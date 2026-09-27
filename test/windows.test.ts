@@ -22,11 +22,16 @@ test('Windows native inbox authenticates and sends one message without exposing 
     writeFileSync(join(sessions, `${process.pid}.json`), JSON.stringify(record));
     writeFileSync(join(sessions, `${process.pid}.fixture.key`), JSON.stringify({ peerToken:secret }));
     const received: string[] = [];
+    let resolveReceived: (() => void) | undefined;
     const server = createServer(socket => {
       let buffer = '';
       socket.on('data', part => {
         buffer += part.toString('utf8');
-        if (buffer.split('\n').length >= 3) { received.push(buffer); socket.end(); }
+        if (buffer.split('\n').length >= 3) {
+          received.push(buffer);
+          resolveReceived?.();
+          socket.end();
+        }
       });
     });
     try {
@@ -43,6 +48,12 @@ test('Windows native inbox authenticates and sends one message without exposing 
       const sent = await send({ to:`claude:${name}`, message:'fixture' });
       assert.equal(sent.status, 'posted');
       assert.equal(sent.consumptionConfirmed, false);
+      if (received.length === 0) {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('fixture inbox did not receive message')), 5000);
+          resolveReceived = () => { clearTimeout(timer); resolve(); };
+        });
+      }
       assert.equal(received.length, 1);
       const lines = received[0]!.trim().split('\n').map(line => JSON.parse(line));
       assert.deepEqual(lines[0], { type:'auth', token:secret });
