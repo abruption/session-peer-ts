@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { validatePackage, validateDispatch, validateGitHubGate, validateRegistryState,
-  validateArtifact, validatePublished, packageFiles } from '../scripts/release.mjs';
+  validateArtifact, validatePublished, waitForPublishedVersion, packageFiles } from '../scripts/release.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
 const sha = 'a'.repeat(40);
@@ -52,6 +52,9 @@ test('bootstrap refuses existing packages and OIDC refuses missing or already pu
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', null));
   validateRegistryState(pkg, 'trusted-stage', existing);
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', { ...existing, versions: { [pkg.version]: {} } }));
+  assert.throws(() => validateRegistryState(pkg, 'trusted-stage', {
+    ...existing, 'dist-tags': { latest: '0.1.0-preview.0' }
+  }), /latest_points_to_prerelease/);
 });
 
 test('release artifact binds version, allowlist, commit, SHA-256 and registry integrity', () => {
@@ -70,8 +73,22 @@ test('release artifact binds version, allowlist, commit, SHA-256 and registry in
   } } };
   validatePublished(pkg, manifest, document);
   assert.throws(() => validatePublished(pkg, manifest, { ...document, 'dist-tags': { latest: pkg.version, preview: pkg.version } }));
+  assert.throws(() => validatePublished(pkg, manifest, {
+    ...document, 'dist-tags': { latest: '0.1.0-preview.0', preview: pkg.version }
+  }), /latest_points_to_prerelease/);
   assert.throws(() => validatePublished(pkg, manifest, { ...document, versions: {} }));
   assert.throws(() => validatePublished(pkg, { ...manifest, integrity: 'different' }, document));
+});
+test('publication verification waits through delayed 404s without any write', async () => {
+  const published = { versions: { [pkg.version]: {} } };
+  let reads = 0, waits = 0;
+  const found = await waitForPublishedVersion(pkg, async () => ++reads <= 6 ? null : published,
+    async ms => { assert.equal(ms, 2000); waits++; }, 8);
+  assert.equal(found, published);
+  assert.equal(reads, 7);
+  assert.equal(waits, 6);
+  await assert.rejects(waitForPublishedVersion(pkg, async () => null, async () => {}, 3),
+    /registry_version_not_visible_after_read_only_wait/);
 });
 
 test('publish workflow is manual, fixed preview, no rebuild with credentials, isolated bootstrap secret', () => {
