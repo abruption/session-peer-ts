@@ -69,7 +69,7 @@ sampling races and packaged guide; use the PR's latest required release gate.
 
 The Windows C# fixture holds actual LockFileEx locks and supplies native process
 PID/SID/start evidence through Restart Manager. Tests cover wrong and competing
-openers, lock replacement between samples, owner exit during pre-submit
+openers, lock replacement between samples, owner replacement during pre-submit
 revalidation, dry-run zero calls, one queue submission, inactive/ambiguous refusal,
 nonzero/timeout unknown outcomes without retry or stderr leakage. Sampling-race
 tests control the delay only; lock/process/owner inspection remains native.

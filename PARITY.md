@@ -162,8 +162,8 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
 The implemented rows map to these repeatable checks:
 
 - [conformance.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/conformance.test.ts): Claude/Codex discovery against the pinned Python oracle, unsupported schema/row/command refusal, empty-PATH runtime.
-- [transport.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/transport.test.ts): real POSIX inbox, guarded queue, wrong/competing writer, unknown native outcome, inert Reply-To, message and host boundaries, SSH preflight/framing/loss.
-- [windows.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/windows.test.ts) and [windows-contract.test.ts](https://github.com/abruption/session-peer-ts/blob/test/34-windows-contracts/test/windows-contract.test.ts): the bounded Windows native contracts described above; the new file link is the #37 review branch until merged.
+- [transport.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/transport.test.ts): real POSIX inbox, guarded queue, wrong/competing writer, unknown native outcome, inert Reply-To, host boundaries, SSH preflight/framing/loss.
+- [windows.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/windows.test.ts) and [windows-contract.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/windows-contract.test.ts): the bounded Windows native contracts described above..
 - [types.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/types.test.ts), [package-smoke.ts](https://github.com/abruption/session-peer-ts/blob/main/test/package-smoke.ts), [release.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/release.test.ts): pure typed helpers, package/native loading, artifact and publication gates. They do not test future update/provisioning implementations.
 
 Windows expansion belongs to [#34](https://github.com/abruption/session-peer-ts/issues/34);

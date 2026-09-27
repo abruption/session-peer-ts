@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { setImmediate as nextTurn } from 'node:timers/promises';
+import timers from 'node:timers/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { send } from '../dist/send.js';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -86,6 +87,24 @@ async function fixture(t: TestContext) {
   return { root, binary, home, lock, database, holder, stop, log, invoke, args };
 }
 
+// Replace only the production sampling delay with an explicit barrier. Waiting
+// for arrival proves a native sample completed, without guessing event-loop turns.
+function samplingBarrier(t: TestContext) {
+  let arrived: (() => void) | undefined;
+  const releases: (() => void)[] = [];
+  t.mock.method(timers, 'setTimeout', (ms: number) => {
+    assert.equal(ms, 250);
+    return new Promise<void>(release => { releases.push(release); arrived?.(); });
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  return async () => {
+    if (!releases.length) await new Promise<void>(resolve => { arrived = resolve; });
+    arrived = undefined;
+    return releases.shift()!;
+  };
+}
+
 test('Windows native writer, CLI and SSH contracts', { skip: process.platform !== 'win32', timeout: 540000 }, async t => {
   const f = await fixture(t);
   await t.test('held lock and stable native PID/SID/start identity', async () => {
@@ -107,34 +126,31 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     await assert.rejects(inspectWriter(f.home, id), /active_writer_unverified/);
     await f.stop(opener); await f.stop(owner);
   });
-  await t.test('lock replacement between native samples fails closed', async t => {
+  await t.test('lock replacement between native samples fails closed', { timeout: 60000 }, async t => {
     const owner = await f.holder();
-    // Warm the lazy native import, then control only the sampling delay.
-    assert.equal(await probeLock(f.lock), 'held');
-    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const sample = samplingBarrier(t);
     const rejected = assert.rejects(inspectWriter(f.home, id), /active_writer_unverified/);
-    await nextTurn(); // First native sample finished; its 250 ms delay is pending.
+    const resume = await sample();
     renameSync(f.lock, f.lock + '.old'); writeFileSync(f.lock, 'replacement');
-    t.mock.timers.tick(250);
+    resume();
     await rejected;
-    t.mock.timers.reset();
     await f.stop(owner); rmSync(f.lock + '.old');
   });
-  await t.test('owner exit during pre-submit revalidation refuses without queueing', async t => {
+  await t.test('owner replacement during pre-submit revalidation refuses without queueing', { timeout: 60000 }, async t => {
     const owner = await f.holder();
-    assert.equal(await probeLock(f.lock), 'held');
-    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const sample = samplingBarrier(t);
     const before = f.log('FIXTURE_QUEUE_LOG').length;
     const rejected = assert.rejects(send({ to: `codex:${id}`, home: f.home,
       codexBin: f.binary, message: 'pre-submit owner race' }), /active_writer_unverified/);
-    await nextTurn(); // First resolveWriter is waiting between its samples.
-    t.mock.timers.tick(250);
-    await nextTurn(); // First resolve completed; revalidation's first sample completed.
+    (await sample())(); // Complete first resolveWriter's two native samples.
+    const resume = await sample(); // Revalidation's first native sample completed.
     await f.stop(owner);
-    t.mock.timers.tick(250);
+    const replacement = await f.holder();
+    assert.notEqual(replacement.pid, owner.pid);
+    resume();
     await rejected;
-    t.mock.timers.reset();
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
+    await f.stop(replacement);
   });
   await t.test('dry-run submits nothing; stable owner queues once; inactive and ambiguous refuse', async () => {
     assert.equal((await f.invoke(f.args)).error, 'inactive_writer'); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 0);
@@ -170,6 +186,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const before = f.log('FIXTURE_QUEUE_LOG').length;
     const sent = await f.invoke(args); assert.equal(sent.status, 'queued', JSON.stringify(sent)); assert.equal(sent.consumptionConfirmed, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').at(-1).args.at(-1), 'SSH SECRET-SENTINEL 🚀');
     const calls = f.log('FIXTURE_SSH_LOG'); assert.equal(calls.length, 2);
     for (const call of calls) {
       assert.ok(call.args.includes('BatchMode=yes')); assert.ok(call.args.includes('StrictHostKeyChecking=yes'));

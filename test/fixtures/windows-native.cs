@@ -32,6 +32,7 @@ public static class Fixture {
   }
   public static int Main(string[] args) {
     Console.OutputEncoding = new UTF8Encoding(false);
+    Console.InputEncoding = new UTF8Encoding(false, true);
     try {
       if (args.Length > 0 && (args[0] == "hold" || args[0] == "open")) {
         using (var handle = Open(args[1], args[0] == "hold")) {
@@ -67,7 +68,9 @@ public static class Fixture {
       start.StandardOutputEncoding = new UTF8Encoding(false); start.StandardErrorEncoding = new UTF8Encoding(false);
       using (var child = Process.Start(start)) {
         var stdout = child.StandardOutput.ReadToEndAsync(); var stderr = child.StandardError.ReadToEndAsync();
-        child.StandardInput.Write(input); child.StandardInput.Close();
+        byte[] inputBytes = Encoding.UTF8.GetBytes(input);
+        child.StandardInput.BaseStream.Write(inputBytes, 0, inputBytes.Length);
+        child.StandardInput.Close();
         if (!child.WaitForExit(60000)) { child.Kill(); return 254; }
         Console.Write(stdout.Result); Console.Error.Write(stderr.Result); return child.ExitCode;
       }

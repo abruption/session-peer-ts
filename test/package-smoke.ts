@@ -61,7 +61,7 @@ const fd = openSync(path, 'r+');
 try {
   if (process.platform === 'win32') {
     locks.lockFileExSync(fd, 3, 0, 0, 0xffffffff, 0xffffffff);
-    locks.unlockFileExSync(fd, 0, 0, 0, 0xffffffff, 0xffffffff);
+    locks.unlockFileExSync(fd, 0, 0, 0xffffffff, 0xffffffff);
   } else { locks.flockSync(fd, 'exnb'); locks.flockSync(fd, 'un'); }
 } finally { closeSync(fd); }
 `);
