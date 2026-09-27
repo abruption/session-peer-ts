@@ -26,7 +26,7 @@ for (const file of locales) {
     'npm pack --ignore-scripts', `npm install --global --ignore-scripts ./session-peer-${pkg.version}.tgz`,
     `npm install --global --ignore-scripts session-peer@${pkg.version}`,
     `session-peer ${pkg.version} (typescript)`, 'consumptionConfirmed', 'submitted:null',
-    'https://github.com/abruption/session-peer-ts', 'https://github.com/abruption/session-peer',
+    'https://github.com/abruption/session-peer-ts', 'https://github.com/abruption/session-peer', '](PARITY.md)',
     ...locales.map(name => `](${name})`)]) {
     assert.ok(content.includes(token), `${file}: missing contract token ${token}`);
   }
