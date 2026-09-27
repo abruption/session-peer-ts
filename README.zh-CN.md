@@ -2,11 +2,11 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-unpublished; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 向正在运行的 **Claude Code 和 Codex 会话**发送消息，支持本机和跨机器 SSH。这是运行于 Node.js 的 TypeScript 客户端，不需要 Python。
 
-**预览版，尚未发布到 npm**（`private: true`）。包名为 `session-peer-ts`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
+**预览发布候选，正式上传需另行批准。**包名为 `session-peer-ts`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
 
 ## 功能与边界
 
@@ -92,6 +92,17 @@ npm audit
 Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。测试还需要 C 编译器和 lsof。CI 固定基准提交，覆盖 macOS/Linux × Node 22/24。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
 
 参见 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md) 和 [SECURITY.md](SECURITY.md)。发布需单独批准，未启用自动 npm 发布。采用 [MIT](LICENSE) 许可证。
+
+## npm 发布后的安装
+
+仅在官方发布以及注册表完整性、provenance 验证完成后，安装以下精确预览版本。它不是稳定版 `latest`。公开前继续使用上述本地 tarball 安装。
+
+```sh
+npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+session-peer --version
+```
+
+手动工作流仅在首次发布时使用短期 bootstrap 令牌。以后通过 Trusted Publisher OIDC 上传至 staging，由维护者使用 2FA 批准。staging 成功不代表已经公开发布。参见 [RELEASING.md](RELEASING.md)。
 
 ## 相关项目
 

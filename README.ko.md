@@ -2,12 +2,12 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-unpublished; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
 TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
-**프리뷰이며 npm에는 아직 발행하지 않았습니다**(`private: true`). 패키지명은
+**프리뷰 릴리스 후보이며 발행에는 별도 승인이 필요합니다.** 패키지명은
 `session-peer-ts`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
 서비스를 제공하는 프로젝트가 아닙니다.
 
@@ -144,6 +144,21 @@ C 컴파일러와 lsof도 필요합니다. CI는 참조 커밋을 고정하고 m
 [CONTRIBUTING.md](CONTRIBUTING.md), [RELEASING.md](RELEASING.md),
 [SECURITY.md](SECURITY.md)를 참고하세요. 발행에는 별도 승인이 필요하며 npm 자동
 발행은 활성화하지 않았습니다. [MIT 라이선스](LICENSE)입니다.
+
+## npm 발행 후 설치
+
+공식 릴리스와 레지스트리 무결성·provenance 검증이 완료된 뒤에만 아래 정확한
+프리뷰 버전을 설치하세요. 안정판 `latest` 채널이 아닙니다. 공개 전에는 위의
+로컬 tarball 설치를 사용합니다.
+
+```sh
+npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+session-peer --version
+```
+
+수동 발행 워크플로우는 최초 1회만 단기 bootstrap 토큰을 사용합니다. 이후에는
+Trusted Publisher OIDC로 staging하고 유지관리자가 2FA로 승인합니다.
+staging 성공은 공개 완료가 아닙니다. [RELEASING.md](RELEASING.md)를 참고하세요.
 
 ## 관련 프로젝트
 

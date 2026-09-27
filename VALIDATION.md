@@ -66,6 +66,7 @@ ACKs are not represented as a new live test of the renamed build.
 
 Windows, native x64 agent interaction, IPv6 literals, Relay/MCP/wake, full Python
 CLI parity, automatic reverse-route detection, npm registry publishing and
-provenance are outside this evidence. Keep `private:true` until a separate
-publication decision. Native dependency prebuild availability must be tested
+provenance are outside this historical evidence. Publication preparation now
+removes the private flag, but actual publishing still needs separate approval
+and the gates in RELEASING.md. Native dependency prebuild availability must be tested
 on each architecture claimed by a future release.

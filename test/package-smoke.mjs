@@ -11,7 +11,8 @@ assert.ok(npm, 'invoke through npm run test:package');
 const runNpm = args => execFileSync(process.execPath, [npm, ...args], { encoding: 'utf8', timeout: 60000 });
 try {
   const metadata = JSON.parse(readFileSync('package.json'));
-  assert.equal(metadata.private, true);
+  assert.equal(metadata.private, false);
+  assert.deepEqual(metadata.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'preview' });
   assert.deepEqual(metadata.dependencies, { 'fs-ext-extra-prebuilt': '2.2.14' });
   for (const hook of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack']) {
     assert.equal(metadata.scripts[hook], undefined);

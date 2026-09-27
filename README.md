@@ -2,12 +2,12 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-unpublished; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 Send messages to running **Claude Code and Codex sessions**, locally or on
 another machine over SSH. This TypeScript client runs on Node.js without Python.
 
-**Preview, not yet published to npm** (`private: true`). Package name:
+**Preview release candidate; publication requires separate approval.** Package name:
 `session-peer-ts`. CLI command: **`session-peer`**. This project does not provide
 a Relay server or hosted service.
 
@@ -148,6 +148,21 @@ participate in WAL shared-memory bookkeeping; they are not snapshots.
 See [CONTRIBUTING.md](CONTRIBUTING.md), [RELEASING.md](RELEASING.md) and
 [SECURITY.md](SECURITY.md). Publication requires separate approval; no automatic
 npm publish is enabled. Licensed under [MIT](LICENSE).
+
+## npm release installation
+
+Only after the official release and registry integrity/provenance verification,
+install the exact preview below. It is not the stable `latest` channel. Before
+publication, keep using the local tarball instructions above.
+
+```sh
+npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+session-peer --version
+```
+
+The manual workflow initially uses a short-lived bootstrap token. Later versions
+use Trusted Publisher OIDC staging and require a maintainer's 2FA approval;
+a staged upload is not a public release. See [RELEASING.md](RELEASING.md).
 
 ## Related project
 
