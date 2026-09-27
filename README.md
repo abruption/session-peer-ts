@@ -7,7 +7,7 @@
 [![Node support](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
 [![MIT license](https://img.shields.io/npm/l/session-peer)](LICENSE)
 
-<sub>Download badges update when npm's statistics include this newly published package.</sub>
+<sub>npm download statistics can lag behind package publication.</sub>
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 

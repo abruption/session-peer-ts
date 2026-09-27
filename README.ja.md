@@ -7,7 +7,7 @@
 [![Node 対応](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
 [![MIT ライセンス](https://img.shields.io/npm/l/session-peer)](LICENSE)
 
-<sub>新しいパッケージが npm のダウンロード統計に反映されると、ダウンロードバッジが更新されます。</sub>
+<sub>npm のダウンロード統計はパッケージ公開より遅れて反映される場合があります。</sub>
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 

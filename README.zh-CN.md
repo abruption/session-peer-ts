@@ -7,7 +7,7 @@
 [![Node 支持](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
 [![MIT 许可证](https://img.shields.io/npm/l/session-peer)](LICENSE)
 
-<sub>npm 下载统计收录这个新发布的包后，下载徽章会更新。</sub>
+<sub>npm 下载统计可能晚于软件包发布才更新。</sub>
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
