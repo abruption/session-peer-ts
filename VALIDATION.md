@@ -3,6 +3,17 @@
 This is preview evidence, not an npm release or a claim of complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
+## 0.1.0-preview.1 candidate
+
+After #7–#10 were merged, the versioned candidate passed the local macOS
+arm64 Node 22 contract suite (23 passed, two Windows-only tests skipped),
+TypeScript test type-check, package/declaration smoke test, four-README
+repository checks and `npm audit` (zero vulnerabilities). The package smoke
+test repeated packing with the same SHA-256 and verified isolated install and
+uninstall. The new candidate was not sent to a live agent and was not published
+by these checks. Windows Node 22/24 and macOS/Linux Node 22/24 must also pass
+on the candidate PR and exact merged `main` commit before publication.
+
 ## Automated checks
 
 - 14 tests pass locally on macOS arm64 / Node 22.14.0.

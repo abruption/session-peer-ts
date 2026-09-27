@@ -12,7 +12,9 @@ const env = { GITHUB_REPOSITORY: 'abruption/session-peer-ts', GITHUB_REF: 'refs/
   RELEASE_VERSION: pkg.version, RELEASE_CONFIRMATION: `session-peer@${pkg.version} bootstrap-token` };
 
 test('release dispatch requires exact main, version, explicit confirmation and preview contract', () => {
-  validateDispatch(pkg, env);
+  const bootstrap = { ...pkg, version: '0.1.0-preview.0' };
+  validateDispatch(bootstrap, { ...env, RELEASE_VERSION: bootstrap.version,
+    RELEASE_CONFIRMATION: `session-peer@${bootstrap.version} bootstrap-token` });
   assert.throws(() => validatePackage({ ...pkg, name: 'session-peer-ts' }));
   assert.throws(() => validatePackage({ ...pkg, types: undefined }));
   assert.throws(() => validatePackage({ ...pkg, exports: {} }));
@@ -26,7 +28,7 @@ test('release dispatch requires exact main, version, explicit confirmation and p
     { repository: { url: 'https://example.com' } }, { scripts: { ...pkg.scripts, prepublishOnly: 'echo unsafe' } }]) {
     assert.throws(() => validatePackage({ ...pkg, ...patch }));
   }
-  const later = { ...pkg, version: '0.1.0-preview.1' };
+  const later = pkg;
   const laterEnv = { ...env, RELEASE_VERSION: later.version, RELEASE_CONFIRMATION: `session-peer@${later.version} bootstrap-token` };
   assert.throws(() => validateDispatch(later, laterEnv));
   validateDispatch(later, { ...laterEnv, RELEASE_MODE: 'trusted-stage', RELEASE_CONFIRMATION: `session-peer@${later.version} trusted-stage` });

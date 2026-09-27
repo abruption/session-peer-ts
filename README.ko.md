@@ -47,11 +47,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 선택 사항: PATH에서 사용할 구현을 명시적으로 선택한 뒤 전역 설치
-npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.1.tgz
 session-peer --version
 ```
 
-예상 출력은 `session-peer 0.1.0-preview.0 (typescript)`입니다. 설치 명령의
+예상 출력은 `session-peer 0.1.0-preview.1 (typescript)`입니다. 설치 명령의
 `./...tgz`는 검증되지 않은 레지스트리 패키지가 아닌 로컬 산출물을 지정하므로 생략하지
 마세요. 별도 승인된 npm 발행 이후에도 패키지명은 `session-peer`, 명령은
 `session-peer`로 유지하며 해당 릴리스의 버전·dist-tag 안내를 따릅니다.
@@ -72,7 +72,7 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.1.tgz
 & "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version
 # 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer
 ```
@@ -171,7 +171,7 @@ C 컴파일러와 lsof는 POSIX 계약 테스트에 필요합니다. CI는 참�
 로컬 tarball 설치를 사용합니다.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.1
 session-peer --version
 ```
 

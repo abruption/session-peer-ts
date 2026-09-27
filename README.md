@@ -48,11 +48,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.1.tgz
 session-peer --version
 ```
 
-Expected: `session-peer 0.1.0-preview.0 (typescript)`. Keep the `./...tgz` path;
+Expected: `session-peer 0.1.0-preview.1 (typescript)`. Keep the `./...tgz` path;
 it selects the locally built artifact, not an unverified registry package.
 After a separately approved npm release, the package will remain `session-peer`
 while the command remains `session-peer`; follow that release's version/dist-tag.
@@ -73,7 +73,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.1.tgz
 & "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer
 ```
@@ -178,7 +178,7 @@ install the exact preview below. It is not the stable `latest` channel. Before
 publication, keep using the local tarball instructions above.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.1
 session-peer --version
 ```
 
