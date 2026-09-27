@@ -40,7 +40,7 @@ does not change that contract. This is a one-shot functional test, not a soak.
 Local self-SSH was denied by the existing SSH authentication configuration; no
 credentials or host-key bypass were introduced. Reverse SSH was not asserted.
 
-## Exact runtime build checked on both Macs
+## Historical runtime build checked on both Macs
 
 Compiled module SHA-256 values matched between the local build and the isolated
 MacBook installation used for the SSH ACK tests:
@@ -53,6 +53,14 @@ b716fed8fe6c8c04047f8485a6e3f982d6e64e5638df570b3b8c2a128f88c81e  protocol.js
 dd946024a61ce8721c273d47e911494c0c8facd62facd9b791a451b90cb702bf  send.js
 c441567e83c64c7d5735708936e9a42b68dd9ea0cdf0ef95538da7919d550496  writer.js
 ```
+
+These hashes and real-TUI ACKs precede the public command rename to
+`session-peer` (npm package remains `session-peer-ts`). The rename changes the
+CLI version banner to `session-peer 0.1.0-preview.0 (typescript)` and the default
+SSH executable to `session-peer`; it does not change native delivery logic.
+Fresh package-install and SSH fixture tests cover the renamed entry point and
+reject a different implementation on remote PATH before sending. The earlier
+ACKs are not represented as a new live test of the renamed build.
 
 ## Not covered / not released
 

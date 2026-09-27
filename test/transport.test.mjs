@@ -110,13 +110,25 @@ test('queue failure after spawn is unknown, never retried or leaked', async t =>
   assert.equal(result.status, 'unknown'); assert.equal(result.submitted, null); assert.equal(result.retryAllowed, false);
   assert.equal(JSON.stringify(result).includes('SECRET-SENTINEL'), false); assert.equal(readFileSync(count, 'utf8'), '1');
 });
+test('SSH refuses a different implementation with the same command name before submission', async t => {
+  const { path, env } = setup(t);
+  const calls = join(path, 'ssh-calls');
+  writeFileSync(join(path, 'ssh'), `#!${process.execPath}\nconst fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},process.argv.at(-1)+'\\n');console.log('session-peer 1.0.2');`, { mode: 0o700 });
+  const result = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'not-sent'], { ...env, PATH: path + delimiter + env.PATH });
+  assert.equal(result.status, 'refused');
+  assert.equal(result.submitted, false);
+  const commands = readFileSync(calls, 'utf8').trim().split('\n');
+  assert.equal(commands.length, 1);
+  assert.match(commands[0], /session-peer.*--version$/);
+  assert.equal(commands[0].includes('--stdio-request'), false);
+});
 test('SSH request framing: no message in remote command; response loss never retries', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
-  writeFileSync(ssh, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer-ts 0.1.0-preview.0');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer 0.1.0-preview.0 (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const result = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message', 'SECRET-SENTINEL', '--no-from'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(result.status, 'posted'); assert.equal(messages.length, 1);
-  writeFileSync(ssh, `#!${process.execPath}\nif(process.argv.at(-1).endsWith('--version'))console.log('session-peer-ts 0.1.0-preview.0');else process.exit(255);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\nif(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.1.0-preview.0 (typescript)');else process.exit(255);`, { mode: 0o700 });
   const lost = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'lost'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(lost.status, 'unknown'); assert.equal(lost.retryAllowed, false); assert.equal(messages.length, 1);
 });

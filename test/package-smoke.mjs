@@ -17,11 +17,12 @@ try {
     assert.equal(metadata.scripts[hook], undefined);
   }
   assert.match(readFileSync('LICENSE', 'utf8'), /MIT License/);
-  assert.equal(execFileSync(process.execPath, ['dist/cli.js', '--version'], { encoding: 'utf8' }).trim(), `${metadata.name} ${metadata.version}`);
+  assert.deepEqual(metadata.bin, { 'session-peer': 'dist/cli.js' });
+  assert.equal(execFileSync(process.execPath, ['dist/cli.js', '--version'], { encoding: 'utf8' }).trim(), `session-peer ${metadata.version} (typescript)`);
   let hash;
   for (let index = 0; index < 2; index++) {
     const [packed] = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', task]));
-    assert.deepEqual(packed.files.map(file => file.path).sort(), ['LICENSE', 'README.md', 'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/writer.js', 'package.json']);
+    assert.deepEqual(packed.files.map(file => file.path).sort(), ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/writer.js', 'package.json']);
     const next = createHash('sha256').update(readFileSync(join(task, packed.filename))).digest('hex');
     if (hash) assert.equal(next, hash, 'same build must produce identical tarball');
     hash = next;
@@ -30,7 +31,7 @@ try {
   const home = join(task, 'empty-home');
   mkdirSync(home);
   runNpm(['install', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', join(task, `${metadata.name}-${metadata.version}.tgz`)]);
-  const binary = join(prefix, 'node_modules/.bin/session-peer-ts');
+  const binary = join(prefix, 'node_modules/.bin/session-peer');
   assert.ok(statSync(binary).mode & 0o111);
   const result = JSON.parse(execFileSync(process.execPath, [binary, 'list', '--agent', 'claude', '--json'], {
     encoding: 'utf8', timeout: 10000,

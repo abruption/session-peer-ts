@@ -2,3 +2,37 @@ node_modules/
 dist/
 *.tgz
 .reference-python/
+
+# Build, test and OS artifacts
+coverage/
+.nyc_output/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Local worktrees, editors and agent configuration (never distributed)
+.worktree/
+.idea/
+.vscode/
+CLAUDE.md
+.claude/
+.codex/
+.cozy/
+cozy.config.json
+
+# Credentials, live state and local evidence. Use sanitized text fixtures instead.
+.env
+.env.*
+!.env.example
+.npmrc
+*.pem
+*.key
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.db
+*.db-*
+evidence/
+.local/

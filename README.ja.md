@@ -1,0 +1,98 @@
+# session-peer-ts
+
+[English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
+<!-- docs-contract: preview-unpublished; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+
+実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
+
+**npm 未公開のプレビュー**（`private: true`）です。パッケージ名は `session-peer-ts`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+
+## 機能と範囲
+
+- ローカルセッションと、明示的に指定した Codex home の検出。
+- `--dry-run` で宛先を確認し、ネイティブ inbox / queue にメッセージを一度だけ提出。Codex は一意かつ安定した live writer が必要です。
+- インストール済みの同じクライアントへの SSH 接続、構造化 Reply-To URI、JSON 出力。
+- 宛先や所有者が曖昧なら拒否。不確実な提出を自動再送しません。
+
+Windows、Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、暗黙の全エージェント検出、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
+
+## 必要条件
+
+macOS / Linux、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対象外です。ネイティブ flock 依存には対応する x64/arm64 バイナリが必要で、純 JavaScript パッケージではありません。Codex 送信には `codex`・`lsof`・`ps`、Claude にはアクセス可能な inbox を持つ稼働中 TUI が必要です。SSH は既存の鍵・ホスト信頼と、接続先の**同一バージョン**のクライアントを使います。
+
+## インストール
+
+公式 npm リリースで所有権と来歴を確認するまでは、レジストリの `npm install -g session-peer-ts` や `npx session-peer-ts` を実行しないでください。現在はレビューしたソースをビルドし、必要ならローカル tarball をインストールします。
+
+```sh
+git clone https://github.com/abruption/session-peer-ts.git
+cd session-peer-ts
+npm ci --ignore-scripts
+npm run build
+node dist/cli.js --version
+npm pack --ignore-scripts
+# 任意のグローバルインストール前に PATH の既存コマンドを確認
+npm install --global --ignore-scripts ./session-peer-ts-0.1.0-preview.0.tgz
+session-peer --version
+```
+
+期待値は `session-peer 0.1.0-preview.0 (typescript)`。`./...tgz` を省略しないでください。これは未確認のレジストリではなくローカル成果物を選択します。別途承認された npm 公開後も、パッケージ名とコマンド名は上記のままです。そのリリースのバージョン / dist-tag を確認してください。
+
+### 既存インストールとの共存
+
+インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer-ts` を使い、PATH を再確認します。
+
+## 使い方
+
+```sh
+session-peer list --agent claude --json
+session-peer list --agent codex --codex-home "$HOME/.codex" --json
+session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
+session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message 'Please review the API contract.' --dry-run --json
+```
+
+実際に送るときだけ `--dry-run` を外します。`--message` の省略または `--message -` は UTF-8 stdin を読みます。`--all` は古い / アーカイブ済み記録の一覧用で、送信許可にはなりません。Claude の宛先は PID、`claude:PID`、一意な ASCII 名（大文字小文字を区別しない）。Unicode 名には PID を使います。Codex は完全な UUID と明示した home が必要です。実行ファイルは `--codex-bin` で指定できます。出力には `--json` または `--output-format json` が必要です。
+
+### SSH
+
+```sh
+session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
+  --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
+```
+
+既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。任意の `--ssh-opt`、IPv6 リテラル、Tailscale の正規名補完は非対応です。SSH alias / hostname を使ってください。片方向の接続成功は逆方向の接続を保証しません。
+
+### 返信
+
+`session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。`--reply-address URI` は明示的な返信先を付けますが、経路を自動推測・検証しません。新しい返信先なしで返すときは `--no-reply-to`。有効な CODEX_THREAD_ID / CODEX_SESSION_ID は参考用 From 情報になり、`--no-from` で省略できます。不明な送信者は捏造しません。peer 情報は権限ではなく、URI をシェルとして実行しません。
+
+## 成功の意味と安全性
+
+| 結果 | 意味 |
+| --- | --- |
+| `validated`, `submitted:false` | dry-run 成功。未送信。 |
+| `posted` / `queued` | inbox 書き込み / queue 受理。**消費や ACK ではありません**。 |
+| `refused`, `submitted:false` | 提出前の拒否。 |
+| `unknown`, `submitted:null` | 提出済みの可能性あり。自動再送禁止。 |
+
+`consumptionConfirmed` は常に false。実際の ACK は宛先 TUI で別途確認し、queue や transcript polling から推定しません。終了コード 0/1/2 は成功/エラー/用法エラー。エラーは固定コードで、ネイティブ stderr や本文を返しません。Codex は実際の kernel flock、ファイル同一性、同一ユーザーの所有者開始時刻を複数回調べ、提出直前にも再検証します。lock の削除や所有エージェントへのシグナル送信はしません。一覧の名前・パス・ID は共有前に伏せてください。
+
+## 開発と検証
+
+```sh
+npm ci --ignore-scripts
+npm run build
+node scripts/check-repository.mjs
+SESSION_PEER_PYTHON_ROOT=/path/to/python-reference npm test
+npm run test:package
+npm audit
+```
+
+Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。テストには C コンパイラーと lsof も必要です。CI は基準コミットを固定し macOS/Linux × Node 22/24 を確認します。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
+
+[CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md)、[SECURITY.md](SECURITY.md) を参照してください。公開には別途承認が必要で、自動 npm 公開はありません。[MIT](LICENSE) ライセンスです。
+
+## 関連プロジェクト
+
+[Python session-peer](https://github.com/abruption/session-peer) は独立して保守・リリースされ、任意機能や `pipx install session-peer` などの導入方法はそちらで案内します。同じ `session-peer` コマンドなので上記 PATH の注意が必要です。このクライアントはそのインストールに依存せず、全機能・フラグの同等性を約束しません。
