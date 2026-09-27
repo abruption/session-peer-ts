@@ -32,13 +32,39 @@ try {
   const home = join(task, 'empty-home');
   mkdirSync(home);
   runNpm(['install', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', join(task, `${metadata.name}-${metadata.version}.tgz`)]);
-  const binary = join(prefix, 'node_modules/.bin/session-peer');
-  assert.ok(statSync(binary).mode & 0o111);
-  const result = JSON.parse(execFileSync(process.execPath, [binary, 'list', '--agent', 'claude', '--json'], {
+  const windows = process.platform === 'win32';
+  const binary = join(prefix, 'node_modules/.bin/session-peer' + (windows ? '.cmd' : ''));
+  const installed = join(prefix, 'node_modules/session-peer');
+  const entry = join(installed, 'dist/cli.js');
+  assert.ok(existsSync(binary));
+  if (windows) {
+    // .cmd is a shell launcher, not a JavaScript source file. Only fixed test
+    // paths/options enter this command; no peer-controlled text is interpolated.
+    const output = execFileSync(process.env.ComSpec ?? 'cmd.exe',
+      ['/d', '/s', '/c', `""${binary}" --version"`],
+      { encoding: 'utf8', windowsVerbatimArguments: true, timeout: 10000 });
+    assert.equal(output.trim(), `session-peer ${metadata.version} (typescript)`);
+  } else assert.ok(statSync(binary).mode & 0o111);
+  const result = JSON.parse(execFileSync(process.execPath, [entry, 'list', '--agent', 'claude', '--json'], {
     encoding: 'utf8', timeout: 10000,
     env: { ...process.env, PATH: '', HOME: home, CLAUDE_CONFIG_DIR: join(home, '.claude'), ANTHROPIC_CONFIG_DIR: '' }
   }));
   assert.equal(result.ok, true);
+  // Load and exercise the installed native dependency with a private fixture.
+  // Empty discovery alone would never load it and cannot prove prebuild support.
+  const nativeProbe = join(prefix, 'native-probe.mjs');
+  writeFileSync(nativeProbe, `import { openSync, closeSync, writeFileSync } from 'node:fs';
+import * as locks from 'fs-ext-extra-prebuilt';
+const path = new URL('./native.lock', import.meta.url); writeFileSync(path, '');
+const fd = openSync(path, 'r+');
+try {
+  if (process.platform === 'win32') {
+    locks.lockFileExSync(fd, 3, 0, 0, 0xffffffff, 0xffffffff);
+    locks.unlockFileExSync(fd, 0, 0, 0, 0xffffffff, 0xffffffff);
+  } else { locks.flockSync(fd, 'exnb'); locks.flockSync(fd, 'un'); }
+} finally { closeSync(fd); }
+`);
+  execFileSync(process.execPath, [nativeProbe], { encoding: 'utf8', timeout: 10000 });
   assert.equal(metadata.types, './dist/index.d.ts');
   assert.ok(existsSync(join(prefix, 'node_modules/session-peer', metadata.types)));
   const consumer = join(prefix, 'consumer.mts');
