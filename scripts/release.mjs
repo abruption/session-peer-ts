@@ -11,13 +11,17 @@ export const registry = 'https://registry.npmjs.org';
 export const packageFiles = ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md',
   'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md',
   'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js',
-  'dist/writer.js', 'package.json'];
+  'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts',
+  'dist/discovery.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts',
+  'dist/send.d.ts', 'dist/writer.d.ts', 'package.json'].sort();
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
 const digest = (bytes, algorithm, encoding = 'hex') => createHash(algorithm).update(bytes).digest(encoding);
 const npm = args => execFileSync('npm', args, { encoding: 'utf8', timeout: 120000 });
 
 export function validatePackage(pkg) {
   assert.equal(pkg.name, 'session-peer');
+  assert.equal(pkg.types, './dist/index.d.ts');
+  assert.deepEqual(pkg.exports, { '.': { types: './dist/index.d.ts', import: './dist/index.js' } });
   assert.equal(pkg.private, false);
   assert.match(pkg.version, /^\d+\.\d+\.\d+-preview\.\d+$/, 'preview versions only');
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });

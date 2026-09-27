@@ -35,6 +35,15 @@ npm run test:package
 npm audit
 ```
 
+Tests live in `test/*.ts`. `npm test` builds declarations, runs strict test
+type-checking, then executes the tests with Node's type-stripping flag (including
+on Node 22.13). Release/repository automation remains JavaScript.
+`npm run test:package` checks that the packed declarations resolve from a
+separate TypeScript consumer. The package root exposes only pure protocol helpers
+(`VERSION`, `VERSION_LINE`, `reply`, `envelope`); importing it does not run the CLI.
+The npm TypeScript indicator requires publishing these declarations in a new
+version; it does not retroactively alter `0.1.0-preview.0`.
+
 Python reference commit: `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 CI checks it out separately. Python is a development oracle, never a runtime
 fallback. Match Node 22/24, macOS/Linux and the native dependency requirements.

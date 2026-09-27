@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
@@ -13,14 +13,14 @@ import { reply, envelope } from '../dist/protocol.js';
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const python = process.env.PYTHON ?? 'python3';
 const id = '11111111-1111-4111-8111-111111111111';
-function setup(t) {
+function setup(t: TestContext) {
   const path = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-send-'));
   mkdirSync(join(path, '.claude/sessions'), { recursive: true });
-  const env = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '' };
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '' };
   t.after(() => rmSync(path, { recursive: true }));
   return { path, env };
 }
-async function invoke(args, env) {
+async function invoke(args: string[], env: NodeJS.ProcessEnv) {
   const child = spawn(process.execPath, [cli, ...args, '--json'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = ''; child.stdout.on('data', x => { stdout += x; }); child.stderr.resume();
   const timer = setTimeout(() => child.kill('SIGKILL'), 15000);
@@ -28,15 +28,15 @@ async function invoke(args, env) {
   assert.equal(signal, null);
   return { code, ...JSON.parse(stdout) };
 }
-async function inbox(t, path) {
-  const messages = [];
+async function inbox(t: TestContext, path: string) {
+  const messages: unknown[] = [];
   const socket = join(path, 'sock');
   const server = createServer(s => {
     let data = ''; s.on('data', chunk => { data += chunk; });
     s.on('end', () => { messages.push(JSON.parse(data)); s.end(); });
   });
   server.listen(socket); await once(server, 'listening');
-  t.after(() => new Promise(ok => server.close(ok)));
+  t.after(() => new Promise<void>((ok, fail) => server.close(error => error ? fail(error) : ok())));
   writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: 'fixture', messagingSocketPath: socket }));
   return messages;
 }
@@ -59,14 +59,14 @@ test('structured replies are inert data and reject conflicting/unsafe fields', (
   assert.equal(envelope('hello', true), 'hello');
 });
 
-function database(home) {
+function database(home: string) {
   mkdirSync(join(home, 'thread-writer-locks'), { recursive: true });
   const result = spawnSync(python, ['-c',
     'import sqlite3,sys\nc=sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE threads(id TEXT)"); c.execute("INSERT INTO threads VALUES (?)",(sys.argv[2],)); c.commit(); c.close()',
     join(home, 'state_5.sqlite'), id]);
   assert.equal(result.status, 0, result.stderr.toString());
 }
-async function holder(t, path, home, name = 'codex-fixture') {
+async function holder(t: TestContext, path: string, home: string, name = 'codex-fixture') {
   // Actual OS flock held by a separate native process, not a mocked lock probe.
   const source = join(path, 'holder.c'), binary = join(path, name);
   writeFileSync(source, '#include <sys/file.h>\n#include <fcntl.h>\n#include <unistd.h>\n#include <stdio.h>\nint main(int argc,char**argv){int f=open(argv[1],O_RDWR|O_CREAT,0600); if(f<0||flock(f,LOCK_EX|LOCK_NB))return 1;puts("ready");fflush(stdout); sleep(60);return 0;}\n');
@@ -121,6 +121,26 @@ test('SSH refuses a different implementation with the same command name before s
   assert.equal(commands.length, 1);
   assert.match(commands[0], /session-peer.*--version$/);
   assert.equal(commands[0].includes('--stdio-request'), false);
+});
+test('SSH preflight reports allowlisted causes without leaking stderr or sending', async t => {
+  const { path, env } = setup(t);
+  const calls = join(path, 'ssh-calls');
+  const cases = [
+    ['Host key verification failed. SECRET-SENTINEL', 255, 'ssh_host_key_untrusted'],
+    ['Permission denied (publickey,password). SECRET-SENTINEL', 255, 'ssh_authentication_refused'],
+    ['Could not resolve hostname fixture: nodename nor servname provided. SECRET-SENTINEL', 255, 'ssh_unreachable'],
+    ['session-peer: command not found. SECRET-SENTINEL', 127, 'remote_cli_missing'],
+    ['Unexpected SSH failure SECRET-SENTINEL', 255, 'ssh_preflight_failed']
+  ];
+  for (const [detail, code, expected] of cases) {
+    writeFileSync(join(path, 'ssh'), `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(calls)},process.argv.at(-1)+'\\n'); console.error(${JSON.stringify(detail)});process.exit(${code});`, { mode: 0o700 });
+    const result = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'not-sent'], { ...env, PATH: path + delimiter + env.PATH });
+    assert.equal(result.error, expected);
+    assert.equal(result.submitted, false);
+    assert.equal(result.retryAllowed, false);
+    assert.equal(JSON.stringify(result).includes('SECRET-SENTINEL'), false);
+  }
+  assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, cases.length);
 });
 test('SSH request framing: no message in remote command; response loss never retries', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
