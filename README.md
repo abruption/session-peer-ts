@@ -31,10 +31,12 @@ session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-Replace `CLAUDE_PID` with an exact PID from the listing. `--dry-run` validates
-without sending; remove it only when delivery is intended. A `posted` or
-`queued` result means submission, not that the receiver read or completed the
-request. See [What success means](#what-success-means).
+1. List sessions and replace `CLAUDE_PID` with the exact PID you selected.
+2. Run the send command with `--dry-run`; nothing is submitted.
+3. When delivery is intended, run that command once without `--dry-run`.
+4. If acknowledgement matters, ask for an explicit reply in the message and
+   verify the receiver's TUI response separately. `posted` / `queued` confirms
+   submission only. See [What success means](#what-success-means).
 
 ## What it does
 
@@ -49,6 +51,8 @@ request. See [What success means](#what-success-means).
 Not implemented: Relay transport, MCP, wake/resume, inactive queueing,
 Antigravity, automatic updates, implicit multi-agent discovery, or human text
 output. Unsupported commands fail explicitly; this is not a general orchestrator.
+
+Planned client gaps are tracked in the [parity roadmap](https://github.com/abruption/session-peer-ts/issues/33); a plan is not an available feature. Relay server/hosted-service delivery remains outside this client's scope.
 
 ## Requirements
 
@@ -160,6 +164,9 @@ authority, and a Reply-To URI is never executed as shell text.
 | `refused`, `submitted:false` | Rejected before submission. |
 | `unknown`, `submitted:null` | Submission may have happened; do not automatically resend. |
 
+After submission, a missing reply or a target exit alone does not establish
+consumption or failure; do not automatically resend.
+
 `consumptionConfirmed` is always false. Verify an actual ACK separately in the
 receiver's TUI, not from queueing or transcript polling. Exit codes are 0/1/2
 for success/error/usage. Errors use fixed codes instead of raw native stderr or
@@ -181,8 +188,12 @@ npm audit
 
 Python is only the development conformance oracle (v1.0.2 commit
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`), never a runtime dependency. Tests also
-need a C compiler and lsof for the POSIX contract suite. CI pins the reference
-and covers macOS/Linux/Windows × Node 22/24. Temporary
+need a C compiler and lsof for the POSIX contract suite. CI uses Node 22/24 on
+macOS, Linux and Windows. macOS/Linux run the full contract suite and package
+checks against the pinned reference; Windows runs build/type checks, bounded
+native Claude inbox and free-lock smoke tests, and audit. Windows held-writer,
+queue and package coverage is tracked in [#34](https://github.com/abruption/session-peer-ts/issues/34).
+The Windows x64/Node 24 live ACKs are separate, one-shot evidence. Temporary
 SQLite, Unix inbox and real lock fixtures are distinct from
 the dedicated real-TUI evidence in [VALIDATION.md](VALIDATION.md). A green fixture
 test is not an ACK. Package tests inspect contents, repeat-pack hashes, clean
@@ -204,6 +215,11 @@ passed. The `latest` tag points to `0.1.0`; the `preview` tag remains on
 ```sh
 npm view session-peer dist-tags
 ```
+
+The immutable npm 0.1.0 archive still contains pre-publication README wording.
+The [dated release record](VALIDATION.md#public-010--2026-09-27-kst) documents
+that discrepancy; current GitHub documentation corrects it. A later version
+will carry corrected packaged documentation.
 
 The release workflow uses Trusted Publisher OIDC staging and a maintainer's
 separate 2FA approval. A staged upload is not a public release. See

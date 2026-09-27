@@ -26,6 +26,8 @@
 
 Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、暗黙の全エージェント検出、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
 
+クライアント機能の計画は [互換性ロードマップ](https://github.com/abruption/session-peer-ts/issues/33) で追跡します。計画は現在の対応を意味しません。Relay サーバーやホスティングサービスの提供は本クライアントの範囲外です。
+
 ## 必要条件
 
 macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対象外です。ネイティブロック依存には対応する x64/arm64 バイナリが必要で、純 JavaScript パッケージではありません。Codex 送信には `codex` が必要で、macOS/Linux では `lsof`・`ps` も必要です。Windows はネイティブロックと Restart Manager で所有者を確認します。Claude にはアクセス可能な inbox を持つ稼働中 TUI が必要です。SSH は既存の鍵・ホスト信頼と、接続先の**同一バージョン**のクライアントを使います。
@@ -39,7 +41,12 @@ npm install --global --ignore-scripts session-peer@0.1.0
 session-peer --version
 ```
 
-期待値は `session-peer 0.1.0 (typescript)`。まず `session-peer list --agent claude --json` で宛先を探し、送信前に `--dry-run` で確認してください。
+期待値は `session-peer 0.1.0 (typescript)`。
+
+1. `session-peer list --agent claude --json` で宛先を探し、正確な PID を選びます。
+2. `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` で提出せずに確認します。
+3. 送る場合は選んだ PID を使い、同じコマンドから `--dry-run` を外して一度だけ実行します。
+4. ACK が必要なら本文で明示的な返信を依頼し、宛先 TUI の応答を別途確認します。`posted` / `queued` は提出のみを示します。
 
 ### ソースからビルド
 
@@ -100,6 +107,8 @@ Windows の SSH 宛先では `--remote-platform win32` を指定し、必要に�
 | `refused`, `submitted:false` | 提出前の拒否。 |
 | `unknown`, `submitted:null` | 提出済みの可能性あり。自動再送禁止。 |
 
+提出後に返信がない、または宛先が終了したという事実だけでは、消費や失敗を確定できません。自動再送しないでください。
+
 `consumptionConfirmed` は常に false。実際の ACK は宛先 TUI で別途確認し、queue や transcript polling から推定しません。終了コード 0/1/2 は成功/エラー/用法エラー。エラーは固定コードで、ネイティブ stderr や本文を返しません。Codex は実際の kernel flock、ファイル同一性、同一ユーザーの所有者開始時刻を複数回調べ、提出直前にも再検証します。lock の削除や所有エージェントへのシグナル送信はしません。一覧の名前・パス・ID は共有前に伏せてください。
 
 ## 開発と検証
@@ -113,7 +122,7 @@ npm run test:package
 npm audit
 ```
 
-Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は基準コミットを固定し macOS/Linux/Windows × Node 22/24 を確認します。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
+Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は三つの OS で Node 22/24 を使います。macOS/Linux は固定した基準に対する全契約・パッケージ検査、Windows はビルド・型検査、限定的なネイティブ Claude inbox・未保持ロックの smoke テストと audit を実行します。Windows の held-writer・queue・パッケージ検証拡充は [#34](https://github.com/abruption/session-peer-ts/issues/34) で追跡します。Windows x64/Node 24 の実機 ACK は別の一回限りの証拠です。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
 
 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md)、[SECURITY.md](SECURITY.md) を参照してください。今後のリリースの公開には別途承認が必要で、自動 npm 公開はありません。[MIT](LICENSE) ライセンスです。
 
@@ -124,6 +133,8 @@ Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c
 ```sh
 npm view session-peer dist-tags
 ```
+
+変更できない npm 0.1.0 の tarball には公開前の README 表現が残っています。[日付付きリリース記録](VALIDATION.md#public-010--2026-09-27-kst) に相違を記録し、現在の GitHub 文書で訂正しています。パッケージ内の訂正は後続バージョンで反映します。
 
 手動ワークフローは Trusted Publisher OIDC で staging し、保守者が 2FA で承認します。staging 成功は公開完了ではありません。[RELEASING.md](RELEASING.md) を参照してください。
 

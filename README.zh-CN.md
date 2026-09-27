@@ -26,6 +26,8 @@
 
 未实现 Relay 传输、MCP、wake/resume、非活跃会话排队、Antigravity、自动更新、隐式多代理发现及面向人的文本输出。不支持的命令会明确失败；这不是通用编排器。
 
+客户端功能计划见 [兼容性路线图](https://github.com/abruption/session-peer-ts/issues/33)；计划不代表当前支持。提供 Relay 服务器或托管服务不属于本客户端范围。
+
 ## 环境要求
 
 macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x**。不支持 Node 26。原生锁依赖需要匹配的 x64/arm64 预编译二进制，本包不是纯 JavaScript 实现。Codex 发送需要 `codex`，macOS/Linux 还需要 `lsof`、`ps`；Windows 使用原生锁和 Restart Manager 验证所有者。Claude 需要运行中的 TUI 及可访问的原生 inbox。SSH 使用已有密钥和主机信任，远端必须安装**同版本**客户端。
@@ -39,7 +41,12 @@ npm install --global --ignore-scripts session-peer@0.1.0
 session-peer --version
 ```
 
-预期输出：`session-peer 0.1.0 (typescript)`。先用 `session-peer list --agent claude --json` 查找目标，并在发送前使用 `--dry-run` 验证。
+预期输出：`session-peer 0.1.0 (typescript)`。
+
+1. 用 `session-peer list --agent claude --json` 查找目标并选择准确 PID。
+2. 用 `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` 验证，不提交。
+3. 确定发送时使用选定 PID，移除同一命令中的 `--dry-run`，只执行一次。
+4. 若需要 ACK，在消息中明确请求回复，并单独确认目标 TUI 的响应。`posted` / `queued` 仅表示提交。
 
 ### 从源码构建
 
@@ -100,6 +107,8 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
 | `refused`, `submitted:false` | 提交前被拒绝。 |
 | `unknown`, `submitted:null` | 可能已经提交，不要自动重发。 |
 
+提交后没有回复或目标退出，都不能单独证明消息已消费或失败。不要自动重发。
+
 `consumptionConfirmed` 始终为 false。必须在目标 TUI 中另行确认实际 ACK，不可由排队或轮询 transcript 推断。退出码 0/1/2 分别表示成功/错误/用法错误。错误只返回固定代码，不返回原生 stderr 或消息内容。Codex 使用真实内核 flock、文件身份和同用户进程开始时间进行多次核验，排队前再次检查。不删除 lock，也不向拥有它的代理进程发送信号。发现结果仍包含本地名称、路径、ID，分享前请脱敏。
 
 ## 开发与验证
@@ -113,7 +122,7 @@ npm run test:package
 npm audit
 ```
 
-Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。POSIX 契约测试还需要 C 编译器和 lsof。CI 固定基准提交，覆盖 macOS/Linux/Windows × Node 22/24。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
+Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。POSIX 契约测试还需要 C 编译器和 lsof。CI 在三种 OS 上使用 Node 22/24。macOS/Linux 对固定基准执行完整契约与包检查；Windows 执行构建、类型检查、范围有限的原生 Claude inbox 与未持有锁 smoke 测试，以及 audit。Windows 的 held-writer、queue 和包验证扩展由 [#34](https://github.com/abruption/session-peer-ts/issues/34) 跟踪。Windows x64/Node 24 实机 ACK 是单独的一次性证据。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
 
 参见 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md) 和 [SECURITY.md](SECURITY.md)。后续版本的发布需单独批准，未启用自动 npm 发布。采用 [MIT](LICENSE) 许可证。
 
@@ -124,6 +133,8 @@ Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde618
 ```sh
 npm view session-peer dist-tags
 ```
+
+不可变的 npm 0.1.0 tarball 仍包含发布前的 README 表述。[带日期的发布记录](VALIDATION.md#public-010--2026-09-27-kst) 说明了这一差异，当前 GitHub 文档已更正。包内文档将在后续版本中更新。
 
 手动工作流通过 Trusted Publisher OIDC 上传至 staging，由维护者使用 2FA 批准。staging 成功不代表已经公开发布。参见 [RELEASING.md](RELEASING.md)。
 
