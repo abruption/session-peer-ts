@@ -29,7 +29,7 @@ before environment approval for staging, and confirm the same artifact again
 before npm 2FA approval. The automated hash/file-list checks do not judge prose.
 
 1. Read `package/README.md`, all three translated READMEs,
-   `package/VALIDATION.md` and `package/RELEASING.md` from the exact retained
+   `package/VALIDATION.md`, `package/PARITY.md` and `package/RELEASING.md` from the exact retained
    tarball. Compare them with the reviewed release source, not just GitHub main.
    For example, `tar -xOf /absolute/path/reviewed.tgz package/README.md` reads
    the packaged English README without installing it.
@@ -43,8 +43,8 @@ before npm 2FA approval. The automated hash/file-list checks do not judge prose.
    assertion that the archive's own version is unpublished or awaiting approval;
    keep pending approval status in the staging record instead.
 4. Match CI claims to the actual workflow and platform depth. Keep fixture,
-   native submission and separately observed ACK evidence distinct. Plans in
-   #33/#34 are not current capability or coverage.
+   native submission and separately observed ACK evidence distinct. Use the versioned
+   matrix in PARITY.md; planned features are not current capability.
 5. Record reviewer, source SHA, tarball SHA-256 and the documentation review in
    the release approval record. A wording failure requires a reviewed source
    correction and new candidate artifact with its own checks/approval; never

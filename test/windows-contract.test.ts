@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
+import { setImmediate as nextTurn } from 'node:timers/promises';
+import { send } from '../dist/send.js';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -11,7 +13,6 @@ import { inspectWindows } from '../dist/windows.js';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const cli = resolve('dist/cli.js');
-const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
 
 async function fixture(t: TestContext) {
   const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-win-contract-'));
@@ -106,13 +107,34 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     await assert.rejects(inspectWriter(f.home, id), /active_writer_unverified/);
     await f.stop(opener); await f.stop(owner);
   });
-  await t.test('lock identity replacement between samples fails closed', async () => {
+  await t.test('lock replacement between native samples fails closed', async t => {
     const owner = await f.holder();
-    // inspectWriter performs its first synchronous native sample before yielding.
-    const inspected = inspectWriter(f.home, id);
-    const rejected = assert.rejects(inspected, /active_writer_unverified/);
+    // Warm the lazy native import, then control only the sampling delay.
+    assert.equal(await probeLock(f.lock), 'held');
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const rejected = assert.rejects(inspectWriter(f.home, id), /active_writer_unverified/);
+    await nextTurn(); // First native sample finished; its 250 ms delay is pending.
     renameSync(f.lock, f.lock + '.old'); writeFileSync(f.lock, 'replacement');
-    await rejected; await f.stop(owner); rmSync(f.lock + '.old');
+    t.mock.timers.tick(250);
+    await rejected;
+    t.mock.timers.reset();
+    await f.stop(owner); rmSync(f.lock + '.old');
+  });
+  await t.test('owner exit during pre-submit revalidation refuses without queueing', async t => {
+    const owner = await f.holder();
+    assert.equal(await probeLock(f.lock), 'held');
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const before = f.log('FIXTURE_QUEUE_LOG').length;
+    const rejected = assert.rejects(send({ to: `codex:${id}`, home: f.home,
+      codexBin: f.binary, message: 'pre-submit owner race' }), /active_writer_unverified/);
+    await nextTurn(); // First resolveWriter is waiting between its samples.
+    t.mock.timers.tick(250);
+    await nextTurn(); // First resolve completed; revalidation's first sample completed.
+    await f.stop(owner);
+    t.mock.timers.tick(250);
+    await rejected;
+    t.mock.timers.reset();
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
   });
   await t.test('dry-run submits nothing; stable owner queues once; inactive and ambiguous refuse', async () => {
     assert.equal((await f.invoke(f.args)).error, 'inactive_writer'); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 0);

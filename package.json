@@ -31,7 +31,8 @@
     "CONTRIBUTING.md",
     "RELEASING.md",
     "SECURITY.md",
-    "VALIDATION.md"
+    "VALIDATION.md",
+    "PARITY.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
