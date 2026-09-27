@@ -1,19 +1,19 @@
-name: npm preview publication
+name: npm staged publication
 
 # No push, tag, release or PR trigger. Merging this file never publishes.
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: First package bootstrap, or tokenless staging after npm trust setup
+        description: Tokenless preview or stable staging through npm Trusted Publisher
         required: true
         type: choice
-        default: trusted-stage
+        default: stable-stage
         options:
+          - stable-stage
           - trusted-stage
-          - bootstrap-token
       version:
-        description: Exact package.json prerelease version
+        description: Exact package.json version
         required: true
         type: string
       confirmation:
@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: npm-preview-publication
+  group: npm-staged-publication
   cancel-in-progress: false
 
 jobs:
@@ -74,7 +74,7 @@ jobs:
         run: node scripts/release.mjs pack
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: npm-preview-${{ github.sha }}
+          name: npm-release-${{ github.sha }}
           path: release-dist/
           if-no-files-found: error
           retention-days: 30
@@ -109,31 +109,23 @@ jobs:
       - run: npm install --global --ignore-scripts npm@11.15.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: npm-preview-${{ github.sha }}
+          name: npm-release-${{ github.sha }}
           path: release-dist/
       - name: Recheck gates after approval and validate downloaded tarball
         run: node scripts/release.mjs preflight && node scripts/release.mjs artifact
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: First package only — publish once with the bootstrap token
-        if: inputs.mode == 'bootstrap-token'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          test -n "$NODE_AUTH_TOKEN"
-          npm publish "./release-dist/session-peer-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
-      - name: Subsequent versions — stage once using OIDC, with no token fallback
+      - name: Stage preview once using OIDC, with no token fallback
         if: inputs.mode == 'trusted-stage'
         env:
           NODE_AUTH_TOKEN: ''
         run: npm stage publish "./release-dist/session-peer-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
-      - name: Verify first publication integrity, provenance metadata and fresh install
-        if: inputs.mode == 'bootstrap-token'
+      - name: Stage stable once using OIDC, with no token fallback
+        if: inputs.mode == 'stable-stage'
         env:
           NODE_AUTH_TOKEN: ''
-        run: node scripts/release.mjs verify
+        run: npm stage publish "./release-dist/session-peer-${RELEASE_VERSION}.tgz" --access public --tag latest --provenance --ignore-scripts --registry https://registry.npmjs.org/
       - name: Mark staged output as awaiting human approval, not a release
-        if: inputs.mode == 'trusted-stage'
         run: |
           echo 'Staged only. Review the npm stage ID above and approve with 2FA on npmjs.com. No public release is claimed.' >> "$GITHUB_STEP_SUMMARY"
           echo 'After approval, download this run artifact and run node scripts/release.mjs verify from this exact source commit.' >> "$GITHUB_STEP_SUMMARY"

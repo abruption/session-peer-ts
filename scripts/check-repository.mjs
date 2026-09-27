@@ -11,7 +11,7 @@ const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
 assert.equal(pkg.name, 'session-peer');
 assert.equal(pkg.private, false);
-assert.deepEqual(pkg.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'preview' });
+assert.deepEqual(pkg.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'latest' });
 assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
 assert.equal(lock.packages[''].name, pkg.name);
 assert.equal(lock.packages[''].version, pkg.version);
@@ -19,7 +19,7 @@ assert.deepEqual(lock.packages[''].bin, pkg.bin);
 assert.equal(read('src/protocol.ts').match(/export const VERSION = '([^']+)'/)[1], pkg.version);
 
 const locales = ['README.md', 'README.ko.md', 'README.ja.md', 'README.zh-CN.md'];
-const marker = '<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->';
+const marker = '<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->';
 for (const file of locales) {
   const content = read(file);
   for (const token of [marker, 'npm ci --ignore-scripts',

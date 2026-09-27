@@ -2,12 +2,12 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
 TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
-**프리뷰 릴리스 후보이며 발행에는 별도 승인이 필요합니다.** 패키지명은
+**0.1.0 안정판 릴리스 소스이며 발행에는 별도 승인이 필요합니다.** 패키지명은
 `session-peer`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
 서비스를 제공하는 프로젝트가 아닙니다.
 
@@ -35,9 +35,9 @@ macOS/Linux/Windows native와 Node **22.x의 22.13 이상 또는 24.x**가 필�
 
 ## 설치
 
-공식 npm 릴리스에서 소유권·출처가 확인되기 전에는 레지스트리의
-`npm install -g session-peer`나 `npx session-peer`를 실행하지 마세요.
-현재는 검토한 소스를 빌드하고, 필요할 때 로컬 tarball을 설치합니다.
+검증된 `0.1.0-preview.1`은 공개됐습니다. 안정판 발행 전에 검토한
+`0.1.0` 소스를 평가하려면 소스를 빌드하고 필요한 경우
+로컬 tarball을 설치합니다.
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -47,14 +47,13 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 선택 사항: PATH에서 사용할 구현을 명시적으로 선택한 뒤 전역 설치
-npm install --global --ignore-scripts ./session-peer-0.1.0-preview.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
 session-peer --version
 ```
 
-예상 출력은 `session-peer 0.1.0-preview.1 (typescript)`입니다. 설치 명령의
-`./...tgz`는 검증되지 않은 레지스트리 패키지가 아닌 로컬 산출물을 지정하므로 생략하지
-마세요. 별도 승인된 npm 발행 이후에도 패키지명은 `session-peer`, 명령은
-`session-peer`로 유지하며 해당 릴리스의 버전·dist-tag 안내를 따릅니다.
+예상 출력은 `session-peer 0.1.0 (typescript)`입니다. 설치 명령의
+`./...tgz`는 로컬 후보 산출물을 지정하므로 생략하지 마세요. 안정판의
+승인·검증이 끝나기 전까지 레지스트리 설치에는 정확한 버전을 지정하세요.
 
 ### 기존 설치본과 PATH
 
@@ -72,9 +71,9 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.1.tgz
-& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version
-# 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer
+npm install --prefix "$env:TEMP\session-peer-ts-candidate" --ignore-scripts .\session-peer-0.1.0.tgz
+& "$env:TEMP\session-peer-ts-candidate\node_modules\.bin\session-peer.cmd" --version
+# 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-candidate" session-peer
 ```
 
 ## 사용법
@@ -166,17 +165,23 @@ C 컴파일러와 lsof는 POSIX 계약 테스트에 필요합니다. CI는 참�
 
 ## npm 발행 후 설치
 
-공식 릴리스와 레지스트리 무결성·provenance 검증이 완료된 뒤에만 아래 정확한
-프리뷰 버전을 설치하세요. 안정판 `latest` 채널이 아닙니다. 공개 전에는 위의
-로컬 tarball 설치를 사용합니다.
+공개 프리뷰는 레지스트리 무결성·provenance·서명·새 환경 설치 검증을
+통과했습니다. 안정판 승격 전 버전 미지정 설치는 `latest`로 표시된 이전
+`0.1.0-preview.0`을 선택하므로 아래 정확한 버전으로 설치하세요.
 
 ```sh
 npm install --global --ignore-scripts session-peer@0.1.0-preview.1
+```
+
+별도 승인된 `0.1.0` staging의 공개와 검증이 끝난 뒤에는 안정판을 정확한
+버전으로 설치하세요.
+
+```sh
+npm install --global --ignore-scripts session-peer@0.1.0
 session-peer --version
 ```
 
-수동 발행 워크플로우는 최초 1회만 단기 bootstrap 토큰을 사용합니다. 이후에는
-Trusted Publisher OIDC로 staging하고 유지관리자가 2FA로 승인합니다.
+수동 발행 워크플로우는 Trusted Publisher OIDC로 staging하고 유지관리자가 2FA로 승인합니다.
 staging 성공은 공개 완료가 아닙니다. [RELEASING.md](RELEASING.md)를 참고하세요.
 
 ## 관련 프로젝트

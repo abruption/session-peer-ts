@@ -1,9 +1,37 @@
 # Validation record — 2026-09-27 KST
 
-This is preview evidence, not an npm release or a claim of complete Python parity.
+This record distinguishes historical live-agent evidence, the verified public
+preview and the unpublished 0.1.0 stable candidate. It does not claim complete
+Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
-## 0.1.0-preview.1 candidate
+## Public 0.1.0-preview.1 — 2026-09-27 KST
+
+The preview.1 candidate and exact merged main passed macOS/Linux Node 22/24,
+native Windows Node 22/24 and the release gate. A separate gate change preserved
+the existing `latest: 0.1.0-preview.0` while permitting preview.1 staging.
+[Run 36313884100](https://github.com/abruption/session-peer-ts/actions/runs/36313884100)
+staged the exact main commit `f65d3ee99cc26ff4a267aef84e31a308d034ac80`
+through the stage-only OIDC Trusted Publisher. After separate environment and
+npm 2FA approvals, the public registry showed `preview: 0.1.0-preview.1` and
+unchanged `latest: 0.1.0-preview.0`.
+
+The npm stage tarball matched the retained run artifact byte for byte. Its
+SHA-256 was `d154beac93893b60b0695e5a6296e185beb8dbd05188ffe04befb74d29966110`.
+The public SHA-512 integrity and provenance metadata matched the manifest;
+`npm audit signatures`, fresh version-specific install, CLI version and empty
+Claude discovery checks, and uninstall passed. This verifies package delivery,
+not a new live Claude/Codex message ACK from the published build.
+
+## 0.1.0 stable candidate
+
+This preparation updates the version handshake, package metadata, four README
+languages, release gates and tests. Native delivery logic is unchanged. The
+candidate must pass its PR and exact merged-main CI before a separate decision
+to stage `0.1.0`; staging, npm 2FA approval, public verification and any GitHub
+tag or fleet installation remain separate gates.
+
+## Historical 0.1.0-preview.1 candidate checks
 
 After #7–#10 were merged, the versioned candidate passed the local macOS
 arm64 Node 22 contract suite (23 passed, two Windows-only tests skipped),
@@ -104,9 +132,9 @@ package/release fixtures, not claimed as new live ACK evidence.
 
 ## Not covered / not released
 
-Windows arm64, IPv6 literals, Relay/MCP/wake, full Python
-CLI parity, automatic reverse-route detection, npm registry publishing and
-provenance are outside this historical evidence. Publication preparation now
-removes the private flag, but actual publishing still needs separate approval
-and the gates in RELEASING.md. Native dependency prebuild availability must be tested
-on each architecture claimed by a future release.
+Windows arm64, IPv6 literals, Relay/MCP/wake, full Python CLI parity and
+automatic reverse-route detection remain outside this evidence. Registry
+publishing and provenance are verified for preview.1 above, but not by the
+historical live-agent ACKs. Stable 0.1.0 publishing still needs the separate
+approvals and gates in RELEASING.md. Native dependency prebuild availability
+must be tested on each architecture claimed by a future release.

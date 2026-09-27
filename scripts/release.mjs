@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 export const repository = 'abruption/session-peer-ts';
 export const registry = 'https://registry.npmjs.org';
+const stableVersion = '0.1.0';
+const verifiedPreview = '0.1.0-preview.1';
+const verifiedPreviewIntegrity = 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==';
 export const packageFiles = ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md',
   'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md',
   'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js',
@@ -23,10 +26,12 @@ export function validatePackage(pkg) {
   assert.equal(pkg.types, './dist/index.d.ts');
   assert.deepEqual(pkg.exports, { '.': { types: './dist/index.d.ts', import: './dist/index.js' } });
   assert.equal(pkg.private, false);
-  assert.match(pkg.version, /^\d+\.\d+\.\d+-preview\.\d+$/, 'preview versions only');
+  assert.ok(pkg.version === stableVersion || /^\d+\.\d+\.\d+-preview\.\d+$/.test(pkg.version),
+    'only reviewed preview versions and 0.1.0 stable are supported');
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
   assert.equal(pkg.repository.url, `git+https://github.com/${repository}.git`);
-  assert.deepEqual(pkg.publishConfig, { registry: `${registry}/`, access: 'public', tag: 'preview' });
+  assert.deepEqual(pkg.publishConfig, { registry: `${registry}/`, access: 'public',
+    tag: pkg.version === stableVersion ? 'latest' : 'preview' });
   for (const hook of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(pkg.scripts?.[hook], undefined, `no ${hook} lifecycle hook`);
   }
@@ -38,12 +43,9 @@ export function validateDispatch(pkg, env) {
   assert.equal(env.GITHUB_REF, 'refs/heads/main');
   assert.equal(env.GITHUB_EVENT_NAME, 'workflow_dispatch');
   assert.match(env.GITHUB_SHA ?? '', /^[a-f0-9]{40}$/);
-  assert.ok(['bootstrap-token', 'trusted-stage'].includes(env.RELEASE_MODE));
+  assert.equal(env.RELEASE_MODE, pkg.version === stableVersion ? 'stable-stage' : 'trusted-stage');
   assert.equal(env.RELEASE_VERSION, pkg.version);
   assert.equal(env.RELEASE_CONFIRMATION, `${pkg.name}@${pkg.version} ${env.RELEASE_MODE}`);
-  if (env.RELEASE_MODE === 'bootstrap-token') {
-    assert.equal(pkg.version, '0.1.0-preview.0', 'bootstrap is limited to the initial version');
-  }
 }
 
 export function validateGitHubGate(sha, main, runs, environment) {
@@ -66,11 +68,17 @@ async function get(url, token) {
 }
 
 export function validateRegistryState(pkg, mode, document) {
-  if (mode === 'bootstrap-token') {
-    assert.equal(document, null, 'bootstrap refuses any existing registry package');
+  assert.ok(document && document.name === pkg.name, 'OIDC staging requires an existing package');
+  assert.ok(!document.versions?.[pkg.version], 'version already published; do not repeat');
+  if (pkg.version === stableVersion) {
+    assert.equal(mode, 'stable-stage');
+    assert.equal(document['dist-tags']?.latest, '0.1.0-preview.0', 'stable_baseline_changed');
+    assert.equal(document['dist-tags']?.preview, verifiedPreview, 'stable_preview_baseline_changed');
+    const preview = document.versions?.[verifiedPreview];
+    assert.equal(preview?.dist?.integrity, verifiedPreviewIntegrity, 'verified_preview_changed');
+    assert.equal(new URL(preview.dist.attestations.url).origin, registry, 'verified preview provenance required');
   } else {
-    assert.ok(document && document.name === pkg.name, 'OIDC staging requires an existing package');
-    assert.ok(!document.versions?.[pkg.version], 'version already published; do not repeat');
+    assert.equal(mode, 'trusted-stage');
     validateLatestTag(pkg, document);
     if (pkg.version === '0.1.0-preview.1') {
       assert.equal(document['dist-tags']?.preview, '0.1.0-preview.0', 'preview_baseline_changed');
@@ -177,8 +185,13 @@ export function validatePublished(pkg, manifest, document) {
   const version = document.versions?.[pkg.version];
   assert.ok(version, 'published version not visible');
   assert.equal(version.dist?.integrity, manifest.integrity);
-  assert.equal(document['dist-tags']?.preview, pkg.version, 'preview_tag_missing');
-  validateLatestTag(pkg, document);
+  if (pkg.version === stableVersion) {
+    assert.equal(document['dist-tags']?.latest, pkg.version, 'stable_latest_missing');
+    assert.equal(document['dist-tags']?.preview, verifiedPreview, 'stable_preview_changed');
+  } else {
+    assert.equal(document['dist-tags']?.preview, pkg.version, 'preview_tag_missing');
+    validateLatestTag(pkg, document);
+  }
   assert.equal(new URL(version.dist.attestations.url).origin, registry, 'provenance metadata required');
 }
 
@@ -200,7 +213,7 @@ async function verify(pkg) {
   const document = await waitForPublishedVersion(pkg);
   validatePublished(pkg, manifest, document);
   freshInstall(pkg, `${pkg.name}@${pkg.version}`, true);
-  const message = `Verified ${pkg.name}@${pkg.version}: registry integrity, preview tag, attestation metadata, npm signature audit, fresh install and uninstall.\n`;
+  const message = `Verified ${pkg.name}@${pkg.version}: registry integrity, ${pkg.publishConfig.tag} tag, attestation metadata, npm signature audit, fresh install and uninstall.\n`;
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, message);
   console.log(message);
 }
@@ -216,7 +229,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command === 'verify') await verify(pkg);
   } catch (error) {
     // Do not echo response bodies, process environments or child-process output.
-    const diagnostic = /legacy_latest_changed/.test(error.message) ? 'legacy_latest_changed'
+    const diagnostic = /stable_baseline_changed/.test(error.message) ? 'stable_baseline_changed'
+      : /stable_preview_baseline_changed/.test(error.message) ? 'stable_preview_baseline_changed'
+      : /verified_preview_changed/.test(error.message) ? 'verified_preview_changed'
+      : /stable_latest_missing/.test(error.message) ? 'stable_latest_missing'
+      : /stable_preview_changed/.test(error.message) ? 'stable_preview_changed'
+      : /legacy_latest_changed/.test(error.message) ? 'legacy_latest_changed'
       : /preview_baseline_changed/.test(error.message) ? 'preview_baseline_changed'
       : /latest_points_to_prerelease/.test(error.message) ? 'latest_points_to_prerelease'
       : /registry_version_not_visible_after_read_only_wait/.test(error.message) ? 'registry_version_not_visible'
