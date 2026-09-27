@@ -1,6 +1,6 @@
 // Contract first: the Python v1 fixture and production CLI are the oracle.
 // Only temporary records/SQLite databases/Unix sockets; never real agent homes.
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
@@ -11,11 +11,11 @@ import { createServer } from 'node:net';
 
 const root = process.env.SESSION_PEER_PYTHON_ROOT ?? fileURLToPath(new URL('../../../', import.meta.url));
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
-const fixture = JSON.parse(readFileSync(new URL('./fixtures/compatibility-v1.json', import.meta.url)));
-assert.deepEqual(fixture, JSON.parse(readFileSync(join(root, 'tests/fixtures/compatibility-v1.json'))), 'vendored contract must match the pinned Python reference');
+const fixture = JSON.parse(readFileSync(new URL('./fixtures/compatibility-v1.json', import.meta.url), 'utf8'));
+assert.deepEqual(fixture, JSON.parse(readFileSync(join(root, 'tests/fixtures/compatibility-v1.json'), 'utf8')), 'vendored contract must match the pinned Python reference');
 const python = process.env.PYTHON ?? 'python3';
 
-function sandbox(t) {
+function sandbox(t: TestContext) {
   const path = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-node-cli-'));
   mkdirSync(join(path, '.claude/sessions'), { recursive: true });
   const env = { ...process.env, HOME: path, USERPROFILE: path,
@@ -24,18 +24,18 @@ function sandbox(t) {
   t.after(() => rmSync(path, { recursive: true }));
   return { path, env };
 }
-function invoke(binary, args, env) {
+function invoke(binary: string, args: string[], env: NodeJS.ProcessEnv) {
   const result = spawnSync(binary, args, { env, encoding: 'utf8', timeout: 10000 });
   assert.ifError(result.error);
   assert.equal(result.signal, null, result.stderr);
   const value = JSON.parse(result.stdout);
   for (const [key, type] of Object.entries(fixture.jsonResult.required)) {
-    assert.equal(typeof value[key], { int: 'number', bool: 'boolean', str: 'string' }[type]);
+    assert.equal(typeof value[key], ({ int: 'number', bool: 'boolean', str: 'string' } as Record<string, string>)[String(type)]);
   }
   assert.equal(value.schemaVersion, fixture.schemaVersion);
   return { status: result.status, value, stderr: result.stderr };
 }
-function compare(args, env) {
+function compare(args: string[], env: NodeJS.ProcessEnv) {
   const node = invoke(process.execPath, [cli, ...args, '--json'], env);
   const reference = invoke(python, [join(root, 'session_peer.py'), ...args, '--json', '--no-update-notice'], env);
   assert.equal(node.status, reference.status);
@@ -66,7 +66,7 @@ test('actual Unix socket metadata matches Python but no connection is made', asy
   const socket = join(socketDir, 's');
   let connections = 0;
   const server = createServer(s => { connections++; s.destroy(); });
-  await new Promise((ok, fail) => { server.once('error', fail); server.listen(socket, ok); });
+  await new Promise<void>((ok, fail) => { server.once('error', fail); server.listen(socket, ok); });
   t.after(async () => { await new Promise(ok => server.close(ok)); rmSync(socketDir, { recursive: true }); });
   writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({
     pid: process.pid, name: '한글 🚀', messagingSocketPath: socket, cwd: '/fixture', status: 'idle'
@@ -77,7 +77,7 @@ test('actual Unix socket metadata matches Python but no connection is made', asy
   assert.equal(connections, 0);
 });
 
-function makeDatabase(home, withName = true) {
+function makeDatabase(home: string, withName = true) {
   mkdirSync(home);
   const code = `import sqlite3,sys\np=sys.argv[1]\nc=sqlite3.connect(p)\nc.execute("CREATE TABLE threads(id TEXT,title TEXT,cwd TEXT,updated_at INTEGER,archived INTEGER,rollout_path TEXT${withName ? ',name TEXT' : ''})")\nrows=[('b','title\\nsecond','/fixture',9,0,'unused'${withName ? ",''" : ''}),('a','🚀'*130,'/fixture',9,0,'unused'${withName ? ",None" : ''}),('z','archived','/fixture',10,1,'unused'${withName ? ",'named'" : ''})]\nc.executemany("INSERT INTO threads VALUES (${withName ? '?,?,?,?,?,?,?' : '?,?,?,?,?,?'})",rows)\nc.commit()\nc.close()`;
   const result = spawnSync(python, ['-c', code, join(home, 'state_5.sqlite')]);
