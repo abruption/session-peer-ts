@@ -122,6 +122,26 @@ test('SSH refuses a different implementation with the same command name before s
   assert.match(commands[0], /session-peer.*--version$/);
   assert.equal(commands[0].includes('--stdio-request'), false);
 });
+test('SSH preflight reports allowlisted causes without leaking stderr or sending', async t => {
+  const { path, env } = setup(t);
+  const calls = join(path, 'ssh-calls');
+  const cases = [
+    ['Host key verification failed. SECRET-SENTINEL', 255, 'ssh_host_key_untrusted'],
+    ['Permission denied (publickey,password). SECRET-SENTINEL', 255, 'ssh_authentication_refused'],
+    ['Could not resolve hostname fixture: nodename nor servname provided. SECRET-SENTINEL', 255, 'ssh_unreachable'],
+    ['session-peer: command not found. SECRET-SENTINEL', 127, 'remote_cli_missing'],
+    ['Unexpected SSH failure SECRET-SENTINEL', 255, 'ssh_preflight_failed']
+  ];
+  for (const [detail, code, expected] of cases) {
+    writeFileSync(join(path, 'ssh'), `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(calls)},process.argv.at(-1)+'\\n'); console.error(${JSON.stringify(detail)});process.exit(${code});`, { mode: 0o700 });
+    const result = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'not-sent'], { ...env, PATH: path + delimiter + env.PATH });
+    assert.equal(result.error, expected);
+    assert.equal(result.submitted, false);
+    assert.equal(result.retryAllowed, false);
+    assert.equal(JSON.stringify(result).includes('SECRET-SENTINEL'), false);
+  }
+  assert.equal(readFileSync(calls, 'utf8').trim().split('\n').length, cases.length);
+});
 test('SSH request framing: no message in remote command; response loss never retries', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
