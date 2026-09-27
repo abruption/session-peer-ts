@@ -1,14 +1,14 @@
-# session-peer-ts
+# session-peer (TypeScript)
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
 TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
 **프리뷰 릴리스 후보이며 발행에는 별도 승인이 필요합니다.** 패키지명은
-`session-peer-ts`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
+`session-peer`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
 서비스를 제공하는 프로젝트가 아닙니다.
 
 ## 주요 기능과 범위
@@ -35,7 +35,7 @@ macOS/Linux와 Node **22.x의 22.13 이상 또는 24.x**가 필요합니다. Nod
 ## 설치
 
 공식 npm 릴리스에서 소유권·출처가 확인되기 전에는 레지스트리의
-`npm install -g session-peer-ts`나 `npx session-peer-ts`를 실행하지 마세요.
+`npm install -g session-peer`나 `npx session-peer`를 실행하지 마세요.
 현재는 검토한 소스를 빌드하고, 필요할 때 로컬 tarball을 설치합니다.
 
 ```sh
@@ -46,13 +46,13 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 선택 사항: PATH에서 사용할 구현을 명시적으로 선택한 뒤 전역 설치
-npm install --global --ignore-scripts ./session-peer-ts-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
 session-peer --version
 ```
 
 예상 출력은 `session-peer 0.1.0-preview.0 (typescript)`입니다. 설치 명령의
 `./...tgz`는 검증되지 않은 레지스트리 패키지가 아닌 로컬 산출물을 지정하므로 생략하지
-마세요. 별도 승인된 npm 발행 이후에도 패키지명은 `session-peer-ts`, 명령은
+마세요. 별도 승인된 npm 발행 이후에도 패키지명은 `session-peer`, 명령은
 `session-peer`로 유지하며 해당 릴리스의 버전·dist-tag 안내를 따릅니다.
 
 ### 기존 설치본과 PATH
@@ -61,7 +61,7 @@ session-peer --version
 `command -v session-peer`로 확인하고 PATH에서 하나를 선택하거나
 `node /절대/경로/dist/cli.js`처럼 명시적으로 실행하세요. 다른 설치 관리자의 파일을
 `--force`로 덮어쓰지 마세요. Python 패키지·스킬·서비스는 자동 설치·삭제·설정하지
-않습니다. npm 설치본 제거는 `npm uninstall --global session-peer-ts`로 하고 PATH를
+않습니다. npm 설치본 제거는 `npm uninstall --global session-peer`로 하고 PATH를
 다시 확인하세요.
 
 ## 사용법
@@ -152,7 +152,7 @@ C 컴파일러와 lsof도 필요합니다. CI는 참조 커밋을 고정하고 m
 로컬 tarball 설치를 사용합니다.
 
 ```sh
-npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.0
 session-peer --version
 ```
 

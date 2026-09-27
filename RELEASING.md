@@ -1,4 +1,4 @@
-# Releasing session-peer-ts previews
+# Releasing session-peer previews
 
 The package is publication-ready (`private:false`), not automatically published.
 Merging, pushing, tagging or publishing a GitHub release does not run publish.yml.
@@ -35,11 +35,31 @@ its Relay release train remain independent.
 
 ## First package: bootstrap-token
 
+### Initial failed attempt (2026-09-27)
+
+[Run 36308424358](https://github.com/abruption/session-peer-ts/actions/runs/36308424358)
+attempted the old npm name `session-peer-ts@0.1.0-preview.0`. Build and artifact
+checks passed, but the registry refused the PUT with HTTP 403 / E_STAGE_REQUIRED:
+the supplied token could only stage, and the package did not exist. A Sigstore
+provenance entry was created before that rejection; it is not proof of npm
+publication. Both npm names returned 404 during the subsequent read-only check.
+
+The intended npm name is now **session-peer**; the GitHub repository remains
+**abruption/session-peer-ts**. Renaming does not fix the authentication restriction.
+Do not rerun the old workflow or switch it to staging: a new package cannot be
+created by staging. Before an approved new attempt, the owner must resolve the
+initial direct-publication authorization or perform an approved interactive
+first publish with 2FA. Do not disable 2FA, automatically replace credentials or
+assume changing a token option bypasses current npm policy. The stored secret's
+value and settings were not inspected. This PR does not reattempt publication.
+
+### Inputs after authentication is resolved
+
 Actions → **npm preview publication** → Run workflow → **main**:
 
 - mode: `bootstrap-token`
 - version: `0.1.0-preview.0`
-- confirmation: `session-peer-ts@0.1.0-preview.0 bootstrap-token`
+- confirmation: `session-peer@0.1.0-preview.0 bootstrap-token`
 
 Preflight requires current main SHA, successful exact-commit main CI and the
 protected npm environment. Bootstrap refuses **any existing registry package**
@@ -63,7 +83,7 @@ Bounded read-only propagation checks are not upload retries.
 
 ## Register npm Trusted Publisher after the first release
 
-npmjs.com → package **session-peer-ts** → Settings → Trusted publishing:
+npmjs.com → package **session-peer** → Settings → Trusted publishing:
 
 | Field | Value |
 | --- | --- |
@@ -89,7 +109,7 @@ follow-up PR.
 
 Prepare a new immutable preview version through a PR. Dispatch main with mode
 `trusted-stage`, its exact version and confirmation
-`session-peer-ts@<version> trusted-stage`. The same gates apply. The package must
+`session-peer@<version> trusted-stage`. The same gates apply. The package must
 already exist; published versions are refused. One `npm stage publish` runs
 with OIDC and the preview tag.
 

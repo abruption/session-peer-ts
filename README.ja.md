@@ -1,12 +1,12 @@
-# session-peer-ts
+# session-peer (TypeScript)
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**プレビューのリリース候補であり、公開には別途承認が必要です。**パッケージ名は `session-peer-ts`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**プレビューのリリース候補であり、公開には別途承認が必要です。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
@@ -23,7 +23,7 @@ macOS / Linux、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対
 
 ## インストール
 
-公式 npm リリースで所有権と来歴を確認するまでは、レジストリの `npm install -g session-peer-ts` や `npx session-peer-ts` を実行しないでください。現在はレビューしたソースをビルドし、必要ならローカル tarball をインストールします。
+公式 npm リリースで所有権と来歴を確認するまでは、レジストリの `npm install -g session-peer` や `npx session-peer` を実行しないでください。現在はレビューしたソースをビルドし、必要ならローカル tarball をインストールします。
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -33,7 +33,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 任意のグローバルインストール前に PATH の既存コマンドを確認
-npm install --global --ignore-scripts ./session-peer-ts-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
 session-peer --version
 ```
 
@@ -41,7 +41,7 @@ session-peer --version
 
 ### 既存インストールとの共存
 
-インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer-ts` を使い、PATH を再確認します。
+インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
 ## 使い方
 
@@ -98,7 +98,7 @@ Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c
 公式リリースとレジストリの整合性・provenance 検証が完了した後にのみ、次の正確なプレビューバージョンをインストールしてください。安定版 `latest` ではありません。公開前は上記のローカル tarball を使います。
 
 ```sh
-npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.0
 session-peer --version
 ```
 

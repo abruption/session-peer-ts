@@ -17,7 +17,7 @@ const digest = (bytes, algorithm, encoding = 'hex') => createHash(algorithm).upd
 const npm = args => execFileSync('npm', args, { encoding: 'utf8', timeout: 120000 });
 
 export function validatePackage(pkg) {
-  assert.equal(pkg.name, 'session-peer-ts');
+  assert.equal(pkg.name, 'session-peer');
   assert.equal(pkg.private, false);
   assert.match(pkg.version, /^\d+\.\d+\.\d+-preview\.\d+$/, 'preview versions only');
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });

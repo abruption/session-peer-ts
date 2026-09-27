@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       confirmation:
-        description: 'Type: session-peer-ts@<version> <mode>'
+        description: 'Type: session-peer@<version> <mode>'
         required: true
         type: string
 
@@ -121,12 +121,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           test -n "$NODE_AUTH_TOKEN"
-          npm publish "./release-dist/session-peer-ts-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
+          npm publish "./release-dist/session-peer-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
       - name: Subsequent versions — stage once using OIDC, with no token fallback
         if: inputs.mode == 'trusted-stage'
         env:
           NODE_AUTH_TOKEN: ''
-        run: npm stage publish "./release-dist/session-peer-ts-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
+        run: npm stage publish "./release-dist/session-peer-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
       - name: Verify first publication integrity, provenance metadata and fresh install
         if: inputs.mode == 'bootstrap-token'
         env:

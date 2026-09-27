@@ -55,12 +55,17 @@ c441567e83c64c7d5735708936e9a42b68dd9ea0cdf0ef95538da7919d550496  writer.js
 ```
 
 These hashes and real-TUI ACKs precede the public command rename to
-`session-peer` (npm package remains `session-peer-ts`). The rename changes the
+`session-peer` (the npm package was then named `session-peer-ts`). The rename changes the
 CLI version banner to `session-peer 0.1.0-preview.0 (typescript)` and the default
 SSH executable to `session-peer`; it does not change native delivery logic.
 Fresh package-install and SSH fixture tests cover the renamed entry point and
 reject a different implementation on remote PATH before sending. The earlier
 ACKs are not represented as a new live test of the renamed build.
+
+The npm package name was subsequently changed to `session-peer` before a
+successful publication; the GitHub repository remains `session-peer-ts`.
+Package identity, tarball naming and publication confirmations are covered by
+package/release fixtures, not claimed as new live ACK evidence.
 
 ## Not covered / not released
 

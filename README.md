@@ -1,14 +1,14 @@
-# session-peer-ts
+# session-peer (TypeScript)
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 Send messages to running **Claude Code and Codex sessions**, locally or on
 another machine over SSH. This TypeScript client runs on Node.js without Python.
 
 **Preview release candidate; publication requires separate approval.** Package name:
-`session-peer-ts`. CLI command: **`session-peer`**. This project does not provide
+`session-peer`. CLI command: **`session-peer`**. This project does not provide
 a Relay server or hosted service.
 
 ## What it does
@@ -35,7 +35,7 @@ existing key/host trust and the **same client version** on the destination.
 
 ## Install
 
-Do **not** run registry `npm install -g session-peer-ts` or `npx session-peer-ts`
+Do **not** run registry `npm install -g session-peer` or `npx session-peer`
 until an official npm release verifies ownership and provenance. Today, build
 a reviewed source checkout and optionally install its local tarball:
 
@@ -47,13 +47,13 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-ts-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
 session-peer --version
 ```
 
 Expected: `session-peer 0.1.0-preview.0 (typescript)`. Keep the `./...tgz` path;
 it selects the locally built artifact, not an unverified registry package.
-After a separately approved npm release, the package will remain `session-peer-ts`
+After a separately approved npm release, the package will remain `session-peer`
 while the command remains `session-peer`; follow that release's version/dist-tag.
 
 ### Existing installations
@@ -63,7 +63,7 @@ and `command -v session-peer` before and after installation. Choose one on PATH,
 or call this build explicitly with `node /absolute/path/dist/cli.js`. Do not use
 `--force` to overwrite another manager's files. No Python package, skill or service
 is installed, removed or reconfigured automatically. To remove this npm install,
-run `npm uninstall --global session-peer-ts` and recheck PATH.
+run `npm uninstall --global session-peer` and recheck PATH.
 
 ## Use
 
@@ -156,7 +156,7 @@ install the exact preview below. It is not the stable `latest` channel. Before
 publication, keep using the local tarball instructions above.
 
 ```sh
-npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.0
 session-peer --version
 ```
 
