@@ -1,5 +1,14 @@
 # session-peer (TypeScript)
 
+[![npm 버전](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm 주간 다운로드](https://img.shields.io/npm/dw/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm 월간 다운로드](https://img.shields.io/npm/dm/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![CI](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml)
+[![Node 지원](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
+[![MIT 라이선스](https://img.shields.io/npm/l/session-peer)](LICENSE)
+
+<sub>npm 다운로드 통계는 패키지 공개보다 늦게 반영될 수 있습니다.</sub>
+
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
@@ -7,7 +16,7 @@
 실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
 TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
-**0.1.0 안정판 릴리스 소스이며 발행에는 별도 승인이 필요합니다.** 패키지명은
+**0.1.0 안정판이 npm에 공개됐습니다.** 패키지명은
 `session-peer`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
 서비스를 제공하는 프로젝트가 아닙니다.
 
@@ -35,8 +44,21 @@ macOS/Linux/Windows native와 Node **22.x의 22.13 이상 또는 24.x**가 필�
 
 ## 설치
 
-검증된 `0.1.0-preview.1`은 공개됐습니다. 안정판 발행 전에 검토한
-`0.1.0` 소스를 평가하려면 소스를 빌드하고 필요한 경우
+Node 22.x의 22.13 이상 또는 24.x에서 검증된 안정판을 설치합니다.
+Python CLI도 같은 명령어를 사용하므로 기존 설치본이 있다면 먼저 PATH를 확인하세요.
+
+```sh
+npm install --global --ignore-scripts session-peer@0.1.0
+session-peer --version
+```
+
+예상 출력은 `session-peer 0.1.0 (typescript)`입니다. 먼저
+`session-peer list --agent claude --json`으로 대상을 찾고 `--dry-run`으로
+제출 전에 확인하세요.
+
+### 소스에서 빌드
+
+공개된 npm 패키지 대신 검토한 소스를 실행하려면 빌드하고 필요한 경우
 로컬 tarball을 설치합니다.
 
 ```sh
@@ -51,9 +73,8 @@ npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
 session-peer --version
 ```
 
-예상 출력은 `session-peer 0.1.0 (typescript)`입니다. 설치 명령의
-`./...tgz`는 로컬 후보 산출물을 지정하므로 생략하지 마세요. 안정판의
-승인·검증이 끝나기 전까지 레지스트리 설치에는 정확한 버전을 지정하세요.
+설치 명령의 `./...tgz`는 로컬 산출물을 지정하므로 생략하지 마세요.
+나중 버전의 소스를 사용할 때는 체크아웃 버전을 먼저 확인하세요.
 
 ### 기존 설치본과 PATH
 
@@ -71,9 +92,9 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-candidate" --ignore-scripts .\session-peer-0.1.0.tgz
-& "$env:TEMP\session-peer-ts-candidate\node_modules\.bin\session-peer.cmd" --version
-# 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-candidate" session-peer
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.1.0.tgz
+& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
+# 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
 
 ## 사용법
@@ -160,25 +181,17 @@ C 컴파일러와 lsof는 POSIX 계약 테스트에 필요합니다. CI는 참�
 처리에 참여할 수 있으므로 스냅샷 읽기는 아닙니다.
 
 [CONTRIBUTING.md](CONTRIBUTING.md), [RELEASING.md](RELEASING.md),
-[SECURITY.md](SECURITY.md)를 참고하세요. 발행에는 별도 승인이 필요하며 npm 자동
-발행은 활성화하지 않았습니다. [MIT 라이선스](LICENSE)입니다.
+[SECURITY.md](SECURITY.md)를 참고하세요. 이후 릴리스 발행에는 별도 승인이 필요하며
+npm 자동 발행은 활성화하지 않았습니다. [MIT 라이선스](LICENSE)입니다.
 
-## npm 발행 후 설치
+## npm 릴리스
 
-공개 프리뷰는 레지스트리 무결성·provenance·서명·새 환경 설치 검증을
-통과했습니다. 안정판 승격 전 버전 미지정 설치는 `latest`로 표시된 이전
-`0.1.0-preview.0`을 선택하므로 아래 정확한 버전으로 설치하세요.
-
-```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.1
-```
-
-별도 승인된 `0.1.0` staging의 공개와 검증이 끝난 뒤에는 안정판을 정확한
-버전으로 설치하세요.
+공개된 `session-peer@0.1.0`은 레지스트리 무결성·provenance 메타데이터·서명·
+새 환경 설치와 제거 검증을 통과했습니다. `latest`는 `0.1.0`, `preview`는
+`0.1.0-preview.1`을 가리킵니다. 버전 미지정 설치 전 현재 태그를 확인하세요.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0
-session-peer --version
+npm view session-peer dist-tags
 ```
 
 수동 발행 워크플로우는 Trusted Publisher OIDC로 staging하고 유지관리자가 2FA로 승인합니다.

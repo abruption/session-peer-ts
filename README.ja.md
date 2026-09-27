@@ -1,12 +1,21 @@
 # session-peer (TypeScript)
 
+[![npm バージョン](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm 週間ダウンロード](https://img.shields.io/npm/dw/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm 月間ダウンロード](https://img.shields.io/npm/dm/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![CI](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml)
+[![Node 対応](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
+[![MIT ライセンス](https://img.shields.io/npm/l/session-peer)](LICENSE)
+
+<sub>npm のダウンロード統計はパッケージ公開より遅れて反映される場合があります。</sub>
+
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**0.1.0 安定版のリリースソースであり、公開には別途承認が必要です。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**0.1.0 安定版は npm で公開済みです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
@@ -23,7 +32,18 @@ macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**
 
 ## インストール
 
-検証済みの `0.1.0-preview.1` は公開されています。安定版の公開前にレビュー済みの `0.1.0` ソースを評価するには、ビルドして必要ならローカル tarball をインストールします。
+検証済みの安定版は、Node 22.x の 22.13 以上または 24.x でインストールできます。Python CLI も同じコマンド名を使うため、既存のインストールがあれば先に PATH を確認してください。
+
+```sh
+npm install --global --ignore-scripts session-peer@0.1.0
+session-peer --version
+```
+
+期待値は `session-peer 0.1.0 (typescript)`。まず `session-peer list --agent claude --json` で宛先を探し、送信前に `--dry-run` で確認してください。
+
+### ソースからビルド
+
+公開済みの npm パッケージではなくレビュー済みのソースを使うには、ビルドして必要ならローカル tarball をインストールします。
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -37,13 +57,13 @@ npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
 session-peer --version
 ```
 
-期待値は `session-peer 0.1.0 (typescript)`。`./...tgz` を省略せず、ローカルの候補を選択してください。安定版の承認と検証が完了するまでは、レジストリからのインストールに正確なバージョンを指定してください。
+`./...tgz` を省略せず、ローカルの成果物を選択してください。後のバージョンのソースを使う場合は、チェックアウトしたバージョンを先に確認してください。
 
 ### 既存インストールとの共存
 
 インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
-Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-candidate" --ignore-scripts .\session-peer-0.1.0.tgz` を実行し、`& "$env:TEMP\session-peer-ts-candidate\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-candidate" session-peer` で削除します。
+Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.1.0.tgz` を実行し、`& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` で削除します。
 
 ## 使い方
 
@@ -95,21 +115,14 @@ npm audit
 
 Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は基準コミットを固定し macOS/Linux/Windows × Node 22/24 を確認します。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
 
-[CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md)、[SECURITY.md](SECURITY.md) を参照してください。公開には別途承認が必要で、自動 npm 公開はありません。[MIT](LICENSE) ライセンスです。
+[CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md)、[SECURITY.md](SECURITY.md) を参照してください。今後のリリースの公開には別途承認が必要で、自動 npm 公開はありません。[MIT](LICENSE) ライセンスです。
 
-## npm 公開後のインストール
+## npm リリース
 
-公開済みプレビューは、レジストリの整合性・provenance・署名・新規インストールの検証に合格しました。安定版への昇格前は、バージョンを指定しないインストールが `latest` の旧 `0.1.0-preview.0` を選ぶため、次の正確なバージョンを指定してください。
-
-```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.1
-```
-
-別途承認された `0.1.0` の staging が公開・検証された後、安定版を正確なバージョンでインストールしてください。
+公開済みの `session-peer@0.1.0` は、レジストリの整合性・provenance メタデータ・署名・新規インストールとアンインストールの検証に合格しました。`latest` は `0.1.0`、`preview` は `0.1.0-preview.1` を指します。バージョンを指定しないインストールの前に現在のタグを確認してください。
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0
-session-peer --version
+npm view session-peer dist-tags
 ```
 
 手動ワークフローは Trusted Publisher OIDC で staging し、保守者が 2FA で承認します。staging 成功は公開完了ではありません。[RELEASING.md](RELEASING.md) を参照してください。

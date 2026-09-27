@@ -1,15 +1,40 @@
 # session-peer (TypeScript)
 
+[![npm version](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm downloads per week](https://img.shields.io/npm/dw/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm downloads per month](https://img.shields.io/npm/dm/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![CI](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml)
+[![Node support](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
+[![MIT license](https://img.shields.io/npm/l/session-peer)](LICENSE)
+
+<sub>npm download statistics can lag behind package publication.</sub>
+
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-Send messages to running **Claude Code and Codex sessions**, locally or on
-another machine over SSH. This TypeScript client runs on Node.js without Python.
+**Find and message running Claude Code and Codex sessions, locally or over SSH.**
+This TypeScript client runs on Node.js without Python.
 
-**0.1.0 stable release source; publication requires separate approval.** Package name:
-`session-peer`. CLI command: **`session-peer`**. This project does not provide
-a Relay server or hosted service.
+The published npm package and CLI command are both **`session-peer`**. This
+project does not provide a Relay server or hosted service.
+
+## Quick start
+
+Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
+selects if the Python CLI is already installed; both packages use that command.
+
+```sh
+npm install --global --ignore-scripts session-peer@0.1.0
+session-peer --version  # session-peer 0.1.0 (typescript)
+session-peer list --agent claude --json
+session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
+```
+
+Replace `CLAUDE_PID` with an exact PID from the listing. `--dry-run` validates
+without sending; remove it only when delivery is intended. A `posted` or
+`queued` result means submission, not that the receiver read or completed the
+request. See [What success means](#what-success-means).
 
 ## What it does
 
@@ -34,11 +59,10 @@ need `lsof` and `ps`. Windows uses native lock and Restart Manager inspection.
 Claude needs a live TUI with an accessible native inbox. SSH requires OpenSSH,
 existing key/host trust and the **same client version** on the destination.
 
-## Install
+## Build from source
 
-The verified `0.1.0-preview.1` is public. To evaluate the reviewed `0.1.0`
-source before stable publication, build it and optionally install its local
-tarball:
+To run a reviewed source checkout instead of the published npm package, build
+it and optionally install its local tarball:
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -53,10 +77,10 @@ session-peer --version
 ```
 
 Expected: `session-peer 0.1.0 (typescript)`. Keep the `./...tgz` path to
-select the locally built candidate. Use an explicit version for registry
-installation until the stable release has been approved and verified.
+select the locally built artifact. Check the checkout version before using
+these commands for a later release.
 
-### Existing installations
+## Existing installations
 
 Other implementations may also install `session-peer`. Check `type -a session-peer`
 and `command -v session-peer` before and after installation. Choose one on PATH,
@@ -72,9 +96,9 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-candidate" --ignore-scripts .\session-peer-0.1.0.tgz
-& "$env:TEMP\session-peer-ts-candidate\node_modules\.bin\session-peer.cmd" --version
-# Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-candidate" session-peer
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.1.0.tgz
+& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
+# Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
 
 ## Use
@@ -167,30 +191,23 @@ the verified prebuilt path uses `--ignore-scripts`. SQLite read-only readers may
 participate in WAL shared-memory bookkeeping; they are not snapshots.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [RELEASING.md](RELEASING.md) and
-[SECURITY.md](SECURITY.md). Publication requires separate approval; no automatic
-npm publish is enabled. Licensed under [MIT](LICENSE).
+[SECURITY.md](SECURITY.md). Future publication remains manual and requires
+separate approval. Licensed under [MIT](LICENSE).
 
-## npm release installation
+## Package release
 
-The public preview passed registry integrity, provenance, signature and
-fresh-install checks. Install it by exact version. Before stable promotion,
-unversioned installs select the older `0.1.0-preview.0` marked `latest`:
-
-```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.1
-```
-
-Only after the separately approved `0.1.0` stage is published and verified,
-install the stable version by exact number:
+`session-peer@0.1.0` is the verified stable npm release. Its public registry
+integrity, provenance metadata, signature audit, fresh install and uninstall
+passed. The `latest` tag points to `0.1.0`; the `preview` tag remains on
+`0.1.0-preview.1`. Check current tags before relying on an unversioned install:
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0
-session-peer --version
+npm view session-peer dist-tags
 ```
 
-The manual workflow uses Trusted Publisher OIDC staging and requires a
-maintainer's 2FA approval; a staged upload is not a public release. See
-[RELEASING.md](RELEASING.md).
+The release workflow uses Trusted Publisher OIDC staging and a maintainer's
+separate 2FA approval. A staged upload is not a public release. See
+[RELEASING.md](RELEASING.md) for the process.
 
 ## Related project
 
