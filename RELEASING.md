@@ -118,10 +118,14 @@ with OIDC and the preview tag.
 This candidate includes the merged TypeScript declaration, SSH preflight,
 publication-verification and native Windows changes (#7–#10). Its publication
 mode is `trusted-stage`; `bootstrap-token` is reserved for preview.0 and must
-not be reused. Before dispatch, resolve the existing `latest` dist-tag pointing
-to preview.0 through a separately reviewed npm operator action, then confirm
-the registry has no `0.1.0-preview.1` version and re-run the exact-main CI gate.
-The workflow deliberately refuses staging while `latest` points to a prerelease.
+not be reused. The existing `latest` tag is retained. For this
+exact candidate, preflight requires both `latest` and `preview` to point to
+preview.0, confirms the registry has no `0.1.0-preview.1` version, and requires
+the exact-main CI gate. No npm tag action is part of this release. After npm
+stage approval, verification requires `preview` to point to preview.1 while
+`latest` still points to preview.0. An unversioned install continues to select
+preview.0; use the explicit `session-peer@0.1.0-preview.1` version for testing.
+Other prerelease `latest` states remain blocked, including future candidates.
 Do not infer publication from local packaging, a green PR, or an approved stage.
 
 **A successful staged run is pending approval, not a public release.** Record its
@@ -162,12 +166,12 @@ now waits for up to 30 read attempts (two seconds between reads) before reportin
 that a published version is still invisible. Never re-upload that version.
 
 The registry also assigned both `preview` and `latest` to the initial preview
-despite the explicit `--tag preview`. The runbook requires `latest` to point to
-a stable version or be absent. Preflight for later staged previews fails while
-`latest` points to **any** prerelease. Review the current tags and agree on an
-operator action in npm before changing a tag; the workflow never does so. A
-verification failure from the tag check does not mean the upload failed. Record
-upload, registry propagation, tag state and install verification separately.
+despite the explicit `--tag preview`. The preview.1 gate preserves this exact
+legacy `latest` value and refuses any change to it; the exception does not apply
+to later versions. Review the current tags and agree on a separate operator
+action in npm before changing a tag; the workflow never does so. A verification
+failure from the tag check does not mean the upload failed. Record upload,
+registry propagation, tag state and install verification separately.
 
 ## Sources
 

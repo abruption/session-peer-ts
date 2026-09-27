@@ -71,11 +71,25 @@ export function validateRegistryState(pkg, mode, document) {
   } else {
     assert.ok(document && document.name === pkg.name, 'OIDC staging requires an existing package');
     assert.ok(!document.versions?.[pkg.version], 'version already published; do not repeat');
-    assert.ok(!/-[0-9A-Za-z]/.test(document['dist-tags']?.latest ?? ''),
-      'latest_points_to_prerelease: resolve the existing tag through a separately reviewed npm action');
+    validateLatestTag(pkg, document);
+    if (pkg.version === '0.1.0-preview.1') {
+      assert.equal(document['dist-tags']?.preview, '0.1.0-preview.0', 'preview_baseline_changed');
+    }
   }
   // Public metadata cannot reveal pending stages. A duplicate stage is a hard
   // registry error; inspect it interactively, never retry or replace it here.
+}
+
+function validateLatestTag(pkg, document) {
+  const latest = document['dist-tags']?.latest;
+  if (pkg.version === '0.1.0-preview.1') {
+    // The initial publication assigned latest as well as preview to preview.0.
+    // Preserve that exact legacy tag for this candidate; never move it in CI.
+    assert.equal(latest, '0.1.0-preview.0', 'legacy_latest_changed');
+  } else {
+    assert.ok(!/-[0-9A-Za-z]/.test(latest ?? ''),
+      'latest_points_to_prerelease: resolve the existing tag through a separately reviewed npm action');
+  }
 }
 
 async function preflight(pkg) {
@@ -164,8 +178,7 @@ export function validatePublished(pkg, manifest, document) {
   assert.ok(version, 'published version not visible');
   assert.equal(version.dist?.integrity, manifest.integrity);
   assert.equal(document['dist-tags']?.preview, pkg.version, 'preview_tag_missing');
-  assert.ok(!/-[0-9A-Za-z]/.test(document['dist-tags']?.latest ?? ''),
-    'latest_points_to_prerelease: resolve the existing tag through a separately reviewed npm action');
+  validateLatestTag(pkg, document);
   assert.equal(new URL(version.dist.attestations.url).origin, registry, 'provenance metadata required');
 }
 
@@ -203,7 +216,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command === 'verify') await verify(pkg);
   } catch (error) {
     // Do not echo response bodies, process environments or child-process output.
-    const diagnostic = /latest_points_to_prerelease/.test(error.message) ? 'latest_points_to_prerelease'
+    const diagnostic = /legacy_latest_changed/.test(error.message) ? 'legacy_latest_changed'
+      : /preview_baseline_changed/.test(error.message) ? 'preview_baseline_changed'
+      : /latest_points_to_prerelease/.test(error.message) ? 'latest_points_to_prerelease'
       : /registry_version_not_visible_after_read_only_wait/.test(error.message) ? 'registry_version_not_visible'
       : /preview_tag_missing/.test(error.message) ? 'preview_tag_missing' : error.name;
     console.error(`Release gate failed (${diagnostic}). Stop; do not retry publication. Inspect the failed gate and registry state.`);
