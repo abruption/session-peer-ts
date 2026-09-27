@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { validatePackage, validateDispatch, validateGitHubGate, validateRegistryState,
   validateArtifact, validatePublished, packageFiles } from '../scripts/release.mjs';
 
-const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const sha = 'a'.repeat(40);
 const env = { GITHUB_REPOSITORY: 'abruption/session-peer-ts', GITHUB_REF: 'refs/heads/main',
   GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_SHA: sha, RELEASE_MODE: 'bootstrap-token',
@@ -14,6 +14,8 @@ const env = { GITHUB_REPOSITORY: 'abruption/session-peer-ts', GITHUB_REF: 'refs/
 test('release dispatch requires exact main, version, explicit confirmation and preview contract', () => {
   validateDispatch(pkg, env);
   assert.throws(() => validatePackage({ ...pkg, name: 'session-peer-ts' }));
+  assert.throws(() => validatePackage({ ...pkg, types: undefined }));
+  assert.throws(() => validatePackage({ ...pkg, exports: {} }));
   assert.throws(() => validateDispatch(pkg, { ...env, RELEASE_CONFIRMATION: `session-peer-ts@${pkg.version} bootstrap-token` }));
   for (const patch of [{ GITHUB_REF: 'refs/heads/feature' }, { GITHUB_REPOSITORY: 'fork/session-peer-ts' },
     { GITHUB_EVENT_NAME: 'pull_request' }, { RELEASE_VERSION: '9.0.0' }, { RELEASE_MODE: 'publish' },
