@@ -11,13 +11,17 @@ export const registry = 'https://registry.npmjs.org';
 export const packageFiles = ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md',
   'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md',
   'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js',
-  'dist/windows.js', 'dist/writer.js', 'package.json'];
+  'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts',
+  'dist/discovery.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts',
+  'dist/send.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'package.json'].sort();
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
 const digest = (bytes, algorithm, encoding = 'hex') => createHash(algorithm).update(bytes).digest(encoding);
 const npm = args => execFileSync('npm', args, { encoding: 'utf8', timeout: 120000 });
 
 export function validatePackage(pkg) {
   assert.equal(pkg.name, 'session-peer');
+  assert.equal(pkg.types, './dist/index.d.ts');
+  assert.deepEqual(pkg.exports, { '.': { types: './dist/index.d.ts', import: './dist/index.js' } });
   assert.equal(pkg.private, false);
   assert.match(pkg.version, /^\d+\.\d+\.\d+-preview\.\d+$/, 'preview versions only');
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
@@ -67,6 +71,8 @@ export function validateRegistryState(pkg, mode, document) {
   } else {
     assert.ok(document && document.name === pkg.name, 'OIDC staging requires an existing package');
     assert.ok(!document.versions?.[pkg.version], 'version already published; do not repeat');
+    assert.ok(!/-[0-9A-Za-z]/.test(document['dist-tags']?.latest ?? ''),
+      'latest_points_to_prerelease: resolve the existing tag through a separately reviewed npm action');
   }
   // Public metadata cannot reveal pending stages. A duplicate stage is a hard
   // registry error; inspect it interactively, never retry or replace it here.
@@ -157,20 +163,28 @@ export function validatePublished(pkg, manifest, document) {
   const version = document.versions?.[pkg.version];
   assert.ok(version, 'published version not visible');
   assert.equal(version.dist?.integrity, manifest.integrity);
-  assert.equal(document['dist-tags']?.preview, pkg.version);
-  assert.notEqual(document['dist-tags']?.latest, pkg.version, 'preview must not become latest');
+  assert.equal(document['dist-tags']?.preview, pkg.version, 'preview_tag_missing');
+  assert.ok(!/-[0-9A-Za-z]/.test(document['dist-tags']?.latest ?? ''),
+    'latest_points_to_prerelease: resolve the existing tag through a separately reviewed npm action');
   assert.equal(new URL(version.dist.attestations.url).origin, registry, 'provenance metadata required');
+}
+
+// A successful upload can precede registry propagation. Reads and waits only:
+// this function never uploads, changes tags or changes authentication.
+export async function waitForPublishedVersion(pkg, read = () => get(`${registry}/${pkg.name}`),
+  wait = ms => new Promise(resolve => setTimeout(resolve, ms)), attempts = 30) {
+  assert.ok(Number.isSafeInteger(attempts) && attempts > 0 && attempts <= 30);
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const document = await read();
+    if (document?.versions?.[pkg.version]) return document;
+    if (attempt + 1 < attempts) await wait(2000);
+  }
+  throw new Error('registry_version_not_visible_after_read_only_wait; inspect registry before any new publication');
 }
 
 async function verify(pkg) {
   const { manifest } = artifact(pkg);
-  let document;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    document = await get(`${registry}/${pkg.name}`);
-    if (document?.versions?.[pkg.version]) break;
-    if (attempt < 4) await new Promise(resolve => setTimeout(resolve, 2000)); // Read-only propagation check.
-  }
-  assert.ok(document, 'registry publication not visible; do not publish again');
+  const document = await waitForPublishedVersion(pkg);
   validatePublished(pkg, manifest, document);
   freshInstall(pkg, `${pkg.name}@${pkg.version}`, true);
   const message = `Verified ${pkg.name}@${pkg.version}: registry integrity, preview tag, attestation metadata, npm signature audit, fresh install and uninstall.\n`;
@@ -189,7 +203,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command === 'verify') await verify(pkg);
   } catch (error) {
     // Do not echo response bodies, process environments or child-process output.
-    console.error(`Release gate failed (${error.name}). Stop; do not retry publication. Inspect the failed gate and registry state.`);
+    const diagnostic = /latest_points_to_prerelease/.test(error.message) ? 'latest_points_to_prerelease'
+      : /registry_version_not_visible_after_read_only_wait/.test(error.message) ? 'registry_version_not_visible'
+      : /preview_tag_missing/.test(error.message) ? 'preview_tag_missing' : error.name;
+    console.error(`Release gate failed (${diagnostic}). Stop; do not retry publication. Inspect the failed gate and registry state.`);
     process.exitCode = 1;
   }
 }

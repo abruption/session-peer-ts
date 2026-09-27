@@ -2,7 +2,7 @@
 import { hostname } from 'node:os';
 import { lstatSync } from 'node:fs';
 import { claude, codex, Refusal } from './discovery.js';
-import { executable, run, UnknownOutcome } from './process.js';
+import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send } from './send.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 
@@ -70,6 +70,24 @@ async function input(): Promise<string> {
   catch { throw new Refusal('invalid_utf8'); }
 }
 const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
+// Classify only the no-message version preflight. Never expose SSH stderr,
+// which can contain user paths or agent output.
+export function sshPreflightFailure(result: Done, expected: string): string | undefined {
+  if (result.interrupted) return 'ssh_preflight_timeout';
+  if (!result.spawned) return 'ssh_unavailable';
+  const detail = result.stderr;
+  if (/host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|no [^\n]*host key is known/i.test(detail))
+    return 'ssh_host_key_untrusted';
+  if (/permission denied \(|authentication failed|too many authentication failures|tailnet policy does not permit/i.test(detail))
+    return 'ssh_authentication_refused';
+  if (/could not resolve hostname|name or service not known|network is unreachable|no route to host|connection timed out|connection refused|operation timed out/i.test(detail))
+    return 'ssh_unreachable';
+  if (result.code === 127 && /not found|no such file|not recognized/i.test(detail))
+    return 'remote_cli_missing';
+  if (result.code === 0 && result.stdout.trim() !== expected) return 'remote_version_mismatch';
+  if (result.code !== 0) return 'ssh_preflight_failed';
+  return undefined;
+}
 async function remote(options: Options, message?: string): Promise<Record<string, unknown>> {
   const { values, flags, command } = options;
   const target = host(values.get('--host')!);
@@ -84,7 +102,8 @@ async function remote(options: Options, message?: string): Promise<Record<string
   const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10',
     ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), '--', target];
   const preflight = await run(ssh, [...base, invoke('--version')], { timeout: 15000 });
-  if (preflight.interrupted || preflight.code !== 0 || preflight.stdout.trim() !== VERSION_LINE) throw new Refusal('remote_version_unverified', 1);
+  const preflightError = sshPreflightFailure(preflight, VERSION_LINE);
+  if (preflightError) throw new Refusal(preflightError, 1);
   const args = [command, '--json'];
   for (const [key, value] of values) if (['--agent', '--codex-home', '--codex-bin', '--to'].includes(key)) args.push(key, value);
   if (flags.has('--all')) args.push('--all');

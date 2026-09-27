@@ -14,12 +14,12 @@ export function executable(name: string): string {
   }
   throw new Refusal('executable_unavailable', 1);
 }
-export type Done = { code: number | null; stdout: string; spawned: boolean; interrupted: boolean };
+export type Done = { code: number | null; stdout: string; stderr: string; spawned: boolean; interrupted: boolean };
 export function run(binary: string, args: string[], options: {
   env?: NodeJS.ProcessEnv; input?: string; timeout?: number; limit?: number;
 } = {}): Promise<Done> {
   return new Promise(resolve => {
-    let stdout = '', bytes = 0, spawned = false, interrupted = false;
+    let stdout = '', stderr = '', bytes = 0, spawned = false, interrupted = false;
     const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'] });
     const stop = () => { interrupted = true; child.kill('SIGKILL'); };
     const timer = setTimeout(stop, options.timeout ?? 3000);
@@ -32,9 +32,14 @@ export function run(binary: string, args: string[], options: {
       else stdout += part;
     });
     // Drain but never report native stderr (it may contain message text/credentials).
-    child.stderr.on('data', (part: Buffer) => { bytes += part.length; if (bytes > (options.limit ?? 1024 * 1024)) stop(); });
+    // Retain stderr only for allowlisted error classification. Never include it in CLI output.
+    child.stderr.on('data', (part: Buffer) => {
+      bytes += part.length;
+      if (stderr.length < 4096) stderr += part.toString('utf8').slice(0, 4096 - stderr.length);
+      if (bytes > (options.limit ?? 1024 * 1024)) stop();
+    });
     child.once('error', () => { interrupted = true; });
-    child.once('close', code => { clearTimeout(timer); resolve({ code, stdout, spawned, interrupted }); });
+    child.once('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr, spawned, interrupted }); });
     child.stdin.end(options.input);
   });
 }

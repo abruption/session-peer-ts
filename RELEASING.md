@@ -142,6 +142,22 @@ checks. Inspect registry/staged state and retained evidence first. Read-only
 verification of the exact artifact may be repeated; publication may not.
 A broken/partial public release requires a reviewed new version and approval.
 
+### First publication propagation and tag state
+
+The first public `0.1.0-preview.0` upload returned success, while its workflow
+verification initially saw registry 404 responses. The exact tarball, provenance
+and isolated install were later verified, but the run remains failed. Verification
+now waits for up to 30 read attempts (two seconds between reads) before reporting
+that a published version is still invisible. Never re-upload that version.
+
+The registry also assigned both `preview` and `latest` to the initial preview
+despite the explicit `--tag preview`. The runbook requires `latest` to point to
+a stable version or be absent. Preflight for later staged previews fails while
+`latest` points to **any** prerelease. Review the current tags and agree on an
+operator action in npm before changing a tag; the workflow never does so. A
+verification failure from the tag check does not mean the upload failed. Record
+upload, registry propagation, tag state and install verification separately.
+
 ## Sources
 
 - [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)

@@ -11,6 +11,10 @@
   "os": ["darwin", "linux", "win32"],
   "description": "Python-free local and SSH client for Claude Code and Codex sessions (preview)",
   "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
   "license": "MIT",
   "engines": {
     "node": "^22.13.0 || ^24.0.0"
@@ -31,9 +35,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test test/*.test.mjs",
-    "test:windows": "npm run build && node --experimental-strip-types --test test/windows.test.ts",
-    "test:package": "npm run build && node test/package-smoke.mjs"
+    "test": "npm run build && npm run test:types && node --experimental-strip-types --test test/*.test.ts",
+    "test:types": "tsc -p tsconfig.test.json",
+    "test:windows": "npm run build && npm run test:types && node --experimental-strip-types --test test/windows.test.ts",
+    "test:package": "npm run build && node --experimental-strip-types test/package-smoke.ts"
   },
   "devDependencies": {
     "@types/node": "22.13.10",
