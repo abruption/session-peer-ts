@@ -2,12 +2,12 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 Send messages to running **Claude Code and Codex sessions**, locally or on
 another machine over SSH. This TypeScript client runs on Node.js without Python.
 
-**Preview release candidate; publication requires separate approval.** Package name:
+**0.1.0 stable release source; publication requires separate approval.** Package name:
 `session-peer`. CLI command: **`session-peer`**. This project does not provide
 a Relay server or hosted service.
 
@@ -36,9 +36,9 @@ existing key/host trust and the **same client version** on the destination.
 
 ## Install
 
-Do **not** run registry `npm install -g session-peer` or `npx session-peer`
-until an official npm release verifies ownership and provenance. Today, build
-a reviewed source checkout and optionally install its local tarball:
+The verified `0.1.0-preview.1` is public. To evaluate the reviewed `0.1.0`
+source before stable publication, build it and optionally install its local
+tarball:
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -48,14 +48,13 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.1.0-preview.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
 session-peer --version
 ```
 
-Expected: `session-peer 0.1.0-preview.1 (typescript)`. Keep the `./...tgz` path;
-it selects the locally built artifact, not an unverified registry package.
-After a separately approved npm release, the package will remain `session-peer`
-while the command remains `session-peer`; follow that release's version/dist-tag.
+Expected: `session-peer 0.1.0 (typescript)`. Keep the `./...tgz` path to
+select the locally built candidate. Use an explicit version for registry
+installation until the stable release has been approved and verified.
 
 ### Existing installations
 
@@ -73,9 +72,9 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.1.tgz
-& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version
-# Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer
+npm install --prefix "$env:TEMP\session-peer-ts-candidate" --ignore-scripts .\session-peer-0.1.0.tgz
+& "$env:TEMP\session-peer-ts-candidate\node_modules\.bin\session-peer.cmd" --version
+# Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-candidate" session-peer
 ```
 
 ## Use
@@ -116,7 +115,7 @@ authenticated OpenSSH control socket can be selected with
 `--ssh-control-path /absolute/local/socket`; this does not bypass host-key
 verification or grant a new login. For local Windows Codex commands, use a full
 `C:\Users\...\.codex` path for `--codex-home`. The Python CLI, if present,
-is not removed or replaced by this preview.
+is not removed or replaced by this client.
 
 ### Replies
 
@@ -173,18 +172,25 @@ npm publish is enabled. Licensed under [MIT](LICENSE).
 
 ## npm release installation
 
-Only after the official release and registry integrity/provenance verification,
-install the exact preview below. It is not the stable `latest` channel. Before
-publication, keep using the local tarball instructions above.
+The public preview passed registry integrity, provenance, signature and
+fresh-install checks. Install it by exact version. Before stable promotion,
+unversioned installs select the older `0.1.0-preview.0` marked `latest`:
 
 ```sh
 npm install --global --ignore-scripts session-peer@0.1.0-preview.1
+```
+
+Only after the separately approved `0.1.0` stage is published and verified,
+install the stable version by exact number:
+
+```sh
+npm install --global --ignore-scripts session-peer@0.1.0
 session-peer --version
 ```
 
-The manual workflow initially uses a short-lived bootstrap token. Later versions
-use Trusted Publisher OIDC staging and require a maintainer's 2FA approval;
-a staged upload is not a public release. See [RELEASING.md](RELEASING.md).
+The manual workflow uses Trusted Publisher OIDC staging and requires a
+maintainer's 2FA approval; a staged upload is not a public release. See
+[RELEASING.md](RELEASING.md).
 
 ## Related project
 

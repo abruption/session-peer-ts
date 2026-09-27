@@ -2,11 +2,11 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**プレビューのリリース候補であり、公開には別途承認が必要です。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**0.1.0 安定版のリリースソースであり、公開には別途承認が必要です。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
@@ -23,7 +23,7 @@ macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**
 
 ## インストール
 
-公式 npm リリースで所有権と来歴を確認するまでは、レジストリの `npm install -g session-peer` や `npx session-peer` を実行しないでください。現在はレビューしたソースをビルドし、必要ならローカル tarball をインストールします。
+検証済みの `0.1.0-preview.1` は公開されています。安定版の公開前にレビュー済みの `0.1.0` ソースを評価するには、ビルドして必要ならローカル tarball をインストールします。
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -33,17 +33,17 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 任意のグローバルインストール前に PATH の既存コマンドを確認
-npm install --global --ignore-scripts ./session-peer-0.1.0-preview.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
 session-peer --version
 ```
 
-期待値は `session-peer 0.1.0-preview.1 (typescript)`。`./...tgz` を省略しないでください。これは未確認のレジストリではなくローカル成果物を選択します。別途承認された npm 公開後も、パッケージ名とコマンド名は上記のままです。そのリリースのバージョン / dist-tag を確認してください。
+期待値は `session-peer 0.1.0 (typescript)`。`./...tgz` を省略せず、ローカルの候補を選択してください。安定版の承認と検証が完了するまでは、レジストリからのインストールに正確なバージョンを指定してください。
 
 ### 既存インストールとの共存
 
 インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
-Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.1.tgz` を実行し、`& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer` で削除します。
+Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-candidate" --ignore-scripts .\session-peer-0.1.0.tgz` を実行し、`& "$env:TEMP\session-peer-ts-candidate\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-candidate" session-peer` で削除します。
 
 ## 使い方
 
@@ -99,14 +99,20 @@ Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c
 
 ## npm 公開後のインストール
 
-公式リリースとレジストリの整合性・provenance 検証が完了した後にのみ、次の正確なプレビューバージョンをインストールしてください。安定版 `latest` ではありません。公開前は上記のローカル tarball を使います。
+公開済みプレビューは、レジストリの整合性・provenance・署名・新規インストールの検証に合格しました。安定版への昇格前は、バージョンを指定しないインストールが `latest` の旧 `0.1.0-preview.0` を選ぶため、次の正確なバージョンを指定してください。
 
 ```sh
 npm install --global --ignore-scripts session-peer@0.1.0-preview.1
+```
+
+別途承認された `0.1.0` の staging が公開・検証された後、安定版を正確なバージョンでインストールしてください。
+
+```sh
+npm install --global --ignore-scripts session-peer@0.1.0
 session-peer --version
 ```
 
-手動ワークフローは初回のみ短期 bootstrap トークンを使用します。以後は Trusted Publisher OIDC で staging し、保守者が 2FA で承認します。staging 成功は公開完了ではありません。[RELEASING.md](RELEASING.md) を参照してください。
+手動ワークフローは Trusted Publisher OIDC で staging し、保守者が 2FA で承認します。staging 成功は公開完了ではありません。[RELEASING.md](RELEASING.md) を参照してください。
 
 ## 関連プロジェクト
 
