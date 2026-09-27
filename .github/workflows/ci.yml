@@ -47,6 +47,8 @@ jobs:
         env:
           SESSION_PEER_PYTHON_ROOT: ${{ github.workspace }}/.reference-python
       - run: npm run test:package
+      - name: Exercise release packaging without publishing or credentials
+        run: node scripts/release.mjs pack && node scripts/release.mjs artifact
       - run: npm audit
   release-gate:
     name: release gate

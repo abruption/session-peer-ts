@@ -2,11 +2,11 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-unpublished; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**npm 未公開のプレビュー**（`private: true`）です。パッケージ名は `session-peer-ts`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**プレビューのリリース候補であり、公開には別途承認が必要です。**パッケージ名は `session-peer-ts`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
@@ -92,6 +92,17 @@ npm audit
 Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。テストには C コンパイラーと lsof も必要です。CI は基準コミットを固定し macOS/Linux × Node 22/24 を確認します。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
 
 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md)、[SECURITY.md](SECURITY.md) を参照してください。公開には別途承認が必要で、自動 npm 公開はありません。[MIT](LICENSE) ライセンスです。
+
+## npm 公開後のインストール
+
+公式リリースとレジストリの整合性・provenance 検証が完了した後にのみ、次の正確なプレビューバージョンをインストールしてください。安定版 `latest` ではありません。公開前は上記のローカル tarball を使います。
+
+```sh
+npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+session-peer --version
+```
+
+手動ワークフローは初回のみ短期 bootstrap トークンを使用します。以後は Trusted Publisher OIDC で staging し、保守者が 2FA で承認します。staging 成功は公開完了ではありません。[RELEASING.md](RELEASING.md) を参照してください。
 
 ## 関連プロジェクト
 

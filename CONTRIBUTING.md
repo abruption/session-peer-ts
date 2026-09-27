@@ -52,5 +52,8 @@ accounts, sessions or credentials. Security reports use SECURITY.md.
 Synchronize README.md, README.ko.md, README.ja.md and README.zh-CN.md. Keep runtime
 version/support status and install examples consistent. Product/source changes
 do not authorize npm publication, production deployment or service restarts.
+CI exercises release packaging without publishing. The manual publishing
+workflow has separate confirmation and environment-approval gates; see
+RELEASING.md before dispatching it. Never add publish credentials to PR tests.
 Dependabot automatic update PRs are not enabled; dependency changes are manual
 reviewed PRs with lockfile, audit, native-load and platform tests.

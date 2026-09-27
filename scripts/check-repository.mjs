@@ -10,7 +10,8 @@ const read = path => readFileSync(path, 'utf8');
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
 assert.equal(pkg.name, 'session-peer-ts');
-assert.equal(pkg.private, true, 'publication requires a separately reviewed change');
+assert.equal(pkg.private, false);
+assert.deepEqual(pkg.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'preview' });
 assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
 assert.equal(lock.packages[''].name, pkg.name);
 assert.equal(lock.packages[''].version, pkg.version);
@@ -18,11 +19,12 @@ assert.deepEqual(lock.packages[''].bin, pkg.bin);
 assert.equal(read('src/protocol.ts').match(/export const VERSION = '([^']+)'/)[1], pkg.version);
 
 const locales = ['README.md', 'README.ko.md', 'README.ja.md', 'README.zh-CN.md'];
-const marker = '<!-- docs-contract: preview-unpublished; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->';
+const marker = '<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->';
 for (const file of locales) {
   const content = read(file);
-  for (const token of [marker, 'private: true', 'npm ci --ignore-scripts',
+  for (const token of [marker, 'npm ci --ignore-scripts',
     'npm pack --ignore-scripts', `npm install --global --ignore-scripts ./session-peer-ts-${pkg.version}.tgz`,
+    `npm install --global --ignore-scripts session-peer-ts@${pkg.version}`,
     `session-peer ${pkg.version} (typescript)`, 'consumptionConfirmed', 'submitted:null',
     'https://github.com/abruption/session-peer-ts', 'https://github.com/abruption/session-peer',
     ...locales.map(name => `](${name})`)]) {

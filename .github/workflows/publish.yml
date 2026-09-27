@@ -1,0 +1,139 @@
+name: npm preview publication
+
+# No push, tag, release or PR trigger. Merging this file never publishes.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: First package bootstrap, or tokenless staging after npm trust setup
+        required: true
+        type: choice
+        default: trusted-stage
+        options:
+          - trusted-stage
+          - bootstrap-token
+      version:
+        description: Exact package.json prerelease version
+        required: true
+        type: string
+      confirmation:
+        description: 'Type: session-peer-ts@<version> <mode>'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-preview-publication
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'abruption/session-peer-ts' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install pinned publishing CLI without lifecycle scripts
+        run: npm install --global --ignore-scripts npm@11.15.0
+      - name: Require approved main commit, exact inputs and protected npm environment
+        run: node scripts/release.mjs preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: abruption/session-peer
+          ref: 47c23713d0a2a3c11ebde6186afd8c43489b8b65
+          path: .reference-python
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: npm ci --ignore-scripts
+      - run: node scripts/check-repository.mjs
+      - run: npm test
+        env:
+          SESSION_PEER_PYTHON_ROOT: ${{ github.workspace }}/.reference-python
+      - run: npm run test:package
+      - run: npm audit
+      - name: Pack and test the exact publication artifact, not a later rebuild
+        run: node scripts/release.mjs pack
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-preview-${{ github.sha }}
+          path: release-dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Must be pre-created with a required reviewer; preflight rejects missing rules.
+    environment: npm
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      NPM_CONFIG_FETCH_RETRIES: '0'
+      NPM_CONFIG_FETCH_TIMEOUT: '60000'
+      NPM_CONFIG_IGNORE_SCRIPTS: 'true'
+      RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global --ignore-scripts npm@11.15.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: npm-preview-${{ github.sha }}
+          path: release-dist/
+      - name: Recheck gates after approval and validate downloaded tarball
+        run: node scripts/release.mjs preflight && node scripts/release.mjs artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: First package only — publish once with the bootstrap token
+        if: inputs.mode == 'bootstrap-token'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          test -n "$NODE_AUTH_TOKEN"
+          npm publish "./release-dist/session-peer-ts-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
+      - name: Subsequent versions — stage once using OIDC, with no token fallback
+        if: inputs.mode == 'trusted-stage'
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: npm stage publish "./release-dist/session-peer-ts-${RELEASE_VERSION}.tgz" --access public --tag preview --provenance --ignore-scripts --registry https://registry.npmjs.org/
+      - name: Verify first publication integrity, provenance metadata and fresh install
+        if: inputs.mode == 'bootstrap-token'
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: node scripts/release.mjs verify
+      - name: Mark staged output as awaiting human approval, not a release
+        if: inputs.mode == 'trusted-stage'
+        run: |
+          echo 'Staged only. Review the npm stage ID above and approve with 2FA on npmjs.com. No public release is claimed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'After approval, download this run artifact and run node scripts/release.mjs verify from this exact source commit.' >> "$GITHUB_STEP_SUMMARY"

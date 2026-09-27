@@ -1,7 +1,12 @@
 {
   "name": "session-peer-ts",
   "version": "0.1.0-preview.0",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public",
+    "tag": "preview"
+  },
   "repository": { "type": "git", "url": "git+https://github.com/abruption/session-peer-ts.git" },
   "os": ["darwin", "linux"],
   "description": "Python-free local and SSH client for Claude Code and Codex sessions (preview)",
