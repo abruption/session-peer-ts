@@ -153,7 +153,7 @@ npm audit
 
 Python은 개발용 호환성 기준(v1.0.2 커밋
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`)일 뿐 런타임 의존성이 아닙니다. 테스트에는
-C 컴파일러와 lsof는 POSIX 계약 테스트에 필요합니다. CI는 참조 커밋을 고정하고 macOS/Linux × Node 22/24와 Windows native Node 24를
+C 컴파일러와 lsof는 POSIX 계약 테스트에 필요합니다. CI는 참조 커밋을 고정하고 macOS/Linux/Windows × Node 22/24를
 검사합니다. 임시 SQLite·Unix inbox·실제 잠금 fixture와 [VALIDATION.md](VALIDATION.md)의
 실제 TUI 증거는 구분합니다. fixture 통과는 ACK가 아닙니다. 패키지 내용·반복 빌드 해시·
 새 환경 설치·삭제도 검사합니다. 네이티브 의존성에는 설치 스크립트가 있지만 검증한 사전

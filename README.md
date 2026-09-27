@@ -159,7 +159,7 @@ npm audit
 Python is only the development conformance oracle (v1.0.2 commit
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`), never a runtime dependency. Tests also
 need a C compiler and lsof for the POSIX contract suite. CI pins the reference
-and covers macOS/Linux × Node 22/24 plus native Windows Node 24. Temporary
+and covers macOS/Linux/Windows × Node 22/24. Temporary
 SQLite, Unix inbox and real lock fixtures are distinct from
 the dedicated real-TUI evidence in [VALIDATION.md](VALIDATION.md). A green fixture
 test is not an ACK. Package tests inspect contents, repeat-pack hashes, clean
