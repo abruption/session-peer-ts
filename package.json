@@ -11,11 +11,18 @@
     "node": "^22.13.0 || ^24.0.0"
   },
   "bin": {
-    "session-peer-ts": "dist/cli.js"
+    "session-peer": "dist/cli.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "README.ko.md",
+    "README.ja.md",
+    "README.zh-CN.md",
+    "CONTRIBUTING.md",
+    "RELEASING.md",
+    "SECURITY.md",
+    "VALIDATION.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

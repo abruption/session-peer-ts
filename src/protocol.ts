@@ -1,6 +1,7 @@
 import { Refusal } from './discovery.js';
 import { uuid } from './writer.js';
 export const VERSION = '0.1.0-preview.0';
+export const VERSION_LINE = `session-peer ${VERSION} (typescript)`;
 export function host(value: string): string {
   if (value.length > 255 || !/^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*@)?[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value)) throw new Refusal('invalid_ssh_host');
   return value;

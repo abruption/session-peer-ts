@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/abruption/session-peer-ts/security/advisories/new
+    about: Do not disclose vulnerabilities in public issues. See SECURITY.md.
+  - name: Existing Python session-peer
+    url: https://github.com/abruption/session-peer
+    about: Python CLI, optional Relay and existing stable releases are maintained separately.
+  - name: Private support (English / Korean)
+    url: "mailto:support@abruption.dev?subject=%5Bsession-peer-ts%5D%20Support"
+    about: Redacted descriptions only. Best-effort support; no guaranteed response deadline.

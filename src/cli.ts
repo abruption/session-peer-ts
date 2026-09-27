@@ -3,7 +3,7 @@ import { hostname } from 'node:os';
 import { claude, codex, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { checkMessage, send } from './send.js';
-import { envelope, host, reply, VERSION } from './protocol.js';
+import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 
 type Options = { command: 'list' | 'send'; values: Map<string, string>; flags: Set<string> };
 export function parse(args: string[]): Options {
@@ -64,11 +64,11 @@ const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 async function remote(options: Options, message?: string): Promise<Record<string, unknown>> {
   const { values, flags, command } = options;
   const target = host(values.get('--host')!);
-  const binary = values.get('--remote-bin') ?? 'session-peer-ts';
+  const binary = values.get('--remote-bin') ?? 'session-peer';
   const ssh = executable('ssh');
   const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '--', target];
   const preflight = await run(ssh, [...base, `${quote(binary)} --version`], { timeout: 15000 });
-  if (preflight.interrupted || preflight.code !== 0 || preflight.stdout.trim() !== `session-peer-ts ${VERSION}`) throw new Refusal('remote_version_unverified', 1);
+  if (preflight.interrupted || preflight.code !== 0 || preflight.stdout.trim() !== VERSION_LINE) throw new Refusal('remote_version_unverified', 1);
   const args = [command, '--json'];
   for (const [key, value] of values) if (['--agent', '--codex-home', '--codex-bin', '--to'].includes(key)) args.push(key, value);
   if (flags.has('--all')) args.push('--all');
@@ -96,8 +96,8 @@ try {
   if (!((major === 22 && minor! >= 13) || major === 24)) throw new Refusal('unsupported_node_version');
   if (!['darwin', 'linux'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
-  if (args.length === 1 && args[0] === '--version') console.log(`session-peer-ts ${VERSION}`);
-  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer-ts preview: list --agent claude|codex --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex requires --codex-home. Relay/MCP/wake/Windows unsupported.');
+  if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
+  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript preview): list --agent claude|codex --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex requires --codex-home. Relay/MCP/wake/Windows unsupported.');
   else {
     const wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
