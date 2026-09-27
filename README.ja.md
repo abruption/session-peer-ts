@@ -33,17 +33,17 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 任意のグローバルインストール前に PATH の既存コマンドを確認
-npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.1.tgz
 session-peer --version
 ```
 
-期待値は `session-peer 0.1.0-preview.0 (typescript)`。`./...tgz` を省略しないでください。これは未確認のレジストリではなくローカル成果物を選択します。別途承認された npm 公開後も、パッケージ名とコマンド名は上記のままです。そのリリースのバージョン / dist-tag を確認してください。
+期待値は `session-peer 0.1.0-preview.1 (typescript)`。`./...tgz` を省略しないでください。これは未確認のレジストリではなくローカル成果物を選択します。別途承認された npm 公開後も、パッケージ名とコマンド名は上記のままです。そのリリースのバージョン / dist-tag を確認してください。
 
 ### 既存インストールとの共存
 
 インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
-Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz` を実行し、`& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer` で削除します。
+Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.1.tgz` を実行し、`& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer` で削除します。
 
 ## 使い方
 
@@ -102,7 +102,7 @@ Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c
 公式リリースとレジストリの整合性・provenance 検証が完了した後にのみ、次の正確なプレビューバージョンをインストールしてください。安定版 `latest` ではありません。公開前は上記のローカル tarball を使います。
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.1
 session-peer --version
 ```
 

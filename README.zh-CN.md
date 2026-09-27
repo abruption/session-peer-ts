@@ -33,17 +33,17 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 可选：全局安装前先检查 PATH 选择的现有命令
-npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.1.tgz
 session-peer --version
 ```
 
-预期输出：`session-peer 0.1.0-preview.0 (typescript)`。保留 `./...tgz` 路径，确保安装的是本地构建产物，而非未验证的注册表包。将来另行批准 npm 发布后，包名和命令名仍如上所示，请按该次发布的版本 / dist-tag 安装。
+预期输出：`session-peer 0.1.0-preview.1 (typescript)`。保留 `./...tgz` 路径，确保安装的是本地构建产物，而非未验证的注册表包。将来另行批准 npm 发布后，包名和命令名仍如上所示，请按该次发布的版本 / dist-tag 安装。
 
 ### 与已有安装共存
 
 安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer`，随后再次检查 PATH。
 
-在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer` 卸载。
+在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.1.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer` 卸载。
 
 ## 使用
 
@@ -102,7 +102,7 @@ Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde618
 仅在官方发布以及注册表完整性、provenance 验证完成后，安装以下精确预览版本。它不是稳定版 `latest`。公开前继续使用上述本地 tarball 安装。
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.1
 session-peer --version
 ```
 

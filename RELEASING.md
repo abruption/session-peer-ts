@@ -113,6 +113,17 @@ Prepare a new immutable preview version through a PR. Dispatch main with mode
 already exist; published versions are refused. One `npm stage publish` runs
 with OIDC and the preview tag.
 
+### 0.1.0-preview.1 candidate
+
+This candidate includes the merged TypeScript declaration, SSH preflight,
+publication-verification and native Windows changes (#7–#10). Its publication
+mode is `trusted-stage`; `bootstrap-token` is reserved for preview.0 and must
+not be reused. Before dispatch, resolve the existing `latest` dist-tag pointing
+to preview.0 through a separately reviewed npm operator action, then confirm
+the registry has no `0.1.0-preview.1` version and re-run the exact-main CI gate.
+The workflow deliberately refuses staging while `latest` points to a prerelease.
+Do not infer publication from local packaging, a green PR, or an approved stage.
+
 **A successful staged run is pending approval, not a public release.** Record its
 stage ID from npm output. Review its tarball against the retained manifest and
 approve with 2FA in npmjs.com or interactive `npm stage approve`. OIDC cannot
