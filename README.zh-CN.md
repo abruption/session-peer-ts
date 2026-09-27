@@ -26,7 +26,7 @@
 
 未实现 Relay 传输、MCP、wake/resume、非活跃会话排队、Antigravity、自动更新、隐式多代理发现及面向人的文本输出。不支持的命令会明确失败；这不是通用编排器。
 
-客户端功能计划见 [兼容性路线图](https://github.com/abruption/session-peer-ts/issues/33)；计划不代表当前支持。提供 Relay 服务器或托管服务不属于本客户端范围。
+客户端功能计划见 [版本化兼容性表与 npm 迁移指南](PARITY.md)；计划不代表当前支持。提供 Relay 服务器或托管服务不属于本客户端范围。
 
 ## 环境要求
 
@@ -122,7 +122,7 @@ npm run test:package
 npm audit
 ```
 
-Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。POSIX 契约测试还需要 C 编译器和 lsof。CI 在三种 OS 上使用 Node 22/24。macOS/Linux 对固定基准执行完整契约与包检查；Windows 执行构建、类型检查、范围有限的原生 Claude inbox 与未持有锁 smoke 测试，以及 audit。Windows 的 held-writer、queue 和包验证扩展由 [#34](https://github.com/abruption/session-peer-ts/issues/34) 跟踪。Windows x64/Node 24 实机 ACK 是单独的一次性证据。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
+Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。POSIX 契约测试还需要 C 编译器和 lsof。CI 在三种 OS 上使用 Node 22/24。macOS/Linux 对固定基准执行完整契约与包检查；Windows x64 执行构建、类型检查、原生 Claude inbox、持有/空闲锁、writer 归属与提交前竞争、CLI 队列结果、隔离模拟 SSH 目标的实际 PowerShell/.cmd 帧处理、包安装/原生加载/卸载及 audit。这些属于 fixture 检查；Windows 不运行 POSIX/Python 参考测试套件。Windows x64/Node 24 实机 ACK 是单独的一次性证据。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
 
 参见 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md) 和 [SECURITY.md](SECURITY.md)。后续版本的发布需单独批准，未启用自动 npm 发布。采用 [MIT](LICENSE) 许可证。
 

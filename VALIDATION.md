@@ -50,12 +50,37 @@ All three operating systems run Node 22/24. The checks differ:
 | Platform | Automated scope |
 | --- | --- |
 | macOS/Linux | Full contract suite, type checks, Python reference fixtures, package smoke, release pack/artifact checks and audit. |
-| Windows | Build/type checks, Claude named-pipe/auth/stale-record fixture, unlocked-lock fixture and audit. |
+| Windows x64 | Build/type checks, Claude named-pipe/auth/stale-record fixtures, held/free kernel locks, writer ownership and pre-submit races, native queue outcome fixtures, PowerShell/.cmd SSH framing through a fake endpoint, package/native-load smoke and audit. |
 
-Windows CI does not yet cover held Codex writer/queue, the broader CLI/SSH
-contracts or package-install smoke; [#34](https://github.com/abruption/session-peer-ts/issues/34)
-tracks that work. The Windows x64/Node 24 user-observed ACKs below are separate
-one-shot evidence, not Windows arm64 or live Node 22 qualification.
+Windows runs its native suite, not the POSIX/Python reference suite. Both
+Windows Node jobs are required by the aggregate release gate. The x64/Node 24
+user-observed ACKs below remain separate one-shot evidence, not Windows arm64 or
+live Node 22 qualification. See [PARITY.md](PARITY.md) for the versioned matrix.
+
+## 0.1.1 milestone verification work — 2026-09-28 KST
+
+[PR #37](https://github.com/abruption/session-peer-ts/pull/37) expands Windows
+fixture coverage for #34 and adds the #33 compatibility/migration guide.
+No runtime feature, package version or public npm tag changes in this work.
+The initial expanded Windows x64 Node 22/24 suite and all other platform jobs
+passed [run 36357787318](https://github.com/abruption/session-peer-ts/actions/runs/36357787318)
+at commit `5c84e91`. Final PR-head checks must include the additional controlled
+sampling races and packaged guide; use the PR's latest required release gate.
+
+The Windows C# fixture holds actual LockFileEx locks and supplies native process
+PID/SID/start evidence through Restart Manager. Tests cover wrong and competing
+openers, lock replacement between samples, owner replacement during pre-submit
+revalidation, dry-run zero calls, one queue submission, inactive/ambiguous refusal,
+nonzero/timeout unknown outcomes without retry or stderr leakage. Sampling-race
+tests control the delay only; lock/process/owner inspection remains native.
+
+The isolated `ssh.exe` fixture records the wire request and runs actual
+PowerShell with a `.cmd` path containing spaces. It checks exact-version
+preflight, stdin JSON, refusal/unknown handling and one native fixture queue.
+It does not connect to a network or authenticate a real SSH host. Package smoke
+checks the installed `.cmd` launcher, empty discovery, declarations, installed
+native lock binary, repeat-pack hashes and uninstall. No fixture result is
+real Codex queue acceptance, live-TUI ACK or Windows arm64 evidence.
 
 ## Public 0.1.0-preview.1 — 2026-09-27 KST
 

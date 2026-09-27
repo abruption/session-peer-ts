@@ -32,7 +32,7 @@ Relay 전송, MCP, wake/resume, 비활성 세션 queue, Antigravity, 자동 업�
 암묵적인 전체 에이전트 탐색, 일반 텍스트 출력은 미지원입니다. 미지원 옵션은 명시적으로
 거부하며 범용 오케스트레이터를 지향하지 않습니다.
 
-클라이언트 기능 계획은 [호환성 로드맵](https://github.com/abruption/session-peer-ts/issues/33)에서 추적하며, 계획은 현재 지원을 뜻하지 않습니다. Relay 서버·호스팅 서비스 제공은 이 클라이언트의 범위 밖입니다.
+클라이언트 기능 계획은 [버전별 호환성 표와 npm 이주 가이드](PARITY.md)에서 추적하며, 계획은 현재 지원을 뜻하지 않습니다. Relay 서버·호스팅 서비스 제공은 이 클라이언트의 범위 밖입니다.
 
 ## 요구사항
 
@@ -182,8 +182,9 @@ Python은 개발용 호환성 기준(v1.0.2 커밋
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`)일 뿐 런타임 의존성이 아닙니다. POSIX 계약 테스트에는
 C 컴파일러와 lsof도 필요합니다. CI는 세 OS에서 Node 22/24를 사용합니다.
 macOS/Linux는 고정된 참조 기준으로 전체 계약·패키지 검사를 실행하고, Windows는
-빌드·타입 검사, 제한된 네이티브 Claude inbox·해제된 잠금 smoke 테스트와 audit를 실행합니다.
-Windows의 held-writer·queue·패키지 검증 확대는 [#34](https://github.com/abruption/session-peer-ts/issues/34)에서 추적합니다.
+x64에서 빌드·타입 검사, 네이티브 Claude inbox·점유/해제된 잠금, writer 소유권·제출 직전 경합,
+CLI 큐 결과, 격리된 가짜 SSH 대상의 실제 PowerShell/.cmd 프레이밍, 패키지 설치·네이티브 로드·삭제와 audit를 실행합니다.
+이는 fixture 검사이며 Windows에서 POSIX/Python 참조 스위트를 실행한다는 뜻은 아닙니다.
 Windows x64/Node 24 실기기 ACK는 별도의 일회성 증거입니다. 임시 SQLite·Unix inbox·실제 잠금 fixture와 [VALIDATION.md](VALIDATION.md)의
 실제 TUI 증거는 구분합니다. fixture 통과는 ACK가 아닙니다. 패키지 내용·반복 빌드 해시·
 새 환경 설치·삭제도 검사합니다. 네이티브 의존성에는 설치 스크립트가 있지만 검증한 사전

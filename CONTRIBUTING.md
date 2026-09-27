@@ -47,6 +47,10 @@ version; it does not retroactively alter `0.1.0-preview.0`.
 Python reference commit: `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 CI checks it out separately. Python is a development oracle, never a runtime
 fallback. Match Node 22/24, macOS/Linux and the native dependency requirements.
+Windows CI separately runs `npm run test:windows` and `npm run test:package`
+on x64 Node 22/24. The Windows fixture compiles with the runner's .NET Framework
+C# compiler and uses real locks/processes plus an isolated fake SSH endpoint
+that invokes actual PowerShell; no live sessions or network destinations.
 Keep `package-lock.json` tracked. Do not commit dist, node_modules, local
 worktrees, credentials, agent state, transcripts or real test evidence.
 
@@ -58,7 +62,8 @@ from queueing. Fixtures are not real-agent evidence. Live tests require explicit
 authorization, dedicated targets and independent observation; CI never uses live
 accounts, sessions or credentials. Security reports use SECURITY.md.
 
-Synchronize README.md, README.ko.md, README.ja.md and README.zh-CN.md. Keep runtime
+Synchronize README.md, README.ko.md, README.ja.md and README.zh-CN.md. Update PARITY.md with feature/command/env/output changes, source baseline,
+transport limits, evidence date and the relevant issue acceptance tests. Keep runtime
 version/support status and install examples consistent. Product/source changes
 do not authorize npm publication, production deployment or service restarts.
 CI exercises release packaging without publishing. The manual publishing

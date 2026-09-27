@@ -52,7 +52,7 @@ Not implemented: Relay transport, MCP, wake/resume, inactive queueing,
 Antigravity, automatic updates, implicit multi-agent discovery, or human text
 output. Unsupported commands fail explicitly; this is not a general orchestrator.
 
-Planned client gaps are tracked in the [parity roadmap](https://github.com/abruption/session-peer-ts/issues/33); a plan is not an available feature. Relay server/hosted-service delivery remains outside this client's scope.
+Planned client gaps are tracked in the [versioned compatibility matrix and npm migration guide](PARITY.md); a plan is not an available feature. Relay server/hosted-service delivery remains outside this client's scope.
 
 ## Requirements
 
@@ -190,9 +190,11 @@ Python is only the development conformance oracle (v1.0.2 commit
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`), never a runtime dependency. Tests also
 need a C compiler and lsof for the POSIX contract suite. CI uses Node 22/24 on
 macOS, Linux and Windows. macOS/Linux run the full contract suite and package
-checks against the pinned reference; Windows runs build/type checks, bounded
-native Claude inbox and free-lock smoke tests, and audit. Windows held-writer,
-queue and package coverage is tracked in [#34](https://github.com/abruption/session-peer-ts/issues/34).
+checks against the pinned reference. Windows x64 runs build/type checks, native
+Claude inbox and held/free lock fixtures, writer ownership/revalidation races,
+CLI queue outcomes, PowerShell/.cmd SSH framing through an isolated fake endpoint,
+package install/native-load/uninstall checks and audit. These are fixture checks;
+Windows does not run the POSIX/Python reference suite.
 The Windows x64/Node 24 live ACKs are separate, one-shot evidence. Temporary
 SQLite, Unix inbox and real lock fixtures are distinct from
 the dedicated real-TUI evidence in [VALIDATION.md](VALIDATION.md). A green fixture

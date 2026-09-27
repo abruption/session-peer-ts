@@ -26,7 +26,7 @@
 
 Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、暗黙の全エージェント検出、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
 
-クライアント機能の計画は [互換性ロードマップ](https://github.com/abruption/session-peer-ts/issues/33) で追跡します。計画は現在の対応を意味しません。Relay サーバーやホスティングサービスの提供は本クライアントの範囲外です。
+クライアント機能の計画は [バージョン別互換性表と npm 移行ガイド](PARITY.md) で追跡します。計画は現在の対応を意味しません。Relay サーバーやホスティングサービスの提供は本クライアントの範囲外です。
 
 ## 必要条件
 
@@ -122,7 +122,7 @@ npm run test:package
 npm audit
 ```
 
-Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は三つの OS で Node 22/24 を使います。macOS/Linux は固定した基準に対する全契約・パッケージ検査、Windows はビルド・型検査、限定的なネイティブ Claude inbox・未保持ロックの smoke テストと audit を実行します。Windows の held-writer・queue・パッケージ検証拡充は [#34](https://github.com/abruption/session-peer-ts/issues/34) で追跡します。Windows x64/Node 24 の実機 ACK は別の一回限りの証拠です。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
+Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は三つの OS で Node 22/24 を使います。macOS/Linux は固定した基準に対する全契約・パッケージ検査、Windows x64 はビルド・型検査、ネイティブ Claude inbox、保持/未保持ロック、writer 所有権と提出直前の競合、CLI queue 結果、隔離した模擬 SSH 宛先での実 PowerShell/.cmd フレーミング、パッケージのインストール・ネイティブ読込・削除と audit を実行します。これらは fixture 検査で、Windows では POSIX/Python 参照スイートを実行しません。Windows x64/Node 24 の実機 ACK は別の一回限りの証拠です。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
 
 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md)、[SECURITY.md](SECURITY.md) を参照してください。今後のリリースの公開には別途承認が必要で、自動 npm 公開はありません。[MIT](LICENSE) ライセンスです。
 
