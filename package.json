@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.mjs",
-    "test:windows": "npm run build && node --test test/windows.test.mjs",
+    "test:windows": "npm run build && node --experimental-strip-types --test test/windows.test.ts",
     "test:package": "npm run build && node test/package-smoke.mjs"
   },
   "devDependencies": {

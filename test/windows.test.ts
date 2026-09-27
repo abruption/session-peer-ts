@@ -21,7 +21,7 @@ test('Windows native inbox authenticates and sends one message without exposing 
     const record = { pid: process.pid, startedAt: Date.now(), name, messagingSocketPath: pipe };
     writeFileSync(join(sessions, `${process.pid}.json`), JSON.stringify(record));
     writeFileSync(join(sessions, `${process.pid}.fixture.key`), JSON.stringify({ peerToken:secret }));
-    const received = [];
+    const received: string[] = [];
     const server = createServer(socket => {
       let buffer = '';
       socket.on('data', part => {
@@ -30,8 +30,12 @@ test('Windows native inbox authenticates and sends one message without exposing 
       });
     });
     try {
-      await new Promise((resolve, reject) => server.listen(pipe, error => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(pipe, resolve);
+      });
       const found = claude(false).sessions;
+      assert.ok(Array.isArray(found));
       assert.equal(found.length, 1);
       assert.equal(found[0].reachable, true);
       const dry = await send({ to:`claude:${name}`, message:'fixture', dryRun:true });
@@ -40,15 +44,16 @@ test('Windows native inbox authenticates and sends one message without exposing 
       assert.equal(sent.status, 'posted');
       assert.equal(sent.consumptionConfirmed, false);
       assert.equal(received.length, 1);
-      const lines = received[0].trim().split('\n').map(line => JSON.parse(line));
+      const lines = received[0]!.trim().split('\n').map(line => JSON.parse(line));
       assert.deepEqual(lines[0], { type:'auth', token:secret });
       assert.deepEqual(lines[1], { type:'user', message:{ role:'user', content:'fixture' } });
       assert.equal(JSON.stringify(sent).includes(secret), false);
       writeFileSync(join(sessions, `${process.pid}.json`), JSON.stringify({ ...record, startedAt:1 }));
       const stale = claude(true).sessions;
+      assert.ok(Array.isArray(stale));
       assert.equal(stale[0].reachable, false);
     } finally {
-      await new Promise(resolve => server.close(resolve));
+      await new Promise<void>(resolve => server.close(() => resolve()));
       if (prior === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = prior;
       rmSync(root, { recursive:true, force:true });
