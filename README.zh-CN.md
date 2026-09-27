@@ -1,12 +1,21 @@
 # session-peer (TypeScript)
 
+[![npm 版本](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm 每周下载](https://img.shields.io/npm/dw/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm 每月下载](https://img.shields.io/npm/dm/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![CI](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml)
+[![Node 支持](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
+[![MIT 许可证](https://img.shields.io/npm/l/session-peer)](LICENSE)
+
+<sub>npm 下载统计收录这个新发布的包后，下载徽章会更新。</sub>
+
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 向正在运行的 **Claude Code 和 Codex 会话**发送消息，支持本机和跨机器 SSH。这是运行于 Node.js 的 TypeScript 客户端，不需要 Python。
 
-**0.1.0 稳定版发布源码，正式发布需另行批准。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
+**0.1.0 稳定版已在 npm 发布。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
 
 ## 功能与边界
 
@@ -23,7 +32,18 @@ macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x
 
 ## 安装
 
-已验证的 `0.1.0-preview.1` 已公开。稳定版发布前评估经审查的 `0.1.0` 源码时，请构建源码，并按需安装本地 tarball：
+已验证的稳定版可在 Node 22.x 的 22.13 及以上或 24.x 上安装。Python CLI 也使用同一个命令名；若已有安装，请先检查 PATH。
+
+```sh
+npm install --global --ignore-scripts session-peer@0.1.0
+session-peer --version
+```
+
+预期输出：`session-peer 0.1.0 (typescript)`。先用 `session-peer list --agent claude --json` 查找目标，并在发送前使用 `--dry-run` 验证。
+
+### 从源码构建
+
+若要使用经审查的源码而非公开的 npm 包，请构建源码，并按需安装本地 tarball：
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -37,13 +57,13 @@ npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
 session-peer --version
 ```
 
-预期输出：`session-peer 0.1.0 (typescript)`。保留 `./...tgz` 路径以选择本地候选产物。在稳定版获批并完成验证之前，从注册表安装时请指定准确版本。
+保留 `./...tgz` 路径以选择本地产物。使用后续版本的源码时，请先确认检出的版本。
 
 ### 与已有安装共存
 
 安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer`，随后再次检查 PATH。
 
-在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-candidate" --ignore-scripts .\session-peer-0.1.0.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-candidate\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-candidate" session-peer` 卸载。
+在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.1.0.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` 卸载。
 
 ## 使用
 
@@ -95,21 +115,14 @@ npm audit
 
 Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。POSIX 契约测试还需要 C 编译器和 lsof。CI 固定基准提交，覆盖 macOS/Linux/Windows × Node 22/24。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md) 和 [SECURITY.md](SECURITY.md)。发布需单独批准，未启用自动 npm 发布。采用 [MIT](LICENSE) 许可证。
+参见 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md) 和 [SECURITY.md](SECURITY.md)。后续版本的发布需单独批准，未启用自动 npm 发布。采用 [MIT](LICENSE) 许可证。
 
-## npm 发布后的安装
+## npm 版本
 
-已公开的预览版通过了注册表完整性、provenance、签名及全新安装验证。稳定版升级前，未指定版本的安装会选中标记为 `latest` 的旧版 `0.1.0-preview.0`，因此请指定以下准确版本：
-
-```sh
-npm install --global --ignore-scripts session-peer@0.1.0-preview.1
-```
-
-待另行批准的 `0.1.0` staging 获公开并验证后，再按准确版本安装稳定版：
+公开的 `session-peer@0.1.0` 已通过注册表完整性、provenance 元数据、签名、全新安装与卸载验证。`latest` 指向 `0.1.0`，`preview` 指向 `0.1.0-preview.1`。未指定版本安装前请检查当前标签：
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0
-session-peer --version
+npm view session-peer dist-tags
 ```
 
 手动工作流通过 Trusted Publisher OIDC 上传至 staging，由维护者使用 2FA 批准。staging 成功不代表已经公开发布。参见 [RELEASING.md](RELEASING.md)。
