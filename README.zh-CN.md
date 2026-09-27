@@ -1,12 +1,12 @@
-# session-peer-ts
+# session-peer (TypeScript)
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: preview-candidate; package=session-peer-ts; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: preview-candidate; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
 向正在运行的 **Claude Code 和 Codex 会话**发送消息，支持本机和跨机器 SSH。这是运行于 Node.js 的 TypeScript 客户端，不需要 Python。
 
-**预览发布候选，正式上传需另行批准。**包名为 `session-peer-ts`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
+**预览发布候选，正式上传需另行批准。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
 
 ## 功能与边界
 
@@ -23,7 +23,7 @@ macOS 或 Linux；Node **22.x 中的 22.13 及以上，或 24.x**。不支持 No
 
 ## 安装
 
-在正式 npm 发布确认包归属和来源之前，**不要**运行注册表安装 `npm install -g session-peer-ts` 或 `npx session-peer-ts`。目前请构建经审查的源码，并按需安装本地 tarball：
+在正式 npm 发布确认包归属和来源之前，**不要**运行注册表安装 `npm install -g session-peer` 或 `npx session-peer`。目前请构建经审查的源码，并按需安装本地 tarball：
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -33,7 +33,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 可选：全局安装前先检查 PATH 选择的现有命令
-npm install --global --ignore-scripts ./session-peer-ts-0.1.0-preview.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.1.0-preview.0.tgz
 session-peer --version
 ```
 
@@ -41,7 +41,7 @@ session-peer --version
 
 ### 与已有安装共存
 
-安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer-ts`，随后再次检查 PATH。
+安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer`，随后再次检查 PATH。
 
 ## 使用
 
@@ -98,7 +98,7 @@ Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde618
 仅在官方发布以及注册表完整性、provenance 验证完成后，安装以下精确预览版本。它不是稳定版 `latest`。公开前继续使用上述本地 tarball 安装。
 
 ```sh
-npm install --global --ignore-scripts session-peer-ts@0.1.0-preview.0
+npm install --global --ignore-scripts session-peer@0.1.0-preview.0
 session-peer --version
 ```
 

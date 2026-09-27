@@ -1,5 +1,5 @@
 {
-  "name": "session-peer-ts",
+  "name": "session-peer",
   "version": "0.1.0-preview.0",
   "private": false,
   "publishConfig": {

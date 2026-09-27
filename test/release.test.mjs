@@ -9,10 +9,12 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))
 const sha = 'a'.repeat(40);
 const env = { GITHUB_REPOSITORY: 'abruption/session-peer-ts', GITHUB_REF: 'refs/heads/main',
   GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_SHA: sha, RELEASE_MODE: 'bootstrap-token',
-  RELEASE_VERSION: pkg.version, RELEASE_CONFIRMATION: `session-peer-ts@${pkg.version} bootstrap-token` };
+  RELEASE_VERSION: pkg.version, RELEASE_CONFIRMATION: `session-peer@${pkg.version} bootstrap-token` };
 
 test('release dispatch requires exact main, version, explicit confirmation and preview contract', () => {
   validateDispatch(pkg, env);
+  assert.throws(() => validatePackage({ ...pkg, name: 'session-peer-ts' }));
+  assert.throws(() => validateDispatch(pkg, { ...env, RELEASE_CONFIRMATION: `session-peer-ts@${pkg.version} bootstrap-token` }));
   for (const patch of [{ GITHUB_REF: 'refs/heads/feature' }, { GITHUB_REPOSITORY: 'fork/session-peer-ts' },
     { GITHUB_EVENT_NAME: 'pull_request' }, { RELEASE_VERSION: '9.0.0' }, { RELEASE_MODE: 'publish' },
     { RELEASE_CONFIRMATION: '' }, { GITHUB_SHA: 'main; echo unsafe' }]) {
@@ -23,9 +25,9 @@ test('release dispatch requires exact main, version, explicit confirmation and p
     assert.throws(() => validatePackage({ ...pkg, ...patch }));
   }
   const later = { ...pkg, version: '0.1.0-preview.1' };
-  const laterEnv = { ...env, RELEASE_VERSION: later.version, RELEASE_CONFIRMATION: `session-peer-ts@${later.version} bootstrap-token` };
+  const laterEnv = { ...env, RELEASE_VERSION: later.version, RELEASE_CONFIRMATION: `session-peer@${later.version} bootstrap-token` };
   assert.throws(() => validateDispatch(later, laterEnv));
-  validateDispatch(later, { ...laterEnv, RELEASE_MODE: 'trusted-stage', RELEASE_CONFIRMATION: `session-peer-ts@${later.version} trusted-stage` });
+  validateDispatch(later, { ...laterEnv, RELEASE_MODE: 'trusted-stage', RELEASE_CONFIRMATION: `session-peer@${later.version} trusted-stage` });
 });
 
 test('release gate rejects moved main, absent/failed/pending CI and missing environment reviewers', () => {
