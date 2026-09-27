@@ -32,6 +32,8 @@ Relay 전송, MCP, wake/resume, 비활성 세션 queue, Antigravity, 자동 업�
 암묵적인 전체 에이전트 탐색, 일반 텍스트 출력은 미지원입니다. 미지원 옵션은 명시적으로
 거부하며 범용 오케스트레이터를 지향하지 않습니다.
 
+클라이언트 기능 계획은 [호환성 로드맵](https://github.com/abruption/session-peer-ts/issues/33)에서 추적하며, 계획은 현재 지원을 뜻하지 않습니다. Relay 서버·호스팅 서비스 제공은 이 클라이언트의 범위 밖입니다.
+
 ## 요구사항
 
 macOS/Linux/Windows native와 Node **22.x의 22.13 이상 또는 24.x**가 필요합니다. Node 26은
@@ -52,9 +54,12 @@ npm install --global --ignore-scripts session-peer@0.1.0
 session-peer --version
 ```
 
-예상 출력은 `session-peer 0.1.0 (typescript)`입니다. 먼저
-`session-peer list --agent claude --json`으로 대상을 찾고 `--dry-run`으로
-제출 전에 확인하세요.
+예상 출력은 `session-peer 0.1.0 (typescript)`입니다.
+
+1. `session-peer list --agent claude --json`으로 대상을 찾고 정확한 PID를 선택합니다.
+2. `session-peer send --to CLAUDE_PID --message '확인 후 회신해 주세요.' --dry-run --json`으로 제출 없이 검증합니다.
+3. 실제 전달할 때 선택한 PID로 같은 명령에서 `--dry-run`을 제거해 한 번 실행합니다.
+4. ACK가 필요하면 메시지에 명시적인 회신을 요청하고 수신 TUI의 응답을 별도로 확인합니다. `posted` / `queued`는 제출만 뜻합니다.
 
 ### 소스에서 빌드
 
@@ -153,6 +158,8 @@ CODEX_THREAD_ID/CODEX_SESSION_ID는 참고용 From 정보에 사용하고 `--no-
 | `refused`, `submitted:false` | 제출 전에 거부 |
 | `unknown`, `submitted:null` | 제출됐을 수 있음. 자동 재전송 금지 |
 
+제출 후 회신이 없거나 대상이 종료됐다는 사실만으로 소비나 실패를 확정할 수 없습니다. 자동 재전송하지 마세요.
+
 `consumptionConfirmed`는 항상 false입니다. 실제 ACK는 수신 TUI에서 별도로 확인하며
 queue 결과나 transcript 폴링으로 추정하지 않습니다. 종료 코드는 성공/오류/사용법에
 0/1/2를 사용합니다. 오류는 고정 코드로 반환하며 원문 stderr·메시지를 노출하지 않습니다.
@@ -172,9 +179,12 @@ npm audit
 ```
 
 Python은 개발용 호환성 기준(v1.0.2 커밋
-`47c23713d0a2a3c11ebde6186afd8c43489b8b65`)일 뿐 런타임 의존성이 아닙니다. 테스트에는
-C 컴파일러와 lsof는 POSIX 계약 테스트에 필요합니다. CI는 참조 커밋을 고정하고 macOS/Linux/Windows × Node 22/24를
-검사합니다. 임시 SQLite·Unix inbox·실제 잠금 fixture와 [VALIDATION.md](VALIDATION.md)의
+`47c23713d0a2a3c11ebde6186afd8c43489b8b65`)일 뿐 런타임 의존성이 아닙니다. POSIX 계약 테스트에는
+C 컴파일러와 lsof도 필요합니다. CI는 세 OS에서 Node 22/24를 사용합니다.
+macOS/Linux는 고정된 참조 기준으로 전체 계약·패키지 검사를 실행하고, Windows는
+빌드·타입 검사, 제한된 네이티브 Claude inbox·해제된 잠금 smoke 테스트와 audit를 실행합니다.
+Windows의 held-writer·queue·패키지 검증 확대는 [#34](https://github.com/abruption/session-peer-ts/issues/34)에서 추적합니다.
+Windows x64/Node 24 실기기 ACK는 별도의 일회성 증거입니다. 임시 SQLite·Unix inbox·실제 잠금 fixture와 [VALIDATION.md](VALIDATION.md)의
 실제 TUI 증거는 구분합니다. fixture 통과는 ACK가 아닙니다. 패키지 내용·반복 빌드 해시·
 새 환경 설치·삭제도 검사합니다. 네이티브 의존성에는 설치 스크립트가 있지만 검증한 사전
 빌드 경로는 `--ignore-scripts`를 사용합니다. SQLite 읽기 전용 접근도 WAL 공유 메모리
@@ -193,6 +203,10 @@ npm 자동 발행은 활성화하지 않았습니다. [MIT 라이선스](LICENSE
 ```sh
 npm view session-peer dist-tags
 ```
+
+변경할 수 없는 npm 0.1.0 tarball에는 발행 전 README 문구가 남아 있습니다.
+[날짜별 릴리스 기록](VALIDATION.md#public-010--2026-09-27-kst)에 이 불일치를 명시했으며,
+현재 GitHub 문서에서 정정했습니다. 패키지 내부 문서는 이후 버전에서 반영됩니다.
 
 수동 발행 워크플로우는 Trusted Publisher OIDC로 staging하고 유지관리자가 2FA로 승인합니다.
 staging 성공은 공개 완료가 아닙니다. [RELEASING.md](RELEASING.md)를 참고하세요.

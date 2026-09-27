@@ -1,9 +1,61 @@
-# Validation record — 2026-09-27 KST
+# Validation record — updated 2026-09-28 KST
 
-This record distinguishes historical live-agent evidence, the verified public
-preview and the unpublished 0.1.0 stable candidate. It does not claim complete
-Python parity.
+The stable 0.1.0 package is public. This record separates public package
+verification from historical candidate checks and live-agent observations.
+It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
+
+## Public 0.1.0 — 2026-09-27 KST
+
+`session-peer@0.1.0` was published at `2026-09-27T11:23:51.466Z`
+(20:23:51 KST), according to the public registry. Its source was
+`0edc4f8ae05256698f591b7402e89cd3d5858eef` and
+[run 36315310094](https://github.com/abruption/session-peer-ts/actions/runs/36315310094)
+created npm stage `e8f7941e-9ad1-4039-9132-285c900ed61d` after the separate
+stable-stage and protected-environment approvals. The owner then confirmed npm
+2FA approval. The run itself records staging, not the later public verification.
+
+The release-session checks recorded matching public registry integrity and
+provenance metadata, npm signature audit, fresh isolated installation and
+uninstallation. The 2026-09-28 KST read-only recheck downloaded the public
+tarball and independently matched both hashes below against the run manifest
+and registry. Registry metadata included provenance and one package signature.
+At that recheck, `latest` was `0.1.0` and `preview` was `0.1.0-preview.1`.
+
+- SHA-256: `41189d771a94c14775f8ef297d887627f4ab12819856bb18efff291e03c2e269`
+- Integrity: `sha512-/FtILLgUpIAgqf5FsdU5/x17IGeWO3ylmm47gbSyN3hHjD40pp5gtOeAXU3zqmye/cx7PE52Pp/oLa0ZgZyDQQ==`
+
+These are package-delivery checks, not new live-TUI ACK evidence for the
+published build. Historical ACKs below retain their original scope.
+
+### Packaged documentation discrepancy
+
+The immutable 0.1.0 tarball contains the earlier four READMEs and validation/
+release notes written before publication. Its English README still describes
+0.1.0 as release source awaiting approval. That wording is stale; it does not
+mean the public stable package is unavailable. The later GitHub README fix
+[PR #15](https://github.com/abruption/session-peer-ts/pull/15) could not change
+an already published archive. Corrected packaged documentation requires a new
+version; never republish 0.1.0 to replace its README.
+
+The npm version page returned HTTP 403 to the read-only web reader during the
+2026-09-28 check, so its rendered README was not verified. The tarball contents
+were inspected directly. See the exact-artifact documentation review in
+[RELEASING.md](RELEASING.md#documentation-gate-for-the-next-release).
+
+## Current CI scope
+
+All three operating systems run Node 22/24. The checks differ:
+
+| Platform | Automated scope |
+| --- | --- |
+| macOS/Linux | Full contract suite, type checks, Python reference fixtures, package smoke, release pack/artifact checks and audit. |
+| Windows | Build/type checks, Claude named-pipe/auth/stale-record fixture, unlocked-lock fixture and audit. |
+
+Windows CI does not yet cover held Codex writer/queue, the broader CLI/SSH
+contracts or package-install smoke; [#34](https://github.com/abruption/session-peer-ts/issues/34)
+tracks that work. The Windows x64/Node 24 user-observed ACKs below are separate
+one-shot evidence, not Windows arm64 or live Node 22 qualification.
 
 ## Public 0.1.0-preview.1 — 2026-09-27 KST
 
@@ -23,13 +75,13 @@ The public SHA-512 integrity and provenance metadata matched the manifest;
 Claude discovery checks, and uninstall passed. This verifies package delivery,
 not a new live Claude/Codex message ACK from the published build.
 
-## 0.1.0 stable candidate
+## Historical 0.1.0 stable candidate
 
-This preparation updates the version handshake, package metadata, four README
-languages, release gates and tests. Native delivery logic is unchanged. The
-candidate must pass its PR and exact merged-main CI before a separate decision
-to stage `0.1.0`; staging, npm 2FA approval, public verification and any GitHub
-tag or fleet installation remain separate gates.
+The preparation updated the version handshake, package metadata, four README
+languages, release gates and tests. Native delivery logic was unchanged.
+Candidate and exact merged-main CI preceded the separately approved staging,
+npm 2FA approval and public checks recorded above. Those approvals did not
+authorize a GitHub tag or fleet installation.
 
 ## Historical 0.1.0-preview.1 candidate checks
 
@@ -39,10 +91,10 @@ TypeScript test type-check, package/declaration smoke test, four-README
 repository checks and `npm audit` (zero vulnerabilities). The package smoke
 test repeated packing with the same SHA-256 and verified isolated install and
 uninstall. The new candidate was not sent to a live agent and was not published
-by these checks. Windows Node 22/24 and macOS/Linux Node 22/24 must also pass
-on the candidate PR and exact merged `main` commit before publication.
+by these checks. Windows Node 22/24 and macOS/Linux Node 22/24 checks were also
+required on the candidate PR and exact merged `main` before publication.
 
-## Automated checks
+## Historical initial automated checks
 
 - 14 tests pass locally on macOS arm64 / Node 22.14.0.
 - Real fixture SQLite DBs, Unix inbox sockets and separate C processes holding
@@ -130,11 +182,11 @@ successful publication; the GitHub repository remains `session-peer-ts`.
 Package identity, tarball naming and publication confirmations are covered by
 package/release fixtures, not claimed as new live ACK evidence.
 
-## Not covered / not released
+## Remaining evidence limits
 
 Windows arm64, IPv6 literals, Relay/MCP/wake, full Python CLI parity and
 automatic reverse-route detection remain outside this evidence. Registry
-publishing and provenance are verified for preview.1 above, but not by the
-historical live-agent ACKs. Stable 0.1.0 publishing still needs the separate
+publication checks for preview.1 and stable 0.1.0 are recorded above separately
+from the historical live-agent ACKs. Future publication still requires the
 approvals and gates in RELEASING.md. Native dependency prebuild availability
 must be tested on each architecture claimed by a future release.

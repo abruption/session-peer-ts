@@ -7,7 +7,54 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## Verified preview and stable baseline — 2026-09-27
+## Current public release
+
+`session-peer@0.1.0` is public. The registry records publication at
+`2026-09-27T11:23:51.466Z`; the 2026-09-28 KST recheck found
+`latest: 0.1.0` and `preview: 0.1.0-preview.1`. See the
+[dated stable verification record](VALIDATION.md#public-010--2026-09-27-kst)
+for source, staging run, artifact hashes, approvals and evidence limits.
+
+The existing stable-stage code is specific to the completed 0.1.0 release and
+refuses that already published version. Preparing a later stable version needs
+a reviewed update to package versions, registry baselines, release gates and
+tests; changing a workflow input alone is insufficient. The procedure below is
+historical and must not be replayed to republish 0.1.0.
+
+## Documentation gate for the next release
+
+The published 0.1.0 archive retained pre-publication README wording even after
+GitHub documentation was corrected. Apply this required manual artifact review
+before environment approval for staging, and confirm the same artifact again
+before npm 2FA approval. The automated hash/file-list checks do not judge prose.
+
+1. Read `package/README.md`, all three translated READMEs,
+   `package/VALIDATION.md` and `package/RELEASING.md` from the exact retained
+   tarball. Compare them with the reviewed release source, not just GitHub main.
+   For example, `tar -xOf /absolute/path/reviewed.tgz package/README.md` reads
+   the packaged English README without installing it.
+2. Match installation versions, CLI banners and POSIX/PowerShell tarball names
+   against the archive's package.json. Update all four languages together and
+   run the repository checker. Fixed `session-peer-<version>.tgz` examples are
+   part of this review, not timeless filenames.
+3. Use release wording that remains accurate after publication. Keep candidate
+   checks dated and historical; record previously published versions explicitly.
+   Do not claim the candidate is already publicly verified. Avoid an undated
+   assertion that the archive's own version is unpublished or awaiting approval;
+   keep pending approval status in the staging record instead.
+4. Match CI claims to the actual workflow and platform depth. Keep fixture,
+   native submission and separately observed ACK evidence distinct. Plans in
+   #33/#34 are not current capability or coverage.
+5. Record reviewer, source SHA, tarball SHA-256 and the documentation review in
+   the release approval record. A wording failure requires a reviewed source
+   correction and new candidate artifact with its own checks/approval; never
+   edit a validated tarball in place or overwrite a published version.
+6. After publication, verify registry integrity/provenance/signatures and the
+   version-specific install as usual, inspect the npm rendered README when
+   accessible, and append a dated public-validation record in GitHub. Preserve
+   any discrepancy between that later record and immutable packaged documents.
+
+## Historical preview baseline before stable — 2026-09-27
 
 `session-peer@0.1.0-preview.1` was staged from main commit
 `f65d3ee99cc26ff4a267aef84e31a308d034ac80` in
@@ -19,10 +66,11 @@ uninstallation. The artifact SHA-256 was
 `d154beac93893b60b0695e5a6296e185beb8dbd05188ffe04befb74d29966110`;
 registry integrity is
 `sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==`.
-The `preview` tag points to preview.1. The existing `latest` tag still points
-to preview.0. No stable version has been published by this preparation PR.
+At that pre-stable checkpoint, `preview` pointed to preview.1 and `latest`
+pointed to preview.0. The subsequent approved stable release changed `latest`
+to 0.1.0; the historical baseline is not the current registry state.
 
-## Prepare 0.1.0 stable
+## Historical 0.1.0 stable procedure (completed)
 
 1. Merge the reviewed 0.1.0 preparation PR. Require successful `cli` CI on the
    exact merged `main` commit, including the release gate and Windows Node 22/24.
