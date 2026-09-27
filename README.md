@@ -21,15 +21,16 @@ a Relay server or hosted service.
 - Refuse ambiguous targets and uncertain ownership; never automatically retry
   an uncertain submission.
 
-Not implemented: Windows, Relay transport, MCP, wake/resume, inactive queueing,
+Not implemented: Relay transport, MCP, wake/resume, inactive queueing,
 Antigravity, automatic updates, implicit multi-agent discovery, or human text
 output. Unsupported commands fail explicitly; this is not a general orchestrator.
 
 ## Requirements
 
-macOS or Linux; Node **22.13+ within 22.x or 24.x**. Node 26 is not supported.
+macOS, Linux or native Windows; Node **22.13+ within 22.x or 24.x**. Node 26 is not supported.
 The native flock dependency needs a matching prebuilt binary (x64/arm64); this
-is not a pure-JavaScript package. Codex sends also need `codex`, `lsof` and `ps`.
+is not a pure-JavaScript package. Codex sends need `codex`; macOS/Linux also
+need `lsof` and `ps`. Windows uses native lock and Restart Manager inspection.
 Claude needs a live TUI with an accessible native inbox. SSH requires OpenSSH,
 existing key/host trust and the **same client version** on the destination.
 
@@ -65,6 +66,18 @@ or call this build explicitly with `node /absolute/path/dist/cli.js`. Do not use
 is installed, removed or reconfigured automatically. To remove this npm install,
 run `npm uninstall --global session-peer` and recheck PATH.
 
+On Windows PowerShell, inspect competing commands with
+`Get-Command session-peer -All`. To avoid replacing the Python CLI, use an isolated prefix:
+
+```powershell
+npm ci --ignore-scripts
+npm run build
+npm pack --ignore-scripts
+npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz
+& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version
+# Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer
+```
+
 ## Use
 
 ```sh
@@ -96,6 +109,14 @@ installs a remote runtime or invokes Python as a fallback. Messages travel in a
 JSON stdin request, not remote shell arguments. Arbitrary `--ssh-opt`, IPv6
 literals and Tailscale canonical-name enrichment are not supported; use an SSH
 alias/hostname. Forward access does not establish reverse access.
+
+For a Windows SSH destination, add `--remote-platform win32` and select a
+Windows `--remote-bin 'C:\absolute\path\session-peer.cmd'` if needed. A previously
+authenticated OpenSSH control socket can be selected with
+`--ssh-control-path /absolute/local/socket`; this does not bypass host-key
+verification or grant a new login. For local Windows Codex commands, use a full
+`C:\Users\...\.codex` path for `--codex-home`. The Python CLI, if present,
+is not removed or replaced by this preview.
 
 ### Replies
 
@@ -137,8 +158,9 @@ npm audit
 
 Python is only the development conformance oracle (v1.0.2 commit
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`), never a runtime dependency. Tests also
-need a C compiler and lsof. CI pins the reference and covers macOS/Linux × Node
-22/24. Temporary SQLite, Unix inbox and real lock fixtures are distinct from
+need a C compiler and lsof for the POSIX contract suite. CI pins the reference
+and covers macOS/Linux/Windows × Node 22/24. Temporary
+SQLite, Unix inbox and real lock fixtures are distinct from
 the dedicated real-TUI evidence in [VALIDATION.md](VALIDATION.md). A green fixture
 test is not an ACK. Package tests inspect contents, repeat-pack hashes, clean
 install and uninstall. The native dependency normally has an install script;

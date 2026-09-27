@@ -17,6 +17,30 @@ Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
 ## Real TUI and SSH checks
 
+### Native Windows candidate — 2026-09-27 KST
+
+An isolated prefix under the Windows user's Temp directory was installed from
+this branch's local tarball. The existing Python CLI was not removed or
+overwritten. Node 24.16.0 and npm 11.13.0 were present. Windows native
+`list` found the live Claude inbox; Codex dry-run verified the saved thread,
+kernel lock, single same-user `codex.exe` opener and stable start time. Mac
+mini → Windows SSH preflight used an explicit Windows platform, remote `.cmd`
+path and an already authenticated OpenSSH control socket; no host-key bypass
+or new login was introduced.
+
+One message per target was submitted from this candidate through Windows SSH.
+The CLI returned Claude `posted` and Codex `queued`, with
+`consumptionConfirmed:false`. The user separately confirmed exact response
+lines in both Windows native TUIs:
+
+- Claude: `ACK TS-WIN4-CLAUDE-20260927-A`
+- Codex: `ACK TS-WIN4-CODEX-20260927-B`
+
+These ACKs are user-observed responses, not direct terminal-pane capture by
+the test runner. No retry was made. This is one-shot evidence, not a soak or
+all-architecture qualification. Windows x64 was tested; Windows arm64 and
+Node 22 remain untested in this live check. Python remains installed.
+
 Dedicated, newly created Claude/Codex test TUIs only. The user approved trusting
 the two otherwise empty test folders. Agent permissions were not changed.
 Each route passed discovery and no-delivery dry-run before exactly one send.
@@ -69,7 +93,7 @@ package/release fixtures, not claimed as new live ACK evidence.
 
 ## Not covered / not released
 
-Windows, native x64 agent interaction, IPv6 literals, Relay/MCP/wake, full Python
+Windows arm64, IPv6 literals, Relay/MCP/wake, full Python
 CLI parity, automatic reverse-route detection, npm registry publishing and
 provenance are outside this historical evidence. Publication preparation now
 removes the private flag, but actual publishing still needs separate approval

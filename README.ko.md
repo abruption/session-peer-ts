@@ -19,15 +19,16 @@ TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 - 구조화된 Reply-To URI와 JSON 결과
 - 모호한 대상·확인할 수 없는 소유권은 거부하고, 불확실한 제출은 자동 재시도하지 않음
 
-Windows, Relay 전송, MCP, wake/resume, 비활성 세션 queue, Antigravity, 자동 업데이트,
+Relay 전송, MCP, wake/resume, 비활성 세션 queue, Antigravity, 자동 업데이트,
 암묵적인 전체 에이전트 탐색, 일반 텍스트 출력은 미지원입니다. 미지원 옵션은 명시적으로
 거부하며 범용 오케스트레이터를 지향하지 않습니다.
 
 ## 요구사항
 
-macOS/Linux와 Node **22.x의 22.13 이상 또는 24.x**가 필요합니다. Node 26은
+macOS/Linux/Windows native와 Node **22.x의 22.13 이상 또는 24.x**가 필요합니다. Node 26은
 미지원입니다. 네이티브 flock 의존성에 맞는 사전 빌드 바이너리(x64/arm64)가 필요하므로
-순수 JavaScript 패키지는 아닙니다. Codex 전송에는 `codex`, `lsof`, `ps`와 저장된
+순수 JavaScript 패키지는 아닙니다. Codex 전송에는 `codex`가 필요하고 macOS/Linux에서는
+`lsof`, `ps`도 필요합니다. Windows는 네이티브 잠금과 Restart Manager로 소유자를 확인합니다. 저장된
 스레드의 유일하고 안정적인 live writer가 필요합니다. Claude는 접근 가능한 inbox가
 있는 실행 중 TUI가 필요합니다. SSH에는 OpenSSH, 기존 키·호스트 신뢰 설정과 원격의
 **동일 버전 클라이언트**가 필요합니다.
@@ -64,6 +65,18 @@ session-peer --version
 않습니다. npm 설치본 제거는 `npm uninstall --global session-peer`로 하고 PATH를
 다시 확인하세요.
 
+Windows PowerShell에서는 `Get-Command session-peer -All`로 기존 설치본을 확인하세요.
+Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 있습니다.
+
+```powershell
+npm ci --ignore-scripts
+npm run build
+npm pack --ignore-scripts
+npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz
+& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version
+# 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer
+```
+
 ## 사용법
 
 ```sh
@@ -94,6 +107,12 @@ Node를 선택하는 래퍼를 지정할 수 있습니다. TypeScript 표시와 
 셸 인자가 아닌 JSON stdin 요청으로 전달합니다. 임의의 `--ssh-opt`, IPv6 리터럴,
 Tailscale 정규 이름 보강은 미지원이므로 SSH 별칭·호스트명을 사용하세요. 정방향 접속이
 역방향 접속을 보장하지 않습니다.
+
+Windows SSH 대상에는 `--remote-platform win32`를 명시하고, 원격 PATH에 없다면
+`--remote-bin 'C:\절대\경로\session-peer.cmd'`를 지정하세요. 이미 인증된 OpenSSH
+제어 소켓은 `--ssh-control-path /로컬/절대/소켓`으로 선택할 수 있습니다. 이는 호스트 키
+검증을 우회하거나 새 로그인을 허용하지 않습니다. Windows 로컬 Codex 홈은
+`C:\Users\...\.codex`처럼 전체 경로를 사용합니다. 기존 Python CLI는 자동 제거·교체하지 않습니다.
 
 ### 회신
 
@@ -134,7 +153,7 @@ npm audit
 
 Python은 개발용 호환성 기준(v1.0.2 커밋
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`)일 뿐 런타임 의존성이 아닙니다. 테스트에는
-C 컴파일러와 lsof도 필요합니다. CI는 참조 커밋을 고정하고 macOS/Linux × Node 22/24를
+C 컴파일러와 lsof는 POSIX 계약 테스트에 필요합니다. CI는 참조 커밋을 고정하고 macOS/Linux/Windows × Node 22/24를
 검사합니다. 임시 SQLite·Unix inbox·실제 잠금 fixture와 [VALIDATION.md](VALIDATION.md)의
 실제 TUI 증거는 구분합니다. fixture 통과는 ACK가 아닙니다. 패키지 내용·반복 빌드 해시·
 새 환경 설치·삭제도 검사합니다. 네이티브 의존성에는 설치 스크립트가 있지만 검증한 사전

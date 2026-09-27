@@ -8,7 +8,7 @@
     "tag": "preview"
   },
   "repository": { "type": "git", "url": "git+https://github.com/abruption/session-peer-ts.git" },
-  "os": ["darwin", "linux"],
+  "os": ["darwin", "linux", "win32"],
   "description": "Python-free local and SSH client for Claude Code and Codex sessions (preview)",
   "type": "module",
   "types": "./dist/index.d.ts",
@@ -37,6 +37,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && npm run test:types && node --experimental-strip-types --test test/*.test.ts",
     "test:types": "tsc -p tsconfig.test.json",
+    "test:windows": "npm run build && npm run test:types && node --experimental-strip-types --test test/windows.test.ts",
     "test:package": "npm run build && node --experimental-strip-types test/package-smoke.ts"
   },
   "devDependencies": {

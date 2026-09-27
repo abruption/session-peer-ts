@@ -11,9 +11,9 @@ export const registry = 'https://registry.npmjs.org';
 export const packageFiles = ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md',
   'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md',
   'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js',
-  'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts',
+  'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts',
   'dist/discovery.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts',
-  'dist/send.d.ts', 'dist/writer.d.ts', 'package.json'].sort();
+  'dist/send.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'package.json'].sort();
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
 const digest = (bytes, algorithm, encoding = 'hex') => createHash(algorithm).update(bytes).digest(encoding);
 const npm = args => execFileSync('npm', args, { encoding: 'utf8', timeout: 120000 });

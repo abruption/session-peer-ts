@@ -23,7 +23,7 @@ try {
   let hash;
   for (let index = 0; index < 2; index++) {
     const [packed] = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', task]));
-    assert.deepEqual(packed.files.map((file: {path: string}) => file.path).sort(), ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts', 'dist/discovery.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts', 'dist/send.d.ts', 'dist/writer.d.ts', 'package.json'].sort());
+    assert.deepEqual(packed.files.map((file: {path: string}) => file.path).sort(), ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts', 'dist/discovery.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts', 'dist/send.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'package.json'].sort());
     const next = createHash('sha256').update(readFileSync(join(task, packed.filename))).digest('hex');
     if (hash) assert.equal(next, hash, 'same build must produce identical tarball');
     hash = next;

@@ -4,6 +4,7 @@ import { isAbsolute, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { canonical, Refusal } from './discovery.js';
 import { executable, run } from './process.js';
+import { inspectWindows } from './windows.js';
 
 const missing = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '');
 export const uuid = (value: string) => /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value);
@@ -16,22 +17,33 @@ export async function probeLock(path: string): Promise<'free' | 'held' | 'absent
   try {
     const before = lstatSync(path);
     if (!before.isFile() || before.isSymbolicLink()) return 'unknown';
-    const { flockSync } = await import('fs-ext-extra-prebuilt');
-    fd = openSync(path, constants.O_RDWR | constants.O_NOFOLLOW);
+    const locks = await import('fs-ext-extra-prebuilt');
+    fd = openSync(path, constants.O_RDWR | (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW));
     const after = fstatSync(fd);
     if (before.dev !== after.dev || before.ino !== after.ino) return 'unknown';
-    try { flockSync(fd, 'exnb'); }
-    catch (error) { return ['EAGAIN', 'EACCES', 'EWOULDBLOCK'].includes((error as NodeJS.ErrnoException).code ?? '') ? 'held' : 'unknown'; }
-    flockSync(fd, 'un');
+    if (process.platform === 'win32') {
+      try { locks.lockFileExSync(fd, locks.constants.LOCKFILE_EXCLUSIVE_LOCK | locks.constants.LOCKFILE_FAIL_IMMEDIATELY, 0, 0, 0xffffffff, 0xffffffff); }
+      catch (error) { return ['EAGAIN', 'EACCES', 'EWOULDBLOCK'].includes((error as NodeJS.ErrnoException).code ?? '') ||
+        (error as NodeJS.ErrnoException & { errno?: number }).errno === 33 ? 'held' : 'unknown'; }
+      locks.unlockFileExSync(fd, 0, 0, 0xffffffff, 0xffffffff);
+    } else {
+      try { locks.flockSync(fd, 'exnb'); }
+      catch (error) { return ['EAGAIN', 'EACCES', 'EWOULDBLOCK'].includes((error as NodeJS.ErrnoException).code ?? '') ? 'held' : 'unknown'; }
+      locks.flockSync(fd, 'un');
+    }
     return 'free';
   } catch (error) { return missing(error) ? 'absent' : 'unknown'; }
   finally { if (fd !== undefined) closeSync(fd); }
 }
-type Owner = { pid: number; uid?: number; command?: string; start?: string };
+type Owner = { pid: number; uid?: number | string; command?: string; start?: string };
 async function sample(path: string) {
   const state = await probeLock(path);
   if (state !== 'held') return { state, fingerprint: '', owners: [] as Owner[], valid: true };
   const fingerprint = snapshot(path);
+  if (process.platform === 'win32') {
+    const owners = inspectWindows('openers', path);
+    return { state, fingerprint, owners, valid: true };
+  }
   const listed = await run(executable('lsof'), ['-nP', '-F0pcu', '--', path]);
   const owners: Owner[] = [];
   let current: Owner | undefined;
@@ -56,9 +68,10 @@ export async function inspectWriter(home: string, id: string) {
   await delay(250);
   const after = await sample(path);
   const owner = after.owners[0];
+  const ownId = process.platform === 'win32' ? inspectWindows('identity', String(process.pid))[0]?.uid : process.getuid?.();
   if (!before.valid || !after.valid || before.state !== after.state || before.fingerprint !== after.fingerprint ||
       before.owners.length !== 1 || after.owners.length !== 1 || JSON.stringify(before.owners) !== JSON.stringify(after.owners) ||
-      !owner?.start || owner.uid !== process.getuid?.() || !/^codex(?:-|$)/i.test(owner.command ?? '')) {
+      !owner?.start || !ownId || owner.uid !== ownId || !/^codex(?:\.exe|-|$)/i.test(owner.command ?? '')) {
     throw new Refusal('active_writer_unverified', 1);
   }
   return { activity: 'live_writer', identity: JSON.stringify({ fingerprint: after.fingerprint, ...owner }) };

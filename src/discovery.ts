@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { windowsProcessStart } from './windows.js';
 
 type Row = Record<string, unknown>;
 export class Refusal extends Error {
@@ -24,6 +25,7 @@ export function canonical(path: string): string {
 }
 function alive(pid: number): boolean {
   if (pid <= 1) return false;
+  if (process.platform === 'win32') return windowsProcessStart(pid) !== undefined;
   try { process.kill(pid, 0); return true; }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 }
@@ -47,15 +49,23 @@ export function claude(all: boolean): Row {
     const pid = record.pid;
     if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid > 2147483647) continue;
     const matches = pid === Number(entry.slice(0, -5));
-    const live = matches && alive(pid);
+    let live = matches && alive(pid);
+    if (live && process.platform === 'win32') {
+      const started = typeof record.startedAt === 'number' && Number.isSafeInteger(record.startedAt) && record.startedAt > 0 ? record.startedAt : NaN;
+      const ticks = windowsProcessStart(pid);
+      const actual = ticks === undefined ? NaN : Number((ticks - 116444736000000000n) / 10000n);
+      live = Number.isFinite(started) && Number.isFinite(actual) && actual <= started + 2000;
+    }
     const socket = typeof record.messagingSocketPath === 'string' ? record.messagingSocketPath : '';
     let inbox = false;
     if (socket) {
-      try { inbox = statSync(socket).isSocket(); } catch { /* Inaccessible is not reachable. */ }
+      if (process.platform === 'win32') inbox = /^\\\\\.\\pipe\\[^\r\n]+$/i.test(socket);
+      else try { inbox = statSync(socket).isSocket(); } catch { /* Inaccessible is not reachable. */ }
     }
     const row: Row = { agent: 'claude', pid, socket, alive: live, reachable: live && inbox };
     for (const key of ['name', 'status', 'cwd', 'kind', 'version', 'tmux']) row[key] = record[key] ?? null;
     if (!matches) row.staleReason = 'record_pid_mismatch';
+    else if (!live && process.platform === 'win32') row.staleReason = 'process_unverified';
     if (all || row.reachable) sessions.push(row);
   }
   return { sessions, discovery: { claude: { status: 'ok' } } };
