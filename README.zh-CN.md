@@ -15,11 +15,11 @@
 - 通过 SSH 调用远端已安装的同版本客户端，支持结构化 Reply-To URI 和 JSON 输出。
 - 目标或进程归属不明确时拒绝操作；不会自动重试结果不确定的提交。
 
-未实现 Windows、Relay 传输、MCP、wake/resume、非活跃会话排队、Antigravity、自动更新、隐式多代理发现及面向人的文本输出。不支持的命令会明确失败；这不是通用编排器。
+未实现 Relay 传输、MCP、wake/resume、非活跃会话排队、Antigravity、自动更新、隐式多代理发现及面向人的文本输出。不支持的命令会明确失败；这不是通用编排器。
 
 ## 环境要求
 
-macOS 或 Linux；Node **22.x 中的 22.13 及以上，或 24.x**。不支持 Node 26。原生 flock 依赖需要匹配的 x64/arm64 预编译二进制，本包不是纯 JavaScript 实现。Codex 发送还需要 `codex`、`lsof`、`ps`；Claude 需要运行中的 TUI 及可访问的原生 inbox。SSH 使用已有密钥和主机信任，远端必须安装**同版本**客户端。
+macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x**。不支持 Node 26。原生锁依赖需要匹配的 x64/arm64 预编译二进制，本包不是纯 JavaScript 实现。Codex 发送需要 `codex`，macOS/Linux 还需要 `lsof`、`ps`；Windows 使用原生锁和 Restart Manager 验证所有者。Claude 需要运行中的 TUI 及可访问的原生 inbox。SSH 使用已有密钥和主机信任，远端必须安装**同版本**客户端。
 
 ## 安装
 
@@ -43,6 +43,8 @@ session-peer --version
 
 安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer`，随后再次检查 PATH。
 
+在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer` 卸载。
+
 ## 使用
 
 ```sh
@@ -62,6 +64,8 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
 ```
 
 默认远程命令是 PATH 中的 `session-peer`。绝对路径 `--remote-bin` 也可选择使用受支持 Node 的包装器。握手检查 TypeScript 标记及精确版本，不同实现会被拒绝。SSH 使用 BatchMode 和 StrictHostKeyChecking，不自动接受新主机密钥、不安装远程运行时，也不会退回 Python。消息通过 JSON stdin 传输，不放进远程 shell 参数。不支持任意 `--ssh-opt`、IPv6 字面量或 Tailscale 规范名补全，请使用 SSH 别名 / 主机名。正向访问不意味着反向访问已配置。
+
+对于 Windows SSH 目标，请指定 `--remote-platform win32`；若远端 PATH 中没有命令，再使用 `--remote-bin 'C:\absolute\path\session-peer.cmd'`。可用 `--ssh-control-path /local/absolute/socket` 选择已认证的 OpenSSH 控制套接字；这不会跳过主机密钥验证或授予新登录。Windows 本机的 Codex home 使用完整 `C:\Users\...\.codex` 路径。已有 Python CLI 不会被自动删除或替换。
 
 ### 回复
 
@@ -89,7 +93,7 @@ npm run test:package
 npm audit
 ```
 
-Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。测试还需要 C 编译器和 lsof。CI 固定基准提交，覆盖 macOS/Linux × Node 22/24。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
+Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。POSIX 契约测试还需要 C 编译器和 lsof。CI 固定基准提交，覆盖 macOS/Linux × Node 22/24 及 Windows native Node 24。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
 
 参见 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md) 和 [SECURITY.md](SECURITY.md)。发布需单独批准，未启用自动 npm 发布。采用 [MIT](LICENSE) 许可证。
 

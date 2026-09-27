@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { hostname } from 'node:os';
+import { lstatSync } from 'node:fs';
 import { claude, codex, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { checkMessage, send } from './send.js';
@@ -17,7 +18,7 @@ export function parse(args: string[]): Options {
     if (['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice'].includes(key)) {
       if (flags.has(key) || split > 0) throw new Refusal('invalid_option');
       flags.add(key);
-    } else if (['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--reply-address'].includes(key)) {
+    } else if (['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address'].includes(key)) {
       const name = key === '-m' ? '--message' : key;
       const value = split > 0 ? token.slice(split + 1) : args[++i];
       if (value === undefined || values.has(name)) throw new Refusal('invalid_option');
@@ -44,8 +45,16 @@ export function parse(args: string[]): Options {
     }
   }
   if (values.has('--host')) host(values.get('--host')!);
+  if (values.has('--ssh-control-path')) {
+    if (!values.has('--host')) throw new Refusal('inapplicable_option');
+    try { if (!lstatSync(values.get('--ssh-control-path')!).isSocket()) throw new Error('not_socket'); }
+    catch { throw new Refusal('invalid_ssh_control_path'); }
+  }
+  if (values.has('--remote-platform') && (!values.has('--host') || !['posix', 'win32'].includes(values.get('--remote-platform')!))) throw new Refusal('invalid_remote_platform');
   if (values.has('--remote-bin')) {
-    if (!values.has('--host') || !/^\/[\x20-\x7e]+$/.test(values.get('--remote-bin')!)) throw new Refusal('invalid_remote_bin');
+    const binary = values.get('--remote-bin')!;
+    if (!values.has('--host') || (values.get('--remote-platform') === 'win32' ?
+      !/^[A-Za-z]:\\[^\r\n]+$/.test(binary) : !/^\/[\x20-\x7e]+$/.test(binary))) throw new Refusal('invalid_remote_bin');
   }
   return { command, values, flags };
 }
@@ -65,16 +74,23 @@ async function remote(options: Options, message?: string): Promise<Record<string
   const { values, flags, command } = options;
   const target = host(values.get('--host')!);
   const binary = values.get('--remote-bin') ?? 'session-peer';
+  const windows = values.get('--remote-platform') === 'win32';
+  const invoke = (flag: string) => {
+    if (!windows) return `${quote(binary)} ${flag}`;
+    const code = `& '${binary.replace(/'/g, "''")}' ${flag}`;
+    return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(code, 'utf16le').toString('base64')}`;
+  };
   const ssh = executable('ssh');
-  const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10', '--', target];
-  const preflight = await run(ssh, [...base, `${quote(binary)} --version`], { timeout: 15000 });
+  const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10',
+    ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), '--', target];
+  const preflight = await run(ssh, [...base, invoke('--version')], { timeout: 15000 });
   if (preflight.interrupted || preflight.code !== 0 || preflight.stdout.trim() !== VERSION_LINE) throw new Refusal('remote_version_unverified', 1);
   const args = [command, '--json'];
   for (const [key, value] of values) if (['--agent', '--codex-home', '--codex-bin', '--to'].includes(key)) args.push(key, value);
   if (flags.has('--all')) args.push('--all');
   if (flags.has('--dry-run')) args.push('--dry-run');
   if (command === 'send') args.push('--message', message!, '--no-from', '--no-reply-to');
-  const done = await run(ssh, [...base, `${quote(binary)} --stdio-request`], {
+  const done = await run(ssh, [...base, invoke('--stdio-request')], {
     timeout: 90000, input: JSON.stringify({ schemaVersion: 1, args })
   });
   const uncertain = () => { if (command === 'send' && !flags.has('--dry-run') && done.spawned) throw new UnknownOutcome(); throw new Refusal('remote_response_unverified', 1); };
@@ -94,10 +110,10 @@ let command = 'unknown';
 try {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (!((major === 22 && minor! >= 13) || major === 24)) throw new Refusal('unsupported_node_version');
-  if (!['darwin', 'linux'].includes(process.platform)) throw new Refusal('unsupported_platform');
+  if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
-  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript preview): list --agent claude|codex --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex requires --codex-home. Relay/MCP/wake/Windows unsupported.');
+  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript preview): list --agent claude|codex --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex requires --codex-home. Relay/MCP/wake unsupported.');
   else {
     const wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -109,7 +125,7 @@ try {
     }
     command = ['list', 'send'].includes(args[0] ?? '') ? args[0]! : 'unknown';
     const options = parse(args);
-    if (wire && (options.values.has('--host') || options.values.has('--remote-bin'))) throw new Refusal('nested_transport_forbidden');
+    if (wire && (options.values.has('--host') || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
     let message: string | undefined;
     if (command === 'send') {
       message = options.values.get('--message');

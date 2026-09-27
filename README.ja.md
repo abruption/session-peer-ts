@@ -15,11 +15,11 @@
 - インストール済みの同じクライアントへの SSH 接続、構造化 Reply-To URI、JSON 出力。
 - 宛先や所有者が曖昧なら拒否。不確実な提出を自動再送しません。
 
-Windows、Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、暗黙の全エージェント検出、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
+Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、暗黙の全エージェント検出、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
 
 ## 必要条件
 
-macOS / Linux、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対象外です。ネイティブ flock 依存には対応する x64/arm64 バイナリが必要で、純 JavaScript パッケージではありません。Codex 送信には `codex`・`lsof`・`ps`、Claude にはアクセス可能な inbox を持つ稼働中 TUI が必要です。SSH は既存の鍵・ホスト信頼と、接続先の**同一バージョン**のクライアントを使います。
+macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対象外です。ネイティブロック依存には対応する x64/arm64 バイナリが必要で、純 JavaScript パッケージではありません。Codex 送信には `codex` が必要で、macOS/Linux では `lsof`・`ps` も必要です。Windows はネイティブロックと Restart Manager で所有者を確認します。Claude にはアクセス可能な inbox を持つ稼働中 TUI が必要です。SSH は既存の鍵・ホスト信頼と、接続先の**同一バージョン**のクライアントを使います。
 
 ## インストール
 
@@ -43,6 +43,8 @@ session-peer --version
 
 インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
+Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-preview" --ignore-scripts .\session-peer-0.1.0-preview.0.tgz` を実行し、`& "$env:TEMP\session-peer-ts-preview\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-preview" session-peer` で削除します。
+
 ## 使い方
 
 ```sh
@@ -62,6 +64,8 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
 ```
 
 既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。任意の `--ssh-opt`、IPv6 リテラル、Tailscale の正規名補完は非対応です。SSH alias / hostname を使ってください。片方向の接続成功は逆方向の接続を保証しません。
+
+Windows の SSH 宛先では `--remote-platform win32` を指定し、必要に応じて `--remote-bin 'C:\absolute\path\session-peer.cmd'` を使います。既に認証済みの OpenSSH 制御ソケットは `--ssh-control-path /local/absolute/socket` で選択できます。ホスト鍵の確認や新しいログイン権限を回避しません。Windows ローカルの Codex home には完全な `C:\Users\...\.codex` パスを使います。既存の Python CLI は自動削除・置換しません。
 
 ### 返信
 
@@ -89,7 +93,7 @@ npm run test:package
 npm audit
 ```
 
-Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。テストには C コンパイラーと lsof も必要です。CI は基準コミットを固定し macOS/Linux × Node 22/24 を確認します。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
+Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は基準コミットを固定し macOS/Linux × Node 22/24 と Windows native Node 24 を確認します。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
 
 [CONTRIBUTING.md](CONTRIBUTING.md)、[RELEASING.md](RELEASING.md)、[SECURITY.md](SECURITY.md) を参照してください。公開には別途承認が必要で、自動 npm 公開はありません。[MIT](LICENSE) ライセンスです。
 

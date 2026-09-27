@@ -50,10 +50,22 @@ jobs:
       - name: Exercise release packaging without publishing or credentials
         run: node scripts/release.mjs pack && node scripts/release.mjs artifact
       - run: npm audit
+  windows-native:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:windows
+      - run: npm audit
   release-gate:
     name: release gate
     if: always()
-    needs: [repository-policy, contract]
+    needs: [repository-policy, contract, windows-native]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -61,4 +73,5 @@ jobs:
         env:
           POLICY: ${{ needs.repository-policy.result }}
           CONTRACT: ${{ needs.contract.result }}
-        run: test "$POLICY" = success && test "$CONTRACT" = success
+          WINDOWS: ${{ needs.windows-native.result }}
+        run: test "$POLICY" = success && test "$CONTRACT" = success && test "$WINDOWS" = success

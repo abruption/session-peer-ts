@@ -23,7 +23,7 @@ try {
   let hash;
   for (let index = 0; index < 2; index++) {
     const [packed] = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', task]));
-    assert.deepEqual(packed.files.map(file => file.path).sort(), ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/writer.js', 'package.json']);
+    assert.deepEqual(packed.files.map(file => file.path).sort(), ['CONTRIBUTING.md', 'LICENSE', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/windows.js', 'dist/writer.js', 'package.json']);
     const next = createHash('sha256').update(readFileSync(join(task, packed.filename))).digest('hex');
     if (hash) assert.equal(next, hash, 'same build must produce identical tarball');
     hash = next;

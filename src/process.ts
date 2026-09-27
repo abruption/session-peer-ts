@@ -5,8 +5,10 @@ import { Refusal } from './discovery.js';
 
 export class UnknownOutcome extends Error {}
 export function executable(name: string): string {
-  const paths = isAbsolute(name) ? [name] : name.includes('/') ? [] :
-    (process.env.PATH ?? '').split(delimiter).filter(Boolean).map(p => join(p, name));
+  const windows = process.platform === 'win32';
+  const names = windows && !/\.(?:exe|cmd|bat)$/i.test(name) ? [name + '.exe', name + '.cmd', name] : [name];
+  const paths = isAbsolute(name) ? [name] : name.includes('/') || name.includes('\\') ? [] :
+    (process.env.PATH ?? '').split(delimiter).filter(Boolean).flatMap(p => names.map(n => join(p, n)));
   for (const path of paths) {
     try { accessSync(path, constants.X_OK); if (statSync(path).isFile()) return realpathSync(path); } catch {}
   }

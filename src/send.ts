@@ -2,6 +2,7 @@ import { createConnection } from 'node:net';
 import { canonical, claude, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { resolveWriter, uuid } from './writer.js';
+import { postWindowsPipe } from './windows.js';
 
 export type SendOptions = { to: string; home?: string; codexBin?: string; message: string; dryRun?: boolean };
 export function checkMessage(text: string, codex = false): void {
@@ -69,6 +70,7 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
   if (options.dryRun) return result;
   const rechecked = select();
   if (row.pid !== rechecked.pid || row.socket !== rechecked.socket) throw new Refusal('target_changed', 1);
-  await postSocket(String(row.socket), options.message);
+  if (process.platform === 'win32') await postWindowsPipe(String(row.socket), Number(row.pid), options.message);
+  else await postSocket(String(row.socket), options.message);
   return result;
 }
