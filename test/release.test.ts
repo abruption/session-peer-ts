@@ -54,11 +54,17 @@ test('bootstrap refuses existing packages and OIDC refuses missing or already pu
   const existing = { name: pkg.name, versions: {} };
   assert.throws(() => validateRegistryState(pkg, 'bootstrap-token', existing));
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', null));
-  validateRegistryState(pkg, 'trusted-stage', existing);
+  const current = { ...existing, 'dist-tags': { latest: '0.1.0-preview.0', preview: '0.1.0-preview.0' } };
+  validateRegistryState(pkg, 'trusted-stage', current);
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', { ...existing, versions: { [pkg.version]: {} } }));
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', {
-    ...existing, 'dist-tags': { latest: '0.1.0-preview.0' }
-  }), /latest_points_to_prerelease/);
+    ...current, 'dist-tags': { latest: pkg.version, preview: '0.1.0-preview.0' }
+  }), /legacy_latest_changed/);
+  assert.throws(() => validateRegistryState(pkg, 'trusted-stage', {
+    ...current, 'dist-tags': { latest: '0.1.0-preview.0', preview: pkg.version }
+  }), /preview_baseline_changed/);
+  assert.throws(() => validateRegistryState({ ...pkg, version: '0.1.0-preview.2' }, 'trusted-stage', current),
+    /latest_points_to_prerelease/);
 });
 
 test('release artifact binds version, allowlist, commit, SHA-256 and registry integrity', () => {
@@ -72,14 +78,18 @@ test('release artifact binds version, allowlist, commit, SHA-256 and registry in
     assert.throws(() => validateArtifact(pkg, { ...manifest, ...patch }, bytes, sha));
   }
   assert.throws(() => validateArtifact(pkg, manifest, Buffer.from('tampered'), sha));
-  const document = { name: pkg.name, 'dist-tags': { preview: pkg.version }, versions: { [pkg.version]: {
+  const document = { name: pkg.name, 'dist-tags': { latest: '0.1.0-preview.0', preview: pkg.version }, versions: { [pkg.version]: {
     dist: { integrity: manifest.integrity, attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/example' } }
   } } };
   validatePublished(pkg, manifest, document);
-  assert.throws(() => validatePublished(pkg, manifest, { ...document, 'dist-tags': { latest: pkg.version, preview: pkg.version } }));
+  assert.throws(() => validatePublished(pkg, manifest, { ...document, 'dist-tags': { latest: pkg.version, preview: pkg.version } }),
+    /legacy_latest_changed/);
   assert.throws(() => validatePublished(pkg, manifest, {
-    ...document, 'dist-tags': { latest: '0.1.0-preview.0', preview: pkg.version }
-  }), /latest_points_to_prerelease/);
+    ...document, 'dist-tags': { preview: pkg.version }
+  }), /legacy_latest_changed/);
+  assert.throws(() => validatePublished(pkg, manifest, {
+    ...document, 'dist-tags': { latest: '0.1.0-preview.0', preview: '0.1.0-preview.0' }
+  }), /preview_tag_missing/);
   assert.throws(() => validatePublished(pkg, manifest, { ...document, versions: {} }));
   assert.throws(() => validatePublished(pkg, { ...manifest, integrity: 'different' }, document));
 });
