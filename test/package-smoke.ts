@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,10 +40,11 @@ try {
   if (windows) {
     // .cmd is a shell launcher, not a JavaScript source file. Only fixed test
     // paths/options enter this command; no peer-controlled text is interpolated.
-    const output = execFileSync(process.env.ComSpec ?? 'cmd.exe',
+    const output = spawnSync(process.env.ComSpec ?? 'cmd.exe',
       ['/d', '/s', '/c', `""${binary}" --version"`],
       { encoding: 'utf8', windowsVerbatimArguments: true, timeout: 10000 });
-    assert.equal(output.trim(), `session-peer ${metadata.version} (typescript)`);
+    assert.equal(output.status, 0, String(output.error ?? output.stderr));
+    assert.equal(output.stdout.trim(), `session-peer ${metadata.version} (typescript)`);
   } else assert.ok(statSync(binary).mode & 0o111);
   const result = JSON.parse(execFileSync(process.execPath, [entry, 'list', '--agent', 'claude', '--json'], {
     encoding: 'utf8', timeout: 10000,
