@@ -101,9 +101,29 @@ try {
 }
 
 export function windowsProcessStart(pid: number): bigint | undefined {
+  if (process.platform !== 'win32' || !Number.isSafeInteger(pid) || pid <= 1 || pid > 2147483647) return undefined;
+  // Claude discovery only needs the creation time. Avoid compiling Reader and
+  // querying CIM/GetOwnerSid for every listed PID; Codex ownership still uses
+  // inspectWindows above. Dispose the native process handle on every path.
+  const code = `
+$ErrorActionPreference = 'Stop'
+try {
+  $item = [Diagnostics.Process]::GetProcessById(${pid})
   try {
-    const rows = inspectWindows('identity', String(pid));
-    return rows.length === 1 ? BigInt(rows[0]!.start) : undefined;
+    if ($item.HasExited) { exit 1 }
+    $ticks = $item.StartTime.ToUniversalTime().ToFileTimeUtc()
+    [Console]::Out.WriteLine($ticks.ToString([Globalization.CultureInfo]::InvariantCulture))
+  } finally { $item.Dispose() }
+} catch { exit 1 }
+`;
+  try {
+    const done = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', code],
+      { encoding: 'utf8', timeout: 8000, maxBuffer: 65536, windowsHide: true });
+    if (done.status !== 0 || done.error) return undefined;
+    const text = done.stdout.trim();
+    if (!/^[1-9][0-9]{0,18}$/.test(text)) return undefined;
+    const ticks = BigInt(text);
+    return ticks <= 9223372036854775807n ? ticks : undefined;
   } catch { return undefined; }
 }
 
