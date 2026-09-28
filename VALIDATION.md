@@ -64,7 +64,10 @@ Windows SSH fixture additionally executes actual PowerShell/.cmd and checks
 partial listing rows while a native writer is held, with no new queue call.
 Windows test files run serially so concurrent PowerShell compilation does not
 consume the native inspector's fixed timeout; assertions and production deadlines
-are unchanged. Each native subtest cleans its children even after assertion
+are unchanged. Separately (#65), the compiling `Add-Type` owner inspection now has
+a 20000 ms deadline after a slow runner exceeded 8000 ms on main (CI run
+36419550921, attempt 1); the compile-free creation-time probe keeps 8000 ms, and
+timeouts still refuse. Each native subtest cleans its children even after assertion
 failure. Package smoke verifies unified empty discovery without executables on PATH.
 These are fixture contracts, not new live-TUI ACKs. CI evidence belongs to the
 issue's PR-head checks; publication requires separate release preparation.
