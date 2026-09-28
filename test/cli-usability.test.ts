@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { pathToFileURL } from 'node:url';
 import { casefold, CASEFOLD_UNICODE_VERSION } from '../dist/casefold.js';
 import { renderOutput } from '../dist/output.js';
 const cli = resolve('dist/cli.js');
@@ -65,10 +66,12 @@ test('Unicode collision refuses, exact name and PID remain selectable; positiona
  const record=(pid:number,name:string)=>writeFileSync(join(home,'.claude/sessions',`${pid}.json`),JSON.stringify({pid,name,startedAt:Date.now(),messagingSocketPath:socket}));
  record(process.pid,'Straße');
  const call=async(target:string,body:string[],dry=true)=>{
-  const preload=process.platform==='win32'?['--import',resolve('test/fixtures/windows-inspection-diagnostic.mjs')]:[];
+  const preload=process.platform==='win32'?['--import',pathToFileURL(resolve('test/fixtures/windows-inspection-diagnostic.mjs')).href]:[];
   const child=spawn(process.execPath,[...preload,cli,'send','--to',target,'--json','--no-from',...(dry?['--dry-run']:[]),...body],{env,stdio:['ignore','pipe','pipe']});
   let output='',diagnostic='';child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>diagnostic+=(String(x).slice(0,4096-diagnostic.length)));const timer=setTimeout(()=>child.kill(),30000);
-  const [code,signal]=await once(child,'close');clearTimeout(timer);assert.equal(signal,null,diagnostic);return {code,...JSON.parse(output),diagnostic};
+  const [code,signal]=await once(child,'close');clearTimeout(timer);assert.equal(signal,null,diagnostic);
+  assert.ok(output.trim(),JSON.stringify({code,diagnostic}));
+  return {code,...JSON.parse(output),diagnostic};
  };
  const normalized=await call('STRASSE',['hello']);
  assert.equal(normalized.status,'validated',JSON.stringify(normalized));
