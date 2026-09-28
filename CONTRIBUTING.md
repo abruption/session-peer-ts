@@ -61,6 +61,8 @@ SSH input/host boundaries and no retry after unknown outcomes. Never infer ACK
 from queueing. Fixtures are not real-agent evidence. Live tests require explicit
 authorization, dedicated targets and independent observation; CI never uses live
 accounts, sessions or credentials. Security reports use SECURITY.md.
+CodeQL default setup scans JavaScript/TypeScript and GitHub Actions; triage each
+code-scanning alert with a fix PR or a documented dismissal reason.
 
 Synchronize README.md, README.ko.md, README.ja.md and README.zh-CN.md. Update PARITY.md with feature/command/env/output changes, source baseline,
 transport limits, evidence date and the relevant issue acceptance tests. Keep runtime

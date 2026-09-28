@@ -17,6 +17,16 @@ test('message budget counts code points, UTF-8 bytes and explicit envelope overh
   for (const invalid of ['', ' \n', 'a\0b']) assert.throws(() => checkMessage(invalid), /invalid_message/);
 });
 
+test('envelope trims only edge newlines in linear time', () => {
+  assert.equal(envelope('\n\na\n\nb\n\n', true), 'a\n\nb');
+  assert.equal(envelope('\r\na\r\n', true), '\r\na\r');
+  assert.equal(envelope('\n\n\n', true), '');
+  // CodeQL js/polynomial-redos: the former /\n+$/ took seconds here (minutes at the size limit).
+  const body = 'a' + '\n'.repeat(200_000) + 'b', started = performance.now();
+  assert.equal(envelope('\n' + body + '\n', true), body);
+  assert.ok(performance.now() - started < 1000, 'edge trimming must stay linear');
+});
+
 test('remote stdin limit includes JSON escaping and rejects before dispatch', () => {
   const wire = (message: string) => JSON.stringify({ schemaVersion: 1,
     args: ['send', '--to', 'codex:invalid', '--message', message, '--no-from', '--json'] });
