@@ -71,3 +71,6 @@ workflow has separate confirmation and environment-approval gates; see
 RELEASING.md before dispatching it. Never add publish credentials to PR tests.
 Dependabot automatic update PRs are not enabled; dependency changes are manual
 reviewed PRs with lockfile, audit, native-load and platform tests.
+Dependabot vulnerability alerts are enabled, and `.github/workflows/audit.yml`
+runs `npm audit` and `npm audit signatures` weekly (and on manual dispatch) so
+new advisories surface between commits. Triage an alert with a manual PR.
