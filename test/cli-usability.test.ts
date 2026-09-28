@@ -70,6 +70,9 @@ test('Unicode collision refuses, exact name and PID remain selectable; positiona
   const child=spawn(process.execPath,[...preload,cli,'send','--to',target,'--json','--no-from',...(dry?['--dry-run']:[]),...body],{env,stdio:['ignore','pipe','pipe']});
   let output='',diagnostic='';child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>diagnostic+=(String(x).slice(0,4096-diagnostic.length)));const timer=setTimeout(()=>child.kill(),30000);
   const [code,signal]=await once(child,'close');clearTimeout(timer);assert.equal(signal,null,diagnostic);
+  for(const line of diagnostic.split('\n')) {
+   try { const data=JSON.parse(line);if(data.inspection==='powershell') t.diagnostic(JSON.stringify(data)); } catch { /* Never forward raw stderr. */ }
+  }
   assert.ok(output.trim(),JSON.stringify({code,diagnostic}));
   return {code,...JSON.parse(output),diagnostic};
  };
