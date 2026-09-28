@@ -15,6 +15,41 @@ with `latest=0.2.0` and unchanged `preview=0.1.0-preview.1`; see the
 The 0.2.0 procedure below is completed history, not a repeatable dispatch.
 A future release requires a new reviewed version and baseline preparation PR.
 
+## 0.2.1 stable release procedure
+
+The reviewed stable target is 0.2.1, a reliability and hardening update
+([changes](PARITY.md#021-reliability-and-hardening)). Previous stable 0.2.0
+integrity is pinned:
+`sha512-wXUVn2GdF3fKAjJA9cUKIiBc9YVswnfBNALo2nxhXqmpCqC7/9N+AQJct/06RAU7stbcbrfY55JQ15PPESXwHw==`.
+The preview integrity remains pinned as a preservation check. No existing tag is
+removed.
+
+1. Merge the reviewed 0.2.1 preparation PR into main and require successful
+   exact-main CI (including Windows Node 22/24 and the release gate).
+2. Check npm environment reviewers and main-only deployment policy, package
+   ownership/2FA and stage-only Trusted Publisher mapping. Inspect pending stages
+   with authenticated `npm stage list session-peer`; stop on a conflicting stage.
+3. Require 0.2.1 absent, `latest=0.2.0`, `preview=0.1.0-preview.1`, and the 0.2.0
+   and preview integrity/provenance records unchanged. The script enforces these.
+4. Obtain final approval naming **exact main SHA**, **0.2.1**, **stable-stage** and
+   `latest` promotion to 0.2.1. Do not replay any historical approval.
+5. Dispatch `publish.yml` on main with `mode=stable-stage`, `version=0.2.1`,
+   `source_sha=<approved 40-character main SHA>`, and
+   `confirmation=session-peer@0.2.1 stable-stage`.
+6. Before approving the protected npm environment, download the prepare job's
+   `npm-release-<SHA>` artifact and apply the documentation gate below.
+7. Staging uses Node 24/npm 11.15.0 and OIDC with upload retries disabled. Record
+   the stage ID, compare the staged tarball with the retained artifact, and obtain
+   the separate final npm 2FA approval, which publishes 0.2.1 and promotes `latest`.
+8. After approval, run `node scripts/release.mjs artifact` and
+   `node scripts/release.mjs verify` on that exact source/artifact and append dated
+   public evidence to VALIDATION.md.
+
+Release notes must list the stricter 0.2.1 refusals (option-name values,
+SSH usage exit code 2, `sqlite_home`, Windows batch shims, relative Reply-To
+`codexHome`). SSH requires the same version on both ends, so 0.2.0 and 0.2.1
+hosts refuse each other at preflight; upgrade the endpoints together.
+
 ## Historical pre-0.2.0 baseline checked 2026-09-28 KST
 
 `session-peer@0.1.0` is public. The registry records publication at
@@ -191,9 +226,9 @@ reviewed new version and its own approval.
 
 The first preview.0 used a bootstrap token, and the registry assigned both
 `preview` and `latest` to it despite `--tag preview`. That bootstrap path is
-closed in this workflow. The repository `NPM_TOKEN` secret and any remaining
-bootstrap credential should be removed through a separate owner-approved account
-operation; this PR neither reads nor changes those credentials.
+closed in this workflow. On 2026-09-29 KST the owner revoked the bootstrap token
+and deleted the repository `NPM_TOKEN` secret; the repository and `npm`
+environment now hold no Actions secrets. Publishing relies only on OIDC.
 
 ## Sources
 

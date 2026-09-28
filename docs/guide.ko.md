@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-0.2.0 상세 가이드입니다. [공개 릴리스 증거](../VALIDATION.md#public-020--2026-09-28-kst)에 발행·검증 기록이 있습니다. 아래 0.1.0 설명은 이전 버전과의 비교입니다.
+0.2.1 상세 가이드입니다. 0.2.1은 0.2.0의 안정성·보안 보강 업데이트입니다([변경 사항](../PARITY.md#021-reliability-and-hardening)). 이전 발행 기록은 [0.2.0 공개 릴리스 증거](../VALIDATION.md#public-020--2026-09-28-kst)에 있습니다. 아래 0.1.0 설명은 이전 버전과의 비교입니다.
 
 ## 목차
 
@@ -22,7 +22,7 @@
 실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
 TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
-**0.2.0 사용 안내입니다.** 패키지명은
+**0.2.1 사용 안내입니다.** 패키지명은
 `session-peer`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
 서비스를 제공하는 프로젝트가 아닙니다.
 
@@ -59,7 +59,7 @@ JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록�
 JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때만 `queueId`가 추가되며,
 둘 다 소비 확인은 아닙니다. [홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
 공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
-SSH 양쪽에는 동일한 0.2.0 빌드를 사용하세요.
+SSH 양쪽에는 동일한 0.2.1 빌드를 사용하세요.
 
 ### 0.2.0 CLI 사용성
 
@@ -90,11 +90,11 @@ Node 22.x의 22.13 이상 또는 24.x에서 검증된 안정판을 설치합니�
 Python CLI도 같은 명령어를 사용하므로 기존 설치본이 있다면 먼저 PATH를 확인하세요.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.0
+npm install --global --ignore-scripts session-peer@0.2.1
 session-peer --version
 ```
 
-예상 출력은 `session-peer 0.2.0 (typescript)`입니다.
+예상 출력은 `session-peer 0.2.1 (typescript)`입니다.
 
 1. `session-peer list --agent claude --json`으로 대상을 찾고 정확한 PID를 선택합니다.
 2. `session-peer send --to CLAUDE_PID --message '확인 후 회신해 주세요.' --dry-run --json`으로 제출 없이 검증합니다.
@@ -114,7 +114,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 선택 사항: PATH에서 사용할 구현을 명시적으로 선택한 뒤 전역 설치
-npm install --global --ignore-scripts ./session-peer-0.2.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.2.1.tgz
 session-peer --version
 ```
 
@@ -137,7 +137,7 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.0.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.1.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```

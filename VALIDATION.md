@@ -6,6 +6,18 @@ describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
+## 0.2.1 candidate checks — 2026-09-29 KST
+
+Candidate source: main after #62, #63, #64 and #66 plus the 0.2.1 preparation PR.
+Changes are listed in [PARITY.md](PARITY.md#021-reliability-and-hardening).
+Local macOS arm64 Node 22.14.0 with the pinned Python reference: 77 tests, 73
+passed, 4 Windows-only skipped; package smoke, repository checker, `npm audit`
+(0 vulnerabilities), release `pack` and `artifact` validation passed. Each
+included fix PR passed the full macOS/Linux/Windows Node 22/24 matrix, CodeQL and
+the release gate on its head. These are fixture results, not live-TUI ACKs and not
+public release evidence; 0.2.1 publication requires the procedure in
+[RELEASING.md](RELEASING.md#021-stable-release-procedure) and a dated public record.
+
 ## Public 0.2.0 — 2026-09-28 KST
 
 `session-peer@0.2.0` is public. Registry publication time is

@@ -47,22 +47,22 @@ in PowerShell before installing. Choose the intended PATH entry; do not use
 `--force` to overwrite another manager’s files.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.0
+npm install --global --ignore-scripts session-peer@0.2.1
 session-peer --version
 ```
 
-Expected: `session-peer 0.2.0 (typescript)`. For isolated installation, source
+Expected: `session-peer 0.2.1 (typescript)`. For isolated installation, source
 builds, Windows and removal, see the detailed guide below.
 
 ### Update
 
 Use npm for an npm-managed installation. Check the available tags and review
 the target version, then install that exact version; this example updates an
-older npm installation to 0.2.0. The CLI has no self-update command.
+older npm installation to 0.2.1. The CLI has no self-update command.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.2.0
+npm install --global --ignore-scripts session-peer@0.2.1
 session-peer --version
 ```
 

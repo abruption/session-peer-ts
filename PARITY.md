@@ -1,10 +1,11 @@
 # Python compatibility and npm migration
 
-Updated 2026-09-28 KST. Python reference: **1.0.2**,
+Updated 2026-09-29 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes **TS 0.2.0**: unified listing, safe home selection,
+This matrix describes **TS 0.2.1**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
-separately managed TS skill guidance (#16/#17/#18/#19/#25). Historical **0.1.0**
+separately managed TS skill guidance (#16/#17/#18/#19/#25), plus the
+[0.2.1 reliability and hardening](#021-reliability-and-hardening) changes. Historical **0.1.0**
 differences are called out explicitly. Public availability and tags must be
 checked in the registry; this document does not assert a publication outcome.
 SSH endpoints require the same version; unreleased source builds also require
@@ -395,10 +396,10 @@ and explicit project/user scope chosen before running the documented command.
   removal for Codex/Claude Code while preserving a Python skill fixture. Those
   are installation/contract fixtures, not live-agent delivery or ACK evidence.
 
-## Source reliability and hardening — #49–#57 (0.2.1 milestone)
+## 0.2.1 reliability and hardening
 
-Unreleased source changes after 0.2.0. They tighten existing behavior and add
-no new command or transport.
+0.2.1 (#49–#57, #59, #64, #65) tightens existing 0.2.0 behavior and adds no new
+command, transport or JSON field. Callers may notice the stricter refusals below.
 
 | Area | Source behavior |
 | --- | --- |
@@ -411,3 +412,5 @@ no new command or transport.
 | SSH preflight (#55) | Exit 0 with the exact version line passes even when login scripts write to stderr; stderr classification applies only to failed preflights. |
 | Windows `--remote-bin` (#56) | Every PowerShell single-quote variant (`'`, U+2018–U+201B) is doubled inside the encoded command. |
 | Windows batch shims (#57) | A `.cmd`/`.bat` executable found first on `PATH` (or given explicitly) is reported as `executable_unsupported` by `send` and `doctor`, because Node cannot spawn them without a shell and a shell would interpret the message. Use the native `codex.exe`. |
+| Envelope trimming (#59, #64) | Leading/trailing `\n` is trimmed by index scanning instead of `/^\n+\|\n+$/`, which was quadratic on long interior newline runs (CodeQL `js/polynomial-redos`). Trimming semantics are unchanged. |
+| Windows owner inspection (#65) | The compiling `Add-Type` owner inspection waits up to 20000 ms; the compile-free creation-time probe keeps 8000 ms. Timeouts still refuse. |
