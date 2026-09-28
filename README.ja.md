@@ -181,7 +181,7 @@ pipe の広告を確認するだけで、pipe の存在や接続可能性は保�
 
 別の `session-peer-ts` スキルを関連 PR で準備しています。新しい npm 公開やスキルタグではありません。公開済み 0.1.0 の基本機能に対応し、TypeScript 表示とヘルプで開発機能を確認します。Python の `session-peer` スキルは別に維持します。
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/4c85fd2382a4d17ef98682cadbbac61a9aa2257a/session-peer-ts),
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/79d3b8ae58527e7231fcb184b5ca5b6575a5c35e/session-peer-ts),
 then choose the agent and scope. This example selects **Codex, current project**;
 run from that project directory. For Claude Code use `--agent claude-code`.
 For user scope add `--global` consistently to add/list/remove. Inspect any existing
@@ -189,7 +189,7 @@ For user scope add `--global` consistently to add/list/remove. Inspect any exist
 `.agents/skills` directory is shared with other clients that discover that path.
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/4c85fd2382a4d17ef98682cadbbac61a9aa2257a/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/79d3b8ae58527e7231fcb184b5ca5b6575a5c35e/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
