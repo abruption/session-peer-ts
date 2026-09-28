@@ -1,10 +1,47 @@
 # Validation record — updated 2026-09-28 KST
 
-This dated record covers the 0.2.0 release source and historical 0.1.0 public
+This dated record covers public 0.2.0 verification and historical 0.1.0 public
 verification, candidate checks and live-agent observations. Older sections
 describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
+
+## Public 0.2.0 — 2026-09-28 KST
+
+`session-peer@0.2.0` is public. Registry publication time is
+`2026-09-28T04:28:39.027Z` (13:28:39 KST). Verified `latest=0.2.0` and
+unchanged `preview=0.1.0-preview.1`; authenticated pending-stage list is empty.
+
+- Source: `2107c4c9f3a2ad9deca42f4e0dd9673d2e5fb3ce`, release PR #44.
+- Exact-main CI: [36377144969](https://github.com/abruption/session-peer-ts/actions/runs/36377144969), successful.
+- Staging run: [36377508658](https://github.com/abruption/session-peer-ts/actions/runs/36377508658), successful; Node 24 / npm 11.15.0.
+- Stage: `479ce166-c252-4f71-88d6-9a9bda4c4e92`, tag `latest`, GitHub Actions trusted automation.
+- Artifact: `session-peer-0.2.0.tgz`; SHA-256 `2def227c0e6d997b2fd292c1f7cfaec2d4330e654caf703fcb100eadafb418c2`.
+- Registry integrity: `sha512-wXUVn2GdF3fKAjJA9cUKIiBc9YVswnfBNALo2nxhXqmpCqC7/9N+AQJct/06RAU7stbcbrfY55JQ15PPESXwHw==`.
+
+The user approved the exact main SHA/stable-stage, separately approved the
+protected GitHub npm environment, and reported final npm 2FA promotion complete.
+Before dispatch, the npm UI showed the Trusted Publisher mapping to this repo,
+`publish.yml`, environment `npm`, with `npm stage publish` permission only.
+GitHub required reviewer and main-only environment policy were checked.
+The existing package setting permitted 2FA or bypass-enabled automation tokens;
+this release did not change that setting and used OIDC staging.
+
+Codex reviewed the retained Actions artifact against the exact source: all four
+READMEs plus PARITY, RELEASING and VALIDATION matched byte for byte. The tarball
+downloaded from npm staging was byte-identical to that retained artifact.
+After promotion, `release.mjs verify` passed registry integrity/tag/attestation
+checks, npm signature audit, fresh version-specific installation, version banner,
+isolated empty Claude listing and uninstall on macOS Node 22.14.0. Published
+provenance names the exact source SHA and run above. The npm 0.2.0 page rendered
+the version-specific README and install command correctly when inspected.
+
+This public-package check does not add a new live-agent ACK or cross-device
+submission claim. Platform fixture evidence remains the exact-main CI above;
+historical live-agent observations below retain their original versions.
+The immutable npm tarball contains the dated pre-publication checkpoint; this
+post-publication record is a later GitHub documentation update. No republishing,
+tag deletion, GitHub release/tag creation or fleet installation was performed.
 
 ## Source discovery for 0.2.0 — 2026-09-28 KST
 
