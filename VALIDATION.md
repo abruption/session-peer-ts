@@ -294,3 +294,10 @@ The companion lifecycle test installs, replaces from a second isolated source,
 lists and removes project/global copies for Codex and Claude Code, preserving a
 Python skill fixture. No production agent homes are edited, and no live TUI ACK
 is claimed. npm installs continue using `--ignore-scripts`.
+
+Independent read-only review used Antigravity `gemini-3.1-pro-high`. Its concrete
+clarification (absolute remote launcher paths) was verified against the CLI and
+applied to the companion skill. Parent review corrected the TS `retryAllowed`
+field name and made capability checks require affirmative supported help entries.
+Real GitHub exact-commit installation was also exercised in isolated scopes;
+installation commands do not depend on a moving tag.

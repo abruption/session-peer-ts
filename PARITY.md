@@ -364,7 +364,7 @@ name/PID selection with collisions, and text escaping on all CI platforms.
 ## Source TS skill guidance — #25 / 0.2.0
 
 Evidence date: 2026-09-28. TS CLI baseline for this work is `8289da7`; companion
-candidate is [`ab5a5c909e7785feee2be3a7cf577569f2db80cb`](https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts).
+candidate is [`4c85fd2382a4d17ef98682cadbbac61a9aa2257a`](https://github.com/abruption/session-peer-skill/tree/4c85fd2382a4d17ef98682cadbbac61a9aa2257a/session-peer-ts).
 This is separately reviewed source, not a skill tag or npm release. Published
 npm 0.1.0 remains unchanged. There is no runtime setup subcommand: user-invoked
 Skills CLI 1.7.0 is the reviewed setup path, with an exact commit, explicit agent,

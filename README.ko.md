@@ -274,7 +274,7 @@ pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 
 
 별도 `session-peer-ts` 스킬은 동반 PR에서 준비되며 새 npm 또는 스킬 태그 발행이 아닙니다. 공개된 0.1.0 기본 기능을 지원하고 TypeScript 구현 표시와 도움말로 개발 기능을 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts),
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/4c85fd2382a4d17ef98682cadbbac61a9aa2257a/session-peer-ts),
 then choose the agent and scope. This example selects **Codex, current project**;
 run from that project directory. For Claude Code use `--agent claude-code`.
 For user scope add `--global` consistently to add/list/remove. Inspect any existing
@@ -282,7 +282,7 @@ For user scope add `--global` consistently to add/list/remove. Inspect any exist
 `.agents/skills` directory is shared with other clients that discover that path.
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/4c85fd2382a4d17ef98682cadbbac61a9aa2257a/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```

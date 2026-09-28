@@ -178,7 +178,7 @@ wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检�
 
 独立的 `session-peer-ts` 技能在配套 PR 中准备，不代表新 npm 或技能标签发布。它支持已发布的 0.1.0 基础功能，通过 TypeScript 标识和帮助检查开发功能。Python 的 `session-peer` 技能仍独立保留。
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts),
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/4c85fd2382a4d17ef98682cadbbac61a9aa2257a/session-peer-ts),
 then choose the agent and scope. This example selects **Codex, current project**;
 run from that project directory. For Claude Code use `--agent claude-code`.
 For user scope add `--global` consistently to add/list/remove. Inspect any existing
@@ -186,7 +186,7 @@ For user scope add `--global` consistently to add/list/remove. Inspect any exist
 `.agents/skills` directory is shared with other clients that discover that path.
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/4c85fd2382a4d17ef98682cadbbac61a9aa2257a/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
