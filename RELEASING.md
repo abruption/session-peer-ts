@@ -7,15 +7,17 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## Current public release — 0.2.0
+## Current public release — 0.2.1
 
-`session-peer@0.2.0` was published on 2026-09-28 KST. Public verification passed
-with `latest=0.2.0` and unchanged `preview=0.1.0-preview.1`; see the
-[dated 0.2.0 verification record](VALIDATION.md#public-020--2026-09-28-kst).
-The 0.2.0 procedure below is completed history, not a repeatable dispatch.
-A future release requires a new reviewed version and baseline preparation PR.
+`session-peer@0.2.1` was published on 2026-09-29 KST. Public verification passed
+with `latest=0.2.1` and unchanged `preview=0.1.0-preview.1`; see the
+[dated 0.2.1 verification record](VALIDATION.md#public-021--2026-09-29-kst).
+0.2.0 was published on 2026-09-28 KST
+([record](VALIDATION.md#public-020--2026-09-28-kst)). The 0.2.1 and 0.2.0
+procedures below are completed history, not repeatable dispatches. A future
+release requires a new reviewed version and baseline preparation PR.
 
-## 0.2.1 stable release procedure
+## Completed 0.2.1 stable release procedure
 
 The reviewed stable target is 0.2.1, a reliability and hardening update
 ([changes](PARITY.md#021-reliability-and-hardening)). Previous stable 0.2.0
