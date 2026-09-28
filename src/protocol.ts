@@ -32,6 +32,10 @@ export function envelope(text: string, noFrom: boolean, address?: string): strin
   const sender = process.env.CODEX_THREAD_ID || process.env.CODEX_SESSION_ID;
   const from = !noFrom && sender && uuid(sender) ? `From: codex:${sender}\n\n` : '';
   if (address) reply(address);
+  // Trim edge newlines by index: /\n+$/ is quadratic on long interior newline runs.
+  let start = 0, end = text.length;
+  while (start < end && text[start] === '\n') start++;
+  while (end > start && text[end - 1] === '\n') end--;
   // No inferred identity/reverse route and no executable Reply command.
-  return from + text.replace(/^\n+|\n+$/g, '') + (address ? `\n\n---\nReply-To: ${address}` : '');
+  return from + text.slice(start, end) + (address ? `\n\n---\nReply-To: ${address}` : '');
 }
