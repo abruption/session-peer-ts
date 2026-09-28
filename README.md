@@ -42,13 +42,13 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
 
 - Discover local Claude/Codex sessions and known Codex homes (source development for 0.2.0; see below).
 - Validate a destination with `--dry-run`, then submit one message to its native
-  inbox or queue. Codex requires a unique, stable live writer.
+  inbox or queue. Codex normally requires a unique, stable live writer.
 - Use the same commands over SSH to an explicitly installed remote client.
 - Accept structured Reply-To URIs as destinations and provide JSON results.
 - Refuse ambiguous targets and uncertain ownership; never automatically retry
   an uncertain submission.
 
-Not implemented: Relay transport, MCP, wake/resume, inactive queueing,
+Not implemented: Relay transport, MCP, wake/resume,
 Antigravity, automatic updates, or human text output. Unsupported commands fail explicitly; this is not a general orchestrator.
 
 Planned client gaps are tracked in the [versioned compatibility matrix and npm migration guide](PARITY.md); a plan is not an available feature. Relay server/hosted-service delivery remains outside this client's scope.
@@ -68,8 +68,17 @@ Use each row's `codexHome` when sending. Optional absent homes are not failures;
 explicitly configured missing/invalid homes produce partial results and exit 1,
 retaining readable rows. Listing never selects a writer or submits a message.
 See the [source listing contract](PARITY.md#source-unified-listing-contract--16--020)
-for ordering, diagnostics, `--all` and SSH behavior. Codex send still requires an
-explicit home. On SSH, use the same development build on both ends.
+for ordering, diagnostics, `--all` and SSH behavior.
+
+Source Codex send now selects the unique stable live writer when `--codex-home`
+is omitted. Explicit homes still check all known competitors. Inactive queueing
+requires both `--codex-home HOME` and `--allow-inactive-codex-home`, a saved thread,
+and verified inactive candidates; it never wakes or resumes a session. Dry-run
+submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
+native queue output, `queueId`; neither confirms consumption. See the
+[selection contract](PARITY.md#source-codex-home-selection--17--020).
+Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
+On SSH, use the same development build on both ends.
 
 ## Requirements
 
@@ -135,7 +144,7 @@ Remove `--dry-run` only when delivery is intended. Omit `--message` or use
 `--message -` for UTF-8 stdin. `--all` includes stale/archived records for listing;
 it does not authorize sending. Claude accepts a PID, `claude:PID`, or an
 unambiguous ASCII name, case-insensitively. Use a PID for Unicode names. Codex
-send requires a full UUID and explicit home; `--codex-bin` selects an executable.
+send in published 0.1.0 requires a full UUID and explicit home; `--codex-bin` selects an executable.
 Output requires `--json` or `--output-format json`.
 
 ### Another machine over SSH

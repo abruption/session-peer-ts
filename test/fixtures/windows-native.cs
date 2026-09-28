@@ -47,7 +47,7 @@ public static class Fixture {
         string mode = Environment.GetEnvironmentVariable("FIXTURE_QUEUE_MODE");
         if (mode == "timeout") Thread.Sleep(60000);
         if (mode == "fail") { Console.Error.WriteLine("SECRET-SENTINEL"); return 1; }
-        Console.WriteLine("queued"); return 0;
+        Console.WriteLine("Queued message fixture-17 for thread " + args[2] + "."); return 0;
       }
       string command = args[args.Length - 1];
       string modeSsh = Environment.GetEnvironmentVariable("FIXTURE_SSH_MODE");

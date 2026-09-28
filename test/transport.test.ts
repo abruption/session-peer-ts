@@ -1,7 +1,7 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import { createServer } from 'node:net';
@@ -14,9 +14,9 @@ const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const python = process.env.PYTHON ?? 'python3';
 const id = '11111111-1111-4111-8111-111111111111';
 function setup(t: TestContext) {
-  const path = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-send-'));
+  const path = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-send-')));
   mkdirSync(join(path, '.claude/sessions'), { recursive: true });
-  const env: NodeJS.ProcessEnv = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '' };
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '' };
   t.after(() => rmSync(path, { recursive: true }));
   return { path, env };
 }
@@ -90,17 +90,32 @@ test('actual kernel lock + owner correlation; symlink and non-Codex owner fail c
 test('Codex guarded queue runs once, refuses inactive or competing live writers', async t => {
   const { path, env } = setup(t), home = join(path, 'home'); database(home);
   const queue = join(path, 'queue'), count = join(path, 'count');
-  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.log('queued');`, { mode: 0o700 });
+  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.log('Queued message queue-17 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, '--message', 'fixture', '--no-from'];
   assert.equal((await invoke(args, env)).error, 'inactive_writer');
+  const inactive = await invoke([...args, '--allow-inactive-codex-home'], env);
+  assert.equal(inactive.status, 'queued'); assert.equal(inactive.codexHomeResolution.reason, 'explicit_inactive_opt_in');
+  assert.equal(inactive.queueId, 'queue-17');
+  rmSync(count);
   await holder(t, path, home);
   const dry = await invoke([...args, '--dry-run'], env); assert.equal(dry.status, 'validated', JSON.stringify(dry));
   const sent = await invoke(args, env); assert.equal(sent.status, 'queued', JSON.stringify(sent));
   assert.equal(readFileSync(count, 'utf8'), '1'); assert.equal(sent.consumptionConfirmed, false);
+  const implicitArgs = args.filter((_, index) => index !== 3 && index !== 4);
+  const implicit = await invoke([...implicitArgs, '--dry-run'], { ...env, CODEX_HOME: home });
+  assert.equal(implicit.status, 'validated', JSON.stringify(implicit));
+  assert.equal(implicit.codexHomeResolution.status, 'selected');
+  assert.equal(implicit.codexHomeResolution.reason, 'single_stable_live_writer');
   const second = join(path, 'second'); database(second);
+  const conflict = await invoke([...args.slice(0, 4), second, ...args.slice(5)], { ...env, CODEX_HOME: home });
+  assert.equal(conflict.error, 'explicit_home_conflicts_with_live_writer');
   await holder(t, path, second, 'codex-second');
   const ambiguous = await invoke(args, { ...env, SESSION_PEER_CODEX_HOMES: JSON.stringify([second]) });
   assert.equal(ambiguous.error, 'multiple_live_writers'); assert.equal(readFileSync(count, 'utf8'), '1');
+  const deleted = spawnSync(python, ['-c', 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM threads"); c.commit(); c.close()', join(second, 'state_5.sqlite')]);
+  assert.equal(deleted.status, 0);
+  const unsavedCompetitor = await invoke([...args, '--allow-inactive-codex-home'], { ...env, SESSION_PEER_CODEX_HOMES: JSON.stringify([second]) });
+  assert.equal(unsavedCompetitor.error, 'multiple_live_writers'); assert.equal(readFileSync(count, 'utf8'), '1');
 });
 test('queue failure after spawn is unknown, never retried or leaked', async t => {
   const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
@@ -108,6 +123,7 @@ test('queue failure after spawn is unknown, never retried or leaked', async t =>
   writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.error('SECRET-SENTINEL');process.exit(1);`, { mode: 0o700 });
   const result = await invoke(['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, '--message', 'SECRET-SENTINEL'], env);
   assert.equal(result.status, 'unknown'); assert.equal(result.submitted, null); assert.equal(result.retryAllowed, false);
+  assert.equal(result.codexHomeResolution.reason, 'explicit_live_writer');
   assert.equal(JSON.stringify(result).includes('SECRET-SENTINEL'), false); assert.equal(readFileSync(count, 'utf8'), '1');
 });
 test('SSH refuses a different implementation with the same command name before submission', async t => {
@@ -151,4 +167,38 @@ test('SSH request framing: no message in remote command; response loss never ret
   writeFileSync(ssh, `#!${process.execPath}\nif(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.1.0 (typescript)');else process.exit(255);`, { mode: 0o700 });
   const lost = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'lost'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(lost.status, 'unknown'); assert.equal(lost.retryAllowed, false); assert.equal(messages.length, 1);
+});
+
+test('unsaved first-turn writer is diagnosed and never queued', async t => {
+  const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
+  const deleted = spawnSync(python, ['-c', 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM threads"); c.commit(); c.close()', join(home, 'state_5.sqlite')]);
+  assert.equal(deleted.status, 0);
+  const result = await invoke(['send', '--to', `codex:${id}`, '--codex-bin', process.execPath, '--message', 'fixture'], { ...env, CODEX_HOME: home });
+  assert.equal(result.error, 'thread_not_yet_persisted'); assert.equal(result.submitted, false);
+  const row = result.codexHomeResolution.candidates.find((c: {codexHome: string}) => c.codexHome === home);
+  assert.equal(row.savedThread, false); assert.equal(row.activity, 'live_writer');
+});
+
+test('SSH resolves Codex homes at destination and preserves resolution/queue metadata', async t => {
+  const { path, env } = setup(t), home = join(path, 'remote-home'); database(home);
+  const owner = await holder(t, path, home);
+  const queue = join(path, 'queue'), count = join(path, 'count');
+  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1'); if(process.env.QUEUE_FAIL){console.error('SECRET-SENTINEL');process.exit(1);} console.log('Queued message ssh-17 for thread ${id}.');`, { mode: 0o700 });
+  writeFileSync(join(path, 'ssh'), `#!${process.execPath}\nconst {spawnSync}=require('node:child_process'); const flag=process.argv.at(-1).endsWith('--version')?'--version':'--stdio-request'; const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},flag],{input:require('node:fs').readFileSync(0),encoding:'utf8',env:{...process.env,CODEX_HOME:${JSON.stringify(home)},SESSION_PEER_CODEX_HOMES:'[]'}});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  const local = { ...env, PATH: path + delimiter + env.PATH, SESSION_PEER_CODEX_HOMES: '{invalid-local' };
+  const args = ['send', '--host', 'fixture', '--to', `codex:${id}`, '--codex-bin', queue, '--message', 'fixture', '--no-from'];
+  const sent = await invoke(args, local);
+  assert.equal(sent.status, 'queued'); assert.equal(sent.queueId, 'ssh-17');
+  assert.equal(sent.codexHomeResolution.reason, 'single_stable_live_writer');
+  const unknown = await invoke(args, { ...local, QUEUE_FAIL: '1' });
+  assert.equal(unknown.status, 'unknown'); assert.equal(unknown.submitted, null);
+  assert.equal(unknown.codexHomeResolution.reason, 'single_stable_live_writer'); assert.equal(unknown.queueId, undefined);
+  assert.equal(JSON.stringify(unknown).includes('SECRET-SENTINEL'), false);
+  owner.kill(); await once(owner, 'close');
+  const refused = await invoke(args, local);
+  assert.equal(refused.error, 'inactive_writer'); assert.equal(refused.submitted, false);
+  assert.equal(refused.codexHomeResolution.reason, 'inactive_queue_requires_opt_in');
+  const inactive = await invoke([...args, '--codex-home', home, '--allow-inactive-codex-home'], local);
+  assert.equal(inactive.queueId, 'ssh-17'); assert.equal(inactive.codexHomeResolution.reason, 'explicit_inactive_opt_in');
+  assert.equal(readFileSync(count, 'utf8'), '111');
 });

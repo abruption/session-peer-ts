@@ -241,3 +241,22 @@ publication checks for preview.1 and stable 0.1.0 are recorded above separately
 from the historical live-agent ACKs. Future publication still requires the
 approvals and gates in RELEASING.md. Native dependency prebuild availability
 must be tested on each architecture claimed by a future release.
+
+
+## 2026-09-28 — #17 source Codex home selection (0.2.0 development)
+
+Source adds implicit unique-live selection, explicit inactive opt-in, sanitized
+resolution diagnostics and optional native queue IDs. npm 0.1.0 remains the
+published baseline; no release or tag operation is part of this work.
+
+Local macOS arm64 / Node 22.14.0: 47 tests passed, 3 Windows-only tests skipped.
+Fixtures cover real flock holders, implicit selection, explicit conflicts,
+multiple writers, unsaved first turns, inactive opt-in, configuration truth table,
+DB/inventory/lock evidence changes, zero-submit dry-run and unknown/no-retry.
+The Windows suite adds equivalent selection/metadata cases to its native
+LockFileEx and owner-swap tests, plus inactive flag/queue ID through PowerShell SSH.
+Initial PR CI run `36368300629` passed macOS/Linux and Windows x64 on Node
+22/24, including package smoke and the release gate. Latest-head results are
+recorded in PR #39; a fixture result is not a recipient ACK.
+No live agents, native DB writes, Python/Relay operations or real SSH destinations
+were exercised. See PARITY.md for the intentional stricter missing-home policy.

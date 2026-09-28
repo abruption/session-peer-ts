@@ -190,11 +190,11 @@ test('invalid configuration is rejected as a whole while other sources survive',
   assert.throws(() => homes(f.home), /invalid_home_configuration/);
 });
 
-test('shared enumeration keeps the existing stricter send policy separate from list', async t => {
+test('shared enumeration rejects empty configuration; pinned send still checks competitors', async t => {
   const f = fixture(t); f.database();
   process.env.SESSION_PEER_CODEX_HOMES = '';
   assert.equal((await codex(undefined, false)).ok, false);
-  assert.deepEqual(homes(f.home), [f.home]); // Existing writer treats an empty value as unset.
+  assert.throws(() => homes(f.home), /invalid_home_configuration/);
   process.env.SESSION_PEER_CODEX_HOMES = '{invalid';
   assert.equal((await codex(f.home, false)).ok, true); // Pinned listing bypasses extras.
   assert.throws(() => homes(f.home), /invalid_home_configuration/); // Pinned send still inventories extras.

@@ -3,7 +3,8 @@ import { hostname } from 'node:os';
 import { lstatSync } from 'node:fs';
 import { listing, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome, type Done } from './process.js';
-import { checkMessage, send } from './send.js';
+import { checkMessage, send, CodexUnknownOutcome } from './send.js';
+import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 
 type Options = { command: 'list' | 'send'; values: Map<string, string>; flags: Set<string> };
@@ -15,7 +16,7 @@ export function parse(args: string[]): Options {
     const token = args[i]!;
     const split = token.indexOf('=');
     const key = split > 0 ? token.slice(0, split) : token;
-    if (['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice'].includes(key)) {
+    if (['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'].includes(key)) {
       if (flags.has(key) || split > 0) throw new Refusal('invalid_option');
       flags.add(key);
     } else if (['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address'].includes(key)) {
@@ -31,7 +32,7 @@ export function parse(args: string[]): Options {
     if (values.has('--agent') && !['claude', 'codex'].includes(values.get('--agent')!)) throw new Refusal('unsupported_agent');
     if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
     if (values.get('--agent') === 'claude' && values.has('--codex-home')) throw new Refusal('inapplicable_option');
-    if (['--to', '--message', '--codex-bin', '--reply-address'].some(k => values.has(k)) || ['--dry-run', '--no-from', '--no-reply-to'].some(k => flags.has(k))) throw new Refusal('inapplicable_option');
+    if (['--to', '--message', '--codex-bin', '--reply-address'].some(k => values.has(k)) || ['--dry-run', '--no-from', '--no-reply-to', '--allow-inactive-codex-home'].some(k => flags.has(k))) throw new Refusal('inapplicable_option');
   } else {
     if (!values.get('--to') || values.has('--agent') || flags.has('--all')) throw new Refusal('invalid_send_options');
     if (flags.has('--no-reply-to') && values.has('--reply-address')) throw new Refusal('conflicting_reply_options');
@@ -44,6 +45,11 @@ export function parse(args: string[]): Options {
       values.set('--to', route.to);
     }
   }
+  if (command === 'send' && flags.has('--allow-inactive-codex-home')) {
+    if (!values.get('--to')!.startsWith('codex:')) throw new Refusal('inapplicable_option');
+    if (!values.get('--codex-home')) throw new Refusal('inactive_opt_in_requires_explicit_home');
+  }
+  if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
   if (values.has('--host')) host(values.get('--host')!);
   if (values.has('--ssh-control-path')) {
     if (!values.has('--host')) throw new Refusal('inapplicable_option');
@@ -108,6 +114,7 @@ async function remote(options: Options, message?: string): Promise<Record<string
   for (const [key, value] of values) if (['--agent', '--codex-home', '--codex-bin', '--to'].includes(key)) args.push(key, value);
   if (flags.has('--all')) args.push('--all');
   if (flags.has('--dry-run')) args.push('--dry-run');
+  if (flags.has('--allow-inactive-codex-home')) args.push('--allow-inactive-codex-home');
   if (command === 'send') args.push('--message', message!, '--no-from', '--no-reply-to');
   const done = await run(ssh, [...base, invoke('--stdio-request')], {
     timeout: 90000, input: JSON.stringify({ schemaVersion: 1, args })
@@ -132,7 +139,7 @@ try {
   if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
-  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript): list [--agent claude|codex] [--codex-home HOME] --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex send requires --codex-home; list discovers known homes. Relay/MCP/wake unsupported.');
+  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript): list [--agent claude|codex] [--codex-home HOME] --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex send selects one stable live home; inactive queue requires --codex-home HOME --allow-inactive-codex-home. List discovers known homes. Relay/MCP/wake unsupported.');
   else {
     const wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -154,7 +161,7 @@ try {
     }
     let result: Record<string, unknown>;
     if (options.values.has('--host')) result = await remote(options, message);
-    else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run') });
+    else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
     else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
     console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }));
     process.exitCode = result.ok === false ? 1 : 0;
@@ -162,8 +169,10 @@ try {
 } catch (error) {
   const unknown = error instanceof UnknownOutcome;
   const failure = error instanceof Refusal ? error : new Refusal('operation_failed', 1);
+  const homeResolution = error instanceof HomeRefusal || error instanceof CodexUnknownOutcome ? error.codexHomeResolution : undefined;
   console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: false,
     error: unknown ? 'outcome_unknown' : failure.code, status: unknown ? 'unknown' : 'refused',
-    submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false }));
+    submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false,
+    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }) }));
   process.exitCode = unknown ? 1 : failure.exitCode;
 }

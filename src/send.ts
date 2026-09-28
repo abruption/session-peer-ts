@@ -1,10 +1,18 @@
 import { createConnection } from 'node:net';
-import { canonical, claude, Refusal } from './discovery.js';
+import { claude, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome } from './process.js';
-import { resolveWriter, uuid } from './writer.js';
+import { HomeRefusal, resolveWriter, revalidateWriter, uuid, type HomeResolution } from './writer.js';
 import { postWindowsPipe } from './windows.js';
 
-export type SendOptions = { to: string; home?: string; codexBin?: string; message: string; dryRun?: boolean };
+export type SendOptions = { to: string; home?: string; codexBin?: string; message: string; dryRun?: boolean; allowInactive?: boolean };
+export class CodexUnknownOutcome extends UnknownOutcome {
+  constructor(readonly codexHomeResolution: HomeResolution) { super(); }
+}
+export function queueId(stdout: string, id: string): string | undefined {
+  if (!uuid(id)) return undefined;
+  const matches = [...stdout.matchAll(new RegExp(`^Queued message ([A-Za-z0-9][A-Za-z0-9._:-]{0,127}) for thread ${id}\\.\\r?$`, 'gm'))];
+  return matches.length === 1 ? matches[0]![1] : undefined;
+}
 export function checkMessage(text: string, codex = false): void {
   if (!text.trim() || text.includes('\0') || [...text].length > 1_000_000 ||
       (codex && Buffer.byteLength(text, 'utf8') > 32768)) throw new Refusal('invalid_message', 2);
@@ -39,22 +47,23 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     dryRun: Boolean(options.dryRun), chars: [...options.message].length };
   if (options.to.startsWith('codex:')) {
     const id = options.to.slice(6).toLowerCase();
-    if (!uuid(id) || !options.home) throw new Refusal('codex_uuid_and_explicit_home_required');
-    const home = canonical(options.home);
+    if (!uuid(id)) throw new Refusal('codex_uuid_required');
     const binary = executable(options.codexBin ?? 'codex');
-    const evidence = await resolveWriter(home, id);
+    const selection = await resolveWriter(options.home, id, options.allowInactive);
+    const { home } = selection;
     const result = { ...base, target: { agent: 'codex', id }, codexHome: home,
-      status: options.dryRun ? 'validated' : 'queued' };
+      status: options.dryRun ? 'validated' : 'queued', codexHomeResolution: selection.resolution };
     if (options.dryRun) return result;
-    if (await resolveWriter(home, id) !== evidence) throw new Refusal('writer_evidence_changed_before_queue', 1);
+    await revalidateWriter(selection, options.home, id, options.allowInactive);
     const done = await run(binary, ['queue', '--thread', id, '--message', options.message],
       { env: { ...process.env, CODEX_HOME: home }, timeout: 30000 });
-    if (!done.spawned) throw new Refusal('native_spawn_failed', 1);
-    if (done.interrupted || done.code !== 0) throw new UnknownOutcome();
-    return result;
+    if (!done.spawned) throw new HomeRefusal('native_spawn_failed', selection.resolution);
+    if (done.interrupted || done.code !== 0) throw new CodexUnknownOutcome(selection.resolution);
+    const queuedId = queueId(done.stdout, id);
+    return { ...result, ...(queuedId === undefined ? {} : { queueId: queuedId }) };
   }
   if (options.to.includes(':') && !options.to.startsWith('claude:')) throw new Refusal('unsupported_agent');
-  if (options.home || options.codexBin) throw new Refusal('inapplicable_option');
+  if (options.home || options.codexBin || options.allowInactive) throw new Refusal('inapplicable_option');
   const target = options.to.replace(/^claude:/, '');
   // ASCII name folding is explicit; Unicode names must use a PID until full casefold parity exists.
   if (!target || /[^\x20-\x7e]/.test(target)) throw new Refusal('use_pid_for_unicode_name');

@@ -4,8 +4,9 @@ Updated 2026-09-28 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
 The published TS baseline remains **0.1.0**,
 [`0edc4f8`](https://github.com/abruption/session-peer-ts/tree/0edc4f8ae05256698f591b7402e89cd3d5858eef/src).
-The matrix now includes **source development for 0.2.0 (#16)**: unified listing
-and bounded Codex home discovery. This feature is not in the npm 0.1.0 archive;
+The matrix now includes **source development for 0.2.0 (#16/#17)**: unified listing,
+bounded Codex home discovery and safe selection/inactive opt-in. These features
+are not in the npm 0.1.0 archive;
 source package metadata stays at 0.1.0 until separate release preparation.
 All other rows retain their baseline scope. Do not use version equality alone
 to mix development builds and published binaries over SSH; test the same build
@@ -23,8 +24,8 @@ not a missing implementation. Issue links describe work, not available features.
 | --- | --- | --- | --- |
 | Claude discovery and inbox submission | Local POSIX socket / Windows named pipe; PID or name; discovery rechecked before submission | Same transport families and recheck; Windows process start identity and authenticated pipe checks | Implemented; native fixtures are not live ACKs |
 | `list` selection | Unified agent list; optional agent; bounded multiple Codex homes; partial discovery diagnostics | Source: combined Claude/Codex by default, optional agent/home filters, bounded multi-home inventory and partial diagnostics. Published 0.1.0 still requires an agent and explicit Codex home | Implemented in source for [#16](https://github.com/abruption/session-peer-ts/issues/16), 0.2.0; no Antigravity adapter |
-| Codex active queue | Saved UUID, unique live writer, real lock/owner checks, pre-submit revalidation | Same protections; full UUID and explicit home required; known-home inventory still checks competing writers | Implemented active path; home selection partial, [#17](https://github.com/abruption/session-peer-ts/issues/17), 0.2.0 |
-| Implicit home / inactive queue | Select unique live home; explicit inactive opt-in under separate guards | No implicit selection or inactive opt-in; refuses inactive/ambiguous state | Planned #17; can proceed alongside #16 using a shared home-source/diagnostic contract |
+| Codex active queue | Saved UUID, unique live writer, real lock/owner checks, pre-submit revalidation | Source: same protections, full UUID, implicit unique-live selection or explicit home; all known candidates checked | Implemented in source for [#17](https://github.com/abruption/session-peer-ts/issues/17), 0.2.0 |
+| Implicit home / inactive queue | Select unique live home; explicit inactive opt-in under separate guards | Source: unique live selection; explicit saved inactive home with opt-in and verified inactive candidates. Public 0.1.0 has neither | Implemented in source for #17, 0.2.0; no wake/resume |
 | `doctor` | Readiness diagnostics; return-route check is opt-in | Unsupported command | Planned [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0 |
 | CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | JSON required; named `--message`/`-m` or stdin only; minimal top-level help; ASCII case-insensitive names, Unicode names require PID | Partial; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
 | From / Reply-To | Caller detection, automatic return-route metadata, structured URI resolution | From uses Codex environment UUID only; explicit `--reply-address`; local/SSH Reply-To URI parsing with conflict checks | Partial; [#21](https://github.com/abruption/session-peer-ts/issues/21), 0.3.0 |
@@ -96,11 +97,10 @@ nonzero partial responses retain rows and diagnostics. No recursive scan,
 inbox connection, writer selection or queue submission is part of listing.
 SQLite is read-only but its existing WAL bookkeeping caveat still applies.
 Listing availability never relaxes send's lock/owner/revalidation checks.
-The shared configured-path/Orca enumerators have separate list and send policies:
-listing requires explicitly named missing environment homes and rejects a set
-empty extra-home variable; send retains its previous truthy-only variable and
-existing-environment-DB rules until #17. It must not use best-effort list results
-as authorization.
+The shared enumerators reject a set empty extra-home variable and require named
+homes for both list and send. Listing may return partial results; send refuses
+any unreadable inventory and never uses listing results as authorization.
+Pinned listing bypasses unrelated configuration, but pinned send checks all sources.
 
 Source: [discovery.ts](https://github.com/abruption/session-peer-ts/blob/main/src/discovery.ts),
 [CLI](https://github.com/abruption/session-peer-ts/blob/main/src/cli.ts),
@@ -125,8 +125,8 @@ TS normal envelopes have `schemaVersion`, `host`, `command`, `ok`, `version`,
 | `send.status`, `submitted` | Submission/wake/transport-specific details; do not assume a uniform error shape | `validated:false`, `posted:true` (Claude), `queued:true` (Codex); caught refusal is `refused:false`, unknown is `unknown:null` |
 | `consumptionConfirmed` | False for native submission; queueing is not consumption | Always false on send results, including refusal/unknown |
 | `target`, `chars`, `dryRun`, `codexHome` | Target and home details depend on agent; Codex target includes `id`/`name`, with separate `agent` | Success/dry-run target has `agent` plus `id` or `pid`/`name`; `chars` counts enveloped code points; `codexHome` only on Codex success/dry-run |
-| `queueId` | Present if native queue stdout supplies an ID | Absent; successful queue output is not parsed for an ID |
-| `codexHomeResolution` | Resolution diagnostics on Codex success and some refusals | Absent; internal writer evidence is not exported. #17 must add explicit acceptance tests for any new shape |
+| `queueId` | Present if native queue stdout supplies an ID | Source #17: optional bounded native confirmation ID on successful queue only; absent in public 0.1.0 |
+| `codexHomeResolution` | Resolution diagnostics on Codex success and some refusals | Source #17: sanitized resolution on success and failures after resolution begins; private owner fingerprints remain internal. Absent in public 0.1.0 |
 | `remoteVersion` | Optional remote `list` metadata after version discovery (also update diagnostics); not universal on send | Absent; exact TS version banner must pass preflight; mismatch is a refusal |
 | `replyRoute`, `addressResolution` | Optional metadata when route advertised / Reply-To destination resolved | Absent; explicit envelope/URI support does not imply these JSON fields |
 | `wake` | Optional, opt-in; failed activation may still have `submitted:true` and `ok:false` | Absent; unsupported option |
@@ -139,7 +139,7 @@ Check `ok`, command, status, exit code and presence separately. TS unknown means
 submission may have happened; never automatically resend. A Python wake error
 with `submitted:true` must not be retried as a fresh send. A missing reply or target exit
 alone does not establish consumption or failure. Observe ACK in the receiver
-TUI separately. Future #17/#20 changes must test success, refused, partial and
+TUI separately. Further #20 changes must test success, refused, partial and
 unknown output, including absent/null/false distinctions.
 
 Output sources: TS CLI/send above; Python
@@ -228,3 +228,57 @@ languages. Changes to JSON, env, defaults, runtime/remote requirements or packag
 must include the corresponding acceptance tests. Keep planned features distinct
 from supported behavior and deliberate exclusions; milestone assignment is not
 a release commitment. Recheck the exact packaged copy during release review.
+
+
+## Source Codex home selection — #17 / 0.2.0
+
+This is development source behavior, not a claim about the immutable npm 0.1.0
+archive. `send --to codex:UUID` selects only a unique stable live writer across
+bounded known homes. `--codex-home` pins the destination but still inventories
+competitors. A unique live writer without a saved row yields
+`thread_not_yet_persisted`; an unknown owner or multiple live writers refuses.
+An unsaved live competitor is checked too. Listing does not authorize sending.
+
+`--allow-inactive-codex-home` requires an explicit home (including a home in a
+Reply-To URI), a saved thread there, and all candidates verified inactive.
+Ordinary inactive sends retain `error: inactive_writer` with resolution reason
+`inactive_queue_requires_opt_in`. No wake, resume, native DB write, wait or ACK
+is added. Dry-run validates once and submits zero messages. Actual submission
+re-enumerates and compares all candidates, saved-row presence, DB file identity,
+lock-file identity and live owner evidence immediately before one native queue
+call. Evidence changes refuse; changes after the final check remain an OS/native
+queue race, not an exactly-once guarantee. Post-spawn failures remain unknown,
+`submitted: null`, `retryAllowed: false`; a queue ID is not an ACK.
+
+| Home/configuration | Source send behavior |
+| --- | --- |
+| Unset `SESSION_PEER_CODEX_HOMES`, or `[]` | No extra candidates |
+| Empty/whitespace, malformed JSON, relative/non-string/NUL array entry | Reject entire configuration, even with explicit destination |
+| Absolute or `~/` array entries | Canonicalized, deduplicated, required homes |
+| Explicit argument, nonempty `CODEX_HOME`, configured home missing DB | `home_inventory_unreadable`; candidate `state_db_missing` |
+| Optional default/Orca home missing DB | Allowed as absent, but requested UUID lock still checked |
+| Unreadable DB, unresolved path, unknown writer | Refuse; never skip a competitor using partial results |
+
+Migration from 0.1.0: unset an empty `SESSION_PEER_CODEX_HOMES` or set it to `[]`;
+remove stale `CODEX_HOME` instead of relying on its missing DB being ignored.
+These guards are stricter than Python 1.0.2's selected-missing-DB exemption and
+saved-match writer inspection: this source checks even unsaved competitors.
+
+`codexHomeResolution` has `schemaVersion: 1`, `status` (`selected`, `explicit`,
+`ambiguous`, `unknown`), canonical `selected` or null, fixed `reason`, and
+`candidates`. Each candidate has `codexHome`, `sources`, `savedThread`
+(boolean/null), `writerLock` (`not_checked`, `held`, `free`, `absent`, `unknown`),
+optional `activity`, and fixed `reason`. Uninspected candidates remain explicit.
+No raw subprocess stdout/stderr, PID start fingerprint, UID or command is exported.
+Errors before home resolution (invalid options/message or missing executable)
+need not include this field. SSH resolves on the destination and preserves these
+fields on verified responses; response loss cannot supply trusted diagnostics.
+
+`queueId` is included only when successful native stdout contains exactly one
+line `Queued message ID for thread UUID.` for the requested UUID. ID must be
+1–128 ASCII alphanumeric/`.`/`_`/`:`/`-` characters, starting alphanumeric.
+Missing, malformed or multiple confirmations omit the field without retrying or
+changing successful queue status. Failed native processes never expose an ID.
+
+Contracts: `test/codex-homes.test.ts`, `test/transport.test.ts` and
+`test/windows-contract.test.ts`. These are fixtures, not real recipient ACKs.

@@ -24,7 +24,7 @@
 - 通过 SSH 调用远端已安装的同版本客户端，支持结构化 Reply-To URI 和 JSON 输出。
 - 目标或进程归属不明确时拒绝操作；不会自动重试结果不确定的提交。
 
-未实现 Relay 传输、MCP、wake/resume、非活跃会话排队、Antigravity、自动更新及面向人的文本输出。不支持的命令会明确失败；这不是通用编排器。
+未实现 Relay 传输、MCP、wake/resume、Antigravity、自动更新及面向人的文本输出。不支持的命令会明确失败；这不是通用编排器。
 
 客户端功能计划见 [版本化兼容性表与 npm 迁移指南](PARITY.md)；计划不代表当前支持。提供 Relay 服务器或托管服务不属于本客户端范围。
 
@@ -32,7 +32,7 @@
 
 构建后，`node dist/cli.js list --json` 合并列出 Claude/Codex，`list --agent codex --json` 查找已知 home。公开 npm **0.1.0** 仍要求显式 agent，以及 Codex 列表所需的 home；上面的安装和入门示例仍适用于公开版本。
 
-范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。Codex 发送仍需要显式 home；SSH 两端请使用同一开发构建。
+范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。开发源码的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端请使用同一开发构建。
 
 ## 环境要求
 
@@ -87,7 +87,7 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
 session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message 'Please review the API contract.' --dry-run --json
 ```
 
-只有确定要投递时才移除 `--dry-run`。省略 `--message` 或使用 `--message -` 会读取 UTF-8 stdin。`--all` 仅让列表包含陈旧 / 已归档记录，不授予发送权限。Claude 支持 PID、`claude:PID` 或唯一的 ASCII 名称（不区分大小写）；Unicode 名称请改用 PID。Codex 发送需要完整 UUID 和显式 home；`--codex-bin` 可指定可执行文件。输出必须选择 `--json` 或 `--output-format json`。
+只有确定要投递时才移除 `--dry-run`。省略 `--message` 或使用 `--message -` 会读取 UTF-8 stdin。`--all` 仅让列表包含陈旧 / 已归档记录，不授予发送权限。Claude 支持 PID、`claude:PID` 或唯一的 ASCII 名称（不区分大小写）；Unicode 名称请改用 PID。公开 0.1.0 的 Codex 发送需要完整 UUID 和显式 home；`--codex-bin` 可指定可执行文件。输出必须选择 `--json` 或 `--output-format json`。
 
 ### 跨机器 SSH
 
