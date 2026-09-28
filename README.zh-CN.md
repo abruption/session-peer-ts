@@ -34,7 +34,7 @@
 
 范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端请使用同一0.2.0 构建。
 
-### 源码 CLI 易用性（计划用于 0.2.0）
+### 0.2.0 CLI 易用性
 
 0.2.0新增 `list --help`、`send --help`、`doctor --help` 和 `--output-format text`。
 仍须明确选择输出格式：`--json` 或 `--output-format json|text`。解析错误
@@ -180,12 +180,11 @@ wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检�
 
 独立的 `session-peer-ts` 技能在配套 PR 中管理，不代表新 npm 或技能标签发布。它支持已发布的 0.1.0 基础功能，通过 TypeScript 标识和帮助检查开发功能。Python 的 `session-peer` 技能仍独立保留。
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
-then choose the agent and scope. This example selects **Codex, current project**;
-run from that project directory. For Claude Code use `--agent claude-code`.
-For user scope add `--global` consistently to add/list/remove. Inspect any existing
-`session-peer-ts` copy for local edits before approving its replacement. Codex's
-`.agents/skills` directory is shared with other clients that discover that path.
+先检查[固定提交的技能源码](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts)，再选择代理和安装范围。
+以下示例选择 **Codex、当前项目**；请在该项目目录中运行。
+Claude Code 使用 `--agent claude-code`。用户范围安装应在 add/list/remove 中一致添加 `--global`。
+批准替换已有的 `session-peer-ts` 副本前，请检查本地修改。
+Codex 的 `.agents/skills` 目录与其他扫描该路径的客户端共享。
 
 ```sh
 npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
@@ -193,8 +192,7 @@ npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
 
-For a pinned update, review another exact commit and repeat `add` with the same
-agent/scope. Restart the agent if its catalog is cached. Runtime and skill
-lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
-Skills CLI, and installing this skill does not overwrite the Python skill or
-install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).
+更新固定版本时，请检查另一个准确的提交，然后以相同代理和范围重新运行 `add`。
+如果代理缓存了技能目录，请重启代理。运行时和技能独立管理：npm `--ignore-scripts` 可正常使用，
+postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能或安装运行时。
+参见[兼容性和验证](PARITY.md#source-ts-skill-guidance--25--020)。

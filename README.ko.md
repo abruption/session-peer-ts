@@ -56,7 +56,7 @@ JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때�
 공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
 SSH 양쪽에는 동일한 0.2.0 빌드를 사용하세요.
 
-### 소스 CLI 사용성 (0.2.0 예정)
+### 0.2.0 CLI 사용성
 
 0.2.0는 `list --help`, `send --help`, `doctor --help`, `--output-format text`를 제공합니다.
 출력 형식은 계속 명시해야 합니다: `--json` 또는 `--output-format json|text`.
@@ -270,12 +270,11 @@ pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 
 
 별도 `session-peer-ts` 스킬은 동반 PR에서 관리되며 새 npm 또는 스킬 태그 발행이 아닙니다. 공개된 0.1.0 기본 기능을 지원하고 TypeScript 구현 표시와 도움말로 개발 기능을 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
-then choose the agent and scope. This example selects **Codex, current project**;
-run from that project directory. For Claude Code use `--agent claude-code`.
-For user scope add `--global` consistently to add/list/remove. Inspect any existing
-`session-peer-ts` copy for local edits before approving its replacement. Codex's
-`.agents/skills` directory is shared with other clients that discover that path.
+[고정된 스킬 소스](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts)를 검토한 뒤 에이전트와 설치 범위를 선택하세요.
+아래 예시는 **Codex, 현재 프로젝트**를 선택합니다. 해당 프로젝트 디렉터리에서 실행하세요.
+Claude Code는 `--agent claude-code`를 사용합니다. 사용자 범위는 add/list/remove 모두에
+`--global`을 동일하게 추가하세요. 기존 `session-peer-ts` 사본을 교체하기 전에 로컬 수정 사항을
+확인하세요. Codex의 `.agents/skills` 디렉터리는 이 경로를 탐색하는 다른 클라이언트와 공유됩니다.
 
 ```sh
 npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
@@ -283,8 +282,8 @@ npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
 
-For a pinned update, review another exact commit and repeat `add` with the same
-agent/scope. Restart the agent if its catalog is cached. Runtime and skill
-lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
-Skills CLI, and installing this skill does not overwrite the Python skill or
-install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).
+고정 버전 업데이트는 다른 정확한 커밋을 검토한 뒤 같은 에이전트·범위로 `add`를 반복합니다.
+목록을 캐시하는 에이전트는 다시 시작하세요. 런타임과 스킬은 독립적으로 관리됩니다.
+npm `--ignore-scripts`를 사용할 수 있고 postinstall은 Skills CLI를 호출하지 않습니다.
+이 스킬 설치는 Python 스킬을 덮어쓰거나 런타임을 설치하지 않습니다.
+[호환성과 검증](PARITY.md#source-ts-skill-guidance--25--020)을 참고하세요.

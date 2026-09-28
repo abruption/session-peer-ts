@@ -38,9 +38,9 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
    verify the receiver's TUI response separately. `posted` / `queued` confirms
    submission only. See [What success means](#what-success-means).
 
-### Source CLI usability (planned 0.2.0)
+### CLI usability in 0.2.0
 
-The 0.2.0 adds `list --help`, `send --help`, `doctor --help` and explicit
+Version 0.2.0 adds `list --help`, `send --help`, `doctor --help` and explicit
 `--output-format text`. Output selection remains required: use `--json` or
 `--output-format json|text`. Parse errors use JSON; valid text requests render
 operation results/errors as text. SSH always exchanges JSON internally.
