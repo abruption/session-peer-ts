@@ -36,7 +36,6 @@ function canonicalPath(absolute: string, seen: Set<string>): string {
 }
 function alive(pid: number): boolean {
   if (pid <= 1) return false;
-  if (process.platform === 'win32') return windowsProcessStart(pid) !== undefined;
   try { process.kill(pid, 0); return true; }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 }
@@ -60,8 +59,8 @@ export function claude(all: boolean): Row {
     const pid = record.pid;
     if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid > 2147483647) continue;
     const matches = pid === Number(entry.slice(0, -5));
-    let live = matches && alive(pid);
-    if (live && process.platform === 'win32') {
+    let live = matches && process.platform !== 'win32' && alive(pid);
+    if (matches && process.platform === 'win32') {
       const started = typeof record.startedAt === 'number' && Number.isSafeInteger(record.startedAt) && record.startedAt > 0 ? record.startedAt : NaN;
       const ticks = windowsProcessStart(pid);
       const actual = ticks === undefined ? NaN : Number((ticks - 116444736000000000n) / 10000n);

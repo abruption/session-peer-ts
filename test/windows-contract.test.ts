@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { inspectWriter, probeLock, resolveWriter } from '../dist/writer.js';
-import { inspectWindows } from '../dist/windows.js';
+import { inspectWindows, windowsProcessStart } from '../dist/windows.js';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const cli = resolve('dist/cli.js');
@@ -119,6 +119,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const owner = await f.holder();
     assert.equal(await probeLock(f.lock), 'held');
     const rows = inspectWindows('openers', f.lock);
+    assert.equal(windowsProcessStart(owner.pid!), BigInt(rows[0].start), 'lightweight probe must match native Restart Manager FILETIME exactly');
     assert.equal(rows.length, 1); assert.equal(rows[0].pid, owner.pid);
     assert.equal(rows[0].uid, inspectWindows('identity', String(process.pid))[0].uid);
     assert.equal((await inspectWriter(f.home, id)).activity, 'live_writer');

@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { pathToFileURL } from 'node:url';
 import { casefold, CASEFOLD_UNICODE_VERSION } from '../dist/casefold.js';
 import { renderOutput } from '../dist/output.js';
 const cli = resolve('dist/cli.js');
@@ -65,11 +66,32 @@ test('Unicode collision refuses, exact name and PID remain selectable; positiona
  const record=(pid:number,name:string)=>writeFileSync(join(home,'.claude/sessions',`${pid}.json`),JSON.stringify({pid,name,startedAt:Date.now(),messagingSocketPath:socket}));
  record(process.pid,'Straße');
  const call=async(target:string,body:string[],dry=true)=>{
-  const child=spawn(process.execPath,[cli,'send','--to',target,'--json','--no-from',...(dry?['--dry-run']:[]),...body],{env,stdio:['ignore','pipe','pipe']});
-  let output='';child.stdout.on('data',x=>output+=x);child.stderr.resume();const timer=setTimeout(()=>child.kill(),30000);
-  const [code,signal]=await once(child,'close');clearTimeout(timer);assert.equal(signal,null);return {code,...JSON.parse(output)};
+  const preload=process.platform==='win32'?['--import',pathToFileURL(resolve('test/fixtures/windows-inspection-diagnostic.mjs')).href]:[];
+  const child=spawn(process.execPath,[...preload,cli,'send','--to',target,'--json','--no-from',...(dry?['--dry-run']:[]),...body],{env,stdio:['ignore','pipe','pipe']});
+  let output='',stderr='',stderrBytes=0;child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>{stderrBytes+=Buffer.byteLength(x);stderr+=String(x).slice(0,4096-stderr.length);});const timer=setTimeout(()=>child.kill(),30000);
+  const [code,signal]=await once(child,'close');clearTimeout(timer);
+  const inspections:Record<string,unknown>[]=[];
+  for(const line of stderr.split('\n')) {
+   try {
+    const data=JSON.parse(line);
+    if(data?.inspection==='powershell') {
+     const count=(value:unknown)=>Number.isSafeInteger(value)&&Number(value)>=0?value:null;
+     inspections.push({inspection:'powershell',durationMs:count(data.durationMs),
+      status:Number.isSafeInteger(data.status)?data.status:null,
+      signal:typeof data.signal==='string'&&/^SIG[A-Z0-9]{1,16}$/.test(data.signal)?data.signal:null,
+      errorCode:typeof data.errorCode==='string'&&/^E[A-Z0-9_]{1,63}$/.test(data.errorCode)?data.errorCode:null,
+      stdoutBytes:count(data.stdoutBytes),stderrBytes:count(data.stderrBytes)});
+    }
+   } catch { /* Never forward raw stderr. */ }
+  }
+  for(const data of inspections) t.diagnostic(JSON.stringify(data));
+  const diagnostic=JSON.stringify({code,signal,stderrBytes,inspections});
+  assert.equal(signal,null,diagnostic);
+  assert.ok(output.trim(),diagnostic);
+  return {code,...JSON.parse(output),diagnostic};
  };
- assert.equal((await call('STRASSE',['hello'])).status,'validated');
+ const normalized=await call('STRASSE',['hello']);
+ assert.equal(normalized.status,'validated',JSON.stringify(normalized));
  record(other.pid,'STRASSE');assert.equal((await call('straße',['hello'])).error,'ambiguous_target');assert.equal(messages.length,0);
  assert.equal((await call(String(process.pid),['hello'])).status,'validated');
  assert.equal((await call('strass',['hello'])).error,'no_reachable_target');
