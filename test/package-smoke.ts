@@ -46,10 +46,14 @@ try {
     assert.equal(output.status, 0, String(output.error ?? output.stderr));
     assert.equal(output.stdout.trim(), `session-peer ${metadata.version} (typescript)`);
   } else assert.ok(statSync(binary).mode & 0o111);
-  const result = JSON.parse(execFileSync(process.execPath, [entry, 'list', '--agent', 'claude', '--json'], {
-    encoding: 'utf8', timeout: 10000,
-    env: { ...process.env, PATH: '', HOME: home, CLAUDE_CONFIG_DIR: join(home, '.claude'), ANTHROPIC_CONFIG_DIR: '' }
+  const emptyEnv = { ...process.env, PATH: '', HOME: home, USERPROFILE: home,
+    CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]',
+    CLAUDE_CONFIG_DIR: join(home, '.claude'), ANTHROPIC_CONFIG_DIR: '' };
+  const result = JSON.parse(execFileSync(process.execPath, [entry, 'list', '--json'], {
+    encoding: 'utf8', timeout: 10000, env: emptyEnv
   }));
+  assert.equal(result.discovery.claude.status, 'ok');
+  assert.equal(result.discovery.codex.status, 'not_installed');
   assert.equal(result.ok, true);
   // Load and exercise the installed native dependency with a private fixture.
   // Empty discovery alone would never load it and cannot prove prebuild support.

@@ -22,17 +22,32 @@ TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
 ## 주요 기능과 범위
 
-- 로컬 세션과 명시적으로 선택한 Codex 홈 탐색
+- 로컬 Claude/Codex 세션과 알려진 Codex 홈 탐색 (0.2.0 소스 개발 기능, 아래 참고)
 - `--dry-run`으로 대상을 검증한 뒤 네이티브 inbox 또는 queue에 메시지 1회 제출
 - 원격에 명시적으로 설치한 같은 버전의 클라이언트로 SSH 전송
 - 구조화된 Reply-To URI와 JSON 결과
 - 모호한 대상·확인할 수 없는 소유권은 거부하고, 불확실한 제출은 자동 재시도하지 않음
 
 Relay 전송, MCP, wake/resume, 비활성 세션 queue, Antigravity, 자동 업데이트,
-암묵적인 전체 에이전트 탐색, 일반 텍스트 출력은 미지원입니다. 미지원 옵션은 명시적으로
+일반 텍스트 출력은 미지원입니다. 미지원 옵션은 명시적으로
 거부하며 범용 오케스트레이터를 지향하지 않습니다.
 
 클라이언트 기능 계획은 [버전별 호환성 표와 npm 이주 가이드](PARITY.md)에서 추적하며, 계획은 현재 지원을 뜻하지 않습니다. Relay 서버·호스팅 서비스 제공은 이 클라이언트의 범위 밖입니다.
+
+### 개발 소스의 통합 목록 (0.2.0)
+
+소스 빌드 후 `node dist/cli.js list --json`은 Claude/Codex를 함께 조회하고,
+`list --agent codex --json`은 알려진 홈을 조회합니다. 공개 npm **0.1.0**은 여전히
+에이전트와 Codex 목록용 홈을 명시해야 하며, 위 시작 예제는 그 버전에도 유효합니다.
+
+탐색 범위는 기본 `~/.codex`, `CODEX_HOME`, macOS Orca의 바로 아래 계정 홈,
+JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록을 해당 홈에
+고정하고 다른 설정 오류를 우회하며, `--agent claude`는 Codex 탐색을 생략합니다.
+동일 홈의 별칭은 합치지만 다른 홈의 동일 UUID는 보존합니다. 전송에는 각 행의
+`codexHome`을 사용하세요. 선택적 홈 부재는 오류가 아니지만 명시된 홈의 부재·오류는
+성공한 행을 보존하면서 종료 코드 1을 반환합니다. 목록은 writer를 선택하거나 전송하지 않습니다.
+정렬·진단·`--all`·SSH는 [목록 계약](PARITY.md#source-unified-listing-contract--16--020)을 참고하세요.
+Codex 전송에는 계속 명시적 홈이 필요하며, SSH 양쪽에는 동일한 개발 빌드를 사용하세요.
 
 ## 요구사항
 
@@ -114,7 +129,7 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 실제 전달할 때만 `--dry-run`을 제거합니다. `--message`를 생략하거나 `--message -`를
 사용하면 UTF-8 stdin을 읽습니다. `--all`은 오래된·보관된 기록을 목록에 포함할 뿐
 전송을 허용하지 않습니다. Claude 대상은 PID, `claude:PID`, 모호하지 않은 ASCII
-이름(대소문자 무시)입니다. Unicode 이름은 PID로 지정하세요. Codex에는 전체 UUID와
+이름(대소문자 무시)입니다. Unicode 이름은 PID로 지정하세요. Codex 전송에는 전체 UUID와
 명시적인 홈이 필요하며 `--codex-bin`으로 실행 파일을 고를 수 있습니다. 출력에는
 `--json` 또는 `--output-format json`이 필요합니다.
 

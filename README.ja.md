@@ -19,14 +19,20 @@
 
 ## 機能と範囲
 
-- ローカルセッションと、明示的に指定した Codex home の検出。
+- ローカル Claude/Codex セッションと既知の Codex home の検出（0.2.0 向けソース開発機能、下記参照）。
 - `--dry-run` で宛先を確認し、ネイティブ inbox / queue にメッセージを一度だけ提出。Codex は一意かつ安定した live writer が必要です。
 - インストール済みの同じクライアントへの SSH 接続、構造化 Reply-To URI、JSON 出力。
 - 宛先や所有者が曖昧なら拒否。不確実な提出を自動再送しません。
 
-Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、暗黙の全エージェント検出、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
+Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
 
 クライアント機能の計画は [バージョン別互換性表と npm 移行ガイド](PARITY.md) で追跡します。計画は現在の対応を意味しません。Relay サーバーやホスティングサービスの提供は本クライアントの範囲外です。
+
+### 開発ソースの統合一覧 (0.2.0)
+
+ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。上記インストール・開始例は公開版でも有効です。
+
+対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。Codex 送信には引き続き明示 home が必要です。SSH 両端で同一の開発ビルドを使ってください。
 
 ## 必要条件
 
@@ -81,7 +87,7 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
 session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message 'Please review the API contract.' --dry-run --json
 ```
 
-実際に送るときだけ `--dry-run` を外します。`--message` の省略または `--message -` は UTF-8 stdin を読みます。`--all` は古い / アーカイブ済み記録の一覧用で、送信許可にはなりません。Claude の宛先は PID、`claude:PID`、一意な ASCII 名（大文字小文字を区別しない）。Unicode 名には PID を使います。Codex は完全な UUID と明示した home が必要です。実行ファイルは `--codex-bin` で指定できます。出力には `--json` または `--output-format json` が必要です。
+実際に送るときだけ `--dry-run` を外します。`--message` の省略または `--message -` は UTF-8 stdin を読みます。`--all` は古い / アーカイブ済み記録の一覧用で、送信許可にはなりません。Claude の宛先は PID、`claude:PID`、一意な ASCII 名（大文字小文字を区別しない）。Unicode 名には PID を使います。Codex 送信には完全な UUID と明示した home が必要です。実行ファイルは `--codex-bin` で指定できます。出力には `--json` または `--output-format json` が必要です。
 
 ### SSH
 

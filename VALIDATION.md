@@ -5,6 +5,32 @@ verification from historical candidate checks and live-agent observations.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
+## Source discovery for 0.2.0 — 2026-09-28 KST
+
+Issue #16 adds combined Claude/Codex listing and bounded multiple-home inventory.
+The source feature is not present in the immutable npm 0.1.0 archive. It does
+not enable implicit Codex send selection or inactive queueing (#17).
+
+`test/discovery.test.ts` ports the Python 1.0.2 unified-list/multi-home cases:
+optional absence versus explicit missing sources, alias/source merging and
+cross-home UUID identity, global ordering/archived filters, whole invalid-config
+rejection, per-home/agent partial failure, pinned-home bypass, destination-side
+stdio/SSH inventory and nonzero partial envelopes. Temporary SQLite files and
+local socket/pipe records are isolated; listing opens no inbox connection and
+leaves DB contents unchanged. Permission/canonicalization/enumeration failures
+are injected deterministically on every OS, not claimed as Windows ACL evidence.
+
+The suite runs in macOS/Linux Node 22/24 CI with the pinned Python oracle, and
+in Windows x64 Node 22/24 CI with native fixtures but no Python oracle. The
+Windows SSH fixture additionally executes actual PowerShell/.cmd and checks
+partial listing rows while a native writer is held, with no new queue call.
+Windows test files run serially so concurrent PowerShell compilation does not
+consume the native inspector's fixed timeout; assertions and production deadlines
+are unchanged. Each native subtest cleans its children even after assertion
+failure. Package smoke verifies unified empty discovery without executables on PATH.
+These are fixture contracts, not new live-TUI ACKs. CI evidence belongs to the
+issue's PR-head checks; publication requires separate release preparation.
+
 ## Public 0.1.0 — 2026-09-27 KST
 
 `session-peer@0.1.0` was published at `2026-09-27T11:23:51.466Z`

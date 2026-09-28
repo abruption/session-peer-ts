@@ -19,12 +19,16 @@ async function fixture(t: TestContext) {
   const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-win-contract-'));
   const children = new Set<ChildProcess>();
   const saved = { ...process.env };
-  t.after(async () => {
+  async function closeChildren() {
     for (const child of children) {
       if (child.exitCode === null && child.signalCode === null) {
         const closed = once(child, 'close'); child.kill(); await closed;
       }
     }
+    children.clear();
+  }
+  t.after(async () => {
+    await closeChildren();
     for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
     Object.assign(process.env, saved);
     rmSync(root, { recursive: true, force: true });
@@ -39,12 +43,14 @@ async function fixture(t: TestContext) {
     SESSION_PEER_CODEX_HOMES: '[]', CLAUDE_CONFIG_DIR: join(user, '.claude'), ANTHROPIC_CONFIG_DIR: '',
     CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', FIXTURE_QUEUE_LOG: join(root, 'queue.jsonl'),
     FIXTURE_QUEUE_MODE: '', FIXTURE_SSH_LOG: join(root, 'ssh.jsonl'), FIXTURE_SSH_MODE: '',
+    FIXTURE_REMOTE_PROFILE: '', FIXTURE_REMOTE_HOMES: '',
     PATH: root + ';' + (process.env.PATH ?? '') });
   const home = join(root, 'selected');
   function database(path: string) {
     mkdirSync(join(path, 'thread-writer-locks'), { recursive: true });
     const db = new DatabaseSync(join(path, 'state_5.sqlite'));
-    db.exec('CREATE TABLE threads(id TEXT)'); db.prepare('INSERT INTO threads VALUES (?)').run(id); db.close();
+    db.exec('CREATE TABLE threads(id TEXT, title TEXT, cwd TEXT, updated_at INTEGER, archived INTEGER, rollout_path TEXT)');
+    db.prepare('INSERT INTO threads VALUES (?,?,?,?,?,?)').run(id, 'fixture', '/project', 1, 0, 'unused'); db.close();
   }
   database(home);
   const lock = join(home, 'thread-writer-locks', id + '.lock');
@@ -84,7 +90,7 @@ async function fixture(t: TestContext) {
     return result;
   }
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', binary, '--message', 'fixture 🚀', '--no-from'];
-  return { root, binary, home, lock, database, holder, stop, log, invoke, args };
+  return { root, binary, home, lock, database, holder, stop, log, invoke, args, closeChildren };
 }
 
 // Replace only the production sampling delay with an explicit barrier. Waiting
@@ -107,6 +113,7 @@ function samplingBarrier(t: TestContext) {
 
 test('Windows native writer, CLI and SSH contracts', { skip: process.platform !== 'win32', timeout: 540000 }, async t => {
   const f = await fixture(t);
+  t.afterEach(f.closeChildren); // A failed assertion must not leave a held lock for the next case.
   await t.test('held lock and stable native PID/SID/start identity', async () => {
     assert.equal(await probeLock(f.lock), 'absent');
     const owner = await f.holder();
@@ -206,6 +213,17 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     }
     const lost = await f.invoke(args, { FIXTURE_SSH_MODE: 'loss' });
     assert.equal(lost.status, 'unknown'); assert.equal(lost.submitted, null); assert.equal(lost.retryAllowed, false);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    const remoteProfile = join(f.root, 'remote-user');
+    const remoteHome = join(remoteProfile, '.codex'); f.database(remoteHome);
+    const listed = await f.invoke(['list', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote],
+      { SESSION_PEER_CODEX_HOMES: '{invalid-local-config', FIXTURE_REMOTE_PROFILE: remoteProfile,
+        FIXTURE_REMOTE_HOMES: JSON.stringify([join(remoteProfile, 'missing')]) });
+    assert.equal(listed.ok, false); assert.equal(listed.sessions.length, 1);
+    assert.equal(listed.sessions[0].codexHome, remoteHome);
+    assert.equal(listed.discovery.claude.status, 'ok');
+    assert.equal(listed.discovery.codex.homes.at(-1).code, 'state_db_missing');
+    assert.equal(listed.sshHost, 'fixture'); assert.equal('submitted' in listed, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
     await f.stop(owner);
   });

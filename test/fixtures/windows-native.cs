@@ -63,6 +63,17 @@ public static class Fixture {
       if (!preflight && modeSsh == "loss") return 255;
       if (!command.StartsWith("powershell.exe ")) throw new Exception("expected_windows_remote_command");
       var start = new ProcessStartInfo("powershell.exe", command.Substring("powershell.exe ".Length));
+      // A distinct simulated destination environment for discovery tests. These
+      // are fixture controls, not SSH SendEnv/AcceptEnv or application options.
+      string remoteProfile = Environment.GetEnvironmentVariable("FIXTURE_REMOTE_PROFILE");
+      if (!String.IsNullOrEmpty(remoteProfile)) {
+        start.EnvironmentVariables["HOME"] = remoteProfile;
+        start.EnvironmentVariables["USERPROFILE"] = remoteProfile;
+        start.EnvironmentVariables["CODEX_HOME"] = Path.Combine(remoteProfile, ".codex");
+        start.EnvironmentVariables["CLAUDE_CONFIG_DIR"] = Path.Combine(remoteProfile, ".claude");
+        start.EnvironmentVariables["ANTHROPIC_CONFIG_DIR"] = "";
+        start.EnvironmentVariables["SESSION_PEER_CODEX_HOMES"] = Environment.GetEnvironmentVariable("FIXTURE_REMOTE_HOMES") ?? "[]";
+      }
       start.UseShellExecute = false; start.CreateNoWindow = true;
       start.RedirectStandardInput = true; start.RedirectStandardOutput = true; start.RedirectStandardError = true;
       start.StandardOutputEncoding = new UTF8Encoding(false); start.StandardErrorEncoding = new UTF8Encoding(false);

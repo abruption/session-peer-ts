@@ -136,7 +136,7 @@ test('unsupported commands/transports fail before inspecting state or sending an
     ['send', '--dry-run'], ['device'], ['doctor'], ['update'], ['reply'],
     ['list', '--agent', 'claude', '--host', '-SECRET-SENTINEL'],
     ['list', '--agent', 'claude', '--device', 'SECRET-SENTINEL'],
-    ['list', '--agent', 'antigravity'], ['list'], ['list', '--agent', 'codex'],
+    ['list', '--agent', 'antigravity'], ['list', '--agent', ''], ['list', '--codex-home', ''],
     ['list', '--agent', 'claude', '--all=false'], ['list', '--agent', 'claude', '--wake'],
   ]) {
     const result = invoke(process.execPath, [cli, ...args, '--json'], env);
