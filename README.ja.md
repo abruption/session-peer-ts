@@ -36,7 +36,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新、人間向けテ�
 
 ### ソース CLI の使いやすさ（0.2.0 予定）
 
-開発ソースは `list --help`、`send --help`、`--output-format text` を提供します。
+開発ソースは `list --help`、`send --help`、`doctor --help`、`--output-format text` を提供します。
 出力指定は引き続き必須です: `--json` または `--output-format json|text`。
 構文エラーは JSON、有効な text 要求の実行結果・エラーはテキストです。SSH
 内部通信は常に JSON です。`send --to TARGET "message" --json` の位置本文に

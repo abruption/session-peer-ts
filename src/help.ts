@@ -15,6 +15,13 @@ List reachable Claude and saved Codex sessions. Listing is not send authorizatio
   --codex-home HOME                   Pin Codex listing to one home
   --all                              Include stale Claude/archived Codex rows
 ${common}`;
+  if (command === 'doctor') return `Usage: session-peer doctor [options]
+Read-only metadata/capability diagnostics; does not send, wake or authorize a send.
+Successful diagnostics exit 0 even when ready=false. Check readiness separately.
+  --agent claude|codex                Filter one agent (default: both)
+  --codex-home HOME                   Pin Codex metadata inspection
+  --codex-bin PATH                    Inspect executable availability; never execute it
+${common}`;
   if (command === 'send') return `Usage: session-peer send --to TARGET [MESSAGE | --message TEXT | -m TEXT] [options]
 TARGET: Claude name/PID, claude:NAME/PID, codex:UUID, or session-peer reply URI.
 Omit the body or use - for UTF-8 stdin. Only one body source is permitted.
@@ -32,6 +39,7 @@ ${common}`;
 Usage: session-peer <command> [options]
   list                               List Claude/Codex sessions
   send                               Submit one guarded message
+  doctor                             Inspect read-only metadata and capabilities
   --version                          Print exact runtime version
   --help, -h                         Show help; <command> --help for details
 ${common}

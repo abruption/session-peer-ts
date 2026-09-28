@@ -18,13 +18,16 @@ function fixture(t: import('node:test').TestContext) {
 test('help, format compatibility, input conflicts, wire JSON and partial text diagnostics', t => {
   const {home,env}=fixture(t);
   const call=(args:string[], input='') => spawnSync(process.execPath,[cli,...args],{env,input,encoding:'utf8',timeout:15000});
-  for(const args of [['--help'],['list','--help'],['send','-h']]) {
+  for(const args of [['--help'],['list','--help'],['send','-h'],['doctor','--help']]) {
     const r=call(args); assert.equal(r.status,0,r.stderr); assert.match(r.stdout,/Usage:/); assert.doesNotMatch(r.stdout,/preview/i);
   }
   assert.equal(JSON.parse(call(['list']).stdout).error,'json_output_required');
   for(const args of [['list','--json'],['list','--output-format','json'],['list','--json','--output-format=json']]) {
     const r=call(args);assert.equal(r.status,0);assert.equal(JSON.parse(r.stdout).ok,true);
   }
+  const diagnostic=call(['doctor','--output-format','text']);assert.equal(diagnostic.status,0);assert.match(diagnostic.stdout,/Ready: no/);assert.match(diagnostic.stdout,/does not authorize/);
+  const doctorJson=call(['doctor','--json']);assert.equal(doctorJson.status,0);assert.equal(JSON.parse(doctorJson.stdout).ready,false);assert.equal(JSON.parse(doctorJson.stdout).ok,true);
+  const doctorWire=call(['--stdio-request'],JSON.stringify({schemaVersion:1,args:['doctor','--json']}));assert.equal(JSON.parse(doctorWire.stdout).command,'doctor');
   const text=call(['list','--output-format','text']);assert.equal(text.status,0);assert.match(text.stdout,/No sessions found/);
   const conflict=call(['send','--to','fixture','--json','--output-format=text']);assert.equal(conflict.status,2);assert.equal(JSON.parse(conflict.stdout).error,'conflicting_output_options');
   for(const body of [['one','-m','two'],['-m','-','two'],['one','two']]) {

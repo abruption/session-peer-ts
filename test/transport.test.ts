@@ -164,6 +164,11 @@ test('SSH request framing: no message in remote command; response loss never ret
   writeFileSync(ssh, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer 0.1.0 (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const result = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message', 'SECRET-SENTINEL', '--no-from'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(result.status, 'posted'); assert.equal(messages.length, 1);
+  // A valid final JSON line cannot authenticate earlier stdout. Preserve the
+  // whole-response boundary even when a shell banner precedes plausible JSON.
+  writeFileSync(ssh, `#!${process.execPath}\nif(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.1.0 (typescript)');else {console.log('untrusted banner');console.log(JSON.stringify({schemaVersion:1,command:'send',host:'fixture',ok:true,status:'posted',submitted:true,consumptionConfirmed:false}));}`, { mode: 0o700 });
+  const prefixed = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'not-provable'], { ...env, PATH: path + delimiter + env.PATH });
+  assert.equal(prefixed.status, 'unknown'); assert.equal(prefixed.submitted, null); assert.equal(prefixed.retryAllowed, false);
   writeFileSync(ssh, `#!${process.execPath}\nif(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.1.0 (typescript)');else process.exit(255);`, { mode: 0o700 });
   const lost = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'lost'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(lost.status, 'unknown'); assert.equal(lost.retryAllowed, false); assert.equal(messages.length, 1);

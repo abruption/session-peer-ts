@@ -275,7 +275,7 @@ these tests do not constitute release or publication approval.
 
 ## Source #19 CLI usability — 2026-09-28
 
-The 0.2.0 development source adds text output, complete list/send help, positional
+The 0.2.0 development source adds text output, complete list/send/doctor help, positional
 message compatibility and Unicode 14.0.0 exact casefold. No npm publication or
 live-agent ACK is claimed. `test/cli-usability.test.ts` is included in the native
 Windows test command and the macOS/Linux suite. It verifies output/exit codes,

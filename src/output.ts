@@ -14,6 +14,7 @@ export function renderOutput(value: Record<string, unknown>, format: OutputForma
     }
     if (Array.isArray(value.errors)) for (const error of value.errors) lines.push(`Discovery error: ${safe(JSON.stringify(error))}`);
   } else if (value.command === 'doctor') {
+    lines.push('Read-only diagnostics; readiness does not authorize submission.');
     lines.push(`Ready: ${value.ready === true ? 'yes' : 'no'}`);
     lines.push(`Agents: ${safe(JSON.stringify(value.agents ?? {}))}`);
     lines.push(`Capabilities: ${safe(JSON.stringify(value.capabilities ?? {}))}`);

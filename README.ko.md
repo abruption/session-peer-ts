@@ -58,7 +58,7 @@ SSH 양쪽에는 동일한 개발 빌드를 사용하세요.
 
 ### 소스 CLI 사용성 (0.2.0 예정)
 
-개발 소스는 `list --help`, `send --help`, `--output-format text`를 제공합니다.
+개발 소스는 `list --help`, `send --help`, `doctor --help`, `--output-format text`를 제공합니다.
 출력 형식은 계속 명시해야 합니다: `--json` 또는 `--output-format json|text`.
 구문 오류는 JSON이며 유효한 text 요청의 실행 결과·오류는 텍스트입니다. SSH
 내부 전송은 항상 JSON입니다. `send --to TARGET "message" --json` 위치 인자를

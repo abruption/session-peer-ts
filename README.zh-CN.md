@@ -36,7 +36,7 @@
 
 ### 源码 CLI 易用性（计划用于 0.2.0）
 
-开发源码新增 `list --help`、`send --help` 和 `--output-format text`。
+开发源码新增 `list --help`、`send --help`、`doctor --help` 和 `--output-format text`。
 仍须明确选择输出格式：`--json` 或 `--output-format json|text`。解析错误
 使用 JSON；有效 text 请求的操作结果和错误使用文本。SSH 内部始终传输 JSON。
 支持 `send --to TARGET "message" --json` 位置正文，不可同时使用

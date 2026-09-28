@@ -335,7 +335,7 @@ live-agent or delivery/consumption test.
 
 ## Source CLI usability — issue #19 (2026-09-28)
 
-Source targeting 0.2.0 adds full list/send help, text rendering and one positional
+Source targeting 0.2.0 adds full list/send/doctor help, text rendering and one positional
 message. Published 0.1.0 remains the baseline in the matrix above. The explicit
 output requirement is retained: `--json` or `--output-format json|text`; no default
 format changes. No selector retains `json_output_required` for compatibility.
