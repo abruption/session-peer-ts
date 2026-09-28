@@ -11,6 +11,8 @@ import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 
 type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string> };
+const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'];
+const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address'];
 export function parse(args: string[]): Options {
   const command = args[0];
   if (command !== 'list' && command !== 'send' && command !== 'doctor') throw new Refusal('unsupported_command');
@@ -26,13 +28,16 @@ export function parse(args: string[]): Options {
     }
     const split = token.indexOf('=');
     const key = split > 0 ? token.slice(0, split) : token;
-    if (['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'].includes(key)) {
+    if (FLAGS.includes(key)) {
       if (flags.has(key) || split > 0) throw new Refusal('invalid_option');
       flags.add(key);
-    } else if (['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address'].includes(key)) {
+    } else if (VALUES.includes(key)) {
       const name = key === '-m' ? '--message' : key;
       const value = split > 0 ? token.slice(split + 1) : args[++i];
-      if (value === undefined || values.has(name)) throw new Refusal('invalid_option');
+      // A separate value that is itself an option name is a missing value, as in
+      // argparse; `--message=--dry-run` or stdin still send such text literally.
+      const option = split > 0 ? '' : (value ?? '').split('=')[0]!;
+      if (value === undefined || values.has(name) || [...FLAGS, ...VALUES, '--help', '-h', '--version', '--stdio-request'].includes(option)) throw new Refusal('invalid_option');
       values.set(name, value);
     } else throw new Refusal('unsupported_option');
   }
@@ -97,6 +102,8 @@ const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 export function sshPreflightFailure(result: Done, expected: string): string | undefined {
   if (result.interrupted) return 'ssh_preflight_timeout';
   if (!result.spawned) return 'ssh_unavailable';
+  // A verified version is success even when login scripts write to stderr.
+  if (result.code === 0 && result.stdout.trim() === expected) return undefined;
   const detail = result.stderr;
   if (/host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|no [^\n]*host key is known/i.test(detail))
     return 'ssh_host_key_untrusted';
@@ -110,14 +117,15 @@ export function sshPreflightFailure(result: Done, expected: string): string | un
   if (result.code !== 0) return 'ssh_preflight_failed';
   return undefined;
 }
-async function remote(options: Options, message?: string): Promise<Record<string, unknown>> {
+async function remote(options: Options, message?: string): Promise<{ value: Record<string, unknown>; exitCode: number }> {
   const { values, flags, command } = options;
   const target = host(values.get('--host')!);
   const binary = values.get('--remote-bin') ?? 'session-peer';
   const windows = values.get('--remote-platform') === 'win32';
   const invoke = (flag: string) => {
     if (!windows) return `${quote(binary)} ${flag}`;
-    const code = `& '${binary.replace(/'/g, "''")}' ${flag}`;
+    // PowerShell also closes single-quoted strings on U+2018-U+201B.
+    const code = `& '${binary.replace(/['\u2018-\u201b]/g, '$&$&')}' ${flag}`;
     return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(code, 'utf16le').toString('base64')}`;
   };
   const ssh = executable('ssh');
@@ -131,7 +139,7 @@ async function remote(options: Options, message?: string): Promise<Record<string
   if (flags.has('--all')) args.push('--all');
   if (flags.has('--dry-run')) args.push('--dry-run');
   if (flags.has('--allow-inactive-codex-home')) args.push('--allow-inactive-codex-home');
-  if (command === 'send') args.push('--message', message!, '--no-from', '--no-reply-to');
+  if (command === 'send') args.push(`--message=${message!}`, '--no-from', '--no-reply-to');
   const done = await run(ssh, [...base, invoke('--stdio-request')], {
     timeout: 90000, input: JSON.stringify({ schemaVersion: 1, args })
   });
@@ -146,7 +154,7 @@ async function remote(options: Options, message?: string): Promise<Record<string
   if (command === 'send' && (value.consumptionConfirmed !== false ||
       (value.ok && (value.submitted !== !flags.has('--dry-run') || value.status !== expectedStatus)) ||
       (!value.ok && !((value.submitted === false && value.status === 'refused') || (value.submitted === null && value.status === 'unknown'))))) return uncertain();
-  return { ...value, host: target, sshHost: target };
+  return { value: { ...value, host: target, sshHost: target }, exitCode: done.code! };
 }
 
 let command = 'unknown';
@@ -181,13 +189,14 @@ try {
       message = envelope(message, options.flags.has('--no-from'), options.values.get('--reply-address'));
       checkMessage(message, options.values.get('--to')!.startsWith('codex:'));
     }
-    let result: Record<string, unknown>;
-    if (options.values.has('--host')) result = await remote(options, message);
+    let result: Record<string, unknown>, exitCode: number | undefined;
+    // Propagate the verified remote exit code so SSH and local refusals match.
+    if (options.values.has('--host')) ({ value: result, exitCode } = await remote(options, message));
     else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
     else if (command === 'doctor') result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
     else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
     console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }, format));
-    process.exitCode = result.ok === false ? 1 : 0;
+    process.exitCode = exitCode ?? (result.ok === false ? 1 : 0);
   }
 } catch (error) {
   const unknown = error instanceof UnknownOutcome;

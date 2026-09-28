@@ -1,6 +1,6 @@
 import { casefold } from './casefold.js';
 import { createConnection } from 'node:net';
-import { claude, Refusal } from './discovery.js';
+import { claude, Refusal, sqliteHome } from './discovery.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { HomeRefusal, resolveWriter, revalidateWriter, uuid, type HomeResolution } from './writer.js';
 import { postWindowsPipe } from './windows.js';
@@ -52,12 +52,18 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     const binary = executable(options.codexBin ?? 'codex');
     const selection = await resolveWriter(options.home, id, options.allowInactive);
     const { home } = selection;
+    const storage = sqliteHome(home);
+    if (storage !== 'default') throw new HomeRefusal(storage === 'configured' ? 'unsupported_codex_sqlite_home' : 'codex_config_unreadable', selection.resolution);
     const result = { ...base, target: { agent: 'codex', id }, codexHome: home,
       status: options.dryRun ? 'validated' : 'queued', codexHomeResolution: selection.resolution };
     if (options.dryRun) return result;
     await revalidateWriter(selection, options.home, id, options.allowInactive);
-    const done = await run(binary, ['queue', '--thread', id, '--message', options.message],
-      { env: { ...process.env, CODEX_HOME: home }, timeout: 30000 });
+    // `--message=` keeps a body starting with `-` from being parsed as an option.
+    // An inherited CODEX_SQLITE_HOME would queue outside the validated home.
+    // Windows environment names are case-insensitive.
+    const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'CODEX_SQLITE_HOME'));
+    const done = await run(binary, ['queue', '--thread', id, `--message=${options.message}`],
+      { env: { ...inherited, CODEX_HOME: home }, timeout: 30000 });
     if (!done.spawned) throw new HomeRefusal('native_spawn_failed', selection.resolution);
     if (done.interrupted || done.code !== 0) throw new CodexUnknownOutcome(selection.resolution);
     const queuedId = queueId(done.stdout, id);
