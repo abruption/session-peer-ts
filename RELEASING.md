@@ -226,9 +226,9 @@ reviewed new version and its own approval.
 
 The first preview.0 used a bootstrap token, and the registry assigned both
 `preview` and `latest` to it despite `--tag preview`. That bootstrap path is
-closed in this workflow. The repository `NPM_TOKEN` secret and any remaining
-bootstrap credential should be removed through a separate owner-approved account
-operation; this PR neither reads nor changes those credentials.
+closed in this workflow. On 2026-09-29 KST the owner revoked the bootstrap token
+and deleted the repository `NPM_TOKEN` secret; the repository and `npm`
+environment now hold no Actions secrets. Publishing relies only on OIDC.
 
 ## Sources
 
