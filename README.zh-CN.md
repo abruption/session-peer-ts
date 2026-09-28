@@ -174,3 +174,25 @@ session-peer doctor --host user@host --json
 存活进程公布了 pipe，并不证明 pipe 存在或可以连接。`capabilities` 明确将
 wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检查也不会安装任何内容。
 参见[诊断边界](PARITY.md#source-read-only-doctor--18--020)。SSH 两端需要相同的源码构建。
+## 显式安装代理技能
+
+独立的 `session-peer-ts` 技能在配套 PR 中准备，不代表新 npm 或技能标签发布。它支持已发布的 0.1.0 基础功能，通过 TypeScript 标识和帮助检查开发功能。Python 的 `session-peer` 技能仍独立保留。
+
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts),
+then choose the agent and scope. This example selects **Codex, current project**;
+run from that project directory. For Claude Code use `--agent claude-code`.
+For user scope add `--global` consistently to add/list/remove. Inspect any existing
+`session-peer-ts` copy for local edits before approving its replacement. Codex's
+`.agents/skills` directory is shared with other clients that discover that path.
+
+```sh
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 list --agent codex --json
+npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
+```
+
+For a pinned update, review another exact commit and repeat `add` with the same
+agent/scope. Restart the agent if its catalog is cached. Runtime and skill
+lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
+Skills CLI, and installing this skill does not overwrite the Python skill or
+install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).

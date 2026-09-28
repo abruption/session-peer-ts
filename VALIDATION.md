@@ -283,3 +283,14 @@ partial discovery, parse-before-stdin behavior, Unicode collisions and PID
 selection using isolated process/socket fixtures. Windows posting ownership is
 covered by the existing native fixture suite; the new name fixture is dry-run on
 Windows. Version metadata remains 0.1.0 until separate release preparation.
+
+## 2026-09-28 — Source skill integration (#25, preparing 0.2.0)
+
+Separate `session-peer-ts` companion skill source and pinned Skills CLI 1.7.0
+setup are prepared without npm publication or new skill tags. Original Python
+skill content stays unchanged. Runtime examples use temporary homes/SQLite only;
+Codex inactive dry-run verifies zero submission and no queue/database mutation.
+The companion lifecycle test installs, replaces from a second isolated source,
+lists and removes project/global copies for Codex and Claude Code, preserving a
+Python skill fixture. No production agent homes are edited, and no live TUI ACK
+is claimed. npm installs continue using `--ignore-scripts`.

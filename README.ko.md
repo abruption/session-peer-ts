@@ -270,3 +270,25 @@ pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 
 확인을 미지원으로 표시합니다. 선택적 TS 스킬 메타데이터 검사도 설치를 하지 않습니다.
 [진단 경계](PARITY.md#source-read-only-doctor--18--020)를 참고하세요. SSH 양쪽에 같은
 소스 빌드가 필요합니다.
+## 에이전트 스킬: 명시적 설치
+
+별도 `session-peer-ts` 스킬은 동반 PR에서 준비되며 새 npm 또는 스킬 태그 발행이 아닙니다. 공개된 0.1.0 기본 기능을 지원하고 TypeScript 구현 표시와 도움말로 개발 기능을 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
+
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts),
+then choose the agent and scope. This example selects **Codex, current project**;
+run from that project directory. For Claude Code use `--agent claude-code`.
+For user scope add `--global` consistently to add/list/remove. Inspect any existing
+`session-peer-ts` copy for local edits before approving its replacement. Codex's
+`.agents/skills` directory is shared with other clients that discover that path.
+
+```sh
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/ab5a5c909e7785feee2be3a7cf577569f2db80cb/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 list --agent codex --json
+npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
+```
+
+For a pinned update, review another exact commit and repeat `add` with the same
+agent/scope. Restart the agent if its catalog is cached. Runtime and skill
+lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
+Skills CLI, and installing this skill does not overwrite the Python skill or
+install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).
