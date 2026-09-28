@@ -87,7 +87,7 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
 session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message 'Please review the API contract.' --dry-run --json
 ```
 
-実際に送るときだけ `--dry-run` を外します。`--message` の省略または `--message -` は UTF-8 stdin を読みます。`--all` は古い / アーカイブ済み記録の一覧用で、送信許可にはなりません。Claude の宛先は PID、`claude:PID`、一意な ASCII 名（大文字小文字を区別しない）。Unicode 名には PID を使います。Codex 送信には完全な UUID と明示した home が必要です。実行ファイルは `--codex-bin` で指定できます。出力には `--json` または `--output-format json` が必要です。
+実際に送るときだけ `--dry-run` を外します。`--message` の省略または `--message -` は UTF-8 stdin を読みます。`--all` は古い / アーカイブ済み記録の一覧用で、送信許可にはなりません。Claude の宛先は PID、`claude:PID`、一意な ASCII 名（大文字小文字を区別しない）。Unicode 名には PID を使います。公開 0.1.0 の Codex 送信には完全な UUID と明示した home が必要です。実行ファイルは `--codex-bin` で指定できます。出力には `--json` または `--output-format json` が必要です。
 
 ### SSH
 

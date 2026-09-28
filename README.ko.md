@@ -136,7 +136,7 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 실제 전달할 때만 `--dry-run`을 제거합니다. `--message`를 생략하거나 `--message -`를
 사용하면 UTF-8 stdin을 읽습니다. `--all`은 오래된·보관된 기록을 목록에 포함할 뿐
 전송을 허용하지 않습니다. Claude 대상은 PID, `claude:PID`, 모호하지 않은 ASCII
-이름(대소문자 무시)입니다. Unicode 이름은 PID로 지정하세요. Codex 전송에는 전체 UUID와
+이름(대소문자 무시)입니다. Unicode 이름은 PID로 지정하세요. 공개 0.1.0의 Codex 전송에는 전체 UUID와
 명시적인 홈이 필요하며 `--codex-bin`으로 실행 파일을 고를 수 있습니다. 출력에는
 `--json` 또는 `--output-format json`이 필요합니다.
 

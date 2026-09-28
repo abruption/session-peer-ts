@@ -87,7 +87,7 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
 session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message 'Please review the API contract.' --dry-run --json
 ```
 
-只有确定要投递时才移除 `--dry-run`。省略 `--message` 或使用 `--message -` 会读取 UTF-8 stdin。`--all` 仅让列表包含陈旧 / 已归档记录，不授予发送权限。Claude 支持 PID、`claude:PID` 或唯一的 ASCII 名称（不区分大小写）；Unicode 名称请改用 PID。Codex 发送需要完整 UUID 和显式 home；`--codex-bin` 可指定可执行文件。输出必须选择 `--json` 或 `--output-format json`。
+只有确定要投递时才移除 `--dry-run`。省略 `--message` 或使用 `--message -` 会读取 UTF-8 stdin。`--all` 仅让列表包含陈旧 / 已归档记录，不授予发送权限。Claude 支持 PID、`claude:PID` 或唯一的 ASCII 名称（不区分大小写）；Unicode 名称请改用 PID。公开 0.1.0 的 Codex 发送需要完整 UUID 和显式 home；`--codex-bin` 可指定可执行文件。输出必须选择 `--json` 或 `--output-format json`。
 
 ### 跨机器 SSH
 

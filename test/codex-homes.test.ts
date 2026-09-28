@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, renameSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import childProcess, { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { HomeRefusal, resolveWriter, revalidateWriter } from '../dist/writer.js';
-import { queueId } from '../dist/send.js';
+import { queueId, send } from '../dist/send.js';
 const id = '11111111-1111-4111-8111-111111111111';
 function fixture(t: TestContext) {
   const root = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-homes-')));
@@ -113,4 +115,31 @@ test('CLI validates inactive option scope and stdio dry-run includes sanitized d
   assert.equal(result.codexHomeResolution.reason, 'explicit_inactive_opt_in');
   assert.equal(result.queueId, undefined);
   for (const c of result.codexHomeResolution.candidates) assert.deepEqual(Object.keys(c).sort(), ['activity', 'codexHome', 'reason', 'savedThread', 'sources', 'writerLock']);
+});
+
+// Inject portable filesystem failures; native ownership tests use real OS locks.
+test('unreadable or unresolved competitors refuse without spawning the queue', async t => {
+  const f = fixture(t), blocked = f.database(join(f.root, 'blocked'));
+  process.env.SESSION_PEER_CODEX_HOMES = JSON.stringify([blocked]);
+  const stat = fs.statSync, real = fs.realpathSync;
+  let queueCalls = 0, unresolved = false;
+  t.mock.method(childProcess, 'spawn', () => { queueCalls++; throw new Error('unexpected queue'); });
+  t.mock.method(fs, 'statSync', (...args: Parameters<typeof fs.statSync>) => {
+    if (args[0] === join(blocked, 'state_5.sqlite')) throw Object.assign(new Error('SECRET-SENTINEL'), { code: 'EACCES' });
+    return stat(...args);
+  });
+  t.mock.method(fs, 'realpathSync', (...args: Parameters<typeof fs.realpathSync>) => {
+    if (unresolved && args[0] === blocked) throw Object.assign(new Error('SECRET-SENTINEL'), { code: 'ELOOP' });
+    return real(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const options = { to: `codex:${id}`, home: f.home, codexBin: process.execPath, message: 'fixture', allowInactive: true };
+  await assert.rejects(send(options), error => {
+    assert.ok(refusal('home_inventory_unreadable')(error));
+    assert.equal(JSON.stringify(error).includes('SECRET-SENTINEL'), false); return true;
+  });
+  unresolved = true;
+  await assert.rejects(send(options), refusal('home_resolution_failed'));
+  assert.equal(queueCalls, 0);
 });

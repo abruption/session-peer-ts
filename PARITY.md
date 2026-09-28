@@ -4,8 +4,9 @@ Updated 2026-09-28 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
 The published TS baseline remains **0.1.0**,
 [`0edc4f8`](https://github.com/abruption/session-peer-ts/tree/0edc4f8ae05256698f591b7402e89cd3d5858eef/src).
-The matrix now includes **source development for 0.2.0 (#16)**: unified listing
-and bounded Codex home discovery. This feature is not in the npm 0.1.0 archive;
+The matrix now includes **source development for 0.2.0 (#16/#17)**: unified listing,
+bounded Codex home discovery and safe selection/inactive opt-in. These features
+are not in the npm 0.1.0 archive;
 source package metadata stays at 0.1.0 until separate release preparation.
 All other rows retain their baseline scope. Do not use version equality alone
 to mix development builds and published binaries over SSH; test the same build
@@ -138,7 +139,7 @@ Check `ok`, command, status, exit code and presence separately. TS unknown means
 submission may have happened; never automatically resend. A Python wake error
 with `submitted:true` must not be retried as a fresh send. A missing reply or target exit
 alone does not establish consumption or failure. Observe ACK in the receiver
-TUI separately. Future #17/#20 changes must test success, refused, partial and
+TUI separately. Further #20 changes must test success, refused, partial and
 unknown output, including absent/null/false distinctions.
 
 Output sources: TS CLI/send above; Python
