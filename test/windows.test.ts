@@ -80,3 +80,23 @@ test('Windows native lock probe reports an unlocked fixture as free',
       assert.equal(await probeLock(path), 'free');
     } finally { rmSync(root, { recursive:true, force:true }); }
   });
+
+test('Windows codex.cmd shims are reported unsupported and never spawned',
+  { skip: process.platform !== 'win32' }, async () => {
+  const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-win-shim-'));
+  const previous = process.env.PATH;
+  try {
+    writeFileSync(join(root, 'codex.cmd'), '@echo off\r\necho SHOULD-NOT-RUN>"%~dp0ran.txt"\r\n');
+    writeFileSync(join(root, 'codex'), '#!/bin/sh\n'); // npm also installs an extensionless POSIX launcher
+    process.env.PATH = root;
+    const { diagnoseCodex } = await import('../dist/diagnostics.js');
+    const diagnosed = await diagnoseCodex(join(root, 'home')) as { tool: { status: string; code: string; executed: boolean } };
+    assert.equal(diagnosed.tool.status, 'unsupported'); assert.equal(diagnosed.tool.code, 'executable_unsupported');
+    assert.equal(diagnosed.tool.executed, false);
+    await assert.rejects(send({ to: 'codex:00000000-0000-4000-8000-000000000001', home: join(root, 'home'), message: 'x' }),
+      (error: { code?: string }) => error.code === 'executable_unsupported');
+  } finally {
+    process.env.PATH = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

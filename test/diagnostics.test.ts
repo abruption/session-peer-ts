@@ -181,3 +181,13 @@ test('unreadable Claude metadata is unknown while malformed JSON is invalid', t 
   const result = diagnoseClaude(); assert.equal(result.code, 'inspection_unknown'); assert.equal(result.unknownInspections, 1);
   assert.equal(result.invalidRecords, 0); assert.equal(JSON.stringify(result).includes('native-detail'), false);
 });
+
+test('doctor reports a relocated Codex sqlite_home as unsupported instead of reading a stale state DB', async t => {
+  const f = fixture(t); f.db();
+  writeFileSync(join(f.home, 'config.toml'), 'sqlite_home = "/relocated"\n');
+  const result = await diagnoseCodex(f.home, process.execPath) as any;
+  assert.equal(result.homes[0].status, 'unsupported'); assert.equal(result.homes[0].code, 'unsupported_codex_sqlite_home');
+  assert.equal(result.ready, false);
+  writeFileSync(join(f.home, 'config.toml'), 'model = "fixture"\n');
+  assert.equal(((await diagnoseCodex(f.home, process.execPath)) as any).homes[0].code, 'state_db_readable');
+});

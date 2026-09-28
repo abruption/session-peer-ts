@@ -20,6 +20,8 @@ export function reply(value: string): { to: string; host?: string; home?: string
   if (!target || !['claude', 'codex'].includes(agent ?? '') || !['local', 'ssh'].includes(transport ?? '')) throw new Refusal('invalid_reply_uri');
   if (agent === 'codex' && !uuid(target)) throw new Refusal('invalid_reply_uri');
   if (agent !== 'codex' && fields.has('codexHome')) throw new Refusal('invalid_reply_uri');
+  // Match Python: a POSIX or Windows absolute path, never cwd- or ~-relative.
+  if (fields.has('codexHome') && !/^(?:\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+)/.test(fields.get('codexHome')!)) throw new Refusal('invalid_reply_uri');
   if (transport === 'local' && fields.has('host')) throw new Refusal('invalid_reply_uri');
   if (transport === 'ssh' && !fields.has('host')) throw new Refusal('invalid_reply_uri');
   return { to: agent === 'codex' ? `codex:${target}` : target,

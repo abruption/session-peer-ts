@@ -4,13 +4,21 @@ import { delimiter, isAbsolute, join } from 'node:path';
 import { Refusal } from './discovery.js';
 
 export class UnknownOutcome extends Error {}
+// Node refuses to spawn .cmd/.bat without a shell (CVE-2024-27980), and a shell
+// would interpret the message argv, so Windows batch shims are unsupported.
+export const batchShim = (path: string) => process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(path);
 export function executable(name: string): string {
   const windows = process.platform === 'win32';
   const names = windows && !/\.(?:exe|cmd|bat)$/i.test(name) ? [name + '.exe', name + '.cmd', name] : [name];
   const paths = isAbsolute(name) ? [name] : name.includes('/') || name.includes('\\') ? [] :
     (process.env.PATH ?? '').split(delimiter).filter(Boolean).flatMap(p => names.map(n => join(p, n)));
   for (const path of paths) {
-    try { accessSync(path, constants.X_OK); if (statSync(path).isFile()) return realpathSync(path); } catch {}
+    let found = false;
+    try { accessSync(path, constants.X_OK); found = statSync(path).isFile(); } catch {}
+    if (!found) continue;
+    // Keep PATH precedence: a first-match shim is refused, not bypassed.
+    if (batchShim(path)) throw new Refusal('executable_unsupported', 1);
+    try { return realpathSync(path); } catch {}
   }
   throw new Refusal('executable_unavailable', 1);
 }

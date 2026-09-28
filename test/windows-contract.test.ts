@@ -167,7 +167,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const sent = await f.invoke(f.args);
     assert.equal(sent.status, 'queued'); assert.equal(sent.submitted, true); assert.equal(sent.consumptionConfirmed, false);
     const calls = f.log('FIXTURE_QUEUE_LOG'); assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].args, ['queue', '--thread', id, '--message', 'fixture 🚀']); assert.equal(calls[0].home, f.home);
+    assert.deepEqual(calls[0].args, ['queue', '--thread', id, '--message=fixture 🚀']); assert.equal(calls[0].home, f.home);
     const other = join(f.root, 'other'); f.database(other);
     const competing = await f.holder(join(other, 'thread-writer-locks', id + '.lock'));
     const refused = await f.invoke(f.args, { SESSION_PEER_CODEX_HOMES: JSON.stringify([other]) });
@@ -216,7 +216,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const before = f.log('FIXTURE_QUEUE_LOG').length;
     const sent = await f.invoke(args); assert.equal(sent.status, 'queued', JSON.stringify(sent)); assert.equal(sent.consumptionConfirmed, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').at(-1).args.at(-1), 'SSH SECRET-SENTINEL 🚀');
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').at(-1).args.at(-1), '--message=SSH SECRET-SENTINEL 🚀');
     const calls = f.log('FIXTURE_SSH_LOG'); assert.equal(calls.length, 2);
     for (const call of calls) {
       assert.ok(call.args.includes('BatchMode=yes')); assert.ok(call.args.includes('StrictHostKeyChecking=yes'));
@@ -226,7 +226,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     }
     assert.equal(calls[0].input, '');
     const request = JSON.parse(calls[1].input); assert.equal(request.schemaVersion, 1);
-    assert.ok(request.args.includes('SSH SECRET-SENTINEL 🚀'));
+    assert.ok(request.args.includes('--message=SSH SECRET-SENTINEL 🚀'));
     for (const [mode, error] of [['mismatch', 'remote_version_mismatch'], ['auth', 'ssh_authentication_refused']]) {
       const count = f.log('FIXTURE_SSH_LOG').length;
       const result = await f.invoke(args, { FIXTURE_SSH_MODE: mode });

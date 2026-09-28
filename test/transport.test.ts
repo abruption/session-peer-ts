@@ -56,6 +56,10 @@ test('structured replies are inert data and reject conflicting/unsafe fields', (
     assert.throws(() => reply('session-peer://v1/reply?agent=claude&session=worker&transport=local' + suffix));
   }
   assert.throws(() => reply('session-peer://v1/reply?agent=claude&session=x&transport=ssh&host=-oProxyCommand%3Did'));
+  // #53: codexHome must be POSIX or Windows absolute, as in the Python reference.
+  const codexReply = (home: string) => reply(`session-peer://v1/reply?agent=codex&session=${id}&transport=local&codexHome=${encodeURIComponent(home)}`);
+  for (const home of ['/srv/codex', 'C:\\Users\\u\\.codex', 'D:/codex', '\\\\server\\share\\codex']) assert.equal(codexReply(home).home, home);
+  for (const home of ['rel/dir', '~/.codex', '.codex', 'C:codex', '\\codex']) assert.throws(() => codexReply(home), /invalid_reply_uri/);
   assert.equal(envelope('hello', true), 'hello');
 });
 
@@ -211,4 +215,60 @@ test('SSH resolves Codex homes at destination and preserves resolution/queue met
   const inactive = await invoke([...args, '--codex-home', home, '--allow-inactive-codex-home'], local);
   assert.equal(inactive.queueId, 'ssh-17'); assert.equal(inactive.codexHomeResolution.reason, 'explicit_inactive_opt_in');
   assert.equal(readFileSync(count, 'utf8'), '111');
+});
+
+test('Codex queue passes dash bodies as one --message= argv and drops inherited CODEX_SQLITE_HOME', async t => {
+  const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
+  const queue = join(path, 'queue'), calls = join(path, 'calls');
+  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(calls)},JSON.stringify({args:process.argv.slice(2),sqlite:process.env.CODEX_SQLITE_HOME??null})+'\\n'); console.log('Queued message q-1 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
+  const bodies = ['- first item', '--help', '-x', '--', '-1', '-\nsecond line'];
+  for (const body of bodies) {
+    const sent = await invoke(['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, `--message=${body}`, '--no-from'], { ...env, CODEX_SQLITE_HOME: join(path, 'elsewhere') });
+    assert.equal(sent.status, 'queued', JSON.stringify(sent));
+  }
+  const recorded = readFileSync(calls, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(recorded.map(call => call.args), bodies.map(body => ['queue', '--thread', id, `--message=${body}`]));
+  assert.ok(recorded.every(call => call.sqlite === null));
+});
+
+test('a configured Codex sqlite_home is refused before dry-run or queue', async t => {
+  const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
+  const queue = join(path, 'queue'), count = join(path, 'count');
+  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1');`, { mode: 0o700 });
+  const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, '--message', 'fixture', '--no-from'];
+  writeFileSync(join(home, 'config.toml'), 'model = "x"\n# sqlite_home = "/commented"\n[profiles.p]\nmodel = "y"\n');
+  assert.equal((await invoke([...args, '--dry-run'], env)).status, 'validated');
+  writeFileSync(join(home, 'config.toml'), 'model = "x"\nsqlite_home = "/relocated"\n');
+  for (const extra of [['--dry-run'], []]) {
+    const refused = await invoke([...args, ...extra], env);
+    assert.equal(refused.error, 'unsupported_codex_sqlite_home'); assert.equal(refused.submitted, false);
+  }
+  assert.throws(() => readFileSync(count));
+});
+
+test('SSH preflight accepts a verified version despite noisy stderr and propagates remote exit codes', async t => {
+  const { path, env } = setup(t), messages = await inbox(t, path);
+  const ssh = join(path, 'ssh');
+  writeFileSync(ssh, `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');if(process.argv.at(-1).endsWith('--version')){console.error('curl: (7) Failed to connect: Connection refused');console.log('session-peer 0.2.0 (typescript)');process.exit(0);}const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:require('node:fs').readFileSync(0,'utf8'),encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  const remoteEnv = { ...env, PATH: path + delimiter + env.PATH };
+  // #55 + #49/#51 over SSH: a flag-like body travels as --message=<text> and posts literally.
+  const sent = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message=--dry-run', '--no-from'], remoteEnv);
+  assert.equal(sent.status, 'posted', JSON.stringify(sent)); assert.equal(sent.code, 0);
+  assert.equal(messages.length, 1); assert.equal((messages[0] as { message: { content: string } }).message.content, '--dry-run');
+  // #52: a verified remote usage refusal keeps exit 2, like the local refusal.
+  const local = await invoke(['send', '--to', 'codex:not-a-uuid', '--message', 'x'], env);
+  const remote = await invoke(['send', '--host', 'fixture', '--to', 'codex:not-a-uuid', '--message', 'x'], remoteEnv);
+  assert.equal(local.error, 'codex_uuid_required'); assert.equal(remote.error, local.error);
+  assert.equal(local.code, 2); assert.equal(remote.code, 2);
+  assert.equal(messages.length, 1);
+});
+
+test('Windows --remote-bin doubles every PowerShell single-quote variant', async t => {
+  const { path, env } = setup(t), calls = join(path, 'ssh-calls');
+  writeFileSync(join(path, 'ssh'), `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(calls)},process.argv.at(-1)+'\\n');process.exit(255);`, { mode: 0o700 });
+  const binary = "C:\\a'\u2018\u2019\u201a\u201b;calc;#";
+  const result = await invoke(['list', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', binary], { ...env, PATH: path + delimiter + env.PATH });
+  assert.equal(result.error, 'ssh_preflight_failed');
+  const decoded = Buffer.from(readFileSync(calls, 'utf8').trim().split(' ').at(-1)!, 'base64').toString('utf16le');
+  assert.equal(decoded, "& 'C:\\a''\u2018\u2018\u2019\u2019\u201a\u201a\u201b\u201b;calc;#' --version");
 });

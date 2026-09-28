@@ -3,7 +3,8 @@
 import { accessSync, constants, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
-import { canonical, listingCandidates } from './discovery.js';
+import { canonical, listingCandidates, sqliteHome } from './discovery.js';
+import { batchShim } from './process.js';
 import { windowsProcessStart } from './windows.js';
 
 type Check = { status: string; code: string; [key: string]: unknown };
@@ -26,6 +27,7 @@ function tool(name: string): Check {
     try {
       if (!statSync(path).isFile()) continue;
       accessSync(path, constants.X_OK);
+      if (batchShim(path)) return { status: 'unsupported', code: 'executable_unsupported', path, executed: false };
       return { status: 'available', code: 'executable_found', path, executed: false };
     } catch (error) {
       const found = failure(error, 'executable_unavailable', 'executable_inspection_unknown');
@@ -55,7 +57,11 @@ async function codexHome(file: string): Promise<Check> {
 export async function diagnoseCodex(home?: string, binary?: string): Promise<Record<string, unknown>> {
   const inventory = listingCandidates(home);
   const homes = [];
-  for (const item of inventory.homes) homes.push({ ...item, ...await codexHome(item.stateDb) });
+  for (const item of inventory.homes) {
+    const storage = sqliteHome(item.codexHome);
+    homes.push({ ...item, ...(storage === 'configured' ? { status: 'unsupported', code: 'unsupported_codex_sqlite_home' } :
+      storage === 'unknown' ? { status: 'unknown', code: 'codex_config_unreadable' } : await codexHome(item.stateDb)) });
+  }
   const agentTool = tool(binary ?? 'codex');
   const complete = inventory.errors.length === 0 && homes.every(item => item.status === 'available' || (!item.required && item.status === 'missing'));
   const ready = complete && homes.some(item => item.status === 'available') && agentTool.status === 'available';

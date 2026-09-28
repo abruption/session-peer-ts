@@ -394,3 +394,20 @@ and explicit project/user scope chosen before running the documented command.
   exercises real Skills CLI project/global install, replacement-update, list and
   removal for Codex/Claude Code while preserving a Python skill fixture. Those
   are installation/contract fixtures, not live-agent delivery or ACK evidence.
+
+## Source reliability and hardening — #49–#57 (0.2.1 milestone)
+
+Unreleased source changes after 0.2.0. They tighten existing behavior and add
+no new command or transport.
+
+| Area | Source behavior |
+| --- | --- |
+| Codex body argv (#49) | Native queue receives `--message=<text>` as one argument, so bodies such as `- item`, `--help` or `-x` are queued as text. The SSH request forwards the body the same way. |
+| Codex SQLite location (#50) | An inherited `CODEX_SQLITE_HOME` is removed from the native queue environment. A home whose `config.toml` sets `sqlite_home` is refused as `unsupported_codex_sqlite_home` (unreadable config: `codex_config_unreadable`) in dry-run and send, and `doctor` reports it as unsupported, because validation reads `<home>/state_5.sqlite`. A live writer started with its own `CODEX_SQLITE_HOME` cannot be observed. |
+| Option values (#51) | A separate value that is exactly an option name (for example `--message --dry-run`) is `invalid_option` (exit 2), as in Python argparse. Use `--message=<text>`, stdin or `-- <text>` for such text. |
+| SSH exit code (#52) | A verified remote response keeps its 0/1/2 exit code locally. |
+| Reply-To `codexHome` (#53) | Must be a POSIX or Windows absolute path, matching Python; relative and `~` paths are `invalid_reply_uri`. |
+| Text output (#54) | Also escapes U+061C, U+200B–U+200F, U+202A–U+202E, U+2060–U+2069 and U+FEFF. JSON is unchanged. |
+| SSH preflight (#55) | Exit 0 with the exact version line passes even when login scripts write to stderr; stderr classification applies only to failed preflights. |
+| Windows `--remote-bin` (#56) | Every PowerShell single-quote variant (`'`, U+2018–U+201B) is doubled inside the encoded command. |
+| Windows batch shims (#57) | A `.cmd`/`.bat` executable found first on `PATH` (or given explicitly) is reported as `executable_unsupported` by `send` and `doctor`, because Node cannot spawn them without a shell and a shell would interpret the message. Use the native `codex.exe`. |

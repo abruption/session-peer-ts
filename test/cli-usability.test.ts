@@ -38,7 +38,12 @@ test('help, format compatibility, input conflicts, wire JSON and partial text di
     const r=call(['send','--to','fixture','--json',...body]);assert.equal(r.status,2);assert.equal(JSON.parse(r.stdout).error,'invalid_message');
   }
   const stdin=call(['send','--to','codex:invalid','--json'],'valid stdin');assert.equal(JSON.parse(stdin.stdout).error,'codex_uuid_required');
-  const literal=call(['send','--to','codex:bad','--message','--json','--output-format','text']);assert.match(literal.stdout,/Error: codex_uuid_required/);
+  const literal=call(['send','--to','codex:bad','--message=--json','--output-format','text']);assert.match(literal.stdout,/Error: codex_uuid_required/);
+  // #51: a separate value that is an option name is missing, never a literal body.
+  for(const args of [['send','--to','fixture','--message','--dry-run','--json'],['send','--to','--dry-run','hi','--json'],['send','--to','fixture','-m','--json'],['list','--agent','--json'],['send','--to','fixture','--message','--to=x','--json']]) {
+    const r=call(args);assert.equal(r.status,2,args.join(' '));assert.equal(JSON.parse(r.stdout).error,'invalid_option');
+  }
+  const dashed=call(['send','--to','codex:bad','--message','- item','--json']);assert.equal(JSON.parse(dashed.stdout).error,'codex_uuid_required');
   const afterEnd=call(['send','--to','codex:bad','--json','--','--output-format=text']);assert.equal(JSON.parse(afterEnd.stdout).error,'codex_uuid_required');
   const duplicate=call(['list','--output-format','text','--output-format','json']);assert.equal(JSON.parse(duplicate.stdout).error,'invalid_option');
   const wire=call(['--stdio-request'],JSON.stringify({schemaVersion:1,args:['list','--output-format=text']}));assert.equal(JSON.parse(wire.stdout).error,'remote_json_required');
@@ -101,4 +106,9 @@ test('Unicode collision refuses, exact name and PID remain selectable; positiona
 test('text output retains unknown semantics and escapes terminal controls',()=>{
  assert.match(renderOutput({command:'send',ok:false,error:'outcome_unknown',submitted:null},'text'),/Do not retry automatically/);
  const text=renderOutput({command:'list',ok:true,sessions:[{agent:'claude',pid:1,name:'x\x1b[2J\ny'}]},'text');assert.doesNotMatch(text,/\x1b/);assert.match(text,/\\u001b/);
+ // #54: bidi overrides/isolates and zero-width characters cannot reorder a row.
+ const bidi=renderOutput({command:'list',ok:true,sessions:[{agent:'codex',id:'x',name:'a\u202eb\u2066c\u2069\u200b\u061c\ufeff',codexHome:'/h\u200f'}]},'text');
+ assert.doesNotMatch(bidi,/[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/);
+ for(const code of ['202e','2066','2069','200b','061c','feff','200f']) assert.match(bidi,new RegExp('\\\\u'+code));
+ assert.match(renderOutput({command:'list',ok:true,sessions:[{agent:'claude',pid:1,name:'한글 🚀'}]},'text'),/한글 🚀/);
 });

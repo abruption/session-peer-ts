@@ -9,6 +9,17 @@ type Row = Record<string, unknown>;
 export class Refusal extends Error {
   constructor(readonly code: string, readonly exitCode = 2) { super(code); }
 }
+// Codex can relocate state_5.sqlite/queue_1.sqlite with `sqlite_home`; validation
+// reads <home>/state_5.sqlite, so any configured relocation is unsupported.
+export function sqliteHome(home: string): 'default' | 'configured' | 'unknown' {
+  let text: string;
+  try {
+    const file = join(home, 'config.toml'), stat = statSync(file);
+    if (!stat.isFile() || stat.size > 1024 * 1024) return 'unknown';
+    text = readFileSync(file, 'utf8');
+  } catch (error) { return ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '') ? 'default' : 'unknown'; }
+  return /^[ \t]*["']?sqlite_home["']?[ \t]*=/m.test(text) ? 'configured' : 'default';
+}
 
 function missing(error: unknown): boolean {
   return ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '');
