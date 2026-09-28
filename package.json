@@ -39,7 +39,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && npm run test:types && node --experimental-strip-types --test test/*.test.ts",
     "test:types": "tsc -p tsconfig.test.json",
-    "test:windows": "npm run build && npm run test:types && node --experimental-strip-types --test --test-concurrency=1 test/windows.test.ts test/windows-contract.test.ts test/input-boundaries.test.ts test/discovery.test.ts test/codex-homes.test.ts test/diagnostics.test.ts test/cli-usability.test.ts test/skill-guidance.test.ts",
+    "test:windows": "npm run build && npm run test:types && node --import ./test/fixtures/windows-inspection-diagnostic.mjs --experimental-strip-types --test --test-concurrency=1 test/windows.test.ts test/windows-contract.test.ts test/windows-inspection.test.ts test/input-boundaries.test.ts test/discovery.test.ts test/codex-homes.test.ts test/diagnostics.test.ts test/cli-usability.test.ts test/skill-guidance.test.ts",
     "test:package": "npm run build && node --experimental-strip-types test/package-smoke.ts"
   },
   "devDependencies": {
