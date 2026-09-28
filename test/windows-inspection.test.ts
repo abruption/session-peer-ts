@@ -5,7 +5,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { windowsProcessStart } from '../dist/windows.js';
+import { COMPILED_INSPECTION_TIMEOUT_MS, inspectWindows, START_PROBE_TIMEOUT_MS, windowsProcessStart } from '../dist/windows.js';
 import { claude } from '../dist/discovery.js';
 import { diagnoseClaude } from '../dist/diagnostics.js';
 
@@ -76,4 +76,24 @@ test('Windows discovery samples each PID once; stale and failed probes cannot au
   writeFileSync(join(directory, '123.json'), JSON.stringify({ ...record, startedAt: 1 }));
   assert.equal((claude(false).sessions as unknown[]).length, 0);
   assert.equal(diagnoseClaude().ready, false);
+});
+
+test('compiling owner inspection gets a cold-start deadline and still fails closed', t => {
+  windows(t);
+  const row = { pid: 123, uid: 'S-1-5-21-1', command: 'codex.exe', start: '133000000000001237' };
+  let done = result(JSON.stringify([row]));
+  const timeouts: (number | undefined)[] = [];
+  t.mock.method(childProcess, 'spawnSync', (_file: string, _args: string[], options: { timeout?: number }) => { timeouts.push(options.timeout); return done; });
+  syncBuiltinESMExports();
+  assert.deepEqual(inspectWindows('identity', '123'), [row]);
+  windowsProcessStart(123);
+  assert.deepEqual(timeouts, [COMPILED_INSPECTION_TIMEOUT_MS, START_PROBE_TIMEOUT_MS]);
+  assert.equal(COMPILED_INSPECTION_TIMEOUT_MS, 20000); assert.equal(START_PROBE_TIMEOUT_MS, 8000);
+  for (const fields of [
+    { status: null, signal: 'SIGTERM' as const, error: Object.assign(new Error('private-timeout'), { code: 'ETIMEDOUT' }) },
+    { status: 1 }, { stdout: 'private-native-output' }, { stdout: JSON.stringify([{ ...row, uid: 'x' }]) },
+  ]) {
+    done = result(JSON.stringify([row]), fields);
+    assert.throws(() => inspectWindows('openers', 'C:\\lock'), /windows_owner_inspection_failed/);
+  }
 });

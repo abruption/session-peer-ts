@@ -74,6 +74,11 @@ function Openers([string]$location) {
 }
 `;
 
+// Add-Type compiles the helper with csc on every inspectWindows call, which has
+// exceeded 8 s on slow runners (#47, #65). Timeouts still fail closed. The
+// compile-free creation-time probe keeps the shorter deadline.
+export const COMPILED_INSPECTION_TIMEOUT_MS = 20000;
+export const START_PROBE_TIMEOUT_MS = 8000;
 export function inspectWindows(mode: 'identity' | 'openers', value: string): WindowsProcess[] {
   if (process.platform !== 'win32') throw new Refusal('windows_inspection_unavailable', 1);
   const encodedValue = Buffer.from(value, 'utf8').toString('base64');
@@ -86,7 +91,7 @@ try {
 `;
   const done = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
     '$script = [Console]::In.ReadToEnd(); Invoke-Expression $script'],
-    { input:code, encoding:'utf8', timeout:8000, maxBuffer:65536, windowsHide:true });
+    { input:code, encoding:'utf8', timeout:COMPILED_INSPECTION_TIMEOUT_MS, maxBuffer:65536, windowsHide:true });
   if (done.status !== 0 || done.error) throw new Refusal('windows_owner_inspection_failed', 1);
   let rows: unknown;
   try { rows = JSON.parse(done.stdout); } catch { throw new Refusal('windows_owner_inspection_failed', 1); }
@@ -118,7 +123,7 @@ try {
 `;
   try {
     const done = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', code],
-      { encoding: 'utf8', timeout: 8000, maxBuffer: 65536, windowsHide: true });
+      { encoding: 'utf8', timeout: START_PROBE_TIMEOUT_MS, maxBuffer: 65536, windowsHide: true });
     if (done.status !== 0 || done.error) return undefined;
     const text = done.stdout.trim();
     if (!/^[1-9][0-9]{0,18}$/.test(text)) return undefined;
