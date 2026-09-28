@@ -83,7 +83,8 @@ export function diagnoseClaude(): Record<string, unknown> {
       record = value as Record<string, unknown>;
     } catch (error) {
       if (['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) result.permissionFailures++;
-      else result.invalidRecords++;
+      else if (error instanceof SyntaxError) result.invalidRecords++;
+      else result.unknownInspections++;
       continue;
     }
     const pid = record.pid;
@@ -143,9 +144,15 @@ export function inspectSkills(home?: string): Check[] {
       const text = readFileSync(path, 'utf8');
       const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text)?.[1];
       if (!front) return { path, status: 'unknown', code: 'skill_metadata_missing' };
+      const lines = front.split(/\r?\n/);
+      const sections = lines.map((line, index) => /^metadata: *(?:#.*)?$/.test(line) ? index : -1).filter(index => index >= 0);
+      if (sections.length !== 1) return { path, status: 'unknown', code: 'skill_metadata_missing' };
+      const start = sections[0]! + 1;
+      let end = start;
+      while (end < lines.length && (/^ /.test(lines[end]!) || /^ *(?:#.*)?$/.test(lines[end]!))) end++;
+      const fields = lines.slice(start, end).map(line => /^  ([a-z-]+): *(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#"'\r\n]*?)) *(?:#.*)?$/.exec(line));
       const field = (key: string) => {
-        const values = front.split(/\r?\n/).map(line => /^ *([a-z-]+): *(.*?) *$/.exec(line))
-          .filter(match => match?.[1] === key).map(match => match![2]!.replace(/^(["'])(.*)\1$/, '$2'));
+        const values = fields.filter(match => match?.[1] === key).map(match => (match![2] ?? match![3] ?? match![4])!.trim());
         return values.length === 1 ? values[0] : undefined;
       };
       const implementation = field('runtime-implementation'), minimum = field('runtime-min-version');

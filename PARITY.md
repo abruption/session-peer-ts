@@ -197,9 +197,10 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `--remote-platform win32` and the `.cmd` path. Retain existing SSH host trust
    and authentication; a control socket is not new authorization. Account for
    the size limits above and lack of multi-host aggregation.
-6. **Keep unsupported workflows on an explicit Python path.** Doctor, updates,
+6. **Keep unsupported workflows on an explicit Python path.** Updates,
    MCP, wake, Antigravity and paired devices need their existing implementation
-   until their issues are delivered. Updating npm does not update Python, skills,
+   until their issues are delivered. Doctor is available in development source;
+   public npm 0.1.0 still requires Python for diagnostics. Updating npm does not update Python, skills,
    external Relay infrastructure or a remote host automatically. To return to
    Python, select its recorded path or uninstall only the npm-owned installation.
 

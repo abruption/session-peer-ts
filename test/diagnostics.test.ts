@@ -122,6 +122,8 @@ test('skill compatibility reads only bounded TS metadata and rejects Python/malf
   const metadata = '---\nname: session-peer-ts\nmetadata:\n  version: "0.1.0"\n  runtime-implementation: "typescript"\n  runtime-min-version: "0.1.0"\n  runtime-full-version: "0.1.0"\n  runtime-capability-policy: "probe-help"\n---\nDo not run this secret body';
   writeFileSync(join(path, 'SKILL.md'), metadata);
   assert.equal(inspectSkills(f.home)[0]!.status, 'compatible');
+  writeFileSync(join(path, 'SKILL.md'), metadata.replace('metadata:', 'version: ignored-root-value\nmetadata:').replace('version: "0.1.0"', 'version: "0.1.0" # contract version'));
+  assert.equal(inspectSkills(f.home)[0]!.status, 'compatible');
   writeFileSync(join(path, 'SKILL.md'), metadata.replace('typescript', 'python'));
   assert.equal(inspectSkills(f.home)[0]!.status, 'incompatible');
   writeFileSync(join(path, 'SKILL.md'), 'no frontmatter'); assert.equal(inspectSkills(f.home)[0]!.status, 'unknown');
@@ -165,4 +167,17 @@ test('uninspectable POSIX process is unknown, not live or stale', { skip: proces
   t.mock.method(process, 'kill', () => { throw Object.assign(new Error('secret'), { code: 'EPERM' }); });
   const result = diagnoseClaude(); assert.equal(result.code, 'inspection_unknown'); assert.equal(result.ready, false);
   assert.equal(result.unknownInspections, 1); assert.equal(result.staleRecords, 0); assert.equal(result.aliveSessions, 0);
+});
+
+
+test('unreadable Claude metadata is unknown while malformed JSON is invalid', t => {
+  const f = fixture(t); const dir = join(f.root, '.claude/sessions'); mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${process.pid}.json`); writeFileSync(path, '{}');
+  const stat = fs.statSync;
+  t.mock.method(fs, 'statSync', ((item: any, ...args: any[]) => {
+    if (item === path) throw Object.assign(new Error('native-detail'), { code: 'EIO' });
+    return (stat as any)(item, ...args);
+  }) as typeof fs.statSync); syncBuiltinESMExports();
+  const result = diagnoseClaude(); assert.equal(result.code, 'inspection_unknown'); assert.equal(result.unknownInspections, 1);
+  assert.equal(result.invalidRecords, 0); assert.equal(JSON.stringify(result).includes('native-detail'), false);
 });
