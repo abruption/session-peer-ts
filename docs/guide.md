@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-This guide covers 0.2.0. [Public release evidence](../VALIDATION.md#public-020--2026-09-28-kst) records publication and verification. References to 0.1.0 below describe the older release.
+This guide covers 0.2.1, a reliability and hardening update to 0.2.0 ([changes](../PARITY.md#021-reliability-and-hardening)). [Public 0.2.0 release evidence](../VALIDATION.md#public-020--2026-09-28-kst) records the previous publication. References to 0.1.0 below describe the older release.
 
 ## Contents
 
@@ -24,7 +24,7 @@ This guide covers 0.2.0. [Public release evidence](../VALIDATION.md#public-020--
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-This guide describes **0.2.0**. The npm package and CLI command are both **`session-peer`**. This
+This guide describes **0.2.1**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -33,8 +33,8 @@ Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.0
-session-peer --version  # session-peer 0.2.0 (typescript)
+npm install --global --ignore-scripts session-peer@0.2.1
+session-peer --version  # session-peer 0.2.1 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -101,7 +101,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, use the same 0.2.0 build on both ends.
+On SSH, use the same 0.2.1 build on both ends.
 
 ## Requirements
 
@@ -125,11 +125,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.2.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.2.1.tgz
 session-peer --version
 ```
 
-Expected: `session-peer 0.2.0 (typescript)`. Keep the `./...tgz` path to
+Expected: `session-peer 0.2.1 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -149,7 +149,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.0.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.1.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```

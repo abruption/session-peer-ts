@@ -47,22 +47,22 @@ SSH에는 기존 키·호스트 신뢰 설정과 양쪽의 **동일 버전 TypeS
 다른 설치 관리자의 파일을 `--force`로 덮어쓰지 마세요.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.0
+npm install --global --ignore-scripts session-peer@0.2.1
 session-peer --version
 ```
 
-예상 출력: `session-peer 0.2.0 (typescript)`. 격리 설치·소스 빌드·Windows·제거
+예상 출력: `session-peer 0.2.1 (typescript)`. 격리 설치·소스 빌드·Windows·제거
 방법은 아래 상세 가이드에서 확인할 수 있습니다.
 
 ### Update
 
 npm으로 설치한 클라이언트는 npm으로 갱신합니다. 태그와 대상 버전을 검토한 뒤
-정확한 버전을 설치하세요. 아래 예시는 이전 npm 설치본을 0.2.0으로 갱신합니다.
+정확한 버전을 설치하세요. 아래 예시는 이전 npm 설치본을 0.2.1로 갱신합니다.
 CLI 자체 업데이트 명령은 없습니다.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.2.0
+npm install --global --ignore-scripts session-peer@0.2.1
 session-peer --version
 ```
 

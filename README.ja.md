@@ -47,22 +47,22 @@ SSH は既存の鍵・ホスト信頼設定と両端の**同じバージョン�
 別の管理ツールのファイルを `--force` で上書きしないでください。
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.0
+npm install --global --ignore-scripts session-peer@0.2.1
 session-peer --version
 ```
 
-期待する出力: `session-peer 0.2.0 (typescript)`。分離インストール・ソースビルド・
+期待する出力: `session-peer 0.2.1 (typescript)`。分離インストール・ソースビルド・
 Windows・削除の手順は以下の詳細ガイドを参照してください。
 
 ### Update
 
 npm で導入したクライアントは npm で更新します。タグと対象バージョンを確認してから
-正確なバージョンを指定してください。以下は古い npm 版を 0.2.0 に更新する例です。
+正確なバージョンを指定してください。以下は古い npm 版を 0.2.1 に更新する例です。
 CLI 自体に自己更新コマンドはありません。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.2.0
+npm install --global --ignore-scripts session-peer@0.2.1
 session-peer --version
 ```
 
