@@ -40,7 +40,12 @@ test('TS skill baseline list and guarded Codex dry-run examples never submit', t
   assert.notEqual(refused.status, 0); assert.equal(refusal.status, 'refused'); assert.equal(refusal.submitted, false);
   assert.equal(refusal.error, 'inactive_writer');
   assert.equal(refusal.retryAllowed, false); assert.equal('retrySafe' in refusal, false);
-  assert.match(help.stdout, /--allow-inactive-codex-home/);
+  assert.match(help.stdout, /<command> --help/);
+  const sendHelp = invoke(['send', '--help']); assert.equal(sendHelp.status, 0);
+  assert.match(sendHelp.stdout, /^  --allow-inactive-codex-home\s/m);
+  assert.match(help.stdout, /^  doctor\s/m);
+  const doctorHelp = invoke(['doctor', '--help']); assert.equal(doctorHelp.status, 0);
+  assert.match(doctorHelp.stdout, /^Usage: session-peer doctor /);
   const optedIn = invoke([...args, '--allow-inactive-codex-home']);
   assert.equal(optedIn.status, 0, optedIn.stdout); const result = JSON.parse(optedIn.stdout);
   assert.equal(result.submitted, false); assert.equal(result.status, 'validated');

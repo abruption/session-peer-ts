@@ -364,7 +364,7 @@ name/PID selection with collisions, and text escaping on all CI platforms.
 ## Source TS skill guidance — #25 / 0.2.0
 
 Evidence date: 2026-09-28. TS CLI baseline for this work is `8289da7`; companion
-candidate is [`79d3b8ae58527e7231fcb184b5ca5b6575a5c35e`](https://github.com/abruption/session-peer-skill/tree/79d3b8ae58527e7231fcb184b5ca5b6575a5c35e/session-peer-ts).
+candidate is [`081cc3c1d16a394bd92824333f4bc61c36951799`](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts).
 This is separately reviewed source, not a skill tag or npm release. Published
 npm 0.1.0 remains unchanged. There is no runtime setup subcommand: user-invoked
 Skills CLI 1.7.0 is the reviewed setup path, with an exact commit, explicit agent,
@@ -374,7 +374,10 @@ and explicit project/user scope chosen before running the documented command.
   then capture that launcher's help. Python's `referenceVersion` is not a feature
   guarantee. Baseline examples retain explicit agent, Codex home and JSON flags.
 - Development capabilities: `doctor`, implicit home selection and inactive opt-in
-  require actual help support. Skill minimum/full runtime metadata mean baseline
+  require affirmative help support. When top-level help advertises per-command
+  help, inspect `send --help` for send flags and `doctor --help` for the supported
+  doctor command. Mere mention in an unsupported list does not enable a feature.
+  Skill minimum/full runtime metadata mean baseline
   support, not support for every conditional option. No assumption of wake,
   Antigravity, Relay, MCP or general wait support is imported from Python.
 - Workflow: fresh list → preserve exact home/PID → dry-run → one authorized send.
@@ -387,7 +390,10 @@ and explicit project/user scope chosen before running the documented command.
 - Lifecycle: no npm hooks, downloads, automatic update or overwrite of the Python
   skill. Pinned update repeats `add` for another reviewed commit after inspecting
   local edits. `skills update` follows a moving source and is not this workflow.
-- Acceptance evidence: `test/skill-guidance.test.ts` exercises baseline JSON list,
+- Acceptance evidence: `test/diagnostics.test.ts` already tests the exact
+  companion metadata contract as compatible without executing or exposing the
+  skill body; compatibility does not authorize sending.
+  `test/skill-guidance.test.ts` exercises baseline JSON list,
   selected-home dry-run refusal and gated explicit inactive dry-run in disposable
   SQLite homes; no submission occurs. Companion `scripts/test-ts-skill.mjs`
   exercises real Skills CLI project/global install, replacement-update, list and

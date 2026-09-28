@@ -297,7 +297,7 @@ SSH requires the same source build on both ends.
 
 The separate `session-peer-ts` companion skill is prepared in [companion PR #14](https://github.com/abruption/session-peer-skill/pull/14); it is not a new npm or skill-tag release. It supports the published 0.1.0 baseline, detects the TypeScript implementation marker, and checks help before using development capabilities. The Python `session-peer` skill remains separate.
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/79d3b8ae58527e7231fcb184b5ca5b6575a5c35e/session-peer-ts),
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
 then choose the agent and scope. This example selects **Codex, current project**;
 run from that project directory. For Claude Code use `--agent claude-code`.
 For user scope add `--global` consistently to add/list/remove. Inspect any existing
@@ -305,7 +305,7 @@ For user scope add `--global` consistently to add/list/remove. Inspect any exist
 `.agents/skills` directory is shared with other clients that discover that path.
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/79d3b8ae58527e7231fcb184b5ca5b6575a5c35e/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
