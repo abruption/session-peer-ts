@@ -354,7 +354,8 @@ Claude exact name matching uses Unicode **14.0.0** `CaseFolding.txt` C/F mapping
 (default non-Turkic full casefold), pinned independently of Node ICU and Python's
 runtime Unicode version. No normalization or fuzzy comparison occurs. ß/ss,
 Greek sigma and ligature collisions require PID selection. Unicode data source
-and SHA-256 are recorded in `src/casefold.ts`; the package includes
+and SHA-256 are recorded in `src/casefold.ts`; regenerate offline with
+`node scripts/generate-casefold.mjs /path/to/CaseFolding.txt` (hash enforced). The package includes
 `UNICODE-LICENSE.txt`. Python builds with newer Unicode databases can differ for
 characters added after 14.0.0; this is not a blanket future-Unicode parity claim.
 `test/cli-usability.test.ts` covers format/help/input/error boundaries, real local
