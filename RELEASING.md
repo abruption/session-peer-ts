@@ -7,7 +7,7 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## Current public release
+## Public baseline checked 2026-09-28 KST
 
 `session-peer@0.1.0` is public. The registry records publication at
 `2026-09-27T11:23:51.466Z`; the 2026-09-28 KST recheck found
@@ -15,11 +15,43 @@ and permits deployments from `main` only.
 [dated stable verification record](VALIDATION.md#public-010--2026-09-27-kst)
 for source, staging run, artifact hashes, approvals and evidence limits.
 
-The existing stable-stage code is specific to the completed 0.1.0 release and
-refuses that already published version. Preparing a later stable version needs
-a reviewed update to package versions, registry baselines, release gates and
-tests; changing a workflow input alone is insufficient. The procedure below is
-historical and must not be replayed to republish 0.1.0.
+## 0.2.0 stable release procedure
+
+The reviewed stable target is 0.2.0. Previous stable 0.1.0 integrity is pinned:
+`sha512-/FtILLgUpIAgqf5FsdU5/x17IGeWO3ylmm47gbSyN3hHjD40pp5gtOeAXU3zqmye/cx7PE52Pp/oLa0ZgZyDQQ==`.
+The prior preview integrity below remains pinned as a preservation check, not a
+claim that a 0.2.0 preview was published. Neither existing tag is removed.
+
+1. Merge the reviewed release preparation PR into main and require successful
+   exact-main CI (including Windows Node 22/24 and the release gate).
+2. Check npm environment reviewers and main-only deployment policy, package
+   ownership/2FA and stage-only Trusted Publisher mapping. Inspect pending stages
+   with authenticated `npm stage list session-peer`; stop on a conflicting stage.
+3. Require 0.2.0 absent, `latest=0.1.0`, `preview=0.1.0-preview.1`, and both prior
+   integrity/provenance records unchanged. The script enforces these baselines.
+4. Obtain final approval naming **exact main SHA**, **0.2.0**, **stable-stage** and
+   `latest` promotion to 0.2.0. An instruction to begin release preparation does
+   not identify a future merged SHA. Do not replay any historical approval.
+5. Dispatch `publish.yml` on main with `mode=stable-stage`, `version=0.2.0`,
+   `source_sha=<approved 40-character main SHA>`, and
+   `confirmation=session-peer@0.2.0 stable-stage`. Both workflow jobs bind
+   `source_sha` to their actual `GITHUB_SHA`; moved main or mismatched input fails.
+6. Before approving the protected npm environment, download the prepare job's
+   `npm-release-<SHA>` artifact. Review its exact manifest/hash and packaged prose
+   using the documentation gate below. Only this artifact proceeds to staging.
+7. Staging uses Node 24/npm 11.15.0 and OIDC, with upload retries disabled. Record
+   the stage ID, compare the staged tarball with the retained artifact, and obtain
+   the separate final npm 2FA approval. Stage approval publicly publishes 0.2.0
+   and promotes `latest`; staging alone does neither.
+8. After approval, use that exact source/artifact to run `node scripts/release.mjs
+   artifact` and `node scripts/release.mjs verify`. Verify 0.2.0 integrity,
+   provenance/signatures, fresh version-specific install/uninstall, latest=0.2.0
+   and unchanged preview. Append dated public evidence; do not alter a tarball.
+
+GitHub tags/releases, companion skill merge/installation and fleet rollout are
+separate operations. The companion skill is pinned and independently managed;
+this npm release neither installs it nor requires executing its instructions.
+The procedures below for 0.1.0 are historical, not current dispatch inputs.
 
 ## Documentation gate for the next release
 

@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 export const repository = 'abruption/session-peer-ts';
 export const registry = 'https://registry.npmjs.org';
-const stableVersion = '0.1.0';
+const stableVersion = '0.2.0';
+const previousStable = '0.1.0';
+const previousStableIntegrity = 'sha512-/FtILLgUpIAgqf5FsdU5/x17IGeWO3ylmm47gbSyN3hHjD40pp5gtOeAXU3zqmye/cx7PE52Pp/oLa0ZgZyDQQ==';
 const verifiedPreview = '0.1.0-preview.1';
 const verifiedPreviewIntegrity = 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==';
 export const packageFiles = ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md',
@@ -27,7 +29,7 @@ export function validatePackage(pkg) {
   assert.deepEqual(pkg.exports, { '.': { types: './dist/index.d.ts', import: './dist/index.js' } });
   assert.equal(pkg.private, false);
   assert.ok(pkg.version === stableVersion || /^\d+\.\d+\.\d+-preview\.\d+$/.test(pkg.version),
-    'only reviewed preview versions and 0.1.0 stable are supported');
+    'only reviewed preview versions and 0.2.0 stable are supported');
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
   assert.equal(pkg.repository.url, `git+https://github.com/${repository}.git`);
   assert.deepEqual(pkg.publishConfig, { registry: `${registry}/`, access: 'public',
@@ -44,6 +46,7 @@ export function validateDispatch(pkg, env) {
   assert.equal(env.GITHUB_EVENT_NAME, 'workflow_dispatch');
   assert.match(env.GITHUB_SHA ?? '', /^[a-f0-9]{40}$/);
   assert.equal(env.RELEASE_MODE, pkg.version === stableVersion ? 'stable-stage' : 'trusted-stage');
+  assert.equal(env.RELEASE_SHA, env.GITHUB_SHA, 'approved_source_sha_changed');
   assert.equal(env.RELEASE_VERSION, pkg.version);
   assert.equal(env.RELEASE_CONFIRMATION, `${pkg.name}@${pkg.version} ${env.RELEASE_MODE}`);
 }
@@ -72,7 +75,10 @@ export function validateRegistryState(pkg, mode, document) {
   assert.ok(!document.versions?.[pkg.version], 'version already published; do not repeat');
   if (pkg.version === stableVersion) {
     assert.equal(mode, 'stable-stage');
-    assert.equal(document['dist-tags']?.latest, '0.1.0-preview.0', 'stable_baseline_changed');
+    const previous = document.versions?.[previousStable];
+    assert.equal(previous?.dist?.integrity, previousStableIntegrity, 'verified_stable_changed');
+    assert.equal(new URL(previous.dist.attestations.url).origin, registry, 'verified stable provenance required');
+    assert.equal(document['dist-tags']?.latest, previousStable, 'stable_baseline_changed');
     assert.equal(document['dist-tags']?.preview, verifiedPreview, 'stable_preview_baseline_changed');
     const preview = document.versions?.[verifiedPreview];
     assert.equal(preview?.dist?.integrity, verifiedPreviewIntegrity, 'verified_preview_changed');
@@ -229,7 +235,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if (command === 'verify') await verify(pkg);
   } catch (error) {
     // Do not echo response bodies, process environments or child-process output.
-    const diagnostic = /stable_baseline_changed/.test(error.message) ? 'stable_baseline_changed'
+    const diagnostic = /approved_source_sha_changed/.test(error.message) ? 'approved_source_sha_changed'
+      : /verified_stable_changed/.test(error.message) ? 'verified_stable_changed'
+      : /stable_baseline_changed/.test(error.message) ? 'stable_baseline_changed'
       : /stable_preview_baseline_changed/.test(error.message) ? 'stable_preview_baseline_changed'
       : /verified_preview_changed/.test(error.message) ? 'verified_preview_changed'
       : /stable_latest_missing/.test(error.message) ? 'stable_latest_missing'
