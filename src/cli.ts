@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { hostname } from 'node:os';
 import { lstatSync } from 'node:fs';
-import { claude, codex, Refusal } from './discovery.js';
+import { listing, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send } from './send.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
@@ -28,9 +28,9 @@ export function parse(args: string[]): Options {
   if (!flags.has('--json') && values.get('--output-format') !== 'json') throw new Refusal('json_output_required');
   if (values.has('--output-format') && values.get('--output-format') !== 'json') throw new Refusal('unsupported_output_format');
   if (command === 'list') {
-    if (!['claude', 'codex'].includes(values.get('--agent') ?? '')) throw new Refusal('explicit_supported_agent_required');
-    if (values.get('--agent') === 'codex' && !values.get('--codex-home')) throw new Refusal('explicit_codex_home_required');
-    if (values.get('--agent') !== 'codex' && values.has('--codex-home')) throw new Refusal('inapplicable_option');
+    if (values.has('--agent') && !['claude', 'codex'].includes(values.get('--agent')!)) throw new Refusal('unsupported_agent');
+    if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
+    if (values.get('--agent') === 'claude' && values.has('--codex-home')) throw new Refusal('inapplicable_option');
     if (['--to', '--message', '--codex-bin', '--reply-address'].some(k => values.has(k)) || ['--dry-run', '--no-from', '--no-reply-to'].some(k => flags.has(k))) throw new Refusal('inapplicable_option');
   } else {
     if (!values.get('--to') || values.has('--agent') || flags.has('--all')) throw new Refusal('invalid_send_options');
@@ -132,7 +132,7 @@ try {
   if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
-  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript preview): list --agent claude|codex --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex requires --codex-home. Relay/MCP/wake unsupported.');
+  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript): list [--agent claude|codex] [--codex-home HOME] --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex send requires --codex-home; list discovers known homes. Relay/MCP/wake unsupported.');
   else {
     const wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -155,7 +155,7 @@ try {
     let result: Record<string, unknown>;
     if (options.values.has('--host')) result = await remote(options, message);
     else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run') });
-    else result = options.values.get('--agent') === 'claude' ? claude(options.flags.has('--all')) : await codex(options.values.get('--codex-home')!, options.flags.has('--all'));
+    else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
     console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }));
     process.exitCode = result.ok === false ? 1 : 0;
   }

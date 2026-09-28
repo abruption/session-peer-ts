@@ -1,8 +1,8 @@
-import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join } from 'node:path';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { canonical, Refusal } from './discovery.js';
+import { canonical, configuredHomePaths, orcaHomePaths, Refusal } from './discovery.js';
 import { executable, run } from './process.js';
 import { inspectWindows } from './windows.js';
 
@@ -85,17 +85,13 @@ export function homes(selected: string): string[] {
   addExisting(join(homedir(), '.codex'));
   if (process.env.CODEX_HOME) addExisting(process.env.CODEX_HOME);
   if (process.platform === 'darwin') {
-    const directory = join(homedir(), 'Library/Application Support/orca/codex-accounts');
-    let entries: string[] = [];
-    try { entries = readdirSync(directory).sort(); }
+    let paths: string[] = [];
+    try { paths = orcaHomePaths(); }
     catch (error) { if (!missing(error)) throw new Refusal('home_inventory_unreadable', 1); }
-    for (const entry of entries) addExisting(join(directory, entry, 'home'));
+    for (const path of paths) addExisting(path);
   }
   if (process.env.SESSION_PEER_CODEX_HOMES) {
-    let paths: unknown;
-    try { paths = JSON.parse(process.env.SESSION_PEER_CODEX_HOMES); } catch { throw new Refusal('invalid_home_configuration', 1); }
-    if (!Array.isArray(paths) || paths.some(p => typeof p !== 'string' || (!isAbsolute(p) && !p.startsWith('~/')))) throw new Refusal('invalid_home_configuration', 1);
-    for (const path of paths) result.add(canonical(path));
+    for (const path of configuredHomePaths()) result.add(canonical(path));
   }
   return [...result].sort();
 }

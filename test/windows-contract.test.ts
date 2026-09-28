@@ -44,7 +44,8 @@ async function fixture(t: TestContext) {
   function database(path: string) {
     mkdirSync(join(path, 'thread-writer-locks'), { recursive: true });
     const db = new DatabaseSync(join(path, 'state_5.sqlite'));
-    db.exec('CREATE TABLE threads(id TEXT)'); db.prepare('INSERT INTO threads VALUES (?)').run(id); db.close();
+    db.exec('CREATE TABLE threads(id TEXT, title TEXT, cwd TEXT, updated_at INTEGER, archived INTEGER, rollout_path TEXT)');
+    db.prepare('INSERT INTO threads VALUES (?,?,?,?,?,?)').run(id, 'fixture', '/project', 1, 0, 'unused'); db.close();
   }
   database(home);
   const lock = join(home, 'thread-writer-locks', id + '.lock');
@@ -206,6 +207,14 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     }
     const lost = await f.invoke(args, { FIXTURE_SSH_MODE: 'loss' });
     assert.equal(lost.status, 'unknown'); assert.equal(lost.submitted, null); assert.equal(lost.retryAllowed, false);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    const listed = await f.invoke(['list', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote],
+      { SESSION_PEER_CODEX_HOMES: JSON.stringify([f.home, join(f.root, 'missing')]) });
+    assert.equal(listed.ok, false); assert.equal(listed.sessions.length, 1);
+    assert.equal(listed.sessions[0].codexHome, f.home);
+    assert.equal(listed.discovery.claude.status, 'ok');
+    assert.equal(listed.discovery.codex.homes.at(-1).code, 'state_db_missing');
+    assert.equal(listed.sshHost, 'fixture'); assert.equal('submitted' in listed, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
     await f.stop(owner);
   });

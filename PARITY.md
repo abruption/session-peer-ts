@@ -1,14 +1,16 @@
 # Python compatibility and npm migration
 
-Reviewed 2026-09-28 KST for the **0.1.1 validation/documentation milestone**.
-Runtime baseline: TypeScript **0.1.0**, commit
-[`0edc4f8`](https://github.com/abruption/session-peer-ts/tree/0edc4f8ae05256698f591b7402e89cd3d5858eef/src),
-and Python **1.0.2**, commit
+Updated 2026-09-28 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-The milestone adds documentation and tests without adding runtime features.
-This is a versioned comparison, not a promise of complete compatibility.
-`referenceVersion: "1.0.2"` identifies the comparison baseline; it does not
-certify equivalent behavior. See [VALIDATION.md](VALIDATION.md) for dated evidence.
+The published TS baseline remains **0.1.0**,
+[`0edc4f8`](https://github.com/abruption/session-peer-ts/tree/0edc4f8ae05256698f591b7402e89cd3d5858eef/src).
+The matrix now includes **source development for 0.2.0 (#16)**: unified listing
+and bounded Codex home discovery. This feature is not in the npm 0.1.0 archive;
+source package metadata stays at 0.1.0 until separate release preparation.
+All other rows retain their baseline scope. Do not use version equality alone
+to mix development builds and published binaries over SSH; test the same build
+on both ends. `referenceVersion: "1.0.2"` names the comparison baseline, not a
+complete parity guarantee. See [VALIDATION.md](VALIDATION.md) for dated evidence.
 
 ## Feature and command matrix
 
@@ -17,14 +19,14 @@ related command exists with the differences shown. **Planned** means no usable
 TS equivalent yet. **Deliberately different** identifies a maintained boundary,
 not a missing implementation. Issue links describe work, not available features.
 
-| Surface | Python 1.0.2 | TypeScript 0.1.0 | Status / follow-up |
+| Surface | Python 1.0.2 | TS source (published differences noted) | Status / follow-up |
 | --- | --- | --- | --- |
 | Claude discovery and inbox submission | Local POSIX socket / Windows named pipe; PID or name; discovery rechecked before submission | Same transport families and recheck; Windows process start identity and authenticated pipe checks | Implemented; native fixtures are not live ACKs |
-| `list` selection | Unified agent list; optional agent; bounded multiple Codex homes; partial discovery diagnostics | Requires `--agent claude` or `--agent codex`; only **Codex** list requires a single explicit `--codex-home`; Claude list rejects that option | Partial; [#16](https://github.com/abruption/session-peer-ts/issues/16), 0.2.0 |
+| `list` selection | Unified agent list; optional agent; bounded multiple Codex homes; partial discovery diagnostics | Source: combined Claude/Codex by default, optional agent/home filters, bounded multi-home inventory and partial diagnostics. Published 0.1.0 still requires an agent and explicit Codex home | Implemented in source for [#16](https://github.com/abruption/session-peer-ts/issues/16), 0.2.0; no Antigravity adapter |
 | Codex active queue | Saved UUID, unique live writer, real lock/owner checks, pre-submit revalidation | Same protections; full UUID and explicit home required; known-home inventory still checks competing writers | Implemented active path; home selection partial, [#17](https://github.com/abruption/session-peer-ts/issues/17), 0.2.0 |
 | Implicit home / inactive queue | Select unique live home; explicit inactive opt-in under separate guards | No implicit selection or inactive opt-in; refuses inactive/ambiguous state | Planned #17; can proceed alongside #16 using a shared home-source/diagnostic contract |
 | `doctor` | Readiness diagnostics; return-route check is opt-in | Unsupported command | Planned [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0 |
-| CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | JSON required; named `--message`/`-m` or stdin only; minimal top-level help; ASCII case-insensitive names, Unicode names require PID | Partial; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. The old help banner still says “preview”; it is not registry status |
+| CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | JSON required; named `--message`/`-m` or stdin only; minimal top-level help; ASCII case-insensitive names, Unicode names require PID | Partial; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
 | From / Reply-To | Caller detection, automatic return-route metadata, structured URI resolution | From uses Codex environment UUID only; explicit `--reply-address`; local/SSH Reply-To URI parsing with conflict checks | Partial; [#21](https://github.com/abruption/session-peer-ts/issues/21), 0.3.0 |
 | SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; one host; strict preflight; JSON stdin; explicit Windows PowerShell path | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) hosts/options, [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design, 0.3.0 |
 | Updates | Cached advisory client/skill notices; explicit manager-aware update commands | No update cache/command; `--no-update-notice` accepted as a no-op | Planned [#22](https://github.com/abruption/session-peer-ts/issues/22), 0.3.0 |
@@ -48,16 +50,66 @@ Source anchors at the baselines:
 
 ## Environment and installation ownership
 
-| Setting / surface | Current TS behavior / migration consequence |
+| Setting / surface | TS source behavior / migration consequence |
 | --- | --- |
 | `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CONFIG_DIR` | Claude config precedence: first nonempty value in that order, otherwise `~/.claude`. No Codex home is required for Claude listing. |
-| `CODEX_HOME`, default `~/.codex`, macOS Orca account homes | Included in bounded writer safety inventory; they do **not** substitute for explicit Codex CLI `--codex-home`. No recursive disk scan. |
-| `SESSION_PEER_CODEX_HOMES` | JSON array of absolute or `~/` paths for writer inventory; malformed/unreadable inventory refuses send. It does not enable multi-home `list`. |
+| `CODEX_HOME`, default `~/.codex`, macOS Orca account homes | Source: bounded automatic Codex listing and writer safety inventory. Codex **send** still requires `--codex-home`. Published 0.1.0 requires it for Codex list too. No recursive disk scan. |
+| `SESSION_PEER_CODEX_HOMES` | Source: JSON array of absolute or `~/` paths adds required listing homes and writer candidates. Invalid list configuration is rejected as a whole with other sources preserved; send keeps fail-closed inventory. Published 0.1.0 uses it only for writer checks. |
 | `CODEX_THREAD_ID`, `CODEX_SESSION_ID` | Valid UUID enables default From metadata; `--no-from` disables it. Claude/Antigravity caller detection is not implemented. |
 | Reply/update/Relay settings from Python | No blanket compatibility. Only the flags and environment reads in the TS baseline above are implemented. Do not infer a route or permission from an environment variable or From header. |
 | Runtime and native dependency | TS needs Node 22.13+ within 22.x or Node 24.x, plus a matching native lock binary. Python is not a TS runtime fallback. |
 | CLI ownership | Both distributions install `session-peer`; npm does not remove Python/uv/pipx/venv installations. Select one path deliberately and update it through its owning manager. |
 | Skills | Install separately and explicitly; no package `postinstall` downloads a skill or invokes another package manager. |
+
+## Source unified listing contract — #16 / 0.2.0
+
+`node dist/cli.js list --json` combines Claude and saved Codex rows. Use
+`--agent claude` to skip all Codex inventory, or `--agent codex` to skip Claude.
+`--codex-home PATH` pins only Codex discovery (also in a combined list) and
+bypasses unrelated environment/Orca/configuration errors. It is inapplicable to
+`--agent claude`. A configured empty string is invalid JSON: unset
+`SESSION_PEER_CODEX_HOMES` or use `[]` to disable extra homes.
+
+Automatic sources are visited in order: default `~/.codex`, nonempty `CODEX_HOME`,
+immediate macOS Orca account homes, then `SESSION_PEER_CODEX_HOMES`. Canonical
+aliases merge source labels; UUIDs in distinct homes stay distinct. Every Codex
+row includes `codexHome` and `stateDb`; identity is host + canonical home + UUID.
+Rows sort by descending `updatedAt`, home and UUID using Unicode code-point
+ordering. `--all` independently includes archived records in every home and
+unreachable Claude records. Discovery success does not imply an active writer.
+
+Per-home `status` is `ok`, `absent` or `error`; missing optional default/Orca DBs
+are `absent`. Missing argument/environment/configured homes are errors, even
+when they alias an optional source. Empty readable DBs are `ok` with zero rows.
+Aggregate Codex status is `not_installed` only when no DB is readable and there
+are no errors; that is exit 0. Any inventory/home/agent failure yields exit 1
+while preserving other rows. Error codes are `state_db_missing`,
+`state_db_not_regular`, `permission_denied`, `state_db_read_failed`,
+`home_resolution_failed`, `candidate_enumeration_failed`, or
+`invalid_home_configuration`. Errors use fixed text, never raw exception bodies.
+Inventory errors appear in `discovery.codex.errors`; per-home errors in `homes`.
+Top-level `codexHome` appears only for exactly one candidate and no inventory
+errors; consumers should use each row's home.
+
+The same listing and filters execute in the SSH destination's environment;
+nonzero partial responses retain rows and diagnostics. No recursive scan,
+inbox connection, writer selection or queue submission is part of listing.
+SQLite is read-only but its existing WAL bookkeeping caveat still applies.
+Listing availability never relaxes send's lock/owner/revalidation checks.
+The shared configured-path/Orca enumerators have separate list and send policies:
+listing requires explicitly named missing environment homes and rejects a set
+empty extra-home variable; send retains its previous truthy-only variable and
+existing-environment-DB rules until #17. It must not use best-effort list results
+as authorization.
+
+Source: [discovery.ts](https://github.com/abruption/session-peer-ts/blob/main/src/discovery.ts),
+[CLI](https://github.com/abruption/session-peer-ts/blob/main/src/cli.ts),
+[writer](https://github.com/abruption/session-peer-ts/blob/main/src/writer.ts).
+Contracts: [discovery.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/discovery.test.ts)
+ports Python unified/multi-home cases; native Windows SSH/partial-envelope checks
+are in [windows-contract.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/windows-contract.test.ts).
+The Python oracle runs in POSIX CI; deterministic fixtures and injected filesystem
+failures run on Windows too. Error injection is not a real Windows ACL test.
 
 ## JSON result compatibility
 
@@ -67,9 +119,9 @@ TS normal envelopes have `schemaVersion`, `host`, `command`, `ok`, `version`,
 `referenceVersion`; caught failures omit the two version fields. Exit codes are
 0 (success), 1 (operation error), 2 (usage/refusal as classified by the command).
 
-| Field / path | Python 1.0.2 | TS 0.1.0 |
+| Field / path | Python 1.0.2 | TS (source differences noted) |
 | --- | --- | --- |
-| `list.sessions`, `discovery` | Unified/per-agent and per-home diagnostics; partial results can remain with `ok:false` | Selected-agent results; failed Codex home returns `ok:false`, empty sessions and home diagnostics; no multi-home partial aggregation |
+| `list.sessions`, `discovery` | Unified/per-agent and per-home diagnostics; partial results can remain with `ok:false` | Source: Claude rows then Codex rows; readable homes survive failed homes/agents with `ok:false`, exit 1. Published 0.1.0 has only selected-agent/single-home results |
 | `send.status`, `submitted` | Submission/wake/transport-specific details; do not assume a uniform error shape | `validated:false`, `posted:true` (Claude), `queued:true` (Codex); caught refusal is `refused:false`, unknown is `unknown:null` |
 | `consumptionConfirmed` | False for native submission; queueing is not consumption | Always false on send results, including refusal/unknown |
 | `target`, `chars`, `dryRun`, `codexHome` | Target and home details depend on agent; Codex target includes `id`/`name`, with separate `agent` | Success/dry-run target has `agent` plus `id` or `pid`/`name`; `chars` counts enveloped code points; `codexHome` only on Codex success/dry-run |
@@ -97,7 +149,7 @@ Output sources: TS CLI/send above; Python
 
 ## Transport, size and failure boundaries
 
-| Boundary | Python 1.0.2 | TS 0.1.0 |
+| Boundary | Python 1.0.2 | TS (source differences noted) |
 | --- | --- | --- |
 | Remote prerequisite | POSIX-compatible remote shell and usable Python; source delivered over stdin. Native Windows destination is not this SSH path | Installed same-version TS CLI + supported Node/native dependency. POSIX shell by default; explicit `--remote-platform win32` uses PowerShell and a `.cmd` launcher |
 | Message on SSH | Base64 body in quoted remote argv; source on stdin | Message in UTF-8 stdin JSON; PowerShell's encoded command contains launcher/flag, not the message |
@@ -132,7 +184,9 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `session-peer list --agent codex --codex-home /absolute/home --json`.
    Use a full Codex UUID and explicit home for send. For Claude use PID when
    Unicode name matching matters. Replace positional messages with `--message`
-   or UTF-8 stdin; update parsers using the JSON table above.
+   or UTF-8 stdin; update parsers using the JSON table above. Development source
+   additionally supports unfiltered/multi-home list as described in the #16
+   contract; installing published 0.1.0 does not enable it.
 4. **Validate before submission.** Use `send ... --json --dry-run`. Review the
    target/home, then remove `--dry-run` only for an intended submission. Check
    posted/queued separately from receiver ACK; do not retry unknown outcomes.

@@ -40,7 +40,7 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
 
 ## What it does
 
-- Discover local sessions and explicitly selected Codex homes.
+- Discover local Claude/Codex sessions and known Codex homes (source development for 0.2.0; see below).
 - Validate a destination with `--dry-run`, then submit one message to its native
   inbox or queue. Codex requires a unique, stable live writer.
 - Use the same commands over SSH to an explicitly installed remote client.
@@ -49,10 +49,27 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
   an uncertain submission.
 
 Not implemented: Relay transport, MCP, wake/resume, inactive queueing,
-Antigravity, automatic updates, implicit multi-agent discovery, or human text
-output. Unsupported commands fail explicitly; this is not a general orchestrator.
+Antigravity, automatic updates, or human text output. Unsupported commands fail explicitly; this is not a general orchestrator.
 
 Planned client gaps are tracked in the [versioned compatibility matrix and npm migration guide](PARITY.md); a plan is not an available feature. Relay server/hosted-service delivery remains outside this client's scope.
+
+### Unified listing in development source (0.2.0)
+
+After building this source, `node dist/cli.js list --json` combines Claude and
+Codex; `list --agent codex --json` searches known homes. Published npm **0.1.0**
+still requires an explicit agent and a home for Codex listing; the install and
+quick-start examples above remain valid for that release.
+
+Sources are default `~/.codex`, `CODEX_HOME`, immediate macOS Orca account homes,
+and the JSON array `SESSION_PEER_CODEX_HOMES`. `--codex-home` pins Codex listing
+and bypasses unrelated inventory errors; `--agent claude` skips Codex entirely.
+Aliases are deduplicated, but the same UUID in different homes stays separate.
+Use each row's `codexHome` when sending. Optional absent homes are not failures;
+explicitly configured missing/invalid homes produce partial results and exit 1,
+retaining readable rows. Listing never selects a writer or submits a message.
+See the [source listing contract](PARITY.md#source-unified-listing-contract--16--020)
+for ordering, diagnostics, `--all` and SSH behavior. Codex send still requires an
+explicit home. On SSH, use the same development build on both ends.
 
 ## Requirements
 
@@ -118,7 +135,7 @@ Remove `--dry-run` only when delivery is intended. Omit `--message` or use
 `--message -` for UTF-8 stdin. `--all` includes stale/archived records for listing;
 it does not authorize sending. Claude accepts a PID, `claude:PID`, or an
 unambiguous ASCII name, case-insensitively. Use a PID for Unicode names. Codex
-requires a full UUID and explicit home; `--codex-bin` selects an executable.
+send requires a full UUID and explicit home; `--codex-bin` selects an executable.
 Output requires `--json` or `--output-format json`.
 
 ### Another machine over SSH
