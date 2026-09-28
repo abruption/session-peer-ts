@@ -34,6 +34,19 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新、人間向けテ�
 
 対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。開発ソースの Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH 両端で同一の開発ビルドを使ってください。
 
+### ソース CLI の使いやすさ（0.2.0 予定）
+
+開発ソースは `list --help`、`send --help`、`doctor --help`、`--output-format text` を提供します。
+出力指定は引き続き必須です: `--json` または `--output-format json|text`。
+構文エラーは JSON、有効な text 要求の実行結果・エラーはテキストです。SSH
+内部通信は常に JSON です。`send --to TARGET "message" --json` の位置本文に
+対応し、`--message`/`-m` との併用は拒否します。本文省略または `-` は stdin、
+オプション形式の位置本文には `--` を前置します。空・空白本文は送信者情報の
+追加前に拒否します。Claude 名は Unicode 14.0.0 のデフォルト full casefold
+による完全一致です。正規化・曖昧検索はせず、衝突時は PID が必要です。
+公開済み 0.1.0 にこのソース機能が遡及適用されることはありません。
+
+
 ## 必要条件
 
 macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対象外です。ネイティブロック依存には対応する x64/arm64 バイナリが必要で、純 JavaScript パッケージではありません。Codex 送信には `codex` が必要で、macOS/Linux では `lsof`・`ps` も必要です。Windows はネイティブロックと Restart Manager で所有者を確認します。Claude にはアクセス可能な inbox を持つ稼働中 TUI が必要です。SSH は既存の鍵・ホスト信頼と、接続先の**同一バージョン**のクライアントを使います。
@@ -164,3 +177,25 @@ pipe の広告を確認するだけで、pipe の存在や接続可能性は保�
 `capabilities` は wake/wait/ACK と消費確認を未対応と明示します。任意の TS スキル
 メタデータ検査もインストールを行いません。[診断の境界](PARITY.md#source-read-only-doctor--18--020)
 を参照してください。SSH の両端には同じソースビルドが必要です。
+## エージェントスキルの明示的な導入
+
+別の `session-peer-ts` スキルを関連 PR で準備しています。新しい npm 公開やスキルタグではありません。公開済み 0.1.0 の基本機能に対応し、TypeScript 表示とヘルプで開発機能を確認します。Python の `session-peer` スキルは別に維持します。
+
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
+then choose the agent and scope. This example selects **Codex, current project**;
+run from that project directory. For Claude Code use `--agent claude-code`.
+For user scope add `--global` consistently to add/list/remove. Inspect any existing
+`session-peer-ts` copy for local edits before approving its replacement. Codex's
+`.agents/skills` directory is shared with other clients that discover that path.
+
+```sh
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 list --agent codex --json
+npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
+```
+
+For a pinned update, review another exact commit and repeat `add` with the same
+agent/scope. Restart the agent if its catalog is cached. Runtime and skill
+lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
+Skills CLI, and installing this skill does not overwrite the Python skill or
+install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).

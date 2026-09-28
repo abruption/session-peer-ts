@@ -272,3 +272,32 @@ Windows CI includes the portable diagnostics suite and encoded PowerShell/.cmd
 SSH checks in the existing native fixture. Windows pipe advertisements remain
 metadata evidence, not proof of a connectable pipe. Public npm 0.1.0 is unchanged;
 these tests do not constitute release or publication approval.
+
+## Source #19 CLI usability — 2026-09-28
+
+The 0.2.0 development source adds text output, complete list/send/doctor help, positional
+message compatibility and Unicode 14.0.0 exact casefold. No npm publication or
+live-agent ACK is claimed. `test/cli-usability.test.ts` is included in the native
+Windows test command and the macOS/Linux suite. It verifies output/exit codes,
+partial discovery, parse-before-stdin behavior, Unicode collisions and PID
+selection using isolated process/socket fixtures. Windows posting ownership is
+covered by the existing native fixture suite; the new name fixture is dry-run on
+Windows. Version metadata remains 0.1.0 until separate release preparation.
+
+## 2026-09-28 — Source skill integration (#25, preparing 0.2.0)
+
+Separate `session-peer-ts` companion skill source and pinned Skills CLI 1.7.0
+setup are prepared without npm publication or new skill tags. Original Python
+skill content stays unchanged. Runtime examples use temporary homes/SQLite only;
+Codex inactive dry-run verifies zero submission and no queue/database mutation.
+The companion lifecycle test installs, replaces from a second isolated source,
+lists and removes project/global copies for Codex and Claude Code, preserving a
+Python skill fixture. No production agent homes are edited, and no live TUI ACK
+is claimed. npm installs continue using `--ignore-scripts`.
+
+Independent read-only review used Antigravity `gemini-3.1-pro-high`. Its concrete
+clarification (absolute remote launcher paths) was verified against the CLI and
+applied to the companion skill. Parent review corrected the TS `retryAllowed`
+field name and made capability checks require affirmative supported help entries.
+Real GitHub exact-commit installation was also exercised in isolated scopes;
+installation commands do not depend on a moving tag.

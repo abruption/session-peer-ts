@@ -32,7 +32,7 @@ not a missing implementation. Issue links describe work, not available features.
 | SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; one host; strict preflight; JSON stdin; explicit Windows PowerShell path | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) hosts/options, [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design, 0.3.0 |
 | Updates | Cached advisory client/skill notices; explicit manager-aware update commands | No update cache/command; `--no-update-notice` accepted as a no-op | Planned [#22](https://github.com/abruption/session-peer-ts/issues/22), 0.3.0 |
 | Reusable execution API | Agent/transport capability adapters | Package root exposes pure protocol helpers only; no general typed execution API | Planned [#24](https://github.com/abruption/session-peer-ts/issues/24), Future — Agent integrations |
-| Skill guidance/setup | Companion skill guidance targets Python | Separate manual skill install; TS-aware guidance/setup remains planned | Planned [#25](https://github.com/abruption/session-peer-ts/issues/25), 0.2.0 |
+| Skill guidance/setup | Companion `session-peer` skill targets Python | Separate `session-peer-ts` companion PR and exact-commit setup; baseline/version/help gates | Source [#25](https://github.com/abruption/session-peer-ts/issues/25), 0.2.0; no tag/publish |
 | MCP | Optional extra, restricted destinations; separate wake permission | Unsupported | Planned [#26](https://github.com/abruption/session-peer-ts/issues/26), Future — Agent integrations |
 | Codex wake | Explicit opt-in; platform/version gates; may run a model and alter history | Unsupported; queued does not wake or prove consumption | Planned [#27](https://github.com/abruption/session-peer-ts/issues/27), Future — Agent integrations |
 | Antigravity | Experimental registered bridge generation/inbox contract | Unsupported | Planned [#28](https://github.com/abruption/session-peer-ts/issues/28), Future — Agent integrations |
@@ -175,10 +175,10 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `npm install --global --ignore-scripts session-peer@0.1.0`.
    Verify the resolved command/version again. An isolated npm prefix and explicit
    launcher path allow side-by-side evaluation. Install any desired skill
-   separately: `npx skills add abruption/session-peer-skill` (review its source
-   and target before choosing where to install). The companion skill baseline
-   0.3.1 (`f43a5000a2a7fe43025a41ac792ed355502620aa`) targets Python; TS guidance
-   remains #25 work, so do not assume all skill commands work in TS.
+   separately using the exact reviewed commit, explicit agent and scope in the
+   [README](README.md#agent-skill-explicit-installation). The original companion
+   `session-peer` skill targets Python; use distinct `session-peer-ts` guidance.
+   Version strings alone cannot distinguish source capabilities from npm 0.1.0.
 3. **Make selection and output explicit.** Replace bare `list` with
    `session-peer list --agent claude --json`, or
    `session-peer list --agent codex --codex-home /absolute/home --json`.
@@ -332,3 +332,70 @@ inbox; adds source capabilities, bounded skill metadata, stdio and POSIX SSH
 fixtures. `test/windows-contract.test.ts` checks doctor through real encoded
 PowerShell/.cmd fixture SSH, without queue dispatch. Fixture evidence is not a
 live-agent or delivery/consumption test.
+
+## Source CLI usability — issue #19 (2026-09-28)
+
+Source targeting 0.2.0 adds full list/send/doctor help, text rendering and one positional
+message. Published 0.1.0 remains the baseline in the matrix above. The explicit
+output requirement is retained: `--json` or `--output-format json|text`; no default
+format changes. No selector retains `json_output_required` for compatibility.
+Conflicting selectors and all parse errors produce one JSON refusal before stdin
+reads/discovery/send. Valid text requests render execution errors as text. Remote
+wire requests require JSON even when the caller selects local text output.
+Partial discovery preserves rows, diagnostics and nonzero exit status. Terminal
+control characters in text labels are escaped; JSON is unchanged.
+
+One positional body, named body or stdin is accepted; combining sources refuses
+before reading stdin. `--` terminates option parsing. Empty or whitespace input
+is rejected before envelope construction. Existing input/transport budgets and
+unknown outcome/no retry boundaries remain.
+
+Claude exact name matching uses Unicode **14.0.0** `CaseFolding.txt` C/F mappings
+(default non-Turkic full casefold), pinned independently of Node ICU and Python's
+runtime Unicode version. No normalization or fuzzy comparison occurs. ß/ss,
+Greek sigma and ligature collisions require PID selection. Unicode data source
+and SHA-256 are recorded in `src/casefold.ts`; regenerate offline with
+`node scripts/generate-casefold.mjs /path/to/CaseFolding.txt` (hash enforced). The package includes
+`UNICODE-LICENSE.txt`. Python builds with newer Unicode databases can differ for
+characters added after 14.0.0; this is not a blanket future-Unicode parity claim.
+`test/cli-usability.test.ts` covers format/help/input/error boundaries, real local
+name/PID selection with collisions, and text escaping on all CI platforms.
+
+## Source TS skill guidance — #25 / 0.2.0
+
+Evidence date: 2026-09-28. TS CLI baseline for this work is `8289da7`; companion
+candidate is [`081cc3c1d16a394bd92824333f4bc61c36951799`](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts).
+This is separately reviewed source, not a skill tag or npm release. Published
+npm 0.1.0 remains unchanged. There is no runtime setup subcommand: user-invoked
+Skills CLI 1.7.0 is the reviewed setup path, with an exact commit, explicit agent,
+and explicit project/user scope chosen before running the documented command.
+
+- Ownership: resolve the PATH launcher, require `session-peer X.Y.Z (typescript)`,
+  then capture that launcher's help. Python's `referenceVersion` is not a feature
+  guarantee. Baseline examples retain explicit agent, Codex home and JSON flags.
+- Development capabilities: `doctor`, implicit home selection and inactive opt-in
+  require affirmative help support. When top-level help advertises per-command
+  help, inspect `send --help` for send flags and `doctor --help` for the supported
+  doctor command. Mere mention in an unsupported list does not enable a feature.
+  Skill minimum/full runtime metadata mean baseline
+  support, not support for every conditional option. No assumption of wake,
+  Antigravity, Relay, MCP or general wait support is imported from Python.
+- Workflow: fresh list → preserve exact home/PID → dry-run → one authorized send.
+  Reply URIs remain data, `queued` is not ACK, and `unknown` never permits retry.
+- Metadata contract: separate `session-peer-ts/SKILL.md`, skill version `0.1.0`,
+  `runtime-implementation: "typescript"`, `runtime-min-version: "0.1.0"`,
+  `runtime-full-version: "0.1.0"`, `runtime-capability-policy: "probe-help"`.
+  Missing or incompatible skills can be diagnosed independently of transport
+  readiness; the runtime never executes instructions merely to inspect metadata.
+- Lifecycle: no npm hooks, downloads, automatic update or overwrite of the Python
+  skill. Pinned update repeats `add` for another reviewed commit after inspecting
+  local edits. `skills update` follows a moving source and is not this workflow.
+- Acceptance evidence: `test/diagnostics.test.ts` already tests the exact
+  companion metadata contract as compatible without executing or exposing the
+  skill body; compatibility does not authorize sending.
+  `test/skill-guidance.test.ts` exercises baseline JSON list,
+  selected-home dry-run refusal and gated explicit inactive dry-run in disposable
+  SQLite homes; no submission occurs. Companion `scripts/test-ts-skill.mjs`
+  exercises real Skills CLI project/global install, replacement-update, list and
+  removal for Codex/Claude Code while preserving a Python skill fixture. Those
+  are installation/contract fixtures, not live-agent delivery or ACK evidence.

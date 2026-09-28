@@ -34,6 +34,18 @@
 
 范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。开发源码的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端请使用同一开发构建。
 
+### 源码 CLI 易用性（计划用于 0.2.0）
+
+开发源码新增 `list --help`、`send --help`、`doctor --help` 和 `--output-format text`。
+仍须明确选择输出格式：`--json` 或 `--output-format json|text`。解析错误
+使用 JSON；有效 text 请求的操作结果和错误使用文本。SSH 内部始终传输 JSON。
+支持 `send --to TARGET "message" --json` 位置正文，不可同时使用
+`--message`/`-m`。省略正文或使用 `-` 从 stdin 读取；选项形式的位置正文
+前须加 `--`。空或纯空白正文在添加发件人信息前被拒绝。Claude 名称使用
+Unicode 14.0.0 默认 full casefold 精确匹配，不进行规范化或模糊匹配；
+冲突时须指定 PID。这些源码功能不会追溯到已经发布的 0.1.0 包。
+
+
 ## 环境要求
 
 macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x**。不支持 Node 26。原生锁依赖需要匹配的 x64/arm64 预编译二进制，本包不是纯 JavaScript 实现。Codex 发送需要 `codex`，macOS/Linux 还需要 `lsof`、`ps`；Windows 使用原生锁和 Restart Manager 验证所有者。Claude 需要运行中的 TUI 及可访问的原生 inbox。SSH 使用已有密钥和主机信任，远端必须安装**同版本**客户端。
@@ -162,3 +174,25 @@ session-peer doctor --host user@host --json
 存活进程公布了 pipe，并不证明 pipe 存在或可以连接。`capabilities` 明确将
 wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检查也不会安装任何内容。
 参见[诊断边界](PARITY.md#source-read-only-doctor--18--020)。SSH 两端需要相同的源码构建。
+## 显式安装代理技能
+
+独立的 `session-peer-ts` 技能在配套 PR 中准备，不代表新 npm 或技能标签发布。它支持已发布的 0.1.0 基础功能，通过 TypeScript 标识和帮助检查开发功能。Python 的 `session-peer` 技能仍独立保留。
+
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
+then choose the agent and scope. This example selects **Codex, current project**;
+run from that project directory. For Claude Code use `--agent claude-code`.
+For user scope add `--global` consistently to add/list/remove. Inspect any existing
+`session-peer-ts` copy for local edits before approving its replacement. Codex's
+`.agents/skills` directory is shared with other clients that discover that path.
+
+```sh
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 list --agent codex --json
+npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
+```
+
+For a pinned update, review another exact commit and repeat `add` with the same
+agent/scope. Restart the agent if its catalog is cached. Runtime and skill
+lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
+Skills CLI, and installing this skill does not overwrite the Python skill or
+install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).

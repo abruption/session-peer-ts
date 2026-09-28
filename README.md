@@ -38,6 +38,21 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
    verify the receiver's TUI response separately. `posted` / `queued` confirms
    submission only. See [What success means](#what-success-means).
 
+### Source CLI usability (planned 0.2.0)
+
+The development source adds `list --help`, `send --help`, `doctor --help` and explicit
+`--output-format text`. Output selection remains required: use `--json` or
+`--output-format json|text`. Parse errors use JSON; valid text requests render
+operation results/errors as text. SSH always exchanges JSON internally.
+
+`send --to TARGET "message" --json` accepts one positional body. Do not combine
+it with `--message`/`-m`; omit the body or use `-` for stdin, and use `--` before
+an option-looking positional body. Empty/whitespace bodies are refused before
+adding the sender envelope. Claude names use exact Unicode 14.0.0 default full
+casefold (no normalization/fuzzy matching); collisions require a PID. This
+source behavior is not retroactively available in the published 0.1.0 package.
+
+
 ## What it does
 
 - Discover local Claude/Codex sessions and known Codex homes (source development for 0.2.0; see below).
@@ -278,3 +293,25 @@ pipe exists or accepts connections. `capabilities` explicitly excludes
 wake/wait/ACK and consumption confirmation. Optional TS skill metadata checks
 never install anything. See [diagnostic boundaries](PARITY.md#source-read-only-doctor--18--020).
 SSH requires the same source build on both ends.
+## Agent skill: explicit installation
+
+The separate `session-peer-ts` companion skill is prepared in [companion PR #14](https://github.com/abruption/session-peer-skill/pull/14); it is not a new npm or skill-tag release. It supports the published 0.1.0 baseline, detects the TypeScript implementation marker, and checks help before using development capabilities. The Python `session-peer` skill remains separate.
+
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
+then choose the agent and scope. This example selects **Codex, current project**;
+run from that project directory. For Claude Code use `--agent claude-code`.
+For user scope add `--global` consistently to add/list/remove. Inspect any existing
+`session-peer-ts` copy for local edits before approving its replacement. Codex's
+`.agents/skills` directory is shared with other clients that discover that path.
+
+```sh
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 list --agent codex --json
+npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
+```
+
+For a pinned update, review another exact commit and repeat `add` with the same
+agent/scope. Restart the agent if its catalog is cached. Runtime and skill
+lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
+Skills CLI, and installing this skill does not overwrite the Python skill or
+install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).
