@@ -68,12 +68,26 @@ test('Unicode collision refuses, exact name and PID remain selectable; positiona
  const call=async(target:string,body:string[],dry=true)=>{
   const preload=process.platform==='win32'?['--import',pathToFileURL(resolve('test/fixtures/windows-inspection-diagnostic.mjs')).href]:[];
   const child=spawn(process.execPath,[...preload,cli,'send','--to',target,'--json','--no-from',...(dry?['--dry-run']:[]),...body],{env,stdio:['ignore','pipe','pipe']});
-  let output='',diagnostic='';child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>diagnostic+=(String(x).slice(0,4096-diagnostic.length)));const timer=setTimeout(()=>child.kill(),30000);
-  const [code,signal]=await once(child,'close');clearTimeout(timer);assert.equal(signal,null,diagnostic);
-  for(const line of diagnostic.split('\n')) {
-   try { const data=JSON.parse(line);if(data.inspection==='powershell') t.diagnostic(JSON.stringify(data)); } catch { /* Never forward raw stderr. */ }
+  let output='',stderr='',stderrBytes=0;child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>{stderrBytes+=Buffer.byteLength(x);stderr+=String(x).slice(0,4096-stderr.length);});const timer=setTimeout(()=>child.kill(),30000);
+  const [code,signal]=await once(child,'close');clearTimeout(timer);
+  const inspections:Record<string,unknown>[]=[];
+  for(const line of stderr.split('\n')) {
+   try {
+    const data=JSON.parse(line);
+    if(data?.inspection==='powershell') {
+     const count=(value:unknown)=>Number.isSafeInteger(value)&&Number(value)>=0?value:null;
+     inspections.push({inspection:'powershell',durationMs:count(data.durationMs),
+      status:Number.isSafeInteger(data.status)?data.status:null,
+      signal:typeof data.signal==='string'&&/^SIG[A-Z0-9]{1,16}$/.test(data.signal)?data.signal:null,
+      errorCode:typeof data.errorCode==='string'&&/^E[A-Z0-9_]{1,63}$/.test(data.errorCode)?data.errorCode:null,
+      stdoutBytes:count(data.stdoutBytes),stderrBytes:count(data.stderrBytes)});
+    }
+   } catch { /* Never forward raw stderr. */ }
   }
-  assert.ok(output.trim(),JSON.stringify({code,diagnostic}));
+  for(const data of inspections) t.diagnostic(JSON.stringify(data));
+  const diagnostic=JSON.stringify({code,signal,stderrBytes,inspections});
+  assert.equal(signal,null,diagnostic);
+  assert.ok(output.trim(),diagnostic);
   return {code,...JSON.parse(output),diagnostic};
  };
  const normalized=await call('STRASSE',['hello']);
