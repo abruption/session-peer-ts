@@ -133,7 +133,7 @@ test('unsupported commands/transports fail before inspecting state or sending an
   const { env } = sandbox(t);
   for (const args of [
     ['send', '--to', 'SECRET-SENTINEL', '--message', 'SECRET-SENTINEL'],
-    ['send', '--dry-run'], ['device'], ['doctor'], ['update'], ['reply'],
+    ['send', '--dry-run'], ['device'], ['update'], ['reply'],
     ['list', '--agent', 'claude', '--host', '-SECRET-SENTINEL'],
     ['list', '--agent', 'claude', '--device', 'SECRET-SENTINEL'],
     ['list', '--agent', 'antigravity'], ['list', '--agent', ''], ['list', '--codex-home', ''],

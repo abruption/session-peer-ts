@@ -247,6 +247,12 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     assert.equal(listed.discovery.codex.homes.at(-1).code, 'state_db_missing');
     assert.equal(listed.sshHost, 'fixture'); assert.equal('submitted' in listed, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    const diagnosed = await f.invoke(['doctor', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote,
+      '--agent', 'codex', '--codex-bin', f.binary], { FIXTURE_REMOTE_PROFILE: remoteProfile, FIXTURE_REMOTE_HOMES: '[]' });
+    assert.equal(diagnosed.ok, true); assert.equal(diagnosed.ready, true); assert.equal(diagnosed.command, 'doctor');
+    assert.equal(diagnosed.agents.codex.homes[0].codexHome, remoteHome);
+    assert.equal(diagnosed.agents.codex.tool.executed, false); assert.equal(diagnosed.sshHost, 'fixture');
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
     await f.stop(owner);
     const inactive = await f.invoke([...args, '--allow-inactive-codex-home']);
     assert.equal(inactive.status, 'queued'); assert.equal(inactive.queueId, 'fixture-17');

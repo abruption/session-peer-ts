@@ -147,3 +147,18 @@ npm view session-peer dist-tags
 ## 相关项目
 
 [Python session-peer](https://github.com/abruption/session-peer) 独立维护和发布，其可选功能与安装指南（例如 `pipx install session-peer`）见该项目。同样使用 `session-peer` 命令，请注意上述 PATH 规则。本客户端不依赖该安装，也不承诺功能和参数完全对等。
+
+### 开发源码的只读诊断 (0.2.0)
+
+```sh
+session-peer doctor --json
+session-peer doctor --agent codex --codex-home /absolute/home --json
+session-peer doctor --host user@host --json
+```
+
+公开 npm 0.1.0 不包含此命令。诊断成功（`ok:true`、退出码 0）与代理就绪状态
+（`ready`、各代理和 home 的结果）分开报告。只检查限定的元数据和可执行文件路径，
+不会执行 Codex、连接 inbox、获取 writer 锁或提交消息。Windows 就绪状态只表示
+存活进程公布了 pipe，并不证明 pipe 存在或可以连接。`capabilities` 明确将
+wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检查也不会安装任何内容。
+参见[诊断边界](PARITY.md#source-read-only-doctor--18--020)。SSH 两端需要相同的源码构建。

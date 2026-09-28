@@ -13,9 +13,9 @@ const verifiedPreview = '0.1.0-preview.1';
 const verifiedPreviewIntegrity = 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==';
 export const packageFiles = ['CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md',
   'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md',
-  'dist/cli.js', 'dist/discovery.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js',
+  'dist/cli.js', 'dist/discovery.js', 'dist/diagnostics.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js',
   'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts',
-  'dist/discovery.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts',
+  'dist/discovery.d.ts', 'dist/diagnostics.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts',
   'dist/send.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'package.json'].sort();
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
 const digest = (bytes, algorithm, encoding = 'hex') => createHash(algorithm).update(bytes).digest(encoding);

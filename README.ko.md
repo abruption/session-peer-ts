@@ -240,3 +240,20 @@ staging 성공은 공개 완료가 아닙니다. [RELEASING.md](RELEASING.md)를
 발행합니다. 선택 기능과 설치법(예: `pipx install session-peer`)은 해당 저장소에서
 안내합니다. 명령어가 같은 `session-peer`이므로 위 PATH 안내를 따르세요. 이 클라이언트는
 Python 설치에 의존하지 않으며 전체 기능·플래그 호환성을 주장하지 않습니다.
+
+### 개발 소스의 읽기 전용 진단 (0.2.0)
+
+```sh
+session-peer doctor --json
+session-peer doctor --agent codex --codex-home /absolute/home --json
+session-peer doctor --host user@host --json
+```
+
+공개 npm 0.1.0에는 없는 소스 기능입니다. 진단 성공(`ok:true`, 종료 코드 0)과
+에이전트 준비 상태(`ready`, 에이전트·홈별 결과)는 별개입니다. 정해진 메타데이터와
+실행 파일 경로만 검사하며 Codex 실행, inbox 연결, writer 잠금 획득, 메시지 제출을
+하지 않습니다. Windows inbox 준비 상태는 살아 있는 프로세스의 pipe 광고를 뜻하며
+pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 wake/wait/ACK와 소비
+확인을 미지원으로 표시합니다. 선택적 TS 스킬 메타데이터 검사도 설치를 하지 않습니다.
+[진단 경계](PARITY.md#source-read-only-doctor--18--020)를 참고하세요. SSH 양쪽에 같은
+소스 빌드가 필요합니다.

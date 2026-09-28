@@ -147,3 +147,20 @@ npm view session-peer dist-tags
 ## 関連プロジェクト
 
 [Python session-peer](https://github.com/abruption/session-peer) は独立して保守・リリースされ、任意機能や `pipx install session-peer` などの導入方法はそちらで案内します。同じ `session-peer` コマンドなので上記 PATH の注意が必要です。このクライアントはそのインストールに依存せず、全機能・フラグの同等性を約束しません。
+
+### 開発ソースの読み取り専用診断 (0.2.0)
+
+```sh
+session-peer doctor --json
+session-peer doctor --agent codex --codex-home /absolute/home --json
+session-peer doctor --host user@host --json
+```
+
+公開 npm 0.1.0 には含まれません。診断の成功（`ok:true`、終了コード 0）と
+エージェントの準備状態（`ready`、エージェント・home ごとの結果）は別です。
+限定されたメタデータと実行ファイルのパスのみを確認し、Codex の実行、inbox 接続、
+writer ロック取得、メッセージ送信はしません。Windows では生存プロセスによる
+pipe の広告を確認するだけで、pipe の存在や接続可能性は保証しません。
+`capabilities` は wake/wait/ACK と消費確認を未対応と明示します。任意の TS スキル
+メタデータ検査もインストールを行いません。[診断の境界](PARITY.md#source-read-only-doctor--18--020)
+を参照してください。SSH の両端には同じソースビルドが必要です。
