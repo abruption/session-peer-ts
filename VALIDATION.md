@@ -6,6 +6,35 @@ describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
+## Public 0.2.1 — 2026-09-29 KST
+
+`session-peer@0.2.1` is public. Registry publication time is
+`2026-09-28T23:45:16.923Z` (08:45:16 KST). Verified `latest=0.2.1` and
+unchanged `preview=0.1.0-preview.1`.
+
+- Source: `a9c42334da8f7faf83f0b9bb1fe52f1c695dfe8d`, release PR #67.
+- Exact-main CI: [36498904152](https://github.com/abruption/session-peer-ts/actions/runs/36498904152), successful.
+- Staging run: [36499231956](https://github.com/abruption/session-peer-ts/actions/runs/36499231956), successful (`prepare` and `publish`).
+- Artifact: `session-peer-0.2.1.tgz`; SHA-256 `6bf3c99d12260ce2e9421909b27326f1663ce6945aa798bc90ca1e17da675e43`.
+- Registry integrity: `sha512-bPjriJZf7OQ5niZafwxNgMYo0DVpZldELEjp640xAfBMjBCAJatT2hPMTG9oV7xDX2ULCPUmox9+vFWc5nw0Mg==`, identical to the retained artifact manifest.
+- SLSA provenance names source `a9c42334…` and run 36499231956 attempt 1, workflow `.github/workflows/publish.yml`.
+
+The user approved the exact main SHA/0.2.1/stable-stage, separately approved the
+protected GitHub npm environment, and reported final npm 2FA promotion complete.
+Before environment approval, the retained Actions artifact was reviewed against
+the exact source: all four READMEs, the four guides, `docs/api.md`, PARITY,
+RELEASING, VALIDATION, SECURITY and CONTRIBUTING matched byte for byte; package
+version, `VERSION` and the packaged CLI banner were 0.2.1. After promotion,
+`release.mjs artifact` and `release.mjs verify` passed registry integrity/tag/
+attestation checks, npm signature audit, fresh version-specific installation and
+uninstall on macOS Node 22.14.0.
+
+Not independently recorded here: the stage ID, a byte comparison of the staged
+tarball, the authenticated pending-stage list and the Trusted Publisher UI; the
+reviewing workstation had no npm session. The registry integrity equals the
+retained artifact. This record adds no live-agent ACK claim. No republishing, tag
+deletion, GitHub release/tag creation or fleet installation was performed.
+
 ## 0.2.1 candidate checks — 2026-09-29 KST
 
 Candidate source: main after #62, #63, #64 and #66 plus the 0.2.1 preparation PR.
@@ -16,7 +45,7 @@ passed, 4 Windows-only skipped; package smoke, repository checker, `npm audit`
 included fix PR passed the full macOS/Linux/Windows Node 22/24 matrix, CodeQL and
 the release gate on its head. These are fixture results, not live-TUI ACKs and not
 public release evidence; 0.2.1 publication requires the procedure in
-[RELEASING.md](RELEASING.md#021-stable-release-procedure) and a dated public record.
+[RELEASING.md](RELEASING.md#completed-021-stable-release-procedure) and a dated public record.
 
 ## Public 0.2.0 — 2026-09-28 KST
 
