@@ -1,6 +1,6 @@
 // Read-only discovery: no inbox connections, writer selection, queue or DB writes.
 // Windows Claude metadata uses native process inspection.
-import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { windowsProcessStart } from './windows.js';
@@ -16,12 +16,22 @@ function missing(error: unknown): boolean {
 export function canonical(path: string): string {
   if (path === '~' || path.startsWith('~/')) path = join(homedir(), path.slice(2));
   else if (path.startsWith('~')) throw new Refusal('unsupported_home_expansion');
-  const absolute = resolve(path);
+  return canonicalPath(resolve(path), new Set());
+}
+function canonicalPath(absolute: string, seen: Set<string>): string {
+  if (seen.has(absolute)) throw new Refusal('home_resolution_failed', 1);
+  seen.add(absolute);
   try { return realpathSync(absolute); }
   catch (error) {
     if (!missing(error)) throw new Refusal('home_resolution_failed', 1);
+    // realpath fails for dangling links. Resolve the link itself before falling
+    // back to its parent, so missing aliases still merge required source labels.
+    let target: string | undefined;
+    try { if (lstatSync(absolute).isSymbolicLink()) target = readlinkSync(absolute); }
+    catch (linkError) { if (!missing(linkError)) throw new Refusal('home_resolution_failed', 1); }
+    if (target !== undefined) return canonicalPath(resolve(dirname(absolute), target), seen);
     const parent = dirname(absolute);
-    return parent === absolute ? absolute : join(canonical(parent), absolute.slice(parent.length));
+    return parent === absolute ? absolute : join(canonicalPath(parent, seen), absolute.slice(parent.length));
   }
 }
 function alive(pid: number): boolean {

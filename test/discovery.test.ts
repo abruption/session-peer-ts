@@ -137,6 +137,20 @@ test('bounded sources retain duplicate UUIDs, merge aliases, and sort globally a
   assert.deepEqual(candidates.homes[0]!.sources, ['default', 'environment', 'configured']);
 });
 
+test('dangling aliases resolve to the same missing home and retain requiredness', t => {
+  const f = fixture(t);
+  const alias = join(f.root, 'missing-alias');
+  symlinkSync(f.home, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  process.env.SESSION_PEER_CODEX_HOMES = JSON.stringify([alias]);
+  const result = f.invoke(['list', '--agent', 'codex']);
+  assert.equal(result.ok, false);
+  assert.equal(result.discovery.codex.homes.length, 1);
+  assert.equal(result.discovery.codex.homes[0].codexHome, f.home);
+  assert.deepEqual(result.discovery.codex.homes[0].sources, ['default', 'configured']);
+  assert.equal(result.discovery.codex.homes[0].code, 'state_db_missing');
+  f.oracle(['list', '--agent', 'codex'], result);
+});
+
 test('global ordering handles Unicode home/id ties and all applies independently per home', t => {
   const f = fixture(t); f.database(f.home, 9, 1);
   const astral = f.database(join(f.root, '🚀'), 3, 0, '🚀');

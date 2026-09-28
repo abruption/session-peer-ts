@@ -24,7 +24,10 @@ The suite runs in macOS/Linux Node 22/24 CI with the pinned Python oracle, and
 in Windows x64 Node 22/24 CI with native fixtures but no Python oracle. The
 Windows SSH fixture additionally executes actual PowerShell/.cmd and checks
 partial listing rows while a native writer is held, with no new queue call.
-Package smoke now verifies unified empty discovery without executables on PATH.
+Windows test files run serially so concurrent PowerShell compilation does not
+consume the native inspector's fixed timeout; assertions and production deadlines
+are unchanged. Each native subtest cleans its children even after assertion
+failure. Package smoke verifies unified empty discovery without executables on PATH.
 These are fixture contracts, not new live-TUI ACKs. CI evidence belongs to the
 issue's PR-head checks; publication requires separate release preparation.
 

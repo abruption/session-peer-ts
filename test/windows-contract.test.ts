@@ -19,12 +19,16 @@ async function fixture(t: TestContext) {
   const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-win-contract-'));
   const children = new Set<ChildProcess>();
   const saved = { ...process.env };
-  t.after(async () => {
+  async function closeChildren() {
     for (const child of children) {
       if (child.exitCode === null && child.signalCode === null) {
         const closed = once(child, 'close'); child.kill(); await closed;
       }
     }
+    children.clear();
+  }
+  t.after(async () => {
+    await closeChildren();
     for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
     Object.assign(process.env, saved);
     rmSync(root, { recursive: true, force: true });
@@ -85,7 +89,7 @@ async function fixture(t: TestContext) {
     return result;
   }
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', binary, '--message', 'fixture 🚀', '--no-from'];
-  return { root, binary, home, lock, database, holder, stop, log, invoke, args };
+  return { root, binary, home, lock, database, holder, stop, log, invoke, args, closeChildren };
 }
 
 // Replace only the production sampling delay with an explicit barrier. Waiting
@@ -108,6 +112,7 @@ function samplingBarrier(t: TestContext) {
 
 test('Windows native writer, CLI and SSH contracts', { skip: process.platform !== 'win32', timeout: 540000 }, async t => {
   const f = await fixture(t);
+  t.afterEach(f.closeChildren); // A failed assertion must not leave a held lock for the next case.
   await t.test('held lock and stable native PID/SID/start identity', async () => {
     assert.equal(await probeLock(f.lock), 'absent');
     const owner = await f.holder();
