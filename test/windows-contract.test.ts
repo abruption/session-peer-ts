@@ -43,6 +43,7 @@ async function fixture(t: TestContext) {
     SESSION_PEER_CODEX_HOMES: '[]', CLAUDE_CONFIG_DIR: join(user, '.claude'), ANTHROPIC_CONFIG_DIR: '',
     CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', FIXTURE_QUEUE_LOG: join(root, 'queue.jsonl'),
     FIXTURE_QUEUE_MODE: '', FIXTURE_SSH_LOG: join(root, 'ssh.jsonl'), FIXTURE_SSH_MODE: '',
+    FIXTURE_REMOTE_PROFILE: '', FIXTURE_REMOTE_HOMES: '',
     PATH: root + ';' + (process.env.PATH ?? '') });
   const home = join(root, 'selected');
   function database(path: string) {
@@ -213,10 +214,13 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const lost = await f.invoke(args, { FIXTURE_SSH_MODE: 'loss' });
     assert.equal(lost.status, 'unknown'); assert.equal(lost.submitted, null); assert.equal(lost.retryAllowed, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    const remoteProfile = join(f.root, 'remote-user');
+    const remoteHome = join(remoteProfile, '.codex'); f.database(remoteHome);
     const listed = await f.invoke(['list', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote],
-      { SESSION_PEER_CODEX_HOMES: JSON.stringify([f.home, join(f.root, 'missing')]) });
+      { SESSION_PEER_CODEX_HOMES: '{invalid-local-config', FIXTURE_REMOTE_PROFILE: remoteProfile,
+        FIXTURE_REMOTE_HOMES: JSON.stringify([join(remoteProfile, 'missing')]) });
     assert.equal(listed.ok, false); assert.equal(listed.sessions.length, 1);
-    assert.equal(listed.sessions[0].codexHome, f.home);
+    assert.equal(listed.sessions[0].codexHome, remoteHome);
     assert.equal(listed.discovery.claude.status, 'ok');
     assert.equal(listed.discovery.codex.homes.at(-1).code, 'state_db_missing');
     assert.equal(listed.sshHost, 'fixture'); assert.equal('submitted' in listed, false);

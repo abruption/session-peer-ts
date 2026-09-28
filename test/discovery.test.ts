@@ -190,6 +190,16 @@ test('invalid configuration is rejected as a whole while other sources survive',
   assert.throws(() => homes(f.home), /invalid_home_configuration/);
 });
 
+test('shared enumeration keeps the existing stricter send policy separate from list', async t => {
+  const f = fixture(t); f.database();
+  process.env.SESSION_PEER_CODEX_HOMES = '';
+  assert.equal((await codex(undefined, false)).ok, false);
+  assert.deepEqual(homes(f.home), [f.home]); // Existing writer treats an empty value as unset.
+  process.env.SESSION_PEER_CODEX_HOMES = '{invalid';
+  assert.equal((await codex(f.home, false)).ok, true); // Pinned listing bypasses extras.
+  assert.throws(() => homes(f.home), /invalid_home_configuration/); // Pinned send still inventories extras.
+});
+
 test('corrupt, incompatible, missing, and invalid-row DBs preserve readable homes', t => {
   const f = fixture(t); f.database();
   const corrupt = join(f.root, 'corrupt'); mkdirSync(corrupt); writeFileSync(join(corrupt, 'state_5.sqlite'), 'SECRET-SENTINEL');
@@ -228,6 +238,7 @@ test('permission, canonicalization and agent errors preserve other sources with 
   assert.equal(discovery.errors[0].code, 'home_resolution_failed');
   assert.equal(result.discovery.claude!.status, 'error'); assert.equal('codexHome' in result, false);
   assert.equal(JSON.stringify(result).includes('SECRET-SENTINEL'), false);
+  assert.throws(() => homes(f.home), /home_resolution_failed/); // Unreadable competitors must refuse send.
 });
 
 test('Orca enumeration failure is partial and explicit home bypasses it', async t => {
