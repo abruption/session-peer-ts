@@ -24,7 +24,7 @@
 - インストール済みの同じクライアントへの SSH 接続、構造化 Reply-To URI、JSON 出力。
 - 宛先や所有者が曖昧なら拒否。不確実な提出を自動再送しません。
 
-Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自動更新、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
+Relay 通信、MCP、wake/resume、Antigravity、自動更新、人間向けテキスト出力は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
 
 クライアント機能の計画は [バージョン別互換性表と npm 移行ガイド](PARITY.md) で追跡します。計画は現在の対応を意味しません。Relay サーバーやホスティングサービスの提供は本クライアントの範囲外です。
 
@@ -32,7 +32,7 @@ Relay 通信、MCP、wake/resume、非アクティブ queue、Antigravity、自�
 
 ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。上記インストール・開始例は公開版でも有効です。
 
-対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。Codex 送信には引き続き明示 home が必要です。SSH 両端で同一の開発ビルドを使ってください。
+対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。開発ソースの Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH 両端で同一の開発ビルドを使ってください。
 
 ## 必要条件
 

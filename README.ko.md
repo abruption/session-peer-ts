@@ -28,7 +28,7 @@ TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 - 구조화된 Reply-To URI와 JSON 결과
 - 모호한 대상·확인할 수 없는 소유권은 거부하고, 불확실한 제출은 자동 재시도하지 않음
 
-Relay 전송, MCP, wake/resume, 비활성 세션 queue, Antigravity, 자동 업데이트,
+Relay 전송, MCP, wake/resume, Antigravity, 자동 업데이트,
 일반 텍스트 출력은 미지원입니다. 미지원 옵션은 명시적으로
 거부하며 범용 오케스트레이터를 지향하지 않습니다.
 
@@ -47,7 +47,14 @@ JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록�
 `codexHome`을 사용하세요. 선택적 홈 부재는 오류가 아니지만 명시된 홈의 부재·오류는
 성공한 행을 보존하면서 종료 코드 1을 반환합니다. 목록은 writer를 선택하거나 전송하지 않습니다.
 정렬·진단·`--all`·SSH는 [목록 계약](PARITY.md#source-unified-listing-contract--16--020)을 참고하세요.
-Codex 전송에는 계속 명시적 홈이 필요하며, SSH 양쪽에는 동일한 개발 빌드를 사용하세요.
+개발 소스의 Codex 전송은 `--codex-home` 생략 시 유일하고 안정된 live writer 홈을
+선택합니다. 명시한 홈도 모든 알려진 경쟁 홈을 검사합니다. 비활성 큐는 저장된 스레드와
+모든 후보의 비활성 검증에 더해 `--codex-home HOME --allow-inactive-codex-home`이
+필요하며 wake/resume을 수행하지 않습니다. Dry-run은 제출하지 않습니다.
+JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때만 `queueId`가 추가되며,
+둘 다 소비 확인은 아닙니다. [홈 선택 계약](PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
+공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
+SSH 양쪽에는 동일한 개발 빌드를 사용하세요.
 
 ## 요구사항
 
