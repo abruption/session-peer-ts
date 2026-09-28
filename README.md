@@ -38,6 +38,21 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
    verify the receiver's TUI response separately. `posted` / `queued` confirms
    submission only. See [What success means](#what-success-means).
 
+### Source CLI usability (planned 0.2.0)
+
+The development source adds `list --help`, `send --help` and explicit
+`--output-format text`. Output selection remains required: use `--json` or
+`--output-format json|text`. Parse errors use JSON; valid text requests render
+operation results/errors as text. SSH always exchanges JSON internally.
+
+`send --to TARGET "message" --json` accepts one positional body. Do not combine
+it with `--message`/`-m`; omit the body or use `-` for stdin, and use `--` before
+an option-looking positional body. Empty/whitespace bodies are refused before
+adding the sender envelope. Claude names use exact Unicode 14.0.0 default full
+casefold (no normalization/fuzzy matching); collisions require a PID. This
+source behavior is not retroactively available in the published 0.1.0 package.
+
+
 ## What it does
 
 - Discover local Claude/Codex sessions and known Codex homes (source development for 0.2.0; see below).

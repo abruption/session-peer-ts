@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { doctor } from './diagnostics.js';
+import { help } from './help.js';
+import { renderOutput, type OutputFormat } from './output.js';
 import { hostname } from 'node:os';
 import { lstatSync } from 'node:fs';
 import { listing, Refusal } from './discovery.js';
@@ -13,8 +15,15 @@ export function parse(args: string[]): Options {
   const command = args[0];
   if (command !== 'list' && command !== 'send' && command !== 'doctor') throw new Refusal('unsupported_command');
   const values = new Map<string, string>(), flags = new Set<string>();
+  let positional: string | undefined;
+  let terminated = false;
   for (let i = 1; i < args.length; i++) {
     const token = args[i]!;
+    if (token === '--' && !terminated) { terminated = true; continue; }
+    if (terminated || !token.startsWith('-') || token === '-') {
+      if (command !== 'send' || positional !== undefined) throw new Refusal('invalid_positional_message');
+      positional = token; continue;
+    }
     const split = token.indexOf('=');
     const key = split > 0 ? token.slice(0, split) : token;
     if (['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'].includes(key)) {
@@ -27,8 +36,13 @@ export function parse(args: string[]): Options {
       values.set(name, value);
     } else throw new Refusal('unsupported_option');
   }
-  if (!flags.has('--json') && values.get('--output-format') !== 'json') throw new Refusal('json_output_required');
-  if (values.has('--output-format') && values.get('--output-format') !== 'json') throw new Refusal('unsupported_output_format');
+  if (positional !== undefined) {
+    if (values.has('--message')) throw new Refusal('conflicting_message_sources');
+    values.set('--message', positional);
+  }
+  if (values.has('--output-format') && !['json', 'text'].includes(values.get('--output-format')!)) throw new Refusal('unsupported_output_format');
+  if (flags.has('--json') && values.get('--output-format') === 'text') throw new Refusal('conflicting_output_options');
+  if (!flags.has('--json') && !values.has('--output-format')) throw new Refusal('json_output_required');
   if (command === 'list' || command === 'doctor') {
     if (values.has('--agent') && !['claude', 'codex'].includes(values.get('--agent')!)) throw new Refusal('unsupported_agent');
     if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
@@ -136,13 +150,15 @@ async function remote(options: Options, message?: string): Promise<Record<string
 }
 
 let command = 'unknown';
+let format: OutputFormat = 'json';
 try {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (!((major === 22 && minor! >= 13) || major === 24)) throw new Refusal('unsupported_node_version');
   if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
-  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript): list [--agent claude|codex] [--codex-home HOME] --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. doctor [--agent claude|codex] --json inspects read-only metadata; diagnostic success is separate from readiness. Codex send selects one stable live home; inactive queue requires --codex-home HOME --allow-inactive-codex-home. List discovers known homes. Relay/MCP/wake unsupported.');
+  else if ((args.length === 1 && ['--help', '-h'].includes(args[0]!)) ||
+    (args.length === 2 && ['list', 'send', 'doctor'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
   else {
     const wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -154,11 +170,14 @@ try {
     }
     command = ['list', 'send', 'doctor'].includes(args[0] ?? '') ? args[0]! : 'unknown';
     const options = parse(args);
+    format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
+    if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
     if (wire && (options.values.has('--host') || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
     let message: string | undefined;
     if (command === 'send') {
       message = options.values.get('--message');
       if (message === undefined || message === '-') { if (wire) throw new Refusal('remote_message_required'); message = await input(); }
+      checkMessage(message);
       message = envelope(message, options.flags.has('--no-from'), options.values.get('--reply-address'));
       checkMessage(message, options.values.get('--to')!.startsWith('codex:'));
     }
@@ -167,16 +186,16 @@ try {
     else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
     else if (command === 'doctor') result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
     else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
-    console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }));
+    console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }, format));
     process.exitCode = result.ok === false ? 1 : 0;
   }
 } catch (error) {
   const unknown = error instanceof UnknownOutcome;
   const failure = error instanceof Refusal ? error : new Refusal('operation_failed', 1);
   const homeResolution = error instanceof HomeRefusal || error instanceof CodexUnknownOutcome ? error.codexHomeResolution : undefined;
-  console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: false,
+  console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: false,
     error: unknown ? 'outcome_unknown' : failure.code, status: unknown ? 'unknown' : 'refused',
     submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false,
-    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }) }));
+    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }) }, format));
   process.exitCode = unknown ? 1 : failure.exitCode;
 }

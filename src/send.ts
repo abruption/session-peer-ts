@@ -1,3 +1,4 @@
+import { casefold } from './casefold.js';
 import { createConnection } from 'node:net';
 import { claude, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome } from './process.js';
@@ -65,12 +66,11 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
   if (options.to.includes(':') && !options.to.startsWith('claude:')) throw new Refusal('unsupported_agent');
   if (options.home || options.codexBin || options.allowInactive) throw new Refusal('inapplicable_option');
   const target = options.to.replace(/^claude:/, '');
-  // ASCII name folding is explicit; Unicode names must use a PID until full casefold parity exists.
-  if (!target || /[^\x20-\x7e]/.test(target)) throw new Refusal('use_pid_for_unicode_name');
+  if (!target) throw new Refusal('no_reachable_target');
   const select = () => {
     const rows = claude(false).sessions as Record<string, unknown>[];
     const matches = rows.filter(r => /^\d+$/.test(target) ? r.pid === Number(target) :
-      typeof r.name === 'string' && r.name.toLowerCase() === target.toLowerCase());
+      typeof r.name === 'string' && casefold(r.name) === casefold(target));
     if (matches.length !== 1) throw new Refusal(matches.length ? 'ambiguous_target' : 'no_reachable_target', 2);
     return matches[0]!;
   };

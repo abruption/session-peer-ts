@@ -332,3 +332,30 @@ inbox; adds source capabilities, bounded skill metadata, stdio and POSIX SSH
 fixtures. `test/windows-contract.test.ts` checks doctor through real encoded
 PowerShell/.cmd fixture SSH, without queue dispatch. Fixture evidence is not a
 live-agent or delivery/consumption test.
+
+## Source CLI usability — issue #19 (2026-09-28)
+
+Source targeting 0.2.0 adds full list/send help, text rendering and one positional
+message. Published 0.1.0 remains the baseline in the matrix above. The explicit
+output requirement is retained: `--json` or `--output-format json|text`; no default
+format changes. No selector retains `json_output_required` for compatibility.
+Conflicting selectors and all parse errors produce one JSON refusal before stdin
+reads/discovery/send. Valid text requests render execution errors as text. Remote
+wire requests require JSON even when the caller selects local text output.
+Partial discovery preserves rows, diagnostics and nonzero exit status. Terminal
+control characters in text labels are escaped; JSON is unchanged.
+
+One positional body, named body or stdin is accepted; combining sources refuses
+before reading stdin. `--` terminates option parsing. Empty or whitespace input
+is rejected before envelope construction. Existing input/transport budgets and
+unknown outcome/no retry boundaries remain.
+
+Claude exact name matching uses Unicode **14.0.0** `CaseFolding.txt` C/F mappings
+(default non-Turkic full casefold), pinned independently of Node ICU and Python's
+runtime Unicode version. No normalization or fuzzy comparison occurs. ß/ss,
+Greek sigma and ligature collisions require PID selection. Unicode data source
+and SHA-256 are recorded in `src/casefold.ts`; the package includes
+`UNICODE-LICENSE.txt`. Python builds with newer Unicode databases can differ for
+characters added after 14.0.0; this is not a blanket future-Unicode parity claim.
+`test/cli-usability.test.ts` covers format/help/input/error boundaries, real local
+name/PID selection with collisions, and text escaping on all CI platforms.

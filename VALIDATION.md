@@ -272,3 +272,14 @@ Windows CI includes the portable diagnostics suite and encoded PowerShell/.cmd
 SSH checks in the existing native fixture. Windows pipe advertisements remain
 metadata evidence, not proof of a connectable pipe. Public npm 0.1.0 is unchanged;
 these tests do not constitute release or publication approval.
+
+## Source #19 CLI usability — 2026-09-28
+
+The 0.2.0 development source adds text output, complete list/send help, positional
+message compatibility and Unicode 14.0.0 exact casefold. No npm publication or
+live-agent ACK is claimed. `test/cli-usability.test.ts` is included in the native
+Windows test command and the macOS/Linux suite. It verifies output/exit codes,
+partial discovery, parse-before-stdin behavior, Unicode collisions and PID
+selection using isolated process/socket fixtures. Windows posting ownership is
+covered by the existing native fixture suite; the new name fixture is dry-run on
+Windows. Version metadata remains 0.1.0 until separate release preparation.

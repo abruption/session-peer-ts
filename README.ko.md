@@ -56,6 +56,19 @@ JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때�
 공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
 SSH 양쪽에는 동일한 개발 빌드를 사용하세요.
 
+### 소스 CLI 사용성 (0.2.0 예정)
+
+개발 소스는 `list --help`, `send --help`, `--output-format text`를 제공합니다.
+출력 형식은 계속 명시해야 합니다: `--json` 또는 `--output-format json|text`.
+구문 오류는 JSON이며 유효한 text 요청의 실행 결과·오류는 텍스트입니다. SSH
+내부 전송은 항상 JSON입니다. `send --to TARGET "message" --json` 위치 인자를
+지원하며 `--message`/`-m`과 중복할 수 없습니다. 본문 생략 또는 `-`는 stdin,
+옵션처럼 시작하는 위치 본문 앞에는 `--`를 사용합니다. 빈 본문·공백 본문은
+발신자 머리말 추가 전에 거부합니다. Claude 이름은 Unicode 14.0.0 기본 full
+casefold로 정확히 비교하며 정규화·유사 검색을 하지 않습니다. 충돌 시 PID를
+지정하세요. 이미 발행된 0.1.0에는 이 소스 기능이 소급 적용되지 않습니다.
+
+
 ## 요구사항
 
 macOS/Linux/Windows native와 Node **22.x의 22.13 이상 또는 24.x**가 필요합니다. Node 26은
