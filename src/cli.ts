@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { doctor } from './diagnostics.js';
 import { hostname } from 'node:os';
 import { lstatSync } from 'node:fs';
 import { listing, Refusal } from './discovery.js';
@@ -7,10 +8,10 @@ import { checkMessage, send, CodexUnknownOutcome } from './send.js';
 import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 
-type Options = { command: 'list' | 'send'; values: Map<string, string>; flags: Set<string> };
+type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string> };
 export function parse(args: string[]): Options {
   const command = args[0];
-  if (command !== 'list' && command !== 'send') throw new Refusal('unsupported_command');
+  if (command !== 'list' && command !== 'send' && command !== 'doctor') throw new Refusal('unsupported_command');
   const values = new Map<string, string>(), flags = new Set<string>();
   for (let i = 1; i < args.length; i++) {
     const token = args[i]!;
@@ -28,11 +29,12 @@ export function parse(args: string[]): Options {
   }
   if (!flags.has('--json') && values.get('--output-format') !== 'json') throw new Refusal('json_output_required');
   if (values.has('--output-format') && values.get('--output-format') !== 'json') throw new Refusal('unsupported_output_format');
-  if (command === 'list') {
+  if (command === 'list' || command === 'doctor') {
     if (values.has('--agent') && !['claude', 'codex'].includes(values.get('--agent')!)) throw new Refusal('unsupported_agent');
     if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
     if (values.get('--agent') === 'claude' && values.has('--codex-home')) throw new Refusal('inapplicable_option');
-    if (['--to', '--message', '--codex-bin', '--reply-address'].some(k => values.has(k)) || ['--dry-run', '--no-from', '--no-reply-to', '--allow-inactive-codex-home'].some(k => flags.has(k))) throw new Refusal('inapplicable_option');
+    if (['--to', '--message', '--reply-address', ...(command === 'list' ? ['--codex-bin'] : [])].some(k => values.has(k)) || ['--dry-run', '--no-from', '--no-reply-to', '--allow-inactive-codex-home'].some(k => flags.has(k))) throw new Refusal('inapplicable_option');
+    if (command === 'doctor' && (flags.has('--all') || (values.get('--agent') === 'claude' && values.has('--codex-bin')))) throw new Refusal('inapplicable_option');
   } else {
     if (!values.get('--to') || values.has('--agent') || flags.has('--all')) throw new Refusal('invalid_send_options');
     if (flags.has('--no-reply-to') && values.has('--reply-address')) throw new Refusal('conflicting_reply_options');
@@ -125,6 +127,7 @@ async function remote(options: Options, message?: string): Promise<Record<string
   try { value = JSON.parse(done.stdout); } catch { return uncertain(); }
   if (!value || value.schemaVersion !== 1 || value.command !== command || typeof value.ok !== 'boolean' || typeof value.host !== 'string' ||
       ![0, 1, 2].includes(done.code ?? -1) || (value.ok !== (done.code === 0))) return uncertain();
+  if (command === 'doctor' && value.ok && (value.diagnosticCompleted !== true || typeof value.ready !== 'boolean' || value.implementation !== 'typescript' || !value.agents || typeof value.agents !== 'object' || Array.isArray(value.agents))) return uncertain();
   const expectedStatus = flags.has('--dry-run') ? 'validated' : values.get('--to')?.startsWith('codex:') ? 'queued' : 'posted';
   if (command === 'send' && (value.consumptionConfirmed !== false ||
       (value.ok && (value.submitted !== !flags.has('--dry-run') || value.status !== expectedStatus)) ||
@@ -139,7 +142,7 @@ try {
   if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
-  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript): list [--agent claude|codex] [--codex-home HOME] --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. Codex send selects one stable live home; inactive queue requires --codex-home HOME --allow-inactive-codex-home. List discovers known homes. Relay/MCP/wake unsupported.');
+  else if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) console.log('session-peer (TypeScript): list [--agent claude|codex] [--codex-home HOME] --json; send --to TARGET --message TEXT --json [--dry-run] [--host HOST] [--remote-bin ABSOLUTE_PATH]. doctor [--agent claude|codex] --json inspects read-only metadata; diagnostic success is separate from readiness. Codex send selects one stable live home; inactive queue requires --codex-home HOME --allow-inactive-codex-home. List discovers known homes. Relay/MCP/wake unsupported.');
   else {
     const wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -149,7 +152,7 @@ try {
       if (!record || record.schemaVersion !== 1 || !Array.isArray(record.args) || record.args.some(a => typeof a !== 'string')) throw new Refusal('invalid_remote_request');
       args = record.args;
     }
-    command = ['list', 'send'].includes(args[0] ?? '') ? args[0]! : 'unknown';
+    command = ['list', 'send', 'doctor'].includes(args[0] ?? '') ? args[0]! : 'unknown';
     const options = parse(args);
     if (wire && (options.values.has('--host') || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
     let message: string | undefined;
@@ -162,6 +165,7 @@ try {
     let result: Record<string, unknown>;
     if (options.values.has('--host')) result = await remote(options, message);
     else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
+    else if (command === 'doctor') result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
     else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
     console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }));
     process.exitCode = result.ok === false ? 1 : 0;

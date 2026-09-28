@@ -4,7 +4,7 @@ Updated 2026-09-28 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
 The published TS baseline remains **0.1.0**,
 [`0edc4f8`](https://github.com/abruption/session-peer-ts/tree/0edc4f8ae05256698f591b7402e89cd3d5858eef/src).
-The matrix now includes **source development for 0.2.0 (#16/#17)**: unified listing,
+The matrix now includes **source development for 0.2.0 (#16/#17/#18)**: unified listing,
 bounded Codex home discovery and safe selection/inactive opt-in. These features
 are not in the npm 0.1.0 archive;
 source package metadata stays at 0.1.0 until separate release preparation.
@@ -26,7 +26,7 @@ not a missing implementation. Issue links describe work, not available features.
 | `list` selection | Unified agent list; optional agent; bounded multiple Codex homes; partial discovery diagnostics | Source: combined Claude/Codex by default, optional agent/home filters, bounded multi-home inventory and partial diagnostics. Published 0.1.0 still requires an agent and explicit Codex home | Implemented in source for [#16](https://github.com/abruption/session-peer-ts/issues/16), 0.2.0; no Antigravity adapter |
 | Codex active queue | Saved UUID, unique live writer, real lock/owner checks, pre-submit revalidation | Source: same protections, full UUID, implicit unique-live selection or explicit home; all known candidates checked | Implemented in source for [#17](https://github.com/abruption/session-peer-ts/issues/17), 0.2.0 |
 | Implicit home / inactive queue | Select unique live home; explicit inactive opt-in under separate guards | Source: unique live selection; explicit saved inactive home with opt-in and verified inactive candidates. Public 0.1.0 has neither | Implemented in source for #17, 0.2.0; no wake/resume |
-| `doctor` | Readiness diagnostics; return-route check is opt-in | Unsupported command | Planned [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0 |
+| `doctor` | Readiness diagnostics; return-route check is opt-in | Source: read-only local/SSH metadata, per-agent/home results, capabilities and bounded TS skill compatibility. Published 0.1.0 has no doctor | Implemented in source for [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0; no return-route probing |
 | CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | JSON required; named `--message`/`-m` or stdin only; minimal top-level help; ASCII case-insensitive names, Unicode names require PID | Partial; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
 | From / Reply-To | Caller detection, automatic return-route metadata, structured URI resolution | From uses Codex environment UUID only; explicit `--reply-address`; local/SSH Reply-To URI parsing with conflict checks | Partial; [#21](https://github.com/abruption/session-peer-ts/issues/21), 0.3.0 |
 | SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; one host; strict preflight; JSON stdin; explicit Windows PowerShell path | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) hosts/options, [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design, 0.3.0 |
@@ -197,9 +197,10 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `--remote-platform win32` and the `.cmd` path. Retain existing SSH host trust
    and authentication; a control socket is not new authorization. Account for
    the size limits above and lack of multi-host aggregation.
-6. **Keep unsupported workflows on an explicit Python path.** Doctor, updates,
+6. **Keep unsupported workflows on an explicit Python path.** Updates,
    MCP, wake, Antigravity and paired devices need their existing implementation
-   until their issues are delivered. Updating npm does not update Python, skills,
+   until their issues are delivered. Doctor is available in development source;
+   public npm 0.1.0 still requires Python for diagnostics. Updating npm does not update Python, skills,
    external Relay infrastructure or a remote host automatically. To return to
    Python, select its recorded path or uninstall only the npm-owned installation.
 
@@ -282,3 +283,52 @@ changing successful queue status. Failed native processes never expose an ID.
 
 Contracts: `test/codex-homes.test.ts`, `test/transport.test.ts` and
 `test/windows-contract.test.ts`. These are fixtures, not real recipient ACKs.
+
+## Source read-only doctor — #18 / 0.2.0
+
+Evidence date: 2026-09-28. `doctor --json [--agent claude|codex]` supports local
+inspection and the existing version-checked SSH/stdin JSON transport. Published
+npm 0.1.0 does not contain this command. Both SSH endpoints must use the same
+source build; the unchanged development version string alone is insufficient.
+
+`ok:true`, exit 0 and `diagnosticCompleted:true` mean the diagnostic command
+completed, including when agents are unavailable. `ready` is a metadata
+precondition summary for the selected agents, **not authorization to send**.
+Per-agent results remain in `agents`; per-home Codex results retain source labels,
+required/optional status and missing, permission, unsupported-schema or unknown
+codes. Explicit doctor home inspection bypasses unrelated inventory, like list;
+it does not replace send's stricter competitor checks. Codex executable paths
+are inspected for accessibility and never executed, even with `--codex-bin`.
+An accessible DB and executable do not verify a live writer (`writerVerified:false`).
+
+Claude checks bounded numeric session records (regular files, maximum 64 KiB),
+process identity and inbox metadata. POSIX checks the socket file; Windows checks
+process identity and a named-pipe advertisement, **not pipe existence or availability
+for connection**. `verification` states this distinction. Invalid records and
+unknown/permission inspections are counted. There is no inbox connection, queue
+submission, lock acquisition, chmod, configuration mutation, wake, login, or
+credential read. Native process arguments, stderr and session names/bodies are
+not emitted. Host/home and executable paths are intentionally reported.
+
+`capabilities` describes implementation support: `list/send/doctor:true`,
+`wake/wait/ack/consumptionConfirmation:false`, `agents:[claude,codex]`,
+`transports:[local,ssh]`; `implementation:typescript` distinguishes runtime identity.
+These are implementation capabilities, not evidence of agent readiness or ACK.
+
+`skills` inspects only `~/.agents/skills/session-peer-ts/SKILL.md` and
+`<explicit home, CODEX_HOME, or ~/.codex>/skills/session-peer-ts/SKILL.md`.
+No skill installation or reference traversal occurs. The #25 TS skill contract
+requires metadata version/min/full `0.1.0`, implementation `typescript`, and
+capability policy `probe-help`; missing/malformed/incompatible metadata is
+reported separately and does not change agent readiness. This conservative
+metadata check does not certify instruction content. Generic Python
+`session-peer` skills are not inferred compatible. No `--check-reply-to` probe
+or general reply-observation API is implemented.
+
+Acceptance evidence: `test/diagnostics.test.ts` ports Python diagnostic cases for
+missing homes/tools, unsupported schema, per-home results, permission/unknown
+boundaries, invalid/stale session records, read-only inspection and unavailable
+inbox; adds source capabilities, bounded skill metadata, stdio and POSIX SSH
+fixtures. `test/windows-contract.test.ts` checks doctor through real encoded
+PowerShell/.cmd fixture SSH, without queue dispatch. Fixture evidence is not a
+live-agent or delivery/consumption test.

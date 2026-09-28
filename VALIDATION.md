@@ -260,3 +260,15 @@ Initial PR CI run `36368300629` passed macOS/Linux and Windows x64 on Node
 recorded in PR #39; a fixture result is not a recipient ACK.
 No live agents, native DB writes, Python/Relay operations or real SSH destinations
 were exercised. See PARITY.md for the intentional stricter missing-home policy.
+
+## 2026-09-28 — source doctor for 0.2.0 (#18)
+
+Read-only doctor fixture coverage adds missing/unsupported/permission/unknown
+home and tool results, separate command success/readiness, truthful capabilities,
+Claude inbox metadata without connection, bounded TS skill compatibility,
+stdio framing and SSH doctor round trips. Codex executables are inspected but
+never run. No live sessions, user homes, inbox dispatch or delivery ACK are used.
+Windows CI includes the portable diagnostics suite and encoded PowerShell/.cmd
+SSH checks in the existing native fixture. Windows pipe advertisements remain
+metadata evidence, not proof of a connectable pipe. Public npm 0.1.0 is unchanged;
+these tests do not constitute release or publication approval.

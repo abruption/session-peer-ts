@@ -260,3 +260,21 @@ and released independently; its own optional features and installation guide
 remain there (for example `pipx install session-peer`). Its command is also
 `session-peer`, so apply the PATH guidance above. This client does not depend on
 that installation or claim complete feature/flag parity.
+
+### Read-only diagnostics in development source (0.2.0)
+
+```sh
+session-peer doctor --json
+session-peer doctor --agent codex --codex-home /absolute/home --json
+session-peer doctor --host user@host --json
+```
+
+This source command is not in published npm 0.1.0. Diagnostic success (`ok:true`,
+exit 0) is separate from agent readiness (`ready` and per-agent/home results).
+It inspects bounded metadata and executable paths without executing Codex,
+connecting to inboxes, acquiring writer locks or submitting messages. Windows
+inbox readiness means a live process advertises a pipe; it does not prove the
+pipe exists or accepts connections. `capabilities` explicitly excludes
+wake/wait/ACK and consumption confirmation. Optional TS skill metadata checks
+never install anything. See [diagnostic boundaries](PARITY.md#source-read-only-doctor--18--020).
+SSH requires the same source build on both ends.
