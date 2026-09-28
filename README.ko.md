@@ -16,13 +16,13 @@
 실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
 TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
-**0.1.0 안정판이 npm에 공개됐습니다.** 패키지명은
+**0.2.0 사용 안내입니다.** 패키지명은
 `session-peer`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
 서비스를 제공하는 프로젝트가 아닙니다.
 
 ## 주요 기능과 범위
 
-- 로컬 Claude/Codex 세션과 알려진 Codex 홈 탐색 (0.2.0 소스 개발 기능, 아래 참고)
+- 로컬 Claude/Codex 세션과 알려진 Codex 홈 탐색 (0.2.0 기능, 아래 참고)
 - `--dry-run`으로 대상을 검증한 뒤 네이티브 inbox 또는 queue에 메시지 1회 제출
 - 원격에 명시적으로 설치한 같은 버전의 클라이언트로 SSH 전송
 - 구조화된 Reply-To URI와 JSON 결과
@@ -34,11 +34,11 @@ Relay 전송, MCP, wake/resume, Antigravity, 자동 업데이트,
 
 클라이언트 기능 계획은 [버전별 호환성 표와 npm 이주 가이드](PARITY.md)에서 추적하며, 계획은 현재 지원을 뜻하지 않습니다. Relay 서버·호스팅 서비스 제공은 이 클라이언트의 범위 밖입니다.
 
-### 개발 소스의 통합 목록 (0.2.0)
+### 0.2.0 통합 목록
 
 소스 빌드 후 `node dist/cli.js list --json`은 Claude/Codex를 함께 조회하고,
 `list --agent codex --json`은 알려진 홈을 조회합니다. 공개 npm **0.1.0**은 여전히
-에이전트와 Codex 목록용 홈을 명시해야 하며, 위 시작 예제는 그 버전에도 유효합니다.
+에이전트와 Codex 목록용 홈을 명시해야 합니다. 0.2.0에서도 명시적 명령 형식을 쓸 수 있습니다.
 
 탐색 범위는 기본 `~/.codex`, `CODEX_HOME`, macOS Orca의 바로 아래 계정 홈,
 JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록을 해당 홈에
@@ -47,18 +47,18 @@ JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록�
 `codexHome`을 사용하세요. 선택적 홈 부재는 오류가 아니지만 명시된 홈의 부재·오류는
 성공한 행을 보존하면서 종료 코드 1을 반환합니다. 목록은 writer를 선택하거나 전송하지 않습니다.
 정렬·진단·`--all`·SSH는 [목록 계약](PARITY.md#source-unified-listing-contract--16--020)을 참고하세요.
-개발 소스의 Codex 전송은 `--codex-home` 생략 시 유일하고 안정된 live writer 홈을
+0.2.0의 Codex 전송은 `--codex-home` 생략 시 유일하고 안정된 live writer 홈을
 선택합니다. 명시한 홈도 모든 알려진 경쟁 홈을 검사합니다. 비활성 큐는 저장된 스레드와
 모든 후보의 비활성 검증에 더해 `--codex-home HOME --allow-inactive-codex-home`이
 필요하며 wake/resume을 수행하지 않습니다. Dry-run은 제출하지 않습니다.
 JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때만 `queueId`가 추가되며,
 둘 다 소비 확인은 아닙니다. [홈 선택 계약](PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
 공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
-SSH 양쪽에는 동일한 개발 빌드를 사용하세요.
+SSH 양쪽에는 동일한 0.2.0 빌드를 사용하세요.
 
-### 소스 CLI 사용성 (0.2.0 예정)
+### 0.2.0 CLI 사용성
 
-개발 소스는 `list --help`, `send --help`, `doctor --help`, `--output-format text`를 제공합니다.
+0.2.0는 `list --help`, `send --help`, `doctor --help`, `--output-format text`를 제공합니다.
 출력 형식은 계속 명시해야 합니다: `--json` 또는 `--output-format json|text`.
 구문 오류는 JSON이며 유효한 text 요청의 실행 결과·오류는 텍스트입니다. SSH
 내부 전송은 항상 JSON입니다. `send --to TARGET "message" --json` 위치 인자를
@@ -85,11 +85,11 @@ Node 22.x의 22.13 이상 또는 24.x에서 검증된 안정판을 설치합니�
 Python CLI도 같은 명령어를 사용하므로 기존 설치본이 있다면 먼저 PATH를 확인하세요.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0
+npm install --global --ignore-scripts session-peer@0.2.0
 session-peer --version
 ```
 
-예상 출력은 `session-peer 0.1.0 (typescript)`입니다.
+예상 출력은 `session-peer 0.2.0 (typescript)`입니다.
 
 1. `session-peer list --agent claude --json`으로 대상을 찾고 정확한 PID를 선택합니다.
 2. `session-peer send --to CLAUDE_PID --message '확인 후 회신해 주세요.' --dry-run --json`으로 제출 없이 검증합니다.
@@ -109,7 +109,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 선택 사항: PATH에서 사용할 구현을 명시적으로 선택한 뒤 전역 설치
-npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.2.0.tgz
 session-peer --version
 ```
 
@@ -132,7 +132,7 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.1.0.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.0.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -148,10 +148,9 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 
 실제 전달할 때만 `--dry-run`을 제거합니다. `--message`를 생략하거나 `--message -`를
 사용하면 UTF-8 stdin을 읽습니다. `--all`은 오래된·보관된 기록을 목록에 포함할 뿐
-전송을 허용하지 않습니다. Claude 대상은 PID, `claude:PID`, 모호하지 않은 ASCII
-이름(대소문자 무시)입니다. Unicode 이름은 PID로 지정하세요. 공개 0.1.0의 Codex 전송에는 전체 UUID와
-명시적인 홈이 필요하며 `--codex-bin`으로 실행 파일을 고를 수 있습니다. 출력에는
-`--json` 또는 `--output-format json`이 필요합니다.
+전송을 허용하지 않습니다. Claude 대상은 PID, `claude:PID`, 모호하지 않은 Unicode 14.0.0 casefold 이름입니다. 충돌 시 PID를 지정하세요.
+Codex 전송에는 전체 UUID가 필요하며 홈은 위의 선택 규칙을 따릅니다. `--codex-bin`으로 실행 파일을 고를 수 있습니다. 출력에는
+`--json` 또는 `--output-format json|text`이 필요합니다.
 
 ### 다른 머신으로 SSH 전송
 
@@ -232,20 +231,17 @@ npm 자동 발행은 활성화하지 않았습니다. [MIT 라이선스](LICENSE
 
 ## npm 릴리스
 
-공개된 `session-peer@0.1.0`은 레지스트리 무결성·provenance 메타데이터·서명·
-새 환경 설치와 제거 검증을 통과했습니다. `latest`는 `0.1.0`, `preview`는
-`0.1.0-preview.1`을 가리킵니다. 버전 미지정 설치 전 현재 태그를 확인하세요.
+이 문서는 0.2.0 기능을 설명하며 공개 여부는 레지스트리에서 확인합니다.
+2026-09-28 KST에 검증된 이전 안정판은 0.1.0, preview 태그는 0.1.0-preview.1이었습니다.
 
 ```sh
+npm view session-peer@0.2.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
-변경할 수 없는 npm 0.1.0 tarball에는 발행 전 README 문구가 남아 있습니다.
-[날짜별 릴리스 기록](VALIDATION.md#public-010--2026-09-27-kst)에 이 불일치를 명시했으며,
-현재 GitHub 문서에서 정정했습니다. 패키지 내부 문서는 이후 버전에서 반영됩니다.
-
-수동 발행 워크플로우는 Trusted Publisher OIDC로 staging하고 유지관리자가 2FA로 승인합니다.
-staging 성공은 공개 완료가 아닙니다. [RELEASING.md](RELEASING.md)를 참고하세요.
+0.1.0 tarball의 과거 문구 불일치와 검증은 [날짜별 기록](VALIDATION.md#public-010--2026-09-27-kst)에 보존합니다.
+발행은 OIDC staging과 별도 2FA 승인을 거칩니다. Staging 성공은 공개 발행이 아닙니다.
+[RELEASING.md](RELEASING.md)를 참고하세요.
 
 ## 관련 프로젝트
 
@@ -254,7 +250,7 @@ staging 성공은 공개 완료가 아닙니다. [RELEASING.md](RELEASING.md)를
 안내합니다. 명령어가 같은 `session-peer`이므로 위 PATH 안내를 따르세요. 이 클라이언트는
 Python 설치에 의존하지 않으며 전체 기능·플래그 호환성을 주장하지 않습니다.
 
-### 개발 소스의 읽기 전용 진단 (0.2.0)
+### 0.2.0 읽기 전용 진단
 
 ```sh
 session-peer doctor --json
@@ -272,14 +268,13 @@ pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 
 소스 빌드가 필요합니다.
 ## 에이전트 스킬: 명시적 설치
 
-별도 `session-peer-ts` 스킬은 동반 PR에서 준비되며 새 npm 또는 스킬 태그 발행이 아닙니다. 공개된 0.1.0 기본 기능을 지원하고 TypeScript 구현 표시와 도움말로 개발 기능을 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
+별도 `session-peer-ts` 스킬은 동반 PR에서 관리되며 새 npm 또는 스킬 태그 발행이 아닙니다. 공개된 0.1.0 기본 기능을 지원하고 TypeScript 구현 표시와 도움말로 개발 기능을 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
-then choose the agent and scope. This example selects **Codex, current project**;
-run from that project directory. For Claude Code use `--agent claude-code`.
-For user scope add `--global` consistently to add/list/remove. Inspect any existing
-`session-peer-ts` copy for local edits before approving its replacement. Codex's
-`.agents/skills` directory is shared with other clients that discover that path.
+[고정된 스킬 소스](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts)를 검토한 뒤 에이전트와 설치 범위를 선택하세요.
+아래 예시는 **Codex, 현재 프로젝트**를 선택합니다. 해당 프로젝트 디렉터리에서 실행하세요.
+Claude Code는 `--agent claude-code`를 사용합니다. 사용자 범위는 add/list/remove 모두에
+`--global`을 동일하게 추가하세요. 기존 `session-peer-ts` 사본을 교체하기 전에 로컬 수정 사항을
+확인하세요. Codex의 `.agents/skills` 디렉터리는 이 경로를 탐색하는 다른 클라이언트와 공유됩니다.
 
 ```sh
 npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
@@ -287,8 +282,8 @@ npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
 
-For a pinned update, review another exact commit and repeat `add` with the same
-agent/scope. Restart the agent if its catalog is cached. Runtime and skill
-lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
-Skills CLI, and installing this skill does not overwrite the Python skill or
-install a runtime. See [compatibility and validation](PARITY.md#source-ts-skill-guidance--25--020).
+고정 버전 업데이트는 다른 정확한 커밋을 검토한 뒤 같은 에이전트·범위로 `add`를 반복합니다.
+목록을 캐시하는 에이전트는 다시 시작하세요. 런타임과 스킬은 독립적으로 관리됩니다.
+npm `--ignore-scripts`를 사용할 수 있고 postinstall은 Skills CLI를 호출하지 않습니다.
+이 스킬 설치는 Python 스킬을 덮어쓰거나 런타임을 설치하지 않습니다.
+[호환성과 검증](PARITY.md#source-ts-skill-guidance--25--020)을 참고하세요.

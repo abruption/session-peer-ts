@@ -12,6 +12,10 @@ on:
         options:
           - stable-stage
           - trusted-stage
+      source_sha:
+        description: Exact reviewed main commit SHA (40 hexadecimal characters)
+        required: true
+        type: string
       version:
         description: Exact package.json version
         required: true
@@ -52,6 +56,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_SHA: ${{ inputs.source_sha }}
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,6 +99,7 @@ jobs:
       NPM_CONFIG_FETCH_TIMEOUT: '60000'
       NPM_CONFIG_IGNORE_SCRIPTS: 'true'
       RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_SHA: ${{ inputs.source_sha }}
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
     steps:

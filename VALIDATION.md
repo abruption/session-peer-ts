@@ -1,7 +1,8 @@
 # Validation record — updated 2026-09-28 KST
 
-The stable 0.1.0 package is public. This record separates public package
-verification from historical candidate checks and live-agent observations.
+This dated record covers the 0.2.0 release source and historical 0.1.0 public
+verification, candidate checks and live-agent observations. Older sections
+describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
@@ -301,3 +302,22 @@ applied to the companion skill. Parent review corrected the TS `retryAllowed`
 field name and made capability checks require affirmative supported help entries.
 Real GitHub exact-commit installation was also exercised in isolated scopes;
 installation commands do not depend on a moving tag.
+
+
+## 0.2.0 release preparation — 2026-09-28 KST
+
+Feature source: main `b87eb39a32f8678cd93789ce81792d5f248fdfa6`, following #43.
+Issues #16/#17/#18/#19/#25 are implemented. This release updates the package,
+lockfile, version handshake, four READMEs and stable-stage baseline to 0.2.0.
+The baseline is verified public 0.1.0; preview stays at 0.1.0-preview.1. No 0.2.0
+preview publication is assumed. The new workflow requires the reviewed exact
+main SHA as `source_sha` and rejects any different runtime source SHA.
+
+The integrated feature tree passed macOS/Linux/Windows Node 22/24 CI in run
+36370904539. Release-specific local tests, retained candidate hash, packaged
+prose review and exact-head CI are recorded in the release PR. Local artifacts
+are not the later exact-main workflow artifact; staging requires its own hash
+review and npm 2FA approval. This dated preparation record does not assert that
+0.2.0 has been publicly published or verified. Historical real-TUI ACKs do not
+constitute a new 0.2.0 ACK test. Companion skill source is independently pinned
+and managed; its repository PR/merge status is not an npm runtime dependency.

@@ -16,7 +16,7 @@
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-The published npm package and CLI command are both **`session-peer`**. This
+This guide describes **0.2.0**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -25,8 +25,8 @@ Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.1.0
-session-peer --version  # session-peer 0.1.0 (typescript)
+npm install --global --ignore-scripts session-peer@0.2.0
+session-peer --version  # session-peer 0.2.0 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -38,9 +38,9 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --
    verify the receiver's TUI response separately. `posted` / `queued` confirms
    submission only. See [What success means](#what-success-means).
 
-### Source CLI usability (planned 0.2.0)
+### CLI usability in 0.2.0
 
-The development source adds `list --help`, `send --help`, `doctor --help` and explicit
+Version 0.2.0 adds `list --help`, `send --help`, `doctor --help` and explicit
 `--output-format text`. Output selection remains required: use `--json` or
 `--output-format json|text`. Parse errors use JSON; valid text requests render
 operation results/errors as text. SSH always exchanges JSON internally.
@@ -55,7 +55,7 @@ source behavior is not retroactively available in the published 0.1.0 package.
 
 ## What it does
 
-- Discover local Claude/Codex sessions and known Codex homes (source development for 0.2.0; see below).
+- Discover local Claude/Codex sessions and known Codex homes (0.2.0; see below).
 - Validate a destination with `--dry-run`, then submit one message to its native
   inbox or queue. Codex normally requires a unique, stable live writer.
 - Use the same commands over SSH to an explicitly installed remote client.
@@ -68,12 +68,12 @@ Antigravity, automatic updates, or human text output. Unsupported commands fail 
 
 Planned client gaps are tracked in the [versioned compatibility matrix and npm migration guide](PARITY.md); a plan is not an available feature. Relay server/hosted-service delivery remains outside this client's scope.
 
-### Unified listing in development source (0.2.0)
+### Unified listing in 0.2.0
 
 After building this source, `node dist/cli.js list --json` combines Claude and
 Codex; `list --agent codex --json` searches known homes. Published npm **0.1.0**
 still requires an explicit agent and a home for Codex listing; the install and
-quick-start examples above remain valid for that release.
+explicit list/send forms also work with that older release.
 
 Sources are default `~/.codex`, `CODEX_HOME`, immediate macOS Orca account homes,
 and the JSON array `SESSION_PEER_CODEX_HOMES`. `--codex-home` pins Codex listing
@@ -93,7 +93,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, use the same development build on both ends.
+On SSH, use the same 0.2.0 build on both ends.
 
 ## Requirements
 
@@ -117,11 +117,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.1.0.tgz
+npm install --global --ignore-scripts ./session-peer-0.2.0.tgz
 session-peer --version
 ```
 
-Expected: `session-peer 0.1.0 (typescript)`. Keep the `./...tgz` path to
+Expected: `session-peer 0.2.0 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -141,7 +141,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.1.0.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.0.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -158,9 +158,9 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 Remove `--dry-run` only when delivery is intended. Omit `--message` or use
 `--message -` for UTF-8 stdin. `--all` includes stale/archived records for listing;
 it does not authorize sending. Claude accepts a PID, `claude:PID`, or an
-unambiguous ASCII name, case-insensitively. Use a PID for Unicode names. Codex
-send in published 0.1.0 requires a full UUID and explicit home; `--codex-bin` selects an executable.
-Output requires `--json` or `--output-format json`.
+unambiguous Unicode 14.0.0 casefolded name. Use a PID for collisions. Codex
+send requires a full UUID; home selection follows the guards above; `--codex-bin` selects an executable.
+Output requires `--json` or `--output-format json|text`.
 
 ### Another machine over SSH
 
@@ -250,19 +250,18 @@ separate approval. Licensed under [MIT](LICENSE).
 
 ## Package release
 
-`session-peer@0.1.0` is the verified stable npm release. Its public registry
-integrity, provenance metadata, signature audit, fresh install and uninstall
-passed. The `latest` tag points to `0.1.0`; the `preview` tag remains on
-`0.1.0-preview.1`. Check current tags before relying on an unversioned install:
+This document describes 0.2.0; public availability is determined by the registry.
+On 2026-09-28 KST, the verified prior release was 0.1.0 and the preview tag was
+0.1.0-preview.1. Check the exact version and current tags before installing:
 
 ```sh
+npm view session-peer@0.2.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
-The immutable npm 0.1.0 archive still contains pre-publication README wording.
-The [dated release record](VALIDATION.md#public-010--2026-09-27-kst) documents
-that discrepancy; current GitHub documentation corrects it. A later version
-will carry corrected packaged documentation.
+The immutable 0.1.0 archive retained pre-publication README wording. This
+archive uses versioned feature descriptions; dated release evidence remains in
+[VALIDATION.md](VALIDATION.md#public-010--2026-09-27-kst).
 
 The release workflow uses Trusted Publisher OIDC staging and a maintainer's
 separate 2FA approval. A staged upload is not a public release. See
@@ -276,7 +275,7 @@ remain there (for example `pipx install session-peer`). Its command is also
 `session-peer`, so apply the PATH guidance above. This client does not depend on
 that installation or claim complete feature/flag parity.
 
-### Read-only diagnostics in development source (0.2.0)
+### Read-only diagnostics in 0.2.0
 
 ```sh
 session-peer doctor --json
@@ -295,7 +294,7 @@ never install anything. See [diagnostic boundaries](PARITY.md#source-read-only-d
 SSH requires the same source build on both ends.
 ## Agent skill: explicit installation
 
-The separate `session-peer-ts` companion skill is prepared in [companion PR #14](https://github.com/abruption/session-peer-skill/pull/14); it is not a new npm or skill-tag release. It supports the published 0.1.0 baseline, detects the TypeScript implementation marker, and checks help before using development capabilities. The Python `session-peer` skill remains separate.
+The separate `session-peer-ts` companion skill is tracked in [companion PR #14](https://github.com/abruption/session-peer-skill/pull/14); it is not a new npm or skill-tag release. It supports the published 0.1.0 baseline, detects the TypeScript implementation marker, and checks help before using development capabilities. The Python `session-peer` skill remains separate.
 
 Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
 then choose the agent and scope. This example selects **Codex, current project**;

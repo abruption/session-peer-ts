@@ -2,16 +2,14 @@
 
 Updated 2026-09-28 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-The published TS baseline remains **0.1.0**,
-[`0edc4f8`](https://github.com/abruption/session-peer-ts/tree/0edc4f8ae05256698f591b7402e89cd3d5858eef/src).
-The matrix now includes **source development for 0.2.0 (#16/#17/#18)**: unified listing,
-bounded Codex home discovery and safe selection/inactive opt-in. These features
-are not in the npm 0.1.0 archive;
-source package metadata stays at 0.1.0 until separate release preparation.
-All other rows retain their baseline scope. Do not use version equality alone
-to mix development builds and published binaries over SSH; test the same build
-on both ends. `referenceVersion: "1.0.2"` names the comparison baseline, not a
-complete parity guarantee. See [VALIDATION.md](VALIDATION.md) for dated evidence.
+This matrix describes **TS 0.2.0**: unified listing, safe home selection,
+read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
+separately managed TS skill guidance (#16/#17/#18/#19/#25). Historical **0.1.0**
+differences are called out explicitly. Public availability and tags must be
+checked in the registry; this document does not assert a publication outcome.
+SSH endpoints require the same version; unreleased source builds also require
+the same commit. `referenceVersion: "1.0.2"` identifies the comparison baseline,
+not complete parity. See [VALIDATION.md](VALIDATION.md) for dated evidence.
 
 ## Feature and command matrix
 
@@ -27,7 +25,7 @@ not a missing implementation. Issue links describe work, not available features.
 | Codex active queue | Saved UUID, unique live writer, real lock/owner checks, pre-submit revalidation | Source: same protections, full UUID, implicit unique-live selection or explicit home; all known candidates checked | Implemented in source for [#17](https://github.com/abruption/session-peer-ts/issues/17), 0.2.0 |
 | Implicit home / inactive queue | Select unique live home; explicit inactive opt-in under separate guards | Source: unique live selection; explicit saved inactive home with opt-in and verified inactive candidates. Public 0.1.0 has neither | Implemented in source for #17, 0.2.0; no wake/resume |
 | `doctor` | Readiness diagnostics; return-route check is opt-in | Source: read-only local/SSH metadata, per-agent/home results, capabilities and bounded TS skill compatibility. Published 0.1.0 has no doctor | Implemented in source for [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0; no return-route probing |
-| CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | JSON required; named `--message`/`-m` or stdin only; minimal top-level help; ASCII case-insensitive names, Unicode names require PID | Partial; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
+| CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | 0.2.0: explicit JSON/text format, positional/named/stdin body, command help, exact Unicode 14.0.0 casefold with PID for ambiguity | Implemented; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
 | From / Reply-To | Caller detection, automatic return-route metadata, structured URI resolution | From uses Codex environment UUID only; explicit `--reply-address`; local/SSH Reply-To URI parsing with conflict checks | Partial; [#21](https://github.com/abruption/session-peer-ts/issues/21), 0.3.0 |
 | SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; one host; strict preflight; JSON stdin; explicit Windows PowerShell path | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) hosts/options, [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design, 0.3.0 |
 | Updates | Cached advisory client/skill notices; explicit manager-aware update commands | No update cache/command; `--no-update-notice` accepted as a no-op | Planned [#22](https://github.com/abruption/session-peer-ts/issues/22), 0.3.0 |
@@ -54,7 +52,7 @@ Source anchors at the baselines:
 | Setting / surface | TS source behavior / migration consequence |
 | --- | --- |
 | `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CONFIG_DIR` | Claude config precedence: first nonempty value in that order, otherwise `~/.claude`. No Codex home is required for Claude listing. |
-| `CODEX_HOME`, default `~/.codex`, macOS Orca account homes | Source: bounded automatic Codex listing and writer safety inventory. Codex **send** still requires `--codex-home`. Published 0.1.0 requires it for Codex list too. No recursive disk scan. |
+| `CODEX_HOME`, default `~/.codex`, macOS Orca account homes | Source: bounded automatic Codex listing and writer safety inventory. Codex send selects a unique stable live home, or validates the explicit home against all competitors. Published 0.1.0 requires it for Codex list too. No recursive disk scan. |
 | `SESSION_PEER_CODEX_HOMES` | Source: JSON array of absolute or `~/` paths adds required listing homes and writer candidates. Invalid list configuration is rejected as a whole with other sources preserved; send keeps fail-closed inventory. Published 0.1.0 uses it only for writer checks. |
 | `CODEX_THREAD_ID`, `CODEX_SESSION_ID` | Valid UUID enables default From metadata; `--no-from` disables it. Claude/Antigravity caller detection is not implemented. |
 | Reply/update/Relay settings from Python | No blanket compatibility. Only the flags and environment reads in the TS baseline above are implemented. Do not infer a route or permission from an environment variable or From header. |
@@ -171,22 +169,21 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `Get-Command session-peer -All` (PowerShell), then `session-peer --version`.
    Record the Python interpreter/venv or owning uv/pipx/package manager before
    changing PATH. Do not delete another manager's files or overwrite its shim.
-2. **Install the chosen published version explicitly.** For the public baseline:
-   `npm install --global --ignore-scripts session-peer@0.1.0`.
+2. **Install the chosen version explicitly after checking registry availability.** For 0.2.0:
+   `npm install --global --ignore-scripts session-peer@0.2.0`.
    Verify the resolved command/version again. An isolated npm prefix and explicit
    launcher path allow side-by-side evaluation. Install any desired skill
    separately using the exact reviewed commit, explicit agent and scope in the
    [README](README.md#agent-skill-explicit-installation). The original companion
    `session-peer` skill targets Python; use distinct `session-peer-ts` guidance.
-   Version strings alone cannot distinguish source capabilities from npm 0.1.0.
+   Check implementation and supported help; 0.1.0 development builds historically shared their version string with the public baseline.
 3. **Make selection and output explicit.** Replace bare `list` with
    `session-peer list --agent claude --json`, or
    `session-peer list --agent codex --codex-home /absolute/home --json`.
-   Use a full Codex UUID and explicit home for send. For Claude use PID when
-   Unicode name matching matters. Replace positional messages with `--message`
-   or UTF-8 stdin; update parsers using the JSON table above. Development source
-   additionally supports unfiltered/multi-home list as described in the #16
-   contract; installing published 0.1.0 does not enable it.
+   Use a full Codex UUID; preserve the discovered home when selecting a row.
+   Unicode names use exact Unicode 14.0.0 casefold; use PID for collisions.
+   Supply one positional body, `--message`, or UTF-8 stdin. Keep `--json` for
+   machine consumers. 0.2.0 also supports combined listing and text output.
 4. **Validate before submission.** Use `send ... --json --dry-run`. Review the
    target/home, then remove `--dry-run` only for an intended submission. Check
    posted/queued separately from receiver ACK; do not retry unknown outcomes.
@@ -199,8 +196,7 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    the size limits above and lack of multi-host aggregation.
 6. **Keep unsupported workflows on an explicit Python path.** Updates,
    MCP, wake, Antigravity and paired devices need their existing implementation
-   until their issues are delivered. Doctor is available in development source;
-   public npm 0.1.0 still requires Python for diagnostics. Updating npm does not update Python, skills,
+   until their issues are delivered. Doctor is available in 0.2.0; 0.1.0 lacked this command. Updating npm does not update Python, skills,
    external Relay infrastructure or a remote host automatically. To return to
    Python, select its recorded path or uninstall only the npm-owned installation.
 
@@ -233,8 +229,7 @@ a release commitment. Recheck the exact packaged copy during release review.
 
 ## Source Codex home selection — #17 / 0.2.0
 
-This is development source behavior, not a claim about the immutable npm 0.1.0
-archive. `send --to codex:UUID` selects only a unique stable live writer across
+This is 0.2.0 behavior; it does not change the immutable npm 0.1.0 archive. `send --to codex:UUID` selects only a unique stable live writer across
 bounded known homes. `--codex-home` pins the destination but still inventories
 competitors. A unique live writer without a saved row yields
 `thread_not_yet_persisted`; an unknown owner or multiple live writers refuses.
@@ -289,7 +284,7 @@ Contracts: `test/codex-homes.test.ts`, `test/transport.test.ts` and
 Evidence date: 2026-09-28. `doctor --json [--agent claude|codex]` supports local
 inspection and the existing version-checked SSH/stdin JSON transport. Published
 npm 0.1.0 does not contain this command. Both SSH endpoints must use the same
-source build; the unchanged development version string alone is insufficient.
+0.2.0 build; development checkouts should also match commits.
 
 `ok:true`, exit 0 and `diagnosticCompleted:true` mean the diagnostic command
 completed, including when agents are unavailable. `ready` is a metadata
@@ -335,8 +330,8 @@ live-agent or delivery/consumption test.
 
 ## Source CLI usability — issue #19 (2026-09-28)
 
-Source targeting 0.2.0 adds full list/send/doctor help, text rendering and one positional
-message. Published 0.1.0 remains the baseline in the matrix above. The explicit
+Version 0.2.0 adds full list/send/doctor help, text rendering and one positional
+message. The matrix distinguishes this from historical 0.1.0. The explicit
 output requirement is retained: `--json` or `--output-format json|text`; no default
 format changes. No selector retains `json_output_required` for compatibility.
 Conflicting selectors and all parse errors produce one JSON refusal before stdin
