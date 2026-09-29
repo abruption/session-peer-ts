@@ -18,6 +18,10 @@ A Node.js client that runs without Python. Package and command: `session-peer`.
 
 ## Demo
 
+![Session discovery and dry-run validation in session-peer 0.2.1](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-v0.2.1-demo.gif)
+
+Actual npm 0.2.1 output excerpts, re-rendered with identifiers redacted; no message was submitted.
+
 After installation, list sessions and replace `CLAUDE_PID` with the exact PID you selected:
 
 ```sh
