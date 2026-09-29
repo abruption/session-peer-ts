@@ -18,9 +18,9 @@ Python 없이 Node.js로 실행하는 클라이언트입니다. 패키지와 명
 
 ## Demo
 
-![session-peer 0.2.1의 세션 조회와 dry-run 검증](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-v0.2.1-demo.gif)
+![TypeScript session-peer 0.2.1의 실제 Codex·Claude Code 요청과 회신](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
-실제 npm 0.2.1 출력 일부를 식별자 제거 후 애니메이션으로 재구성했습니다. 메시지는 제출하지 않았습니다.
+npm 0.2.1로 로컬 요청과 명시적인 `ACK DEMO-READY` 회신을 확인했습니다. CLI·메시지 발췌를 식별자 제거와 타이밍 편집 후 재구성한 것으로, 화면 녹화가 아닙니다. 제출만으로 ACK를 의미하지 않습니다.
 
 설치 후 세션을 조회하고, 선택한 정확한 PID로 `CLAUDE_PID`를 바꾸세요:
 

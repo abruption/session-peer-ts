@@ -18,9 +18,9 @@
 
 ## Demo
 
-![session-peer 0.2.1 的会话发现与 dry-run 验证](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-v0.2.1-demo.gif)
+![TypeScript session-peer 0.2.1 的实际 Codex 与 Claude Code 请求和回复](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
-截取实际 npm 0.2.1 输出，隐去标识信息后重新渲染为动画；未提交任何消息。
+使用 npm 0.2.1 确认了本地请求及明确的 `ACK DEMO-READY` 回复。CLI 与消息摘录经过重新渲染、标识信息匿名化及时间编辑，并非屏幕录像。仅提交不代表 ACK。
 
 安装后列出会话，将 `CLAUDE_PID` 替换为选中的准确 PID：
 
