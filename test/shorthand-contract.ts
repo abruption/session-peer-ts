@@ -45,7 +45,7 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     if (probe) body += shell === 'powershell'
       ? 'function session-peer { $input | & $env:SP_NODE $env:SP_CAPTURE @args }\n'
       : 'session-peer() { "$SP_NODE" "$SP_CAPTURE" "$@"; }\n';
-    if (alias) body += shell === 'powershell' ? '. $env:SP_ACTIVATOR\n' : '. "$SP_ACTIVATOR" || exit $?\n';
+    if (alias) body += shell === 'powershell' ? "try { . $env:SP_ACTIVATOR } catch { [Console]::Error.WriteLine((Get-Command sp -All -ListImported | Format-List * | Out-String)); throw }\n" : '. "$SP_ACTIVATOR" || exit $?\n';
     const name = alias ? 'sp' : 'session-peer';
     body += shell === 'powershell'
       ? `$arguments = @(Get-Content -LiteralPath $env:SP_ARGUMENTS -Raw -Encoding UTF8 | ConvertFrom-Json)\n$env:SP_STDIN | & ${name} @arguments\nexit $LASTEXITCODE\n`
