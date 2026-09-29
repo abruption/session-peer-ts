@@ -32,10 +32,10 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     writeFileSync(file, shell === 'powershell' ? '\ufeff' + psHeader + body : body);
     const program = shell === 'powershell'
       ? join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe') : '/bin/' + shell;
-    const options = shell === 'powershell' ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', file]
+    const options = shell === 'powershell' ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '. $env:SP_SCRIPT']
       : (shell === 'bash' ? ['--noprofile', '--norc', file, ...args] : ['-f', file, ...args]);
     const result = spawnSync(program, options, { encoding: 'utf8', timeout: 120000,
-      env: { ...env, SP_ARGUMENTS: argv,
+      env: { ...env, SP_SCRIPT: file, SP_ARGUMENTS: argv,
         SP_ACTIVATOR: join(installed, 'shorthand', shell === 'powershell' ? 'sp.ps1' : 'sp.sh'), ...extra } });
     assert.ifError(result.error); assert.equal(result.signal, null, result.stderr);
     return result;
