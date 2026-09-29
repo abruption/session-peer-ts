@@ -18,9 +18,9 @@ Python 不要の Node.js クライアントです。パッケージ名とコマ�
 
 ## Demo
 
-![session-peer 0.2.1 のセッション検索と dry-run 検証](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-v0.2.1-demo.gif)
+![TypeScript session-peer 0.2.1 による実際の Codex・Claude Code 間の要求と返信](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
-実際の npm 0.2.1 の出力から識別情報を除き、抜粋をアニメーションとして再描画しました。メッセージは送信していません。
+npm 0.2.1 でローカルの要求と明示的な `ACK DEMO-READY` の返信を確認しました。CLI・メッセージの抜粋を識別情報の除去とタイミング編集後に再描画したもので、画面録画ではありません。提出だけでは ACK を意味しません。
 
 インストール後、一覧から選んだ正確な PID に `CLAUDE_PID` を置き換えます:
 

@@ -18,9 +18,9 @@ A Node.js client that runs without Python. Package and command: `session-peer`.
 
 ## Demo
 
-![Session discovery and dry-run validation in session-peer 0.2.1](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-v0.2.1-demo.gif)
+![Actual Codex to Claude Code request and reply with TypeScript session-peer 0.2.1](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
-Actual npm 0.2.1 output excerpts, re-rendered with identifiers redacted; no message was submitted.
+Actual local request and explicit `ACK DEMO-READY` reply using npm 0.2.1. CLI/message excerpts are re-rendered, identifiers redacted and timing edited; this is not a screen recording. Submission alone is not an ACK.
 
 After installation, list sessions and replace `CLAUDE_PID` with the exact PID you selected:
 
