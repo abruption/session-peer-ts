@@ -90,13 +90,13 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
       if (kind === 'alias') body += shell === 'powershell' ? 'Set-Alias sp Write-Output\n' : "alias sp='printf foreign'\n";
       if (kind === 'function') body += shell === 'powershell' ? "function sp { 'foreign' }\n" : 'sp() { printf foreign; }\n';
       body += shell === 'powershell'
-        ? `$before = Get-Command sp -ErrorAction SilentlyContinue\ntry { . $env:SP_ACTIVATOR; throw 'unexpected activation' } catch {\n if ($_.Exception.Message -notmatch '${kind === 'missing' ? 'session-peer is not available' : 'sp already exists'}') { throw }\n}\n$after = Get-Command sp -ErrorAction SilentlyContinue\nif ($before.Definition -ne $after.Definition -or $before.CommandType -ne $after.CommandType) { throw 'collision changed' }\nexit 0\n`
+        ? `$before = Get-Command sp -ListImported -ErrorAction SilentlyContinue\ntry { . $env:SP_ACTIVATOR; throw 'unexpected activation' } catch {\n if ($_.Exception.Message -notmatch '${kind === 'missing' ? 'session-peer is not available' : 'sp already exists'}') { throw }\n}\n$after = Get-Command sp -ListImported -ErrorAction SilentlyContinue\nif ($before.Definition -ne $after.Definition -or $before.CommandType -ne $after.CommandType) { throw 'collision changed' }\nexit 0\n`
         : 'before=$(command -v sp)\n. "$SP_ACTIVATOR"\ncode=$?\nafter=$(command -v sp)\n[ "$code" -eq 1 ] && [ "$before" = "$after" ]\n';
       const result = execute(shell, body, [], { PATH: kind === 'missing' ? '' : kind === 'executable' ? foreign + delimiter + env.PATH : env.PATH });
       assert.equal(result.status, 0, `${shell} ${kind}: ${result.stdout} ${result.stderr}`);
     }
     const clean = execute(shell, shell === 'powershell'
-      ? psClear + '. $env:SP_ACTIVATOR\nRemove-Item Alias:sp\nif (Get-Command sp -ErrorAction SilentlyContinue) { throw "sp remains" }\n'
+      ? psClear + '. $env:SP_ACTIVATOR\nRemove-Item Alias:sp\nif (Get-Command sp -ListImported -ErrorAction SilentlyContinue) { throw "sp remains" }\n'
       : (shell === 'bash' ? 'shopt -s expand_aliases\n' : '') + '. "$SP_ACTIVATOR" || exit $?\nunalias sp\n! command -v sp\n');
     assert.equal(clean.status, 0, clean.stderr);
     console.log(JSON.stringify({ shorthandContract: shell, status: 'pass' }));
@@ -114,7 +114,7 @@ if ($before -ne $after) { throw 'alias changed after update' }
 if ($LASTEXITCODE -ne 0) { throw 'uninstall failed' }
 try { & sp --version; throw 'unexpected command after uninstall' } catch [System.Management.Automation.CommandNotFoundException] { }
 Remove-Item Alias:sp
-if (Get-Command sp -ErrorAction SilentlyContinue) { throw 'sp remains' }
+if (Get-Command sp -ListImported -ErrorAction SilentlyContinue) { throw 'sp remains' }
 ` : `shopt -s expand_aliases
 . "$SP_ACTIVATOR" || exit $?
 before=$(sp --version) || exit $?

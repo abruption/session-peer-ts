@@ -2,7 +2,7 @@
 if ($MyInvocation.InvocationName -ne '.') {
     throw 'Dot-source this file to activate sp in the current scope.'
 }
-if (Get-Command sp -ErrorAction SilentlyContinue) {
+if (Get-Command sp -ListImported -ErrorAction SilentlyContinue) {
     throw 'sp already exists; inspect Get-Command sp -All before choosing a name.'
 }
 if (-not (Get-Command session-peer -ErrorAction SilentlyContinue)) {
