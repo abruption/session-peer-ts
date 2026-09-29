@@ -88,7 +88,7 @@ test('compiling owner inspection gets a cold-start deadline and still fails clos
   assert.deepEqual(inspectWindows('identity', '123'), [row]);
   windowsProcessStart(123);
   assert.deepEqual(timeouts, [COMPILED_INSPECTION_TIMEOUT_MS, START_PROBE_TIMEOUT_MS]);
-  assert.equal(COMPILED_INSPECTION_TIMEOUT_MS, 20000); assert.equal(START_PROBE_TIMEOUT_MS, 8000);
+  assert.equal(COMPILED_INSPECTION_TIMEOUT_MS, 20000); assert.equal(START_PROBE_TIMEOUT_MS, 15000);
   for (const fields of [
     { status: null, signal: 'SIGTERM' as const, error: Object.assign(new Error('private-timeout'), { code: 'ETIMEDOUT' }) },
     { status: 1 }, { stdout: 'private-native-output' }, { stdout: JSON.stringify([{ ...row, uid: 'x' }]) },

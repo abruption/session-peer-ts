@@ -107,8 +107,10 @@ Windows test files run serially so concurrent PowerShell compilation does not
 consume the native inspector's fixed timeout; assertions and production deadlines
 are unchanged. Separately (#65), the compiling `Add-Type` owner inspection now has
 a 20000 ms deadline after a slow runner exceeded 8000 ms on main (CI run
-36419550921, attempt 1); the compile-free creation-time probe keeps 8000 ms, and
-timeouts still refuse. Each native subtest cleans its children even after assertion
+36419550921, attempt 1). The compile-free creation-time probe moved from 8000 ms
+to 15000 ms (#78) after it timed out at 8024 ms in CI run 36542897023
+(`windows-native (24)`); each hung probe can add up to 15 s per listed Claude PID
+before that process is excluded. Timeouts still refuse. Each native subtest cleans its children even after assertion
 failure. Package smoke verifies unified empty discovery without executables on PATH.
 These are fixture contracts, not new live-TUI ACKs. CI evidence belongs to the
 issue's PR-head checks; publication requires separate release preparation.
