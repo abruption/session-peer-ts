@@ -48,7 +48,7 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     if (alias) body += shell === 'powershell' ? "try { . $env:SP_ACTIVATOR } catch { [Console]::Error.WriteLine((Get-Command sp -All -ListImported | Format-List * | Out-String)); throw }\n" : '. "$SP_ACTIVATOR" || exit $?\n';
     const name = alias ? 'sp' : 'session-peer';
     body += shell === 'powershell'
-      ? `$arguments = @(Get-Content -LiteralPath $env:SP_ARGUMENTS -Raw -Encoding UTF8 | ConvertFrom-Json)\n$env:SP_STDIN | & ${name} @arguments\nexit $LASTEXITCODE\n`
+      ? `$arguments = Get-Content -LiteralPath $env:SP_ARGUMENTS -Raw -Encoding UTF8 | ConvertFrom-Json\n$env:SP_STDIN | & ${name} @arguments\nexit $LASTEXITCODE\n`
       : `printf '%s' "$SP_STDIN" | ${name} "$@"\n`;
     return execute(shell, body, args, { SP_STDIN: stdin, SP_CAPTURE: join(root, 'capture.mjs') });
   }
@@ -70,7 +70,7 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
       if (args.includes('--allow-inactive-codex-home')) {
         const result = JSON.parse(short.stdout); assert.equal(result.status, 'validated'); assert.equal(result.submitted, false);
       } else if (args.includes('--bad') || args.includes('--message')) assert.equal(short.status, 2);
-      else assert.equal(short.status, 0, short.stdout);
+      else assert.equal(short.status, 0, `${shell} ${JSON.stringify(args)}: ${short.stdout}`);
     }
     const args = ['one two', '한글 🚀', '--', '-leading', "single'quote", '$HOME;$(echo BAD)&|%PATH%!^'];
     const direct = invoke(shell, false, args, 'stdin α\nsecond line', true);
