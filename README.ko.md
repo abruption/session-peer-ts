@@ -18,6 +18,10 @@ Python 없이 Node.js로 실행하는 클라이언트입니다. 패키지와 명
 
 ## Demo
 
+![session-peer 0.2.1의 세션 조회와 dry-run 검증](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-v0.2.1-demo.gif)
+
+실제 npm 0.2.1 출력 일부를 식별자 제거 후 애니메이션으로 재구성했습니다. 메시지는 제출하지 않았습니다.
+
 설치 후 세션을 조회하고, 선택한 정확한 PID로 `CLAUDE_PID`를 바꾸세요:
 
 ```sh
