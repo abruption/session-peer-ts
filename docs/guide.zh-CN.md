@@ -284,3 +284,8 @@ npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 如果代理缓存了技能目录，请重启代理。运行时和技能独立管理：npm `--ignore-scripts` 可正常使用，
 postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能或安装运行时。
 参见[兼容性和验证](../PARITY.md#source-ts-skill-guidance--25--020)。
+
+## 可选 sp 简写
+
+可选的 `sp` 简写是面向 0.3.0 的源码功能，不包含在已发布的 npm 0.2.1 中。
+请参阅[显式启用、冲突与停用(英文)](shorthand.md)。

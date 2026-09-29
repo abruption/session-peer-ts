@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { shorthandFixture } from './shorthand-contract.ts';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,7 +24,7 @@ try {
   let hash;
   for (let index = 0; index < 2; index++) {
     const [packed] = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', task]));
-    assert.deepEqual(packed.files.map((file: {path: string}) => file.path).sort(), ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'docs/guide.md', 'docs/guide.ko.md', 'docs/guide.ja.md', 'docs/guide.zh-CN.md', 'docs/api.md', 'dist/cli.js', 'dist/discovery.js', 'dist/diagnostics.js', 'dist/process.js', 'dist/protocol.js', 'dist/replies.js', 'dist/send.js', 'dist/ssh.js', 'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts', 'dist/discovery.d.ts', 'dist/diagnostics.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts', 'dist/replies.d.ts', 'dist/send.d.ts', 'dist/ssh.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'dist/updates.js', 'dist/updates.d.ts', 'package.json'].sort());
+    assert.deepEqual(packed.files.map((file: {path: string}) => file.path).sort(), ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'docs/guide.md', 'docs/guide.ko.md', 'docs/guide.ja.md', 'docs/guide.zh-CN.md', 'docs/api.md', 'docs/shorthand.md', 'shorthand/sp.sh', 'shorthand/sp.ps1', 'dist/cli.js', 'dist/discovery.js', 'dist/diagnostics.js', 'dist/process.js', 'dist/protocol.js', 'dist/replies.js', 'dist/send.js', 'dist/ssh.js', 'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts', 'dist/discovery.d.ts', 'dist/diagnostics.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts', 'dist/replies.d.ts', 'dist/send.d.ts', 'dist/ssh.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'dist/updates.js', 'dist/updates.d.ts', 'package.json'].sort());
     const next = createHash('sha256').update(readFileSync(join(task, packed.filename))).digest('hex');
     if (hash) assert.equal(next, hash, 'same build must produce identical tarball');
     hash = next;
@@ -87,7 +88,8 @@ try {
   writeFileSync(consumer, 'import { reply, envelope, VERSION } from "session-peer";\nconst destination: { to: string; host?: string; home?: string } = reply("session-peer://v1/reply?agent=claude&session=fixture&transport=local");\nconst message: string = envelope(VERSION, true);\nvoid destination; void message;\n');
   execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '--strict', '--module', 'NodeNext', '--target', 'ES2022', '--skipLibCheck', consumer], {encoding:'utf8'});
   assert.deepEqual(result.sessions, []);
-  runNpm(['uninstall', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', metadata.name]);
+  for (const name of ['sp', 'sp.cmd', 'sp.ps1']) assert.equal(existsSync(join(prefix, 'node_modules/.bin', name)), false, 'npm must not install an sp bin');
+  shorthandFixture(installed, join(prefix, 'node_modules/.bin'), task).lifecycle(prefix, npm, join(task, `${metadata.name}-${metadata.version}.tgz`));
   assert.equal(existsSync(binary), false);
   assert.equal(existsSync(join(prefix, 'node_modules', metadata.name)), false);
   console.log(JSON.stringify({ packageSmoke: 'pass', reproducibleSha256: hash, cleanInstall: true, uninstall: true }));

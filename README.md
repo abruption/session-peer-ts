@@ -58,6 +58,9 @@ session-peer --version
 Expected: `session-peer 0.2.1 (typescript)`. For isolated installation, source
 builds, Windows and removal, see the detailed guide below.
 
+Optional `sp` shorthand is a source feature planned for 0.3.0, not included in
+public npm 0.2.1. See [explicit activation and collisions](docs/shorthand.md).
+
 ### Update
 
 Use npm for an npm-managed installation. Check the available tags and review

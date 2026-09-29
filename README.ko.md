@@ -58,6 +58,9 @@ session-peer --version
 예상 출력: `session-peer 0.2.1 (typescript)`. 격리 설치·소스 빌드·Windows·제거
 방법은 아래 상세 가이드에서 확인할 수 있습니다.
 
+선택적 `sp` 단축 이름은 0.3.0을 목표로 하는 소스 기능이며 공개 npm 0.2.1에는 없습니다.
+[명시적 활성화·충돌·해제 안내(영문)](docs/shorthand.md)를 참고하세요.
+
 ### Update
 
 npm으로 설치한 클라이언트는 npm으로 갱신합니다. 태그와 대상 버전을 검토한 뒤

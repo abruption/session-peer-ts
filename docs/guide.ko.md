@@ -477,3 +477,8 @@ npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 npm `--ignore-scripts`를 사용할 수 있고 postinstall은 Skills CLI를 호출하지 않습니다.
 이 스킬 설치는 Python 스킬을 덮어쓰거나 런타임을 설치하지 않습니다.
 [호환성과 검증](../PARITY.md#source-ts-skill-guidance--25--020)을 참고하세요.
+
+## 선택적 sp 단축 이름
+
+선택적 `sp` 단축 이름은 0.3.0을 목표로 하는 소스 기능이며 공개 npm 0.2.1에는 없습니다.
+[명시적 활성화·충돌·해제 안내(영문)](shorthand.md)를 참고하세요.

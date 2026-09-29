@@ -301,3 +301,8 @@ npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 npm `--ignore-scripts` は利用でき、postinstall は Skills CLI を呼び出しません。
 このスキルの導入は Python スキルを上書きせず、ランタイムもインストールしません。
 [互換性と検証](../PARITY.md#source-ts-skill-guidance--25--020)を参照してください。
+
+## 任意の sp 短縮名
+
+任意の `sp` 短縮名は 0.3.0 向けのソース機能で、公開 npm 0.2.1 には含まれません。
+[明示的な有効化・衝突・解除(英語)](shorthand.md)を参照してください。
