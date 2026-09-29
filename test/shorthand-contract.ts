@@ -32,7 +32,10 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     writeFileSync(file, shell === 'powershell' ? '\ufeff' + psHeader + body : body);
     const program = shell === 'powershell'
       ? join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe') : '/bin/' + shell;
-    const options = shell === 'powershell' ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '. $env:SP_SCRIPT']
+    // Windows PowerShell -Command maps any script exit code other than 0/1 to 1
+    // unless the command string ends with `exit $LASTEXITCODE` (about_PowerShell_exe).
+    // -Command (global scope) is kept so the AllScope builtin sp alias can be removed.
+    const options = shell === 'powershell' ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '. $env:SP_SCRIPT; exit $LASTEXITCODE']
       : (shell === 'bash' ? ['--noprofile', '--norc', file, ...args] : ['-f', file, ...args]);
     const result = spawnSync(program, options, { encoding: 'utf8', timeout: 120000,
       env: { ...env, SP_SCRIPT: file, SP_ARGUMENTS: argv,
@@ -62,22 +65,29 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     [...dry, '--message=space 한글 🚀'], [...dry, '--', '-leading 한글'], [...dry, '--message', '-'],
   ];
   for (const shell of shells) {
+    // Collect every case before asserting so one CI run reports all mismatches.
+    const failures: string[] = [];
     for (const args of cases) {
       const direct = invoke(shell, false, args, 'stdin 한글\nsecond line');
       const short = invoke(shell, true, args, 'stdin 한글\nsecond line');
-      assert.equal(short.status, direct.status, `${shell} ${args[0]}: ${short.stderr}`);
-      assert.equal(short.stdout, direct.stdout, `${shell} ${args[0]}`);
-      if (args.includes('--allow-inactive-codex-home')) {
-        const result = JSON.parse(short.stdout); assert.equal(result.status, 'validated'); assert.equal(result.submitted, false);
-      } else if (args.includes('--bad') || args.includes('--message')) assert.equal(short.status, 2);
-      else assert.equal(short.status, 0, `${shell} ${JSON.stringify(args)}: ${short.stdout}`);
+      const expected = args.includes('--allow-inactive-codex-home') ? 0 : args.includes('--bad') || args.includes('--message') ? 2 : 0;
+      let detail = '';
+      if (short.status !== direct.status || short.stdout !== direct.stdout) detail = 'alias differs from canonical';
+      else if (short.status !== expected) detail = `exit ${short.status}, expected ${expected}`;
+      else if (args.includes('--allow-inactive-codex-home')) {
+        try { const result = JSON.parse(short.stdout); if (result.status !== 'validated' || result.submitted !== false) detail = 'not validated'; }
+        catch { detail = 'stdout is not JSON'; }
+      }
+      if (detail) failures.push(`${shell} ${JSON.stringify(args)}: ${detail}; direct=${direct.status} ${direct.stdout.trim().slice(0, 300)} ${direct.stderr.trim().slice(0, 300)}; alias=${short.status} ${short.stdout.trim().slice(0, 300)} ${short.stderr.trim().slice(0, 300)}`);
     }
+    assert.deepEqual(failures, [], failures.join('\n'));
     const args = ['one two', '한글 🚀', '--', '-leading', "single'quote", '$HOME;$(echo BAD)&|%PATH%!^'];
     const direct = invoke(shell, false, args, 'stdin α\nsecond line', true);
     const short = invoke(shell, true, args, 'stdin α\nsecond line', true);
-    assert.equal(short.status, 7, short.stderr); assert.equal(short.stdout, direct.stdout);
+    assert.equal(short.status, 7, `${shell} capture: direct=${direct.status} ${direct.stdout} ${direct.stderr}; alias=${short.stdout} ${short.stderr}`);
+    assert.equal(short.stdout, direct.stdout);
     const captured = JSON.parse(short.stdout);
-    assert.deepEqual(captured.args, args, `${shell}: arguments must not be reparsed`);
+    assert.deepEqual(captured.args, args, `${shell}: arguments must not be reparsed: ${short.stdout}`);
     assert.ok(captured.stdin.includes('stdin α\nsecond line'), `${shell}: preserve stdin`);
     // Windows PowerShell's text pipeline adds a newline; the alias must retain
     // exactly the same bytes as the canonical pipeline, not rewrite them.
