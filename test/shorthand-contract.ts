@@ -25,7 +25,7 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', CODEX_SQLITE_HOME: '',
     SP_NODE: process.execPath, SP_ROOT: root, SP_STDIN: '' };
   const psHeader = `$ErrorActionPreference = 'Stop'\n$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)\n`;
-  const psClear = 'Remove-Item Alias:sp -ErrorAction SilentlyContinue\n';
+  const psClear = 'Remove-Item Alias:sp -Force -ErrorAction Stop\n';
   function execute(shell: Shell, body: string, args: string[] = [], extra: NodeJS.ProcessEnv = {}) {
     const file = join(root, shell === 'powershell' ? 'invoke.ps1' : 'invoke.sh');
     const argv = join(root, 'arguments.json'); writeFileSync(argv, JSON.stringify(args));

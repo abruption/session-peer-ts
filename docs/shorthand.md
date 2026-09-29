@@ -81,11 +81,13 @@ Get-Command sp -All
 ```
 
 If you decide to give up the built-in alias in this scope, explicitly remove it
-only after verifying its definition. This is a separate user choice:
+only after verifying its definition. Windows PowerShell marks this built-in alias
+read-only, so this explicit removal uses `-Force`. Activation never does. This
+is a separate user choice:
 
 ```powershell
 if ((Get-Alias sp -ErrorAction SilentlyContinue).Definition -eq 'Set-ItemProperty') {
-    Remove-Item Alias:sp
+    Remove-Item Alias:sp -Force
 }
 ```
 
