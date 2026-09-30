@@ -1,0 +1,12 @@
+{
+  "name": "session-peer-side-session-experiment",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test_side_session.ts",
+    "typecheck": "tsc --noEmit --strict --module NodeNext --target ES2022 --allowImportingTsExtensions --skipLibCheck side_session.ts test_side_session.ts"
+  },
+  "dependencies": { "ws": "8.22.0" },
+  "devDependencies": { "@types/node": "22.13.10", "@types/ws": "8.18.2", "typescript": "5.9.3" }
+}
