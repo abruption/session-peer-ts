@@ -8,6 +8,8 @@ Transport:
   --ssh-opt OPT                      Allowlisted ssh option, repeatable: -p PORT, -l USER,
                                      -i IDENTITY_FILE, -o Port|User|IdentityFile|IdentitiesOnly=VALUE,
                                      -4, -6. Other options (ProxyJump, ProxyCommand, -F...) are refused
+  --ssh-jump USER@HOST[:PORT]         One hardened jump host for every --host (POSIX clients;
+                                     fixed ProxyCommand with BatchMode/StrictHostKeyChecking)
   --remote-bin ABSOLUTE_PATH          Remote session-peer executable
   --remote-platform posix|win32       Remote shell platform
   --ssh-control-path SOCKET           Existing SSH control socket (one --host only)

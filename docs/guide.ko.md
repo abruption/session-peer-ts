@@ -198,8 +198,19 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 - 같은 대상을 두 번 지정하면 `duplicate_ssh_host`입니다. 이 검사는 대상 문자열(사용자,
   대소문자 무시 호스트 이름, 정규화한 IPv6)만 비교합니다. 같은 장비를 가리키는 서로 다른
   별칭이나 주소는 감지하지 않습니다.
-- 타입이 지정된 점프 호스트 경로는 아직 미해결입니다(#20). `-J`/`ProxyJump`는 아래
-  설명처럼 보안상 거부합니다.
+- `--ssh-jump USER@HOST[:PORT]`(한 번, POSIX 클라이언트)는 모든 `--host`의 모든 `ssh`
+  호출을 점프 호스트 하나를 거쳐 보냅니다. 사용자는 필수이고, IPv6는 괄호가 필요하며
+  (`hop@[2001:db8::1]:22`), `%`, `$`, 따옴표, 공백 등 셸 문자는 거부합니다
+  (`invalid_ssh_jump`). `-J` 대신 CLI가 고정된 `ProxyCommand`를 만듭니다. 점프 구간의
+  `ssh`는 `BatchMode=yes`, `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`,
+  `ConnectTimeout=10`, `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`,
+  `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes`,
+  `PermitLocalCommand=no`로 실행되고 `-W [대상]:포트`로 연결합니다. 점프 호스트에도
+  known_hosts 항목이 따로 필요합니다. `--ssh-opt` 값은 점프 호스트가 아니라 대상에
+  적용되며, 점프 구간은 그 밖에는 해당 호스트의 SSH 설정을 따릅니다. 점프는 한 단계만
+  지원합니다. `--ssh-control-path`와 함께 쓸 수 없고(`conflicting_ssh_jump`), Win32-OpenSSH의
+  `ProxyCommand` 처리를 검증하기 전까지 Windows 클라이언트에서는 거부합니다
+  (`ssh_jump_unsupported_platform`). 결과에 `sshJump`가 추가됩니다.
 - 각 대상은 순서대로 사전 확인 한 번과 요청 최대 한 번만 받습니다. 거부되거나
   `unknown`인 호스트가 다음 호스트를 막지 않으며, 재시도하거나 다른 곳으로 다시 보내지
   않습니다. 원소마다 결과를 확인한 뒤 판단하세요.
@@ -207,9 +218,8 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `-o IdentityFile=…`, `-o IdentitiesOnly=yes|no`, `-4`, `-6`만 허용합니다.
   `ProxyCommand`, `LocalCommand`, `-F`, `Include`, `-J`/`ProxyJump`,
   `BatchMode`/`StrictHostKeyChecking` 변경을 포함한 나머지는 모두 거부합니다
-  (`unsupported_ssh_option`). 점프 호스트는 `~/.ssh/config`에 설정하고 그 호스트에
-  `BatchMode yes`와 `StrictHostKeyChecking yes`를 지정하세요. 명령줄 설정은 점프 구간에
-  전달되지 않습니다.
+  (`unsupported_ssh_option`). `-J` 대신 `--ssh-jump`를 쓰세요. OpenSSH 자체의 `-J`
+  점프 구간에는 명령줄의 `BatchMode`와 `StrictHostKeyChecking`이 전달되지 않습니다.
 - IPv6 리터럴은 괄호 없이(`2001:db8::1`) 또는 괄호로(`[2001:db8::1]`,
   `user@[2001:db8::1]`) 쓸 수 있습니다. 영역 ID(`%`)는 거부합니다.
 - 결과에 `sshUser`, `sshUserSource`가 추가됩니다. `USER@HOST`나 `-l USER`이면
