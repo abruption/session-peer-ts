@@ -226,12 +226,22 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `PermitLocalCommand=no`, then `-W [target]:port`. The outer `ssh` also gets
   `ControlMaster=no`, `ControlPath=none` and `ProxyUseFdpass=no`, so a
   configured control master cannot bypass the hop. `ProxyCommand` runs through
-  your login shell (`$SHELL`); only POSIX-compatible shells are expected. The hop needs its own
-  known_hosts entry. `--ssh-opt` values apply to the target, not the hop; the
+  your login shell (`$SHELL`). It was verified with sh, bash and zsh; other
+  login shells (for example fish or csh) are unverified. The hop needs its own
+  known_hosts entry. `--ssh-opt` values, including `-4`/`-6`, apply to the
+  target only and are not passed to the hop; the
   hop otherwise uses your ssh config for that host. Only one hop is supported.
   `--ssh-jump` conflicts with `--ssh-control-path` (`conflicting_ssh_jump`) and
   is refused on Windows clients (`ssh_jump_unsupported_platform`) until
   Win32-OpenSSH's `ProxyCommand` handling is verified. Results add `sshJump`.
+- Timeouts are bounded. On POSIX each `ssh` runs in its own process group. At
+  a timeout or output overflow the whole group is killed, including a jump
+  `ProxyCommand` or any other descendant still holding the output pipes, and the
+  call returns shortly after. Ctrl-C, SIGTERM or SIGHUP to the CLI also kills the
+  group before the CLI exits. On Windows only the direct child is killed, so
+  descendants may linger, but the call still returns at the deadline. A preflight
+  timeout is a refusal (`ssh_preflight_timeout`); a request timeout is `unknown`
+  and is never retried.
 - Each destination gets one preflight and at most one request, in order. A
   refused or `unknown` host does not stop the next host and is never retried or
   resent elsewhere. Check each element before acting on it.

@@ -208,12 +208,18 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `PermitLocalCommand=no`로 실행되고 `-W [대상]:포트`로 연결합니다. 바깥쪽 `ssh`에도
   `ControlMaster=no`, `ControlPath=none`, `ProxyUseFdpass=no`를 지정하므로, 설정된 제어
   마스터가 점프 구간을 우회할 수 없습니다. `ProxyCommand`는 로그인 셸(`$SHELL`)로
-  실행되며 POSIX 호환 셸만 전제합니다. 점프 호스트에도
-  known_hosts 항목이 따로 필요합니다. `--ssh-opt` 값은 점프 호스트가 아니라 대상에
-  적용되며, 점프 구간은 그 밖에는 해당 호스트의 SSH 설정을 따릅니다. 점프는 한 단계만
+  실행됩니다. sh, bash, zsh로 검증했으며 그 밖의 로그인 셸(예: fish, csh)은 검증하지
+  않았습니다. 점프 호스트에도 known_hosts 항목이 따로 필요합니다. `-4`/`-6`을 포함한
+  `--ssh-opt` 값은 대상에만 적용되고 점프 호스트에는 전달되지 않으며, 점프 구간은 그 밖에는 해당 호스트의 SSH 설정을 따릅니다. 점프는 한 단계만
   지원합니다. `--ssh-control-path`와 함께 쓸 수 없고(`conflicting_ssh_jump`), Win32-OpenSSH의
   `ProxyCommand` 처리를 검증하기 전까지 Windows 클라이언트에서는 거부합니다
   (`ssh_jump_unsupported_platform`). 결과에 `sshJump`가 추가됩니다.
+- 시간 제한은 유한합니다. POSIX에서는 `ssh`마다 별도의 프로세스 그룹에서 실행합니다.
+  시간 초과나 출력 한도 초과 시 점프 `ProxyCommand`처럼 출력 파이프를 붙잡은 하위 프로세스를
+  포함해 그룹 전체를 종료하고 곧바로 반환합니다. CLI가 Ctrl-C, SIGTERM, SIGHUP을 받아도
+  종료 전에 그룹을 함께 종료합니다. Windows에서는 직접 실행한 자식만 종료하므로 하위
+  프로세스가 남을 수 있지만, 호출은 기한에 반환합니다. 사전 확인 시간 초과는 거부
+  (`ssh_preflight_timeout`), 요청 시간 초과는 `unknown`이며 재시도하지 않습니다.
 - 각 대상은 순서대로 사전 확인 한 번과 요청 최대 한 번만 받습니다. 거부되거나
   `unknown`인 호스트가 다음 호스트를 막지 않으며, 재시도하거나 다른 곳으로 다시 보내지
   않습니다. 원소마다 결과를 확인한 뒤 판단하세요.
