@@ -128,11 +128,14 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 ```
 
 - 只有一个 `--host` 时与以前一样返回单个对象。重复 `--host` 时按相同顺序返回 JSON 数组，每个元素都有 `schemaVersion`、`ok`、`host` 和 `command`。任一主机失败时退出码为 1。文本输出为每个目标打印一个 `Host: <host>` 块。
-- 在启动任何 `ssh` 进程之前校验所有主机和选项。只要有一个值无效，就对所有请求的主机拒绝整个命令，并返回 `submitted:false`。重复指定同一目标会返回 `duplicate_ssh_host`。
+- 在启动任何 `ssh` 进程之前校验所有主机和选项。只要有一个值无效，就拒绝整个命令并返回 `submitted:false`。`--` 之前的 `--host VALUE` 和 `--host=VALUE` 会先被收集，因此当它们有两个或更多时，任何拒绝（包括未知选项或缺少值）都会输出为每个主机一个元素的数组；少于两个时输出单个对象。
+- 重复指定同一目标会返回 `duplicate_ssh_host`。该检查只比较目标文本（用户、不区分大小写的主机名、规范化的 IPv6），无法识别指向同一台机器的不同别名或地址。
+- 类型化的跳板机路由仍未完成（#20）。`-J`/`ProxyJump` 出于安全考虑被拒绝，详见下文。
 - 每个目标按顺序只进行一次预检和最多一次请求。被拒绝或 `unknown` 的主机不会阻止下一个主机，也不会重试或改发到其他目标。请逐个检查元素后再采取行动。
 - `--ssh-opt` 只接受 `-p PORT`、`-l USER`、`-i IDENTITY_FILE`、`-o Port=…`、`-o User=…`、`-o IdentityFile=…`、`-o IdentitiesOnly=yes|no`、`-4` 和 `-6`。其他选项一律拒绝（`unsupported_ssh_option`），包括 `ProxyCommand`、`LocalCommand`、`-F`、`Include`、`-J`/`ProxyJump` 以及对 `BatchMode`/`StrictHostKeyChecking` 的修改。跳板机请在 `~/.ssh/config` 中配置，并为该主机设置 `BatchMode yes` 和 `StrictHostKeyChecking yes`；命令行设置不会传递到跳板连接。
 - IPv6 字面量可以不带方括号（`2001:db8::1`），也可以带方括号（`[2001:db8::1]`、`user@[2001:db8::1]`）；区域 ID（`%`）会被拒绝。
-- 结果新增 `sshUser` 和 `sshUserSource`：`USER@HOST` 或 `-l USER` 为 `explicit`；不建立连接、通过 `ssh -G` 得到的为 `ssh_config_or_local_default`；无法确定时为 `sshUser:null` 和 `unknown`。同时使用 `-l` 和 `USER@HOST` 会被拒绝。
+- 结果新增 `sshUser` 和 `sshUserSource`：`USER@HOST` 或 `-l USER` 为 `explicit`；通过 `ssh -G` 得到的为 `ssh_config_or_local_default`；无法确定时为 `sshUser:null` 和 `unknown`。同时使用 `-l` 和 `USER@HOST` 会被拒绝。没有显式用户时，会为每个主机在本地运行一次 `ssh -G`（最长 5 秒）。它不建立连接，但如 ssh(1) 和 ssh_config(5) 所述，会像普通 `ssh` 一样解析 SSH 配置，包括执行 `Match exec` 命令。
+- 存在两条信任边界。允许列表只约束本 CLI 在命令行上传递的选项。你自己的 `~/.ssh/config`（以及系统配置）属于受信任的用户配置，其中的 `ProxyCommand`、`ProxyJump`、`Match exec` 等设置，会像你自己运行 `ssh` 时一样，作用于本 CLI 启动的每个 `ssh`。
 
 ### 回复
 

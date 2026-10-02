@@ -208,8 +208,15 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `command`. If any host fails, the exit code is 1. Text output prints one
   `Host: <host>` block per destination.
 - All hosts and options are validated before any `ssh` process starts. One bad
-  value refuses the whole command for every host, with `submitted:false`. The
-  same destination twice is `duplicate_ssh_host`.
+  value refuses the whole command with `submitted:false`. Every `--host VALUE`
+  or `--host=VALUE` before `--` is collected first, so with two or more of them
+  any refusal, including an unknown option or a missing value, is an array with
+  one element per host. With fewer, it is one flat object.
+- The same destination twice is `duplicate_ssh_host`. This check compares the
+  destination text only (user, case-insensitive host name, canonical IPv6). Two
+  aliases or addresses for the same machine are not detected.
+- Typed jump-host routing is still open (#20). `-J`/`ProxyJump` is refused for
+  security, as described below.
 - Each destination gets one preflight and at most one request, in order. A
   refused or `unknown` host does not stop the next host and is never retried or
   resent elsewhere. Check each element before acting on it.
@@ -223,8 +230,16 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 - IPv6 literals may be bare (`2001:db8::1`) or bracketed (`[2001:db8::1]`,
   `user@[2001:db8::1]`); zone IDs are refused.
 - Results add `sshUser` and `sshUserSource`: `explicit` for `USER@HOST` or
-  `-l USER`, `ssh_config_or_local_default` from `ssh -G` (no connection), or
-  `unknown` with `sshUser:null`. `-l` together with `USER@HOST` is refused.
+  `-l USER`, `ssh_config_or_local_default` from `ssh -G`, or `unknown` with
+  `sshUser:null`. `-l` together with `USER@HOST` is refused. Without an explicit
+  user, a local `ssh -G` runs once per host, limited to 5 s. It does not
+  connect, but as ssh(1) and ssh_config(5) describe, it evaluates your ssh
+  configuration, including `Match exec` commands, just as a normal `ssh` would.
+- Two trust boundaries apply. The allowlist governs only the options this CLI
+  passes on the command line. Your own `~/.ssh/config` (and the system config)
+  is trusted user configuration: its `ProxyCommand`, `ProxyJump`, `Match exec`
+  and similar settings run for every `ssh` this CLI starts, exactly as they do
+  for your own `ssh` commands.
 
 ### Replies
 

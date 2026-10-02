@@ -21,6 +21,15 @@ let requested: string[] = [];
 export function parse(args: string[]): Options {
   const command = args[0];
   if (command !== 'list' && command !== 'send' && command !== 'doctor') throw new Refusal('unsupported_command');
+  // Collect requested hosts before any other validation, so that even a syntax
+  // refusal with several --host values is attributed to each of them. Value
+  // options consume their next token, as in the loop below; `--` ends options.
+  requested = [];
+  for (let i = 1; i < args.length && args[i] !== '--'; i++) {
+    const token = args[i]!, key = token.split('=')[0]!;
+    if (key === '--host') { const value = token.includes('=') ? token.slice(7) : args[++i]; if (value !== undefined) requested.push(value); }
+    else if (VALUES.includes(key) && !token.includes('=')) i++;
+  }
   const values = new Map<string, string>(), flags = new Set<string>(), repeated = new Map<string, string[]>(REPEATED.map(k => [k, []]));
   let positional: string | undefined;
   let terminated = false;
@@ -47,7 +56,6 @@ export function parse(args: string[]): Options {
     } else throw new Refusal('unsupported_option');
   }
   let hosts = repeated.get('--host')!;
-  requested = [...hosts];
   if (positional !== undefined) {
     if (values.has('--message')) throw new Refusal('conflicting_message_sources');
     values.set('--message', positional);
@@ -192,7 +200,9 @@ async function remotes(options: Options, message?: string): Promise<{ value: Rec
   let exitCode = 0;
   for (const requestedHost of options.hosts) {
     const target = host(requestedHost);
-    const user = await sshUser(ssh, target, options.ssh);
+    // Metadata never blocks or aborts a destination; earlier results are kept.
+    let user: Awaited<ReturnType<typeof sshUser>>;
+    try { user = await sshUser(ssh, target, options.ssh); } catch { user = { sshUser: null, sshUserSource: 'unknown' }; }
     let outcome: { value: Record<string, unknown>; exitCode: number };
     try { outcome = await remote(options, ssh, target, message); }
     // One destination keeps the existing flat local-host failure shape.

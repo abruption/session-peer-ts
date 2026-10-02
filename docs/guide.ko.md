@@ -191,8 +191,15 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   한 호스트라도 실패하면 종료 코드는 1입니다. 텍스트 출력은 대상마다 `Host: <host>`
   블록을 출력합니다.
 - 모든 호스트와 옵션은 `ssh` 프로세스를 하나라도 시작하기 전에 검증합니다. 값 하나가
-  잘못되면 모든 호스트에 대해 명령 전체를 `submitted:false`로 거부합니다. 같은 대상을
-  두 번 지정하면 `duplicate_ssh_host`입니다.
+  잘못되면 명령 전체를 `submitted:false`로 거부합니다. `--` 앞의 `--host VALUE`와
+  `--host=VALUE`를 먼저 모으므로, 이런 값이 둘 이상이면 알 수 없는 옵션이나 값 누락을
+  포함한 모든 거부가 호스트마다 원소가 하나씩인 배열로 나옵니다. 그보다 적으면 객체
+  하나로 나옵니다.
+- 같은 대상을 두 번 지정하면 `duplicate_ssh_host`입니다. 이 검사는 대상 문자열(사용자,
+  대소문자 무시 호스트 이름, 정규화한 IPv6)만 비교합니다. 같은 장비를 가리키는 서로 다른
+  별칭이나 주소는 감지하지 않습니다.
+- 타입이 지정된 점프 호스트 경로는 아직 미해결입니다(#20). `-J`/`ProxyJump`는 아래
+  설명처럼 보안상 거부합니다.
 - 각 대상은 순서대로 사전 확인 한 번과 요청 최대 한 번만 받습니다. 거부되거나
   `unknown`인 호스트가 다음 호스트를 막지 않으며, 재시도하거나 다른 곳으로 다시 보내지
   않습니다. 원소마다 결과를 확인한 뒤 판단하세요.
@@ -206,8 +213,15 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 - IPv6 리터럴은 괄호 없이(`2001:db8::1`) 또는 괄호로(`[2001:db8::1]`,
   `user@[2001:db8::1]`) 쓸 수 있습니다. 영역 ID(`%`)는 거부합니다.
 - 결과에 `sshUser`, `sshUserSource`가 추가됩니다. `USER@HOST`나 `-l USER`이면
-  `explicit`, 접속 없이 `ssh -G`로 확인하면 `ssh_config_or_local_default`, 확인하지
-  못하면 `sshUser:null`과 `unknown`입니다. `-l`과 `USER@HOST`를 함께 쓰면 거부합니다.
+  `explicit`, `ssh -G`로 확인하면 `ssh_config_or_local_default`, 확인하지 못하면
+  `sshUser:null`과 `unknown`입니다. `-l`과 `USER@HOST`를 함께 쓰면 거부합니다. 명시적인
+  사용자가 없으면 호스트마다 로컬 `ssh -G`를 한 번(최대 5초) 실행합니다. 접속하지는
+  않지만 ssh(1)·ssh_config(5)에 설명된 대로 일반 `ssh`와 똑같이 SSH 설정을 평가하며,
+  `Match exec` 명령도 실행됩니다.
+- 신뢰 경계는 두 가지입니다. 허용 목록은 이 CLI가 명령줄로 넘기는 옵션에만 적용됩니다.
+  사용자의 `~/.ssh/config`(와 시스템 설정)는 신뢰하는 사용자 설정이며, 그 안의
+  `ProxyCommand`, `ProxyJump`, `Match exec` 등은 직접 실행하는 `ssh`와 똑같이 이 CLI가
+  시작하는 모든 `ssh`에 적용됩니다.
 
 ### 회신
 
