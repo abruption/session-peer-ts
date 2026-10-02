@@ -115,8 +115,11 @@ machines or CI never exceed it. Probes run sequentially, once per probe-eligible
 Claude session record (N, including stale records), so a full scan's worst-case
 probe budget is roughly 15 × N seconds plus I/O and termination overhead, an
 increase of 7 × N seconds over the former 8 × N; the compiling path's 20000 ms
-deadline is per call, not a scan bound. A Claude send scans during selection and
-again during revalidation. Timeouts still exclude the process. Each native subtest
+deadline is per call, not a scan bound. A Claude dry-run scans once and returns
+after selection. A real Claude send scans during selection and, only if selection
+succeeds, again during revalidation, so its worst case is about 15 × (N1 + N2)
+seconds for the two scans' record counts; a refusal at selection has no second scan.
+Timeouts still exclude the process. Each native subtest
 cleans its children even after assertion failure. Package smoke verifies unified empty discovery without executables on PATH.
 These are fixture contracts, not new live-TUI ACKs. CI evidence belongs to the
 issue's PR-head checks; publication requires separate release preparation.
