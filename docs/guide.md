@@ -300,8 +300,10 @@ Source after 0.2.1 (unreleased) adds sender context and generated routes:
   records its transport, and `normalizedFrom: "ssh_self"` when it was delivered
   locally.
 - **Same machine.** An SSH reply URI is delivered locally only when its host
-  includes this OS user and names this machine (`localhost`, loopback, the host
-  name or the Tailscale self node), and no `--host` or SSH option (including `--ssh-jump`) was given. A
+  includes this OS user and names this machine in an exact form (`localhost`,
+  canonical `127.x.y.z`, `::1`, `::ffff:127.x.y.z`, the host name or the
+  Tailscale self node; never a non-canonical numeric such as `127.1` or
+  `0177.0.0.1`, nor an IPv4-compatible address such as `::7f00:1`), and no `--host` or SSH option (including `--ssh-jump`) was given. A
   different or missing user stays SSH.
 - **Tailscale.** `tailscale status --json` (3 s bound) is a routing hint only.
   A peer whose `Online` is the boolean `true` (with MagicDNS on) keeps your SSH
@@ -328,10 +330,13 @@ Source after 0.2.1 (unreleased) adds sender context and generated routes:
   `ssh_executable_missing`, `authentication_failed`, `host_key_failed`,
   `timeout`, `transport_failed`, `remote_command_failed`). Locally, this user
   on this machine is a local route without SSH. With `--host`, a loopback
-  return host is refused before SSH: `localhost`, `*.localhost`, and any
-  127.0.0.0/8, `0.0.0.0`, `::1` or `::` address in any numeric form (`127.1`,
-  `2130706433`, `0x7f.1`, `[::ffff:127.0.0.1]`, …), compared by value without
-  DNS. It is refused
+  return host that might name a machine is refused before SSH, without DNS:
+  `localhost`, `*.localhost`, canonical 127.0.0.0/8 and 0.0.0.0/8, `::1`,
+  `::`, their `::ffff:` mapped forms, IPv4-compatible IPv6 (`::a.b.c.d`), and
+  every non-canonical numeric (leading zeros, fewer than four parts, hex or
+  octal parts, single integers, overflow such as `127.1`, `0177.0.0.1`,
+  `2130706433` or `4294967296`), because resolvers disagree on those. It is
+  refused
   (`invalid_return_route`), because the destination would read it as itself.
   A name of the destination itself, for any user, fails as `return_host_is_receiver` and is
   never reported as a verified local route. Likewise a remote send never

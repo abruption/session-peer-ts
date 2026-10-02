@@ -10,7 +10,7 @@ import { checkMessage, send, CodexUnknownOutcome } from './send.js';
 import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 import { jumpOptions, sshConfig, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
-import { configuredHost, detectedHost, isSelf, loopback, probeReturnRoute, replyUri, returnHost, route, sender, tailnet, type Tailnet } from './replies.js';
+import { configuredHost, detectedHost, isSelf, probeReturnRoute, unsafeReturnHost, replyUri, returnHost, route, sender, tailnet, type Tailnet } from './replies.js';
 
 type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions; jump?: SshJump;
   address?: { uri: string; transport: 'local' | 'ssh'; implicit: boolean } };
@@ -300,8 +300,8 @@ try {
       if (!address && !noReply && identity) {
         const configured = configuredHost(options.values.get('--reply-to'));
         let destination = configured ? route(returnHost(configured), await tailnetStatus()).canonical : undefined;
-        // Sent to another machine, a loopback return host would name the receiver.
-        if (destination && options.hosts.length && loopback(destination)) throw new Refusal('invalid_reply_host');
+        // Sent to another machine, a loopback (or unprovable numeric) return host could name the receiver.
+        if (destination && options.hosts.length && unsafeReturnHost(destination)) throw new Refusal('invalid_reply_host');
         const local = !options.hosts.length && (!destination || isSelf(destination, await tailnetStatus()));
         if (!local && !destination) {
           const detected = detectedHost(await tailnetStatus());
@@ -322,7 +322,7 @@ try {
       try { returnTo = configured ? returnHost(configured) : undefined; }
       catch (error) { if (options.values.has('--reply-to') || configuredHost()) throw error; }
       // A remote executor would read a loopback name as itself, not as this origin.
-      if (returnTo && options.hosts.length && loopback(returnTo)) throw new Refusal('invalid_return_route');
+      if (returnTo && options.hosts.length && unsafeReturnHost(returnTo)) throw new Refusal('invalid_return_route');
     }
     let result: Record<string, unknown> = {}, exitCode: number | undefined, results: Record<string, unknown>[] | undefined;
     // Propagate the verified remote exit code so SSH and local refusals match.

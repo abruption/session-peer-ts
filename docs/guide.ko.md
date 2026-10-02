@@ -272,7 +272,9 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `--to`가 URI이면 `addressResolution`에 전송 방식을 기록하고, 로컬로 전달했다면
   `normalizedFrom: "ssh_self"`를 함께 기록합니다.
 - **같은 장비.** SSH 회신 URI는 호스트에 현재 OS 사용자가 포함되고 이 장비를 가리키며
-  (`localhost`, 루프백, 호스트 이름, Tailscale 자기 노드), `--host`나 SSH 옵션(`--ssh-jump` 포함)을 주지
+  (정확한 `localhost`, 정규 표기 `127.x.y.z`, `::1`, `::ffff:127.x.y.z`, 호스트 이름,
+  Tailscale 자기 노드. `127.1`, `0177.0.0.1` 같은 비정규 숫자 표기나 `::7f00:1` 같은
+  IPv4 호환 주소는 해당하지 않음), `--host`나 SSH 옵션(`--ssh-jump` 포함)을 주지
   않았을 때만 로컬로 전달합니다. 사용자가 다르거나 없으면 SSH로 남습니다.
 - **Tailscale.** `tailscale status --json`(3초 제한)은 경로 힌트로만 씁니다. `Online`이
   불리언 `true`인 피어(MagicDNS 켜짐)는 지정한 SSH 별칭을 그대로 대상으로 쓰고
@@ -294,9 +296,10 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `return_host_is_receiver`, `ssh_executable_missing`, `authentication_failed`,
   `host_key_failed`, `timeout`, `transport_failed`, `remote_command_failed`)입니다. 로컬
   점검에서는 같은 장비의 현재 사용자를 SSH 없이 로컬 경로로 처리합니다. `--host`를 쓰면
-  루프백 회신 호스트(`localhost`, `*.localhost`, 그리고 `127.1`, `2130706433`, `0x7f.1`,
-  `[::ffff:127.0.0.1]`처럼 어떤 숫자 표기든 127.0.0.0/8, `0.0.0.0`, `::1`, `::` 주소이며, DNS
-  없이 값으로 비교)는 대상이 자기 자신으로 읽으므로 SSH
+  장비를 가리킬 수 있는 회신 호스트(DNS 없이 판단: `localhost`, `*.localhost`, 정규 표기
+  127.0.0.0/8·0.0.0.0/8, `::1`, `::`, 이들의 `::ffff:` 매핑 형태, IPv4 호환 IPv6(`::a.b.c.d`),
+  그리고 리졸버마다 해석이 달라지는 모든 비정규 숫자 표기: 앞자리 0, 네 부분 미만, 16진·8진
+  부분, 단일 정수, `127.1`·`0177.0.0.1`·`2130706433`·`4294967296` 같은 범위 초과)는 대상이 자기 자신으로 읽으므로 SSH
   전에 거부합니다(`invalid_return_route`). 대상 자신의 이름은 사용자와 관계없이 `return_host_is_receiver`로
   실패하며 검증된 로컬 경로로 보고하지 않습니다. 원격 전송도 루프백 회신 호스트를
   알리지 않습니다(`invalid_reply_host`). 자동 실행이나 재시도는 하지 않으며, 정방향 접속이 된다고 이 점검을

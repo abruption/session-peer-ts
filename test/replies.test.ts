@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { reply } from '../dist/protocol.js';
 import os from 'node:os';
 import { syncBuiltinESMExports } from 'node:module';
-import { detectedHost, isSelf, loopback, namesThisMachine, probeReturnRoute, replyUri, route, sender, type Tailnet } from '../dist/replies.js';
+import { detectedHost, isSelf, localName, namesThisMachine, probeReturnRoute, replyUri, route, sender, unsafeReturnHost, type Tailnet } from '../dist/replies.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const posix = { skip: process.platform === 'win32' };
@@ -281,7 +281,9 @@ test('remote send carries the detected SSH return route; self reply URIs normali
   assert.equal(f.calls().length, calls);
   // A different or unspecified user, or an explicit --host, stays an SSH route.
   // A --ssh-jump implies SSH, so it also keeps a self URI on SSH (through the hop).
-  for (const [destination, extra] of [[`not-${me}@origin`, []], ['origin', []], [`${me}@origin`, ['--host', `${me}@origin`]], [`${me}@origin`, ['--ssh-jump', 'hop@jump']]] as const) {
+  // Non-canonical numerics and IPv4-compatible IPv6 cannot be proven to be this machine either.
+  for (const [destination, extra] of [[`not-${me}@origin`, []], ['origin', []], [`${me}@origin`, ['--host', `${me}@origin`]], [`${me}@origin`, ['--ssh-jump', 'hop@jump']],
+    [`${me}@0177.0.0.1`, []], [`${me}@127.1`, []], [`${me}@2130706433`, []], [`${me}@6425673729`, []], [`${me}@::7f00:1`, []], [`${me}@::127.0.0.1`, []]] as const) {
     const before = f.calls().length;
     const remote = await f.invoke(['send', '--to', target(destination), ...extra, '--message', 'stays ssh', '--no-reply-to'], { ...on, FAKE_DOWN: destination });
     assert.equal(remote.value.error, 'ssh_unreachable', destination); assert.equal(remote.value.addressResolution.transport, 'ssh');
@@ -342,7 +344,7 @@ test('doctor --check-return-route is an explicit bounded probe; forward success 
   assert.deepEqual(JSON.parse(sequence[1]!.input).args.slice(-2), ['--return-route-host', 'bob@origin']);
   // A loopback return host would name the receiver, so it is refused before any SSH.
   const quiet = f.calls().length;
-  for (const target of [`${me}@localhost`, 'bob@127.0.0.1', 'bob@[::1]', ...['127.1', '2130706433', '0', '[::ffff:127.0.0.1]', '0x7f.1', '0177.0.0.1', '017700000001', '[::ffff:7f00:1]', '[::]', '0.0.0.0'].map(name => `bob@${name}`)]) {
+  for (const target of [`${me}@localhost`, 'bob@127.0.0.1', 'bob@[::1]', ...['127.1', '2130706433', '0', '[::ffff:127.0.0.1]', '0x7f.1', '0177.0.0.1', '017700000001', '[::ffff:7f00:1]', '[::]', '0.0.0.0', '6425673729', '4294967296', '18446744075840258049', '[::7f00:1]', '[::127.0.0.1]'].map(name => `bob@${name}`)]) {
     const refused = await f.invoke(['doctor', '--agent', 'claude', '--host', 'worker', '--check-return-route', '--reply-to', target]);
     assert.equal(refused.value.error, 'invalid_return_route', target); assert.equal(refused.code, 2);
   }
@@ -358,7 +360,7 @@ test('doctor --check-return-route is an explicit bounded probe; forward success 
   await once(wire, 'close');
   assert.equal(JSON.parse(wired).returnRoute.reason, 'return_host_is_receiver');
   // Numeric loopback forms forwarded straight over the wire fail on the receiver too, without a probe.
-  for (const name of ['127.1', '2130706433', '0', '[::ffff:127.0.0.1]', '0x7f.1', '0177.0.0.1', '017700000001', '[::ffff:7f00:1]', '[::]', '0.0.0.0']) {
+  for (const name of ['127.1', '2130706433', '0', '[::ffff:127.0.0.1]', '0x7f.1', '0177.0.0.1', '017700000001', '[::ffff:7f00:1]', '[::]', '0.0.0.0', '6425673729', '4294967296', '18446744075840258049', '[::7f00:1]', '[::127.0.0.1]']) {
     const child = spawn(process.execPath, [cli, '--stdio-request'], { env: { ...f.env, FAKE_PROBE: 'ok' }, stdio: ['pipe', 'pipe', 'ignore'] });
     let out = ''; child.stdout.on('data', x => { out += x; });
     child.stdin.end(JSON.stringify({ schemaVersion: 1, args: ['doctor', '--json', '--agent', 'claude', '--return-route-host', `bob@${name}`] }));
@@ -378,11 +380,20 @@ test('the test preload keeps CLI children away from the real tailnet and caller 
   for (const key of ['CLAUDE_CODE_MESSAGING_SOCKET', 'CODEX_THREAD_ID', 'CODEX_SESSION_ID', 'SESSION_PEER_REPLY_HOST', 'CC_PEER_REPLY_HOST']) assert.equal(process.env[key], undefined, key);
 });
 
-test('loopback and receiver names are compared by value, without DNS or the login user', async t => {
-  for (const name of ['localhost', 'a.localhost', '127.0.0.1', '127.1', '2130706433', '0', '0.0.0.0', '0x7f.1', '0177.0.0.1', '017700000001',
-    '::1', '[::1]', '::', '[::ffff:127.0.0.1]', '::ffff:7f00:1', '::7f00:1']) assert.equal(loopback(`bob@${name}`), true, name);
-  for (const name of ['10.0.0.1', '100.64.0.1', '128.0.0.1', '127', '4294967296', '1.2.3.4.5', '0x', '08', '2001:db8::1', '::ffff:10.0.0.1', 'worker', 'localhost.example'])
-    assert.equal(loopback(`bob@${name}`), false, name);
+test('return-host refusal fails closed; local normalization accepts only canonical loopback', async t => {
+  // Conservative refusal: loopback/unspecified in canonical or mapped form, IPv4-compatible
+  // IPv6 and every non-canonical numeric (resolvers disagree on these), all without DNS.
+  for (const name of ['localhost', 'a.localhost', '127.0.0.1', '127.5.6.7', '0.0.0.0', '0.1.2.3', '127.1', '2130706433', '0', '0x7f.1', '0177.0.0.1',
+    '017700000001', '6425673729', '4294967296', '18446744075840258049', '010.0.0.1', '1.2.3', '127', '1.2.3.4.5', '0x', '08',
+    '::1', '[::1]', '::', '[::ffff:127.0.0.1]', '::ffff:7f00:1', '::7f00:1', '::127.0.0.1', '::a00:1']) assert.equal(unsafeReturnHost(`bob@${name}`), true, name);
+  for (const name of ['10.0.0.1', '100.64.0.1', '128.0.0.1', '2001:db8::1', '::ffff:10.0.0.1', 'worker', 'localhost.example', '1password'])
+    assert.equal(unsafeReturnHost(`bob@${name}`), false, name);
+  // Strict local delivery: exact localhost, canonical 127.x.y.z, ::1 and canonical mapped loopback only.
+  for (const name of ['localhost', '127.0.0.1', '127.5.6.7', '::1', '[::1]', '[::ffff:127.0.0.1]', '::ffff:7f00:1']) assert.equal(localName(`bob@${name}`), true, name);
+  for (const name of ['a.localhost', '0.0.0.0', '::', '127.1', '2130706433', '0177.0.0.1', '0x7f.0.0.1', '6425673729', '4294967296', '18446744075840258049',
+    '::7f00:1', '::127.0.0.1', '10.0.0.1']) assert.equal(localName(`bob@${name}`), false, name);
+  for (const name of ['0177.0.0.1', '127.1', '2130706433', '6425673729', '::7f00:1', '::127.0.0.1']) assert.equal(isSelf(`${me}@${name}`), false, name);
+  assert.equal(isSelf(`${me}@127.0.0.1`), true); assert.equal(isSelf(`${me}@[::ffff:127.0.0.1]`), true);
   // An unusable login name must not make a receiver's own host name look remote.
   t.mock.method(os, 'userInfo', () => ({ username: 'Fixture User', uid: -1, gid: -1, shell: null, homedir: '/' }));
   syncBuiltinESMExports();
