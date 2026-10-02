@@ -234,7 +234,10 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `--ssh-jump` conflicts with `--ssh-control-path` (`conflicting_ssh_jump`) and
   is refused on Windows clients (`ssh_jump_unsupported_platform`) until
   Win32-OpenSSH's `ProxyCommand` handling is verified. Results add `sshJump`.
-- Timeouts are bounded. On POSIX each `ssh` runs in its own process group. At
+- Timeouts are bounded. On POSIX each `ssh` starts detached: in a new session
+  and process group with no controlling terminal. Cleanup covers that group
+  only; a descendant that leaves it with `setsid()` is out of scope, and there
+  is no PID scanning. At
   a timeout or output overflow the whole group is killed, including a jump
   `ProxyCommand` or any other descendant still holding the output pipes, and the
   call returns shortly after. Ctrl-C, SIGTERM or SIGHUP to the CLI also kills the

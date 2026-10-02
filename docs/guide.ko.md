@@ -214,7 +214,9 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   지원합니다. `--ssh-control-path`와 함께 쓸 수 없고(`conflicting_ssh_jump`), Win32-OpenSSH의
   `ProxyCommand` 처리를 검증하기 전까지 Windows 클라이언트에서는 거부합니다
   (`ssh_jump_unsupported_platform`). 결과에 `sshJump`가 추가됩니다.
-- 시간 제한은 유한합니다. POSIX에서는 `ssh`마다 별도의 프로세스 그룹에서 실행합니다.
+- 시간 제한은 유한합니다. POSIX에서는 `ssh`마다 제어 터미널이 없는 새 세션·프로세스 그룹으로 분리해 시작합니다.
+  정리는 그 그룹에만 적용되며, `setsid()`로 그룹을 벗어난 하위 프로세스는 범위 밖이고 PID
+  검색은 하지 않습니다.
   시간 초과나 출력 한도 초과 시 점프 `ProxyCommand`처럼 출력 파이프를 붙잡은 하위 프로세스를
   포함해 그룹 전체를 종료하고 곧바로 반환합니다. CLI가 Ctrl-C, SIGTERM, SIGHUP을 받아도
   종료 전에 그룹을 함께 종료합니다. Windows에서는 직접 실행한 자식만 종료하므로 하위
