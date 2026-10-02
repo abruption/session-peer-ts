@@ -300,7 +300,7 @@ try {
       if (!address && !noReply && identity) {
         const configured = configuredHost(options.values.get('--reply-to'));
         let destination = configured ? route(returnHost(configured), await tailnetStatus()).canonical : undefined;
-        // Sent to another machine, a loopback (or unprovable numeric) return host could name the receiver.
+        // Sent to another machine, a loopback or non-canonical numeric reply host could name the receiver.
         if (destination && options.hosts.length && unsafeReturnHost(destination)) throw new Refusal('invalid_reply_host');
         const local = !options.hosts.length && (!destination || isSelf(destination, await tailnetStatus()));
         if (!local && !destination) {

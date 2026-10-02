@@ -138,8 +138,11 @@ export function localName(destination: string): boolean {
   if (v6 !== undefined) return v6 === '::1' || mapped(v6)?.[0] === 127;
   return canonicalIPv4(name)?.[0] === 127;
 }
-// Whether a host name (any user) may name this machine; conservative, for the
-// receiver side of a return-route probe. Independent of the login user's name.
+// Whether a host name (any user) may name this machine: a known self name or an
+// unprovable numeric form. Known names are only the exact OS host name and the
+// Tailscale self names/addresses; other DNS or LAN aliases are not detected.
+// Conservative, for the receiver side of a return-route probe; independent of
+// the login user's name.
 export function namesThisMachine(destination: string, status?: Tailnet): boolean {
   const name = lower(split(destination).name);
   if (unsafeReturnHost(name) || name === lower(hostname())) return true;
