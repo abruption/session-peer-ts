@@ -343,9 +343,9 @@ command's result or exit code; a failed refresh waits 1 hour before the next
 attempt. Cache writes are single-flight and fail closed: every write, from a
 background refresh or an explicit check, happens only while holding
 `npm-update.lock`, and only over an older record. Nothing ever takes over or
-removes a lock it did not create. If a refresh crashed and left the lock behind,
-background refreshes stop, and `update --check` reports
-`cache: "skipped_stale_lock"`. Delete `npm-update.lock` by hand when no
+removes a lock it did not create. If a refresh crashes, or an I/O error keeps it
+from releasing the lock, the lock stays behind: background refreshes stop, and
+`update --check` reports `cache: "skipped_stale_lock"`. Delete `npm-update.lock` by hand when no
 session-peer process is running.
 
 `--no-update-notice` and `SESSION_PEER_NO_UPDATE_NOTICE=1` suppress these

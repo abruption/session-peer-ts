@@ -3,14 +3,15 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import fs, { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import { type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { acquireLock, cacheDirectory, compareVersions, manager, refreshCache, registryUrl, releaseLock, upgradeCommand, upgradeGuidance, validVersion, type Manager, type Probe } from '../dist/updates.js';
+import { syncBuiltinESMExports } from 'node:module';
+import { acquireLock, cacheDirectory, checkUpdate, compareVersions, manager, refreshCache, registryUrl, releaseLock, upgradeCommand, upgradeGuidance, validVersion, type Manager, type Probe } from '../dist/updates.js';
 
 const cli = resolve('dist/cli.js');
 const SENTINEL = 'REGISTRY-BODY-SENTINEL';
@@ -461,4 +462,32 @@ test('concurrent lock acquisition across processes yields one owner, and none fo
   assert.equal(winners.length, 1); assert.equal(readFileSync(f.lock, 'utf8'), winners[0]);
   const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
   assert.deepEqual((await race()).filter(Boolean), []); assert.equal(readFileSync(f.lock, 'utf8'), winners[0]);
+});
+
+test('lock I/O failures: a failed token write removes only its own new lock; an unverifiable lock maps to cache failed', async t => {
+  const f = await fixture(t, { body: JSON.stringify({ latest: '0.2.2' }) });
+  const env = { ...f.env };
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const token = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const writeSync = fs.writeSync;
+  t.mock.method(fs, 'writeSync', ((fd: number, data: unknown, ...rest: unknown[]) => {
+    if (typeof data === 'string' && token.test(data)) throw Object.assign(new Error('EIO'), { code: 'EIO' });
+    return (writeSync as (...args: unknown[]) => number)(fd, data, ...rest);
+  }) as typeof fs.writeSync);
+  syncBuiltinESMExports();
+  assert.throws(() => acquireLock(env), /EIO/);
+  assert.equal(existsSync(f.lock), false, 'own empty lock removed');
+  t.mock.restoreAll(); syncBuiltinESMExports();
+  // The token cannot be read back: publication is not attempted and the enum stays stable.
+  const readFileSync = fs.readFileSync;
+  t.mock.method(fs, 'readFileSync', ((path: unknown, ...rest: unknown[]) => {
+    if (String(path).endsWith('npm-update.lock')) throw Object.assign(new Error('EIO'), { code: 'EIO' });
+    return (readFileSync as (...args: unknown[]) => unknown)(path, ...rest);
+  }) as typeof fs.readFileSync);
+  syncBuiltinESMExports();
+  const result = await checkUpdate('latest', env);
+  t.mock.restoreAll(); syncBuiltinESMExports();
+  assert.equal(result.cache, 'failed'); assert.equal(result.latest, '0.2.2'); assert.equal(existsSync(f.file), false);
+  // Release failed too, so the lock is left for documented manual recovery.
+  assert.ok(existsSync(f.lock));
 });

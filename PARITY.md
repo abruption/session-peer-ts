@@ -486,17 +486,21 @@ generation's lock or mutex be deleted. That code is removed:
   (`checkedAt`); an explicit check that finds the lock held still reports its
   result with `cache: "skipped_locked"`. A refresh without the current token does
   nothing.
-- No code path takes over, renames or deletes a lock it did not create, and no
-  mutex exists. An existing lock of any age makes the background refresh skip.
+- No code path takes over, renames or deletes a lock, temporary file or other
+  resource it did not create, and no mutex exists. The shared cache record
+  `npm-update.json` is the one file that is replaced by design, by atomic
+  rename and only under the lock rules above. An existing lock of any age makes the background refresh skip.
   The holder deletes its own lock after re-reading its token.
 
 Guaranteed, with no automatic recovery: at most one lock holder at a time (`O_EXCL`), so
 at most one background refresh and at most one cache writer at once; no writer
 replaces a record newer than its own start; no invocation deletes or moves a
-lock or file it did not create. Cost: a refresh that crashes while holding the
-lock (the detached child runs for at most about 3 seconds) blocks background
-refreshes until a user deletes `npm-update.lock` by hand while no session-peer
-process runs. `update --check` reports `cache: "skipped_stale_lock"` once the lock is older
+foreign lock, temporary file or other resource. Cost: a lock can be left behind
+when its holder crashes (the detached child runs for at most about 3 seconds)
+or when releasing it fails, for example because its token cannot be read back.
+A failed token write right after creation is undone only for that same inode.
+A left-behind lock blocks background refreshes until a user deletes
+`npm-update.lock` by hand while no session-peer process runs. `update --check` reports `cache: "skipped_stale_lock"` once the lock is older
 than 60 s; it never removes it. Manual deletion during a running refresh is the
 only way to break the guarantee (the holder could then remove a lock created
 after the deletion).

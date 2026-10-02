@@ -2,7 +2,7 @@
 // replace npm-owned files, or touch Python installs, remote hosts or skills.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
+import { chmodSync, closeSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -189,7 +189,9 @@ export function readCache(env = process.env, now = Date.now()): CacheState {
   // A failed refresh (latest:null) only backs off further attempts.
   return { status: now - checkedAt < (latest === null ? FAILURE_TTL : TTL) ? 'fresh' : 'expired', latest: latest as string | null, checkedAt };
 }
-export function writeCache(latest: string | null, env = process.env, now = Date.now()): void {
+// Internal helper: callers must hold the refresh lock (see publish). dist/updates.js is
+// not a package export, so none of these functions are public API.
+function writeCache(latest: string | null, env: NodeJS.ProcessEnv, now = Date.now()): void {
   const directory = privateDirectory(env);
   const temporary = join(directory, `.${CACHE}.${process.pid}.${randomUUID()}.tmp`);
   try {
@@ -214,7 +216,20 @@ export function acquireLock(env = process.env): string | undefined {
   let fd: number;
   try { fd = openSync(lock, 'wx', 0o600); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined; throw error; }
-  try { writeSync(fd, token); } finally { closeSync(fd); }
+  let created: { dev: bigint; ino: bigint } | undefined;
+  try {
+    created = fstatSync(fd, { bigint: true });
+    writeSync(fd, token);
+  } catch (error) {
+    try { closeSync(fd); } catch {}
+    // Remove only the file this call just created (same inode); never another lock.
+    try {
+      const info = lstatSync(lock, { bigint: true });
+      if (created && info.dev === created.dev && info.ino === created.ino) rmSync(lock, { force: true });
+    } catch {}
+    throw error;
+  }
+  closeSync(fd);
   return token;
 }
 export function lockState(env = process.env, now = Date.now()): 'free' | 'held' | 'stale' {
@@ -303,7 +318,8 @@ export async function checkUpdate(channel = 'latest', env = process.env): Promis
   if (channel === 'latest') {
     try {
       const token = acquireLock(env);
-      if (token) { cache = publish(token, latest as string, started, env); releaseLock(token, env); }
+      // Keep the documented enum: an unverifiable lock (not_owner) is reported as failed.
+      if (token) { const outcome = publish(token, latest as string, started, env); cache = outcome === 'not_owner' ? 'failed' : outcome; releaseLock(token, env); }
       else cache = lockState(env) === 'stale' ? 'skipped_stale_lock' : 'skipped_locked';
     } catch { cache = 'failed'; }
   }

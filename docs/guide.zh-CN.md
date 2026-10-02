@@ -215,7 +215,7 @@ npm 版本，Python 版 `session-peer` 的发布是独立的版本序列，从�
 写一行。缓存缺失、无效或过期时会启动一个分离的刷新进程，不会延迟或改变命令结果与退出码；
 刷新失败后 1 小时内不再尝试。缓存写入是单次执行的，并在失败时保持关闭：无论是后台刷新还是
 显式检查，写入都只在持有 `npm-update.lock` 时进行，且只覆盖更旧的记录。任何调用都不会接管或
-删除不是自己创建的锁。若刷新异常退出而留下锁，后台刷新会停止，`update --check` 会报告
+删除不是自己创建的锁。若刷新异常退出，或因 I/O 错误未能释放锁而留下锁，后台刷新会停止，`update --check` 会报告
 `cache: "skipped_stale_lock"`。请在没有 session-peer 进程运行时手动删除 `npm-update.lock`。
 
 `--no-update-notice` 和 `SESSION_PEER_NO_UPDATE_NOTICE=1` 会抑制这些后台提示和刷新。
