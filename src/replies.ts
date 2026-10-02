@@ -1,5 +1,6 @@
 // Sender context, Tailscale routing hints and the opt-in return-route probe.
 // Everything here is metadata: none of it authenticates a peer or authorizes a send.
+import { isIPv6 } from 'node:net';
 import { hostname, userInfo } from 'node:os';
 import { isAbsolute } from 'node:path';
 import { casefold } from './casefold.js';
@@ -100,9 +101,37 @@ export function route(destination: string, status?: Tailnet): Route {
 }
 // A loopback name always means the machine that evaluates it. Sent to another
 // machine as a return host, it would name the receiver, not the origin.
+// Numeric names are compared by value, without DNS: IPv4 in every inet_aton
+// form (127.1, 2130706433, 0x7f.1, 0177.0.0.1) and IPv4-mapped/compatible IPv6.
+function ipv4(name: string): number | undefined {
+  const parts = name.split('.');
+  if (parts.length > 4 || parts.some(part => !/^(?:0x[0-9a-f]+|0[0-7]*|[1-9]\d*)$/.test(part))) return undefined;
+  const values = parts.map(part => part.startsWith('0x') ? parseInt(part.slice(2), 16) : part.length > 1 && part.startsWith('0') ? parseInt(part, 8) : Number(part));
+  const last = values.pop()!, room = 2 ** (8 * (4 - values.length));
+  if (values.some(value => value > 255) || last >= room) return undefined;
+  return values.reduce((sum, value, index) => sum + value * 2 ** (8 * (3 - index)), 0) + last;
+}
+function ipv6Tail(name: string): number | undefined {
+  const literal = name.replace(/^\[|\]$/g, '');
+  if (!literal.includes(':') || !isIPv6(literal)) return undefined;
+  const canonical = new URL(`http://[${literal}]`).hostname.slice(1, -1);
+  if (canonical === '::') return 0;
+  const match = /^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(canonical);
+  return match ? parseInt(match[1]!, 16) * 65536 + parseInt(match[2]!, 16) : canonical === '::1' ? -1 : undefined;
+}
 export function loopback(destination: string): boolean {
   const name = lower(split(destination).name);
-  return name === 'localhost' || name.endsWith('.localhost') || name === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name) || name === '0.0.0.0' || name === '::';
+  if (name === 'localhost' || name.endsWith('.localhost')) return true;
+  const value = ipv4(name) ?? ipv6Tail(name);
+  // -1 is ::1; 0 is the unspecified address; 127.0.0.0/8 is IPv4 loopback.
+  return value !== undefined && (value === -1 || value === 0 || Math.floor(value / 2 ** 24) === 127);
+}
+// Whether a host name (any user) names this machine: loopback, its host name
+// or its Tailscale self node. Independent of the login user's name.
+export function namesThisMachine(destination: string, status?: Tailnet): boolean {
+  const name = lower(split(destination).name);
+  if (loopback(name) || name === lower(hostname())) return true;
+  return !!status?.self && names(status.self).has(name);
 }
 export function localUser(): string | undefined {
   try { const name = userInfo().username; return /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(name) ? name : undefined; } catch { return undefined; }
@@ -110,11 +139,8 @@ export function localUser(): string | undefined {
 // Same machine only when the destination names this OS user explicitly and a
 // local name; a missing or different user stays an SSH route.
 export function isSelf(destination: string, status?: Tailnet): boolean {
-  const { user, name } = split(destination);
-  if (!user || user !== localUser()) return false;
-  const local = new Set(['localhost', '127.0.0.1', '::1', lower(hostname())]);
-  if (status?.self) for (const item of names(status.self)) local.add(item);
-  return local.has(lower(name));
+  const { user } = split(destination);
+  return !!user && user === localUser() && namesThisMachine(destination, status);
 }
 // This machine's tailnet address: MagicDNS name, else a 100.64.0.0/10 IPv4.
 export function detectedHost(status?: Tailnet): string | undefined {
@@ -153,7 +179,7 @@ const PROBE = ['-T', '-o', 'BatchMode=yes', '-o', 'PasswordAuthentication=no', '
 // origin, so it fails instead of normalizing to a local route.
 export async function probeReturnRoute(destination: string | undefined, status?: Tailnet, remote = false): Promise<Record<string, unknown>> {
   if (!destination) return { status: 'failed', transport: 'ssh', host: null, reason: 'return_host_unavailable' };
-  if (remote && (loopback(destination) || isSelf(destination, status) || isSelf(`${localUser()}@${split(destination).name}`, status)))
+  if (remote && namesThisMachine(destination, status))
     return { status: 'failed', transport: 'ssh', host: destination, reason: 'return_host_is_receiver' };
   if (isSelf(destination, status)) return { status: 'verified', transport: 'local', host: hostname(), reason: 'self_route_normalized' };
   let ssh: string;

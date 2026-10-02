@@ -10,7 +10,9 @@ import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { reply } from '../dist/protocol.js';
-import { detectedHost, isSelf, replyUri, route, sender, type Tailnet } from '../dist/replies.js';
+import os from 'node:os';
+import { syncBuiltinESMExports } from 'node:module';
+import { detectedHost, isSelf, loopback, namesThisMachine, probeReturnRoute, replyUri, route, sender, type Tailnet } from '../dist/replies.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const posix = { skip: process.platform === 'win32' };
@@ -264,7 +266,8 @@ test('remote send carries the detected SSH return route; self reply URIs normali
   // Remote destination: the message travels in stdin JSON, never in argv.
   for (const call of f.calls()) assert.equal(call.args.some(arg => arg.includes('remote hello') || arg.includes('Reply-To')), false);
   // A remote send never advertises a loopback return host: it would name the receiver.
-  for (const [args, extra] of [[['--reply-to', `${me}@localhost`], {}], [['--reply-to', '127.0.0.1'], {}], [[], { SESSION_PEER_REPLY_HOST: 'localhost' }]] as const) {
+  for (const [args, extra] of [[['--reply-to', `${me}@localhost`], {}], [['--reply-to', '127.0.0.1'], {}], [[], { SESSION_PEER_REPLY_HOST: 'localhost' }],
+    [['--reply-to', '127.1'], {}], [['--reply-to', '2130706433'], {}], [['--reply-to', '0'], {}], [['--reply-to', 'bob@[::ffff:127.0.0.1]'], {}]] as const) {
     const before = f.calls().length;
     const refused = await f.invoke(['send', '--host', 'worker', '--to', 'fixture', '--message', 'x', ...args], { ...on, CODEX_THREAD_ID: id, ...extra });
     assert.equal(refused.value.error, 'invalid_reply_host'); assert.equal(refused.value.submitted, false);
@@ -337,7 +340,7 @@ test('doctor --check-return-route is an explicit bounded probe; forward success 
   assert.deepEqual(JSON.parse(sequence[1]!.input).args.slice(-2), ['--return-route-host', 'bob@origin']);
   // A loopback return host would name the receiver, so it is refused before any SSH.
   const quiet = f.calls().length;
-  for (const target of [`${me}@localhost`, 'bob@127.0.0.1', 'bob@[::1]']) {
+  for (const target of [`${me}@localhost`, 'bob@127.0.0.1', 'bob@[::1]', ...['127.1', '2130706433', '0', '[::ffff:127.0.0.1]', '0x7f.1', '0177.0.0.1', '017700000001', '[::ffff:7f00:1]', '[::]', '0.0.0.0'].map(name => `bob@${name}`)]) {
     const refused = await f.invoke(['doctor', '--agent', 'claude', '--host', 'worker', '--check-return-route', '--reply-to', target]);
     assert.equal(refused.value.error, 'invalid_return_route', target); assert.equal(refused.code, 2);
   }
@@ -352,6 +355,15 @@ test('doctor --check-return-route is an explicit bounded probe; forward success 
   wire.stdin.end(JSON.stringify({ schemaVersion: 1, args: ['doctor', '--json', '--agent', 'claude', '--return-route-host', 'bob@localhost'] }));
   await once(wire, 'close');
   assert.equal(JSON.parse(wired).returnRoute.reason, 'return_host_is_receiver');
+  // Numeric loopback forms forwarded straight over the wire fail on the receiver too, without a probe.
+  for (const name of ['127.1', '2130706433', '0', '[::ffff:127.0.0.1]', '0x7f.1', '0177.0.0.1', '017700000001', '[::ffff:7f00:1]', '[::]', '0.0.0.0']) {
+    const child = spawn(process.execPath, [cli, '--stdio-request'], { env: { ...f.env, FAKE_PROBE: 'ok' }, stdio: ['pipe', 'pipe', 'ignore'] });
+    let out = ''; child.stdout.on('data', x => { out += x; });
+    child.stdin.end(JSON.stringify({ schemaVersion: 1, args: ['doctor', '--json', '--agent', 'claude', '--return-route-host', `bob@${name}`] }));
+    await once(child, 'close');
+    assert.deepEqual(JSON.parse(out).returnRoute, { status: 'failed', transport: 'ssh', host: `bob@${name.replace(/^\[|\]$/g, '')}`, reason: 'return_host_is_receiver' }, name);
+  }
+  assert.equal(f.calls().slice(quiet).some(call => call.args.at(-1) === 'exit 0'), false);
   const missing = await f.invoke(['doctor', '--agent', 'claude', '--host', 'worker', '--check-return-route']);
   assert.deepEqual(missing.value.returnRoute, { status: 'failed', transport: 'ssh', host: null, reason: 'return_host_unavailable' });
   assert.equal(JSON.parse(f.calls().at(-1)!.input).args.includes('--return-route-host'), false);
@@ -362,4 +374,19 @@ test('doctor --check-return-route is an explicit bounded probe; forward success 
 test('the test preload keeps CLI children away from the real tailnet and caller identity', () => {
   assert.equal(process.env.SESSION_PEER_TAILSCALE, 'off');
   for (const key of ['CLAUDE_CODE_MESSAGING_SOCKET', 'CODEX_THREAD_ID', 'CODEX_SESSION_ID', 'SESSION_PEER_REPLY_HOST', 'CC_PEER_REPLY_HOST']) assert.equal(process.env[key], undefined, key);
+});
+
+test('loopback and receiver names are compared by value, without DNS or the login user', async t => {
+  for (const name of ['localhost', 'a.localhost', '127.0.0.1', '127.1', '2130706433', '0', '0.0.0.0', '0x7f.1', '0177.0.0.1', '017700000001',
+    '::1', '[::1]', '::', '[::ffff:127.0.0.1]', '::ffff:7f00:1', '::7f00:1']) assert.equal(loopback(`bob@${name}`), true, name);
+  for (const name of ['10.0.0.1', '100.64.0.1', '128.0.0.1', '127', '4294967296', '1.2.3.4.5', '0x', '08', '2001:db8::1', '::ffff:10.0.0.1', 'worker', 'localhost.example'])
+    assert.equal(loopback(`bob@${name}`), false, name);
+  // An unusable login name must not make a receiver's own host name look remote.
+  t.mock.method(os, 'userInfo', () => ({ username: 'Fixture User', uid: -1, gid: -1, shell: null, homedir: '/' }));
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const own = `bob@${hostname().toLowerCase()}`;
+  assert.equal(namesThisMachine(own), true); assert.equal(isSelf(own), false);
+  assert.deepEqual(await probeReturnRoute(own, undefined, true), { status: 'failed', transport: 'ssh', host: own, reason: 'return_host_is_receiver' });
+  assert.deepEqual(await probeReturnRoute('bob@2130706433', undefined, true), { status: 'failed', transport: 'ssh', host: 'bob@2130706433', reason: 'return_host_is_receiver' });
 });
