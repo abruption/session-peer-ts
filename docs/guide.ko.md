@@ -272,7 +272,7 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `--to`가 URI이면 `addressResolution`에 전송 방식을 기록하고, 로컬로 전달했다면
   `normalizedFrom: "ssh_self"`를 함께 기록합니다.
 - **같은 장비.** SSH 회신 URI는 호스트에 현재 OS 사용자가 포함되고 이 장비를 가리키며
-  (`localhost`, 루프백, 호스트 이름, Tailscale 자기 노드), `--host`나 SSH 옵션을 주지
+  (`localhost`, 루프백, 호스트 이름, Tailscale 자기 노드), `--host`나 SSH 옵션(`--ssh-jump` 포함)을 주지
   않았을 때만 로컬로 전달합니다. 사용자가 다르거나 없으면 SSH로 남습니다.
 - **Tailscale.** `tailscale status --json`(3초 제한)은 경로 힌트로만 씁니다. `Online`이
   불리언 `true`인 피어(MagicDNS 켜짐)는 지정한 SSH 별칭을 그대로 대상으로 쓰고

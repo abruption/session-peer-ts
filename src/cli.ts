@@ -84,7 +84,7 @@ export function parse(args: string[]): Options {
       const route = reply(values.get('--to')!);
       // Only a route taken from the URI alone may later normalize to local.
       address = { uri: values.get('--to')!, transport: route.host === undefined ? 'local' : 'ssh',
-        implicit: !hosts.length && !repeated.get('--ssh-opt')!.length && !['--remote-bin', '--remote-platform', '--ssh-control-path'].some(k => values.has(k)) };
+        implicit: !hosts.length && !repeated.get('--ssh-opt')!.length && !['--remote-bin', '--remote-platform', '--ssh-control-path', '--ssh-jump'].some(k => values.has(k)) };
       if (hosts.length && (hosts.length > 1 || host(hosts[0]!) !== route.host)) throw new Refusal('reply_route_conflict');
       if (route.host !== undefined) hosts = [route.host];
       if (values.has('--codex-home') && values.get('--codex-home') !== route.home) throw new Refusal('reply_route_conflict');

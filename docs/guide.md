@@ -301,7 +301,7 @@ Source after 0.2.1 (unreleased) adds sender context and generated routes:
   locally.
 - **Same machine.** An SSH reply URI is delivered locally only when its host
   includes this OS user and names this machine (`localhost`, loopback, the host
-  name or the Tailscale self node), and no `--host`/SSH option was given. A
+  name or the Tailscale self node), and no `--host` or SSH option (including `--ssh-jump`) was given. A
   different or missing user stays SSH.
 - **Tailscale.** `tailscale status --json` (3 s bound) is a routing hint only.
   A peer whose `Online` is the boolean `true` (with MagicDNS on) keeps your SSH
