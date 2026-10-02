@@ -9,14 +9,19 @@ import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send, CodexUnknownOutcome } from './send.js';
 import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
+import { sshOptions, sshUser, type SshOptions } from './ssh.js';
 
-type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string> };
+type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions };
 const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'];
-const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address'];
+const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt'];
+// Repeated in order; every other value option is single.
+const REPEATED = ['--host', '--ssh-opt'];
+// Requested destinations, so a command-wide refusal can be attributed to each.
+let requested: string[] = [];
 export function parse(args: string[]): Options {
   const command = args[0];
   if (command !== 'list' && command !== 'send' && command !== 'doctor') throw new Refusal('unsupported_command');
-  const values = new Map<string, string>(), flags = new Set<string>();
+  const values = new Map<string, string>(), flags = new Set<string>(), repeated = new Map<string, string[]>(REPEATED.map(k => [k, []]));
   let positional: string | undefined;
   let terminated = false;
   for (let i = 1; i < args.length; i++) {
@@ -38,9 +43,11 @@ export function parse(args: string[]): Options {
       // argparse; `--message=--dry-run` or stdin still send such text literally.
       const option = split > 0 ? '' : (value ?? '').split('=')[0]!;
       if (value === undefined || values.has(name) || [...FLAGS, ...VALUES, '--help', '-h', '--version', '--stdio-request'].includes(option)) throw new Refusal('invalid_option');
-      values.set(name, value);
+      if (REPEATED.includes(name)) repeated.get(name)!.push(value); else values.set(name, value);
     } else throw new Refusal('unsupported_option');
   }
+  let hosts = repeated.get('--host')!;
+  requested = [...hosts];
   if (positional !== undefined) {
     if (values.has('--message')) throw new Refusal('conflicting_message_sources');
     values.set('--message', positional);
@@ -59,10 +66,10 @@ export function parse(args: string[]): Options {
     if (flags.has('--no-reply-to') && values.has('--reply-address')) throw new Refusal('conflicting_reply_options');
     if (values.get('--to')!.startsWith('session-peer:')) {
       const route = reply(values.get('--to')!);
-      for (const [key, value] of [['--host', route.host], ['--codex-home', route.home]] as const) {
-        if (values.has(key) && values.get(key) !== value) throw new Refusal('reply_route_conflict');
-        if (value !== undefined) values.set(key, value);
-      }
+      if (hosts.length && (hosts.length > 1 || host(hosts[0]!) !== route.host)) throw new Refusal('reply_route_conflict');
+      if (route.host !== undefined) hosts = [route.host];
+      if (values.has('--codex-home') && values.get('--codex-home') !== route.home) throw new Refusal('reply_route_conflict');
+      if (route.home !== undefined) values.set('--codex-home', route.home);
       values.set('--to', route.to);
     }
   }
@@ -71,19 +78,32 @@ export function parse(args: string[]): Options {
     if (!values.get('--codex-home')) throw new Refusal('inactive_opt_in_requires_explicit_home');
   }
   if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
-  if (values.has('--host')) host(values.get('--host')!);
+  // Validate every destination and option before any SSH process starts.
+  const destinations = new Set<string>();
+  for (const item of hosts) {
+    const destination = host(item), at = destination.lastIndexOf('@');
+    // One attempt per destination: a repeated destination is refused, not sent twice.
+    const name = destination.slice(at + 1).toLowerCase(), key = destination.slice(0, at + 1) + (name.includes(':') ? new URL(`http://[${name}]`).hostname : name);
+    if (destinations.has(key)) throw new Refusal('duplicate_ssh_host');
+    destinations.add(key);
+  }
+  if (repeated.get('--ssh-opt')!.length && !hosts.length) throw new Refusal('inapplicable_option');
+  const ssh = sshOptions(repeated.get('--ssh-opt')!);
+  // `ssh -l` silently overrides USER@HOST, so both together are ambiguous.
+  if (ssh.user !== undefined && hosts.some(item => item.includes('@'))) throw new Refusal('conflicting_ssh_user');
   if (values.has('--ssh-control-path')) {
-    if (!values.has('--host')) throw new Refusal('inapplicable_option');
+    // One control socket multiplexes one destination, never several.
+    if (hosts.length !== 1) throw new Refusal('inapplicable_option');
     try { if (!lstatSync(values.get('--ssh-control-path')!).isSocket()) throw new Error('not_socket'); }
     catch { throw new Refusal('invalid_ssh_control_path'); }
   }
-  if (values.has('--remote-platform') && (!values.has('--host') || !['posix', 'win32'].includes(values.get('--remote-platform')!))) throw new Refusal('invalid_remote_platform');
+  if (values.has('--remote-platform') && (!hosts.length || !['posix', 'win32'].includes(values.get('--remote-platform')!))) throw new Refusal('invalid_remote_platform');
   if (values.has('--remote-bin')) {
     const binary = values.get('--remote-bin')!;
-    if (!values.has('--host') || (values.get('--remote-platform') === 'win32' ?
+    if (!hosts.length || (values.get('--remote-platform') === 'win32' ?
       !/^[A-Za-z]:\\[^\r\n]+$/.test(binary) : !/^\/[\x20-\x7e]+$/.test(binary))) throw new Refusal('invalid_remote_bin');
   }
-  return { command, values, flags };
+  return { command, values, flags, hosts, ssh };
 }
 async function input(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -117,9 +137,8 @@ export function sshPreflightFailure(result: Done, expected: string): string | un
   if (result.code !== 0) return 'ssh_preflight_failed';
   return undefined;
 }
-async function remote(options: Options, message?: string): Promise<{ value: Record<string, unknown>; exitCode: number }> {
+async function remote(options: Options, ssh: string, target: string, message?: string): Promise<{ value: Record<string, unknown>; exitCode: number }> {
   const { values, flags, command } = options;
-  const target = host(values.get('--host')!);
   const binary = values.get('--remote-bin') ?? 'session-peer';
   const windows = values.get('--remote-platform') === 'win32';
   const invoke = (flag: string) => {
@@ -128,9 +147,10 @@ async function remote(options: Options, message?: string): Promise<{ value: Reco
     const code = `& '${binary.replace(/['\u2018-\u201b]/g, '$&$&')}' ${flag}`;
     return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(code, 'utf16le').toString('base64')}`;
   };
-  const ssh = executable('ssh');
+  // OpenSSH keeps the first value obtained, so the fixed hardening options
+  // precede the allowlisted user options and cannot be overridden by them.
   const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10',
-    ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), '--', target];
+    ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), ...options.ssh.args, '--', target];
   const preflight = await run(ssh, [...base, invoke('--version')], { timeout: 15000 });
   const preflightError = sshPreflightFailure(preflight, VERSION_LINE);
   if (preflightError) throw new Refusal(preflightError, 1);
@@ -156,9 +176,36 @@ async function remote(options: Options, message?: string): Promise<{ value: Reco
       (!value.ok && !((value.submitted === false && value.status === 'refused') || (value.submitted === null && value.status === 'unknown'))))) return uncertain();
   return { value: { ...value, host: target, sshHost: target }, exitCode: done.code! };
 }
+function failure(error: unknown, command: string, where: string): { value: Record<string, unknown>; exitCode: number } {
+  const unknown = error instanceof UnknownOutcome;
+  const refusal = error instanceof Refusal ? error : new Refusal('operation_failed', 1);
+  const homeResolution = error instanceof HomeRefusal || error instanceof CodexUnknownOutcome ? error.codexHomeResolution : undefined;
+  return { exitCode: unknown ? 1 : refusal.exitCode, value: { schemaVersion: 1, host: where, command, ok: false,
+    error: unknown ? 'outcome_unknown' : refusal.code, status: unknown ? 'unknown' : 'refused',
+    submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false,
+    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }) } };
+}
+// Destinations run in order, one attempt each. A failure or unknown outcome is
+// reported for that destination only; it is never retried or failed over.
+async function remotes(options: Options, message?: string): Promise<{ value: Record<string, unknown>[]; exitCode: number }> {
+  const ssh = executable('ssh'), results: Record<string, unknown>[] = [];
+  let exitCode = 0;
+  for (const requestedHost of options.hosts) {
+    const target = host(requestedHost);
+    const user = await sshUser(ssh, target, options.ssh);
+    let outcome: { value: Record<string, unknown>; exitCode: number };
+    try { outcome = await remote(options, ssh, target, message); }
+    // One destination keeps the existing flat local-host failure shape.
+    catch (error) { outcome = failure(error, options.command, options.hosts.length === 1 ? hostname() : requestedHost); }
+    results.push({ ...outcome.value, ...(options.hosts.length > 1 ? { host: requestedHost } : {}), sshHost: target, ...user });
+    exitCode = options.hosts.length === 1 ? outcome.exitCode : outcome.exitCode === 0 && exitCode === 0 ? 0 : 1;
+  }
+  return { value: results, exitCode };
+}
 
 let command = 'unknown';
 let format: OutputFormat = 'json';
+let wire = false;
 try {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (!((major === 22 && minor! >= 13) || major === 24)) throw new Refusal('unsupported_node_version');
@@ -168,7 +215,7 @@ try {
   else if ((args.length === 1 && ['--help', '-h'].includes(args[0]!)) ||
     (args.length === 2 && ['list', 'send', 'doctor'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
   else {
-    const wire = args.length === 1 && args[0] === '--stdio-request';
+    wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
       let request: unknown;
       try { request = JSON.parse(await input()); } catch { throw new Refusal('invalid_remote_request'); }
@@ -180,7 +227,7 @@ try {
     const options = parse(args);
     format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
     if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
-    if (wire && (options.values.has('--host') || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
+    if (wire && (options.hosts.length || options.ssh.args.length || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
     let message: string | undefined;
     if (command === 'send') {
       message = options.values.get('--message');
@@ -189,22 +236,20 @@ try {
       message = envelope(message, options.flags.has('--no-from'), options.values.get('--reply-address'));
       checkMessage(message, options.values.get('--to')!.startsWith('codex:'));
     }
-    let result: Record<string, unknown>, exitCode: number | undefined;
+    let result: Record<string, unknown> = {}, exitCode: number | undefined, results: Record<string, unknown>[] | undefined;
     // Propagate the verified remote exit code so SSH and local refusals match.
-    if (options.values.has('--host')) ({ value: result, exitCode } = await remote(options, message));
+    if (options.hosts.length) ({ value: results, exitCode } = await remotes(options, message));
     else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
     else if (command === 'doctor') result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
     else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
-    console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }, format));
+    const shape = (item: Record<string, unknown>) => ({ schemaVersion: 1, host: hostname(), command, ok: item.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...item });
+    // One destination stays flat; repeated --host returns an ordered array.
+    console.log(renderOutput(results && results.length > 1 ? results.map(shape) : shape(results?.[0] ?? result), format));
     process.exitCode = exitCode ?? (result.ok === false ? 1 : 0);
   }
 } catch (error) {
-  const unknown = error instanceof UnknownOutcome;
-  const failure = error instanceof Refusal ? error : new Refusal('operation_failed', 1);
-  const homeResolution = error instanceof HomeRefusal || error instanceof CodexUnknownOutcome ? error.codexHomeResolution : undefined;
-  console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: false,
-    error: unknown ? 'outcome_unknown' : failure.code, status: unknown ? 'unknown' : 'refused',
-    submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false,
-    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }) }, format));
-  process.exitCode = unknown ? 1 : failure.exitCode;
+  // A command-wide refusal before dispatch applies to every requested host.
+  const { value, exitCode } = failure(error, command, hostname());
+  console.log(renderOutput(!wire && requested.length > 1 ? requested.map(item => ({ ...value, host: item })) : value, format));
+  process.exitCode = exitCode;
 }

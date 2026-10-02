@@ -28,7 +28,7 @@ not a missing implementation. Issue links describe work, not available features.
 | `doctor` | Readiness diagnostics; return-route check is opt-in | Source: read-only local/SSH metadata, per-agent/home results, capabilities and bounded TS skill compatibility. Published 0.1.0 has no doctor | Implemented in source for [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0; no return-route probing |
 | CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | 0.2.0: explicit JSON/text format, positional/named/stdin body, command help, exact Unicode 14.0.0 casefold with PID for ambiguity | Implemented; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
 | From / Reply-To | Caller detection, automatic return-route metadata, structured URI resolution | From uses Codex environment UUID only; explicit `--reply-address`; local/SSH Reply-To URI parsing with conflict checks | Partial; [#21](https://github.com/abruption/session-peer-ts/issues/21), 0.3.0 |
-| SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; one host; strict preflight; JSON stdin; explicit Windows PowerShell path | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) hosts/options, [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design, 0.3.0 |
+| SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; strict preflight; JSON stdin; explicit Windows PowerShell path. Unreleased source: ordered repeated `--host`, allowlisted `--ssh-opt`, IPv6 literals and `sshUser`/`sshUserSource` ([details](#multi-host-ssh-and-connection-options-unreleased-source)) | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) in source (no `-J`/ProxyJump, Tailscale enrichment or arbitrary options), [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design, 0.3.0 |
 | Updates | Cached advisory client/skill notices; explicit manager-aware update commands | No update cache/command; `--no-update-notice` accepted as a no-op | Planned [#22](https://github.com/abruption/session-peer-ts/issues/22), 0.3.0 |
 | Reusable execution API | Agent/transport capability adapters | Package root exposes pure protocol helpers only; no general typed execution API | Planned [#24](https://github.com/abruption/session-peer-ts/issues/24), Future — Agent integrations |
 | Skill guidance/setup | Companion `session-peer` skill targets Python | Separate `session-peer-ts` companion PR and exact-commit setup; baseline/version/help gates | Source [#25](https://github.com/abruption/session-peer-ts/issues/25), 0.2.0; no tag/publish |
@@ -129,7 +129,7 @@ TS normal envelopes have `schemaVersion`, `host`, `command`, `ok`, `version`,
 | `remoteVersion` | Optional remote `list` metadata after version discovery (also update diagnostics); not universal on send | Absent; exact TS version banner must pass preflight; mismatch is a refusal |
 | `replyRoute`, `addressResolution` | Optional metadata when route advertised / Reply-To destination resolved | Absent; explicit envelope/URI support does not imply these JSON fields |
 | `wake` | Optional, opt-in; failed activation may still have `submitted:true` and `ok:false` | Absent; unsupported option |
-| SSH metadata | Requested/resolved host and SSH metadata; multi-host list may be an array | Verified remote response adds `host`/`sshHost`; caught local SSH failure reports the local host; no host aggregation |
+| SSH metadata | Requested/resolved host and SSH metadata; multi-host list may be an array | Verified remote response adds `host`/`sshHost`; caught local SSH failure for one host reports the local host. Unreleased source adds `sshUser`/`sshUserSource` and returns an ordered array for repeated `--host` (see #20 section) |
 | `error`, `retryAllowed` | Error/detail fields vary by path; submission may already have happened | Fixed error codes, caught failure has `retryAllowed:false`; native stderr/message body are not copied into errors |
 | `clientUpdate`, `skillUpdates` | Optional advisory notice metadata | Absent |
 
@@ -414,3 +414,26 @@ command, transport or JSON field. Callers may notice the stricter refusals below
 | Windows batch shims (#57) | A `.cmd`/`.bat` executable found first on `PATH` (or given explicitly) is reported as `executable_unsupported` by `send` and `doctor`, because Node cannot spawn them without a shell and a shell would interpret the message. Use the native `codex.exe`. |
 | Envelope trimming (#59, #64) | Leading/trailing `\n` is trimmed by index scanning instead of `/^\n+\|\n+$/`, which was quadratic on long interior newline runs (CodeQL `js/polynomial-redos`). Trimming semantics are unchanged. |
 | Windows owner inspection (#65) | The compiling `Add-Type` owner inspection waits up to 20000 ms; the compile-free creation-time probe keeps 8000 ms. Timeouts still refuse. |
+
+## Multi-host SSH and connection options (unreleased source)
+
+[#20](https://github.com/abruption/session-peer-ts/issues/20) source behavior
+after 0.2.1; it is not part of any published version. Compared with Python
+1.0.2 `--host`/`--ssh-opt`:
+
+| Area | Python 1.0.2 | TS source |
+| --- | --- | --- |
+| Repeated `--host` | Ordered per-host loop; one host stays flat, several return a JSON array; any failure exits 1 | Same shape and order for `list`, `send` and `doctor`. Every element keeps `schemaVersion`, `ok`, `host` (as requested) and `command`. Any failed host makes the overall exit 1; a single host keeps its own 0/1/2 exit code |
+| Validation before dispatch | Host/option checks run inside the loop, so an earlier host may already be contacted | Every host, `--ssh-opt`, message and remote option is validated before any `ssh` process starts (including `ssh -G`). A refusal with several hosts is repeated for each requested host with `submitted:false`. A repeated destination (case-insensitive host, canonical IPv6) is `duplicate_ssh_host` |
+| Attempts | One attempt per host | One preflight and at most one request per destination. Refused/unknown hosts are reported in place; later hosts still get their single attempt. No failover, resend or retry after `unknown` |
+| `--ssh-opt` | Arbitrary ssh arguments minus a substring blocklist (`proxycommand`, `localcommand`, `permitlocalcommand`) | Allowlist only: `-p PORT`, `-l USER`, `-i IDENTITY_FILE`, `-o Port=`/`User=`/`IdentityFile=`/`IdentitiesOnly=yes\|no`, `-4`, `-6`, as separate or attached tokens. Anything else is `unsupported_ssh_option`; a bad, duplicate or dash-leading value is `invalid_ssh_option`. Identity paths refuse `%` and `$` (OpenSSH token/environment expansion). Options are re-emitted canonically after the fixed `BatchMode=yes`, `StrictHostKeyChecking=yes` and `ConnectTimeout=10`, which OpenSSH therefore keeps |
+| Jump hosts | `ProxyJump` allowed through `--ssh-opt` | Refused. OpenSSH starts the jump hop without the command-line `BatchMode`/`StrictHostKeyChecking`; configure the jump in `~/.ssh/config` with those settings instead |
+| User | `sshUser`/`sshUserSource`: `explicit` from `USER@HOST`, else `ssh -G` (`ssh_config_or_local_default`), else `unknown` | Same fields and sources; `-l USER` also counts as `explicit`. `-l` together with `USER@HOST` is `conflicting_ssh_user`, because `-l` silently wins |
+| IPv6 | Passed through to `ssh` | `2001:db8::1`, `[2001:db8::1]` and `user@[2001:db8::1]` are accepted; brackets are removed for `ssh`, `sshHost` shows the destination used. Zone IDs (`%`) are refused |
+| Control socket / Windows | n/a | `--ssh-control-path` requires exactly one `--host`. `--remote-platform win32` and `--remote-bin` apply to every host with the same encoded PowerShell command |
+| Text output | Per-host human blocks | Per-host blocks prefixed by `Host: <host>` |
+
+Evidence: POSIX fake-`ssh` fixtures in `test/ssh-hosts.test.ts` (ordering,
+argv, zero invocations on invalid input, partial/unknown results, IPv6,
+POSIX/Windows remote commands, body absent from argv) and a two-host case in
+the Windows native fixture. No real SSH destination was contacted.

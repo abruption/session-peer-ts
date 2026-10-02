@@ -168,15 +168,46 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
 Node를 선택하는 래퍼를 지정할 수 있습니다. TypeScript 표시와 정확한 버전을 확인하므로
 다른 구현을 발견하면 거부합니다. BatchMode·StrictHostKeyChecking을 사용하며 새
 호스트 키 승인, 원격 런타임 설치, Python 대체 실행은 하지 않습니다. 메시지는 원격
-셸 인자가 아닌 JSON stdin 요청으로 전달합니다. 임의의 `--ssh-opt`, IPv6 리터럴,
-Tailscale 정규 이름 보강은 미지원이므로 SSH 별칭·호스트명을 사용하세요. 정방향 접속이
-역방향 접속을 보장하지 않습니다.
+셸 인자가 아닌 JSON stdin 요청으로 전달합니다. Tailscale 정규 이름 보강은
+미지원입니다. 정방향 접속이 역방향 접속을 보장하지 않습니다.
 
 Windows SSH 대상에는 `--remote-platform win32`를 명시하고, 원격 PATH에 없다면
 `--remote-bin 'C:\절대\경로\session-peer.cmd'`를 지정하세요. 이미 인증된 OpenSSH
-제어 소켓은 `--ssh-control-path /로컬/절대/소켓`으로 선택할 수 있습니다. 이는 호스트 키
+제어 소켓은 `--host`가 정확히 하나일 때 `--ssh-control-path /로컬/절대/소켓`으로 선택할 수 있습니다. 이는 호스트 키
 검증을 우회하거나 새 로그인을 허용하지 않습니다. Windows 로컬 Codex 홈은
 `C:\Users\...\.codex`처럼 전체 경로를 사용합니다. 기존 Python CLI는 자동 제거·교체하지 않습니다.
+
+### 여러 호스트와 연결 옵션
+
+0.2.1 이후 소스(미배포)는 반복 `--host`와 제한된 `--ssh-opt`를 받습니다.
+
+```sh
+session-peer list --host alpha --host user@[2001:db8::1] \
+  --ssh-opt=-p --ssh-opt=2222 --ssh-opt=-i --ssh-opt="$HOME/.ssh/id_ed25519" --json
+```
+
+- `--host`가 하나면 기존처럼 객체 하나를 반환합니다. `--host`를 반복하면 같은 순서의
+  JSON 배열을 반환하며, 모든 원소에 `schemaVersion`, `ok`, `host`, `command`가 있습니다.
+  한 호스트라도 실패하면 종료 코드는 1입니다. 텍스트 출력은 대상마다 `Host: <host>`
+  블록을 출력합니다.
+- 모든 호스트와 옵션은 `ssh` 프로세스를 하나라도 시작하기 전에 검증합니다. 값 하나가
+  잘못되면 모든 호스트에 대해 명령 전체를 `submitted:false`로 거부합니다. 같은 대상을
+  두 번 지정하면 `duplicate_ssh_host`입니다.
+- 각 대상은 순서대로 사전 확인 한 번과 요청 최대 한 번만 받습니다. 거부되거나
+  `unknown`인 호스트가 다음 호스트를 막지 않으며, 재시도하거나 다른 곳으로 다시 보내지
+  않습니다. 원소마다 결과를 확인한 뒤 판단하세요.
+- `--ssh-opt`는 `-p PORT`, `-l USER`, `-i IDENTITY_FILE`, `-o Port=…`, `-o User=…`,
+  `-o IdentityFile=…`, `-o IdentitiesOnly=yes|no`, `-4`, `-6`만 허용합니다.
+  `ProxyCommand`, `LocalCommand`, `-F`, `Include`, `-J`/`ProxyJump`,
+  `BatchMode`/`StrictHostKeyChecking` 변경을 포함한 나머지는 모두 거부합니다
+  (`unsupported_ssh_option`). 점프 호스트는 `~/.ssh/config`에 설정하고 그 호스트에
+  `BatchMode yes`와 `StrictHostKeyChecking yes`를 지정하세요. 명령줄 설정은 점프 구간에
+  전달되지 않습니다.
+- IPv6 리터럴은 괄호 없이(`2001:db8::1`) 또는 괄호로(`[2001:db8::1]`,
+  `user@[2001:db8::1]`) 쓸 수 있습니다. 영역 ID(`%`)는 거부합니다.
+- 결과에 `sshUser`, `sshUserSource`가 추가됩니다. `USER@HOST`나 `-l USER`이면
+  `explicit`, 접속 없이 `ssh -G`로 확인하면 `ssh_config_or_local_default`, 확인하지
+  못하면 `sshUser:null`과 `unknown`입니다. `-l`과 `USER@HOST`를 함께 쓰면 거부합니다.
 
 ### 회신
 

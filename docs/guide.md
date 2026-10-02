@@ -182,17 +182,49 @@ The default remote command is `session-peer` on remote PATH. An absolute
 the TypeScript marker and exact version; a different implementation is refused.
 SSH uses BatchMode and StrictHostKeyChecking. It never accepts new host keys,
 installs a remote runtime or invokes Python as a fallback. Messages travel in a
-JSON stdin request, not remote shell arguments. Arbitrary `--ssh-opt`, IPv6
-literals and Tailscale canonical-name enrichment are not supported; use an SSH
-alias/hostname. Forward access does not establish reverse access.
+JSON stdin request, not remote shell arguments. Tailscale canonical-name
+enrichment is not supported. Forward access does not establish reverse access.
 
 For a Windows SSH destination, add `--remote-platform win32` and select a
 Windows `--remote-bin 'C:\absolute\path\session-peer.cmd'` if needed. A previously
 authenticated OpenSSH control socket can be selected with
-`--ssh-control-path /absolute/local/socket`; this does not bypass host-key
-verification or grant a new login. For local Windows Codex commands, use a full
+`--ssh-control-path /absolute/local/socket` with exactly one `--host`; this
+does not bypass host-key verification or grant a new login. For local Windows Codex commands, use a full
 `C:\Users\...\.codex` path for `--codex-home`. The Python CLI, if present,
 is not removed or replaced by this client.
+
+### Several hosts and connection options
+
+Source after 0.2.1 (unreleased) accepts repeated `--host` and a constrained
+`--ssh-opt`:
+
+```sh
+session-peer list --host alpha --host user@[2001:db8::1] \
+  --ssh-opt=-p --ssh-opt=2222 --ssh-opt=-i --ssh-opt="$HOME/.ssh/id_ed25519" --json
+```
+
+- One `--host` returns one object, as before. Repeated `--host` returns a JSON
+  array in the same order; every element has `schemaVersion`, `ok`, `host` and
+  `command`. If any host fails, the exit code is 1. Text output prints one
+  `Host: <host>` block per destination.
+- All hosts and options are validated before any `ssh` process starts. One bad
+  value refuses the whole command for every host, with `submitted:false`. The
+  same destination twice is `duplicate_ssh_host`.
+- Each destination gets one preflight and at most one request, in order. A
+  refused or `unknown` host does not stop the next host and is never retried or
+  resent elsewhere. Check each element before acting on it.
+- `--ssh-opt` accepts only `-p PORT`, `-l USER`, `-i IDENTITY_FILE`,
+  `-o Port=…`, `-o User=…`, `-o IdentityFile=…`, `-o IdentitiesOnly=yes|no`,
+  `-4` and `-6`. Everything else, including `ProxyCommand`, `LocalCommand`,
+  `-F`, `Include`, `-J`/`ProxyJump` and any `BatchMode`/`StrictHostKeyChecking`
+  change, is refused (`unsupported_ssh_option`). Configure a jump host in
+  `~/.ssh/config` and give that host `BatchMode yes` and
+  `StrictHostKeyChecking yes`; the command-line settings do not reach the jump hop.
+- IPv6 literals may be bare (`2001:db8::1`) or bracketed (`[2001:db8::1]`,
+  `user@[2001:db8::1]`); zone IDs are refused.
+- Results add `sshUser` and `sshUserSource`: `explicit` for `USER@HOST` or
+  `-l USER`, `ssh_config_or_local_default` from `ssh -G` (no connection), or
+  `unknown` with `sshUser:null`. `-l` together with `USER@HOST` is refused.
 
 ### Replies
 

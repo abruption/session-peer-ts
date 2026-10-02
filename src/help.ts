@@ -3,10 +3,14 @@ export function help(command?: string): string {
   const common = `Output (required for operations; no default):
   --json | --output-format json|text   JSON stays one machine-readable object
 Transport:
-  --host HOST                        SSH destination (no nested transports)
+  --host [USER@]HOST                 SSH destination; repeat for ordered per-host results
+                                     (IPv6: 2001:db8::1 or [2001:db8::1]; no nested transports)
+  --ssh-opt OPT                      Allowlisted ssh option, repeatable: -p PORT, -l USER,
+                                     -i IDENTITY_FILE, -o Port|User|IdentityFile|IdentitiesOnly=VALUE,
+                                     -4, -6. Other options (ProxyJump, ProxyCommand, -F...) are refused
   --remote-bin ABSOLUTE_PATH          Remote session-peer executable
   --remote-platform posix|win32       Remote shell platform
-  --ssh-control-path SOCKET           Existing SSH control socket
+  --ssh-control-path SOCKET           Existing SSH control socket (one --host only)
   --no-update-notice                  Accepted compatibility flag
   -h, --help                         Show command help`;
   if (command === 'list') return `Usage: session-peer list [options]

@@ -85,8 +85,8 @@ async function fixture(t: TestContext) {
     const [code, signal] = await once(child, 'close'); clearTimeout(timer); children.delete(child);
     assert.equal(signal, null, `CLI fixture deadline: ${stderr}`);
     assert.ok([0, 1, 2].includes(code as number), `CLI exit ${code}: ${stderr}`);
-    const result = JSON.parse(stdout);
-    assert.equal(result.schemaVersion, 1); assert.equal(result.ok, code === 0);
+    const result = JSON.parse(stdout), items = [result].flat();
+    assert.ok(items.every(item => item.schemaVersion === 1)); assert.equal(items.every(item => item.ok), code === 0);
     return result;
   }
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', binary, '--message', 'fixture 🚀', '--no-from'];
@@ -253,6 +253,17 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     assert.equal(diagnosed.ok, true); assert.equal(diagnosed.ready, true); assert.equal(diagnosed.command, 'doctor');
     assert.equal(diagnosed.agents.codex.homes[0].codexHome, remoteHome);
     assert.equal(diagnosed.agents.codex.tool.executed, false); assert.equal(diagnosed.sshHost, 'fixture');
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    // #20: repeated hosts run in order through the same encoded PowerShell path.
+    const sshBefore = f.log('FIXTURE_SSH_LOG').length;
+    const pair = await f.invoke(['list', '--agent', 'codex', '--host', 'fixture', '--host', 'user@[2001:db8::1]', '--remote-platform', 'win32',
+      '--remote-bin', remote, '--ssh-opt=-p', '--ssh-opt=2222'], { FIXTURE_REMOTE_PROFILE: remoteProfile, FIXTURE_REMOTE_HOMES: '[]' });
+    assert.deepEqual(pair.map((item: { host: string }) => item.host), ['fixture', 'user@[2001:db8::1]']);
+    assert.deepEqual(pair.map((item: { sshUserSource: string }) => item.sshUserSource), ['ssh_config_or_local_default', 'explicit']);
+    assert.deepEqual(pair.map((item: { sessions: unknown[] }) => item.sessions.length), [1, 1]);
+    const pairCalls = f.log('FIXTURE_SSH_LOG').slice(sshBefore);
+    assert.deepEqual(pairCalls.map(call => call.args[call.args.indexOf('--') + 1]), ['fixture', 'fixture', 'user@2001:db8::1', 'user@2001:db8::1']);
+    for (const call of pairCalls) assert.deepEqual(call.args.slice(call.args.indexOf('-p'), call.args.indexOf('-p') + 2), ['-p', '2222']);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
     await f.stop(owner);
     const inactive = await f.invoke([...args, '--allow-inactive-codex-home']);

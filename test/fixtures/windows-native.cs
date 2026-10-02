@@ -49,6 +49,8 @@ public static class Fixture {
         if (mode == "fail") { Console.Error.WriteLine("SECRET-SENTINEL"); return 1; }
         Console.WriteLine("Queued message fixture-17 for thread " + args[2] + "."); return 0;
       }
+      // `ssh -G` user metadata lookup: answered without a log entry or connection.
+      if (Array.IndexOf(args, "-G") >= 0) { Console.WriteLine("user fixture-user"); return 0; }
       string command = args[args.Length - 1];
       string modeSsh = Environment.GetEnvironmentVariable("FIXTURE_SSH_MODE");
       bool preflight = command.EndsWith("--version'") || command.EndsWith("--version");
