@@ -18,6 +18,30 @@ Only one implementation is assumed installed. Check `session-peer --version`
 and your installation manager before enabling the alias. Python and TypeScript
 co-installation is outside this feature's scope.
 
+## Checking for the activation files
+
+`--version` alone cannot tell whether an installation contains these files: a
+local source build reports the same version as public 0.2.1 until the version is
+raised for release. Check for the files in the installed package directory
+instead:
+
+```sh
+# Global npm installation:
+ls "$(npm root --global)/session-peer/shorthand/sp.sh"
+# Isolated or project prefix (replace <prefix>):
+ls "$(npm root --prefix <prefix>)/session-peer/shorthand/sp.sh"
+```
+
+```powershell
+Test-Path (Join-Path (npm root --global) 'session-peer/shorthand/sp.ps1')
+# Isolated or project prefix (replace <prefix>):
+Test-Path (Join-Path (npm root --prefix <prefix>) 'session-peer/shorthand/sp.ps1')
+```
+
+A missing file means that installation predates the feature (for example the
+public 0.2.1 archive); its `session-peer` command still works, but `sp` cannot
+be activated from it.
+
 ## Why activation is explicit
 
 npm owns only the `session-peer` executable. Adding another unconditional npm
@@ -91,7 +115,17 @@ if ((Get-Alias sp -ErrorAction SilentlyContinue).Definition -eq 'Set-ItemPropert
 }
 ```
 
-Other `sp` commands/functions/aliases must also be resolved by you. Then read
+Other `sp` commands/functions/aliases must also be resolved by you.
+
+The PowerShell activator detects collisions with `Get-Command sp -ListImported`,
+which covers aliases, functions, cmdlets and PATH applications already visible in
+the session. It does **not** consider an `sp` command exported by a module that
+is installed but not yet imported (module auto-loading). Activation deliberately
+does not import modules to find out, because importing runs module code. If you
+rely on such a module, check `Get-Command sp -All` (which can auto-load it) and
+choose accordingly; once that module is imported, the activator refuses its `sp`.
+
+Then read
 and dot-source the activation file (do not invoke it with `&`):
 
 ```powershell
@@ -140,11 +174,21 @@ to replace another manager's files. Never silently replace another tool's `sp`.
 ## Validation boundaries
 
 Package tests compare both names against an isolated installed CLI for
-version/help/list/dry-run and argument errors. Shell fixtures check whitespace,
-Unicode, literal metacharacters, stdin, `--`, executable/alias/function collisions,
-missing canonical commands and deactivation. An alias remains loaded while the
-fixture reinstalls and uninstalls the package. Bash is checked on macOS/Linux,
-zsh where present (including macOS), and Windows PowerShell on Windows Node22/24.
+version/help/list/dry-run and argument errors, including exit codes and stdout
+and stderr. Shell fixtures check whitespace, Unicode, literal metacharacters,
+stdin, `--`, executable/alias/function collisions, missing canonical commands
+and deactivation; each fixture shell first proves that its runner reports a
+script's own exit code (3), not a 0/1 summary.
+
+The lifecycle fixture runs in every fixture shell: Bash on macOS/Linux, zsh where
+present (including macOS), and Windows PowerShell 5.1 on Windows Node 22/24. In an
+isolated `--prefix` it installs the packed version, activates `sp`, updates in
+place to a second, fixture-only version packed from a copy of the same files,
+and checks that `sp --version` and `session-peer --version` both report the new
+version. It then uninstalls the package and checks that both names fail as
+command not found (Bash/zsh exit 127, PowerShell `CommandNotFoundException`) and
+that deactivation removes `sp`. It never installs globally or edits a profile.
+
 These are isolated fixtures, not live message or ACK evidence. Submission,
 ownership, permissions and no-retry-on-unknown contracts remain those of the
 canonical CLI.

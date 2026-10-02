@@ -633,5 +633,5 @@ canonical identity. See [activation and lifecycle](docs/shorthand.md).
 
 Python/TS co-installation is excluded; replacing an implementation respects its
 original manager. This TS change does not implement additional Python features.
-Package fixtures cover name equivalence, collisions and in-place reinstall/removal
-on supported shells. They do not establish live delivery or ACK.
+Package fixtures cover name equivalence, collisions, an in-place version update
+and removal on every supported shell. They do not establish live delivery or ACK.
