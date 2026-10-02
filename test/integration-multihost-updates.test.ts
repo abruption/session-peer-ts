@@ -42,7 +42,7 @@ if(args.at(-1).endsWith('--version')){console.log('session-peer 0.2.1 (typescrip
 const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:fs.readFileSync(0,'utf8'),encoding:'utf8',
   env:{...process.env,SESSION_PEER_CACHE_DIR:${JSON.stringify(receiver)},SESSION_PEER_UPDATE_NOTICE:'1'}});
 // FAKE_INJECT: a receiver response carrying a forged client-only field.
-let out=r.stdout;if(process.env.FAKE_INJECT){const v=JSON.parse(out);v.clientUpdate={command:'fixture-only'};out=JSON.stringify(v);}
+let out=r.stdout;if(process.env.FAKE_INJECT){const v=JSON.parse(out);v.clientUpdate={command:'fixture-only'};v.remoteMarker='kept';out=JSON.stringify(v);}
 process.stdout.write(out);process.exit(r.status);`, { mode: 0o700 });
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: root, USERPROFILE: root, CLAUDE_CONFIG_DIR: join(root, '.claude'), ANTHROPIC_CONFIG_DIR: '',
     CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off',
@@ -137,13 +137,23 @@ test('clientUpdate is client-local: a remote-supplied value is dropped', posix, 
   const f = await fixture(t);
   f.seed();
   const inject = { FAKE_INJECT: '1' };
-  const array = JSON.parse((await f.call(f.args(['--json']), inject)).stdout);
-  assert.equal(array.length, 3); for (const item of array) assert.equal('clientUpdate' in item, false);
-  const optOut = JSON.parse((await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json', '--no-update-notice'], inject)).stdout);
-  assert.equal('clientUpdate' in optOut, false);
-  const local = JSON.parse((await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json'], inject)).stdout);
-  assert.equal(local.clientUpdate.source, 'npm_registry_cache'); assert.equal(local.clientUpdate.latest, '0.2.2');
-  assert.notEqual(local.clientUpdate.command, 'fixture-only');
+  // The forged response is still accepted as a normal result: only the reserved field is dropped.
+  const accepted = (item: Record<string, unknown>, host: string) => {
+    assert.equal(item.ok, true); assert.equal('error' in item, false); assert.equal(item.sshHost, host);
+    assert.deepEqual(item.sessions, []); assert.equal(item.remoteMarker, 'kept'); assert.equal('clientUpdate' in item, false);
+  };
+  const arrayRun = await f.call(f.args(['--json']), inject);
+  assert.equal(arrayRun.code, 0, arrayRun.stdout);
+  const array = JSON.parse(arrayRun.stdout);
+  assert.equal(array.length, 3); array.forEach((item: Record<string, unknown>, index: number) => accepted(item, hosts[index]!));
+  const optOutRun = await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json', '--no-update-notice'], inject);
+  assert.equal(optOutRun.code, 0); accepted(JSON.parse(optOutRun.stdout), 'alpha');
+  const localRun = await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json'], inject);
+  assert.equal(localRun.code, 0);
+  const { clientUpdate: own, ...local } = JSON.parse(localRun.stdout);
+  accepted(local, 'alpha');
+  assert.equal(own.source, 'npm_registry_cache'); assert.equal(own.latest, '0.2.2'); assert.notEqual(own.command, 'fixture-only');
   const text = await f.call(f.args(['--output-format', 'text', '--no-update-notice']), inject);
-  assert.equal(text.stdout.includes('fixture-only'), false); assert.equal(text.stderr, '');
+  assert.equal(text.code, 0); assert.doesNotMatch(text.stdout, /fixture-only|Error:/); assert.equal(text.stderr, '');
+  assert.deepEqual(text.stdout.match(/^Host: .+$/gm), hosts.map(item => `Host: ${item}`));
 });

@@ -290,7 +290,11 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const noticedText = await raw([...pairArgs, '--output-format', 'text']);
     assert.equal(noticedText.code, 0); assert.equal(noticedText.stderr.match(/^Update available: session-peer \S+ -> 99\.0\.0 /gm)?.length, 1);
     const flat = await raw(['list', '--agent', 'codex', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote, '--json']);
-    assert.equal(JSON.parse(flat.stdout).clientUpdate.latest, '99.0.0');
+    const flatValue = JSON.parse(flat.stdout);
+    assert.equal(flat.code, 0, flat.stderr); assert.equal(flatValue.ok, true); assert.equal(flatValue.sshHost, 'fixture');
+    assert.equal(flatValue.clientUpdate.latest, '99.0.0');
+    const quietText = await raw([...pairArgs, '--output-format', 'text', '--no-update-notice']);
+    assert.equal(quietText.code, noticedText.code); assert.equal(noticedText.stdout, quietText.stdout); assert.equal(quietText.stderr, '');
     assert.deepEqual(readdirSync(cacheDir), ['npm-update.json']);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
     await f.stop(owner);

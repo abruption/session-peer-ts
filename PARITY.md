@@ -544,7 +544,7 @@ Multi-host and failures (integration candidate with #20/#21):
 - Flat result: one destination (local or a single `--host`) gets the additive
   field, also when that per-host result failed (preflight refusal, remote
   `ok:false`) or is unknown. Top-level parse errors and local caught failures
-  (the global failure envelope) never get it.
+  (the top-level catch path in `cli.ts`) never get it.
 - Text output: one stderr line per invocation, for flat or array output and
   with failed, mixed or successful hosts; stdout is unchanged.
 - The advisory never changes status, exit code, `submitted`,
