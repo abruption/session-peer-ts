@@ -12,6 +12,8 @@ import { codex, listing, listingCandidates } from '../dist/discovery.js';
 import { homes } from '../dist/writer.js';
 
 const cli = resolve('dist/cli.js');
+// Answers `ssh -G` user metadata lookups without logging them as SSH dispatches.
+const sshConfigUser = "if(process.argv.includes('-G')){console.log('user fixture-user');process.exit(0);}";
 const id = '01900000-0000-7000-8000-000000000001';
 function fixture(t: TestContext) {
   const root = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-list-')));
@@ -275,7 +277,7 @@ test('POSIX SSH preserves destination ordering, filters, all and nonzero partial
   const extra = f.database(join(remoteRoot, 'extra'), 2);
   const remoteEnv = { ...process.env, HOME: remoteRoot, USERPROFILE: remoteRoot,
     SESSION_PEER_CODEX_HOMES: JSON.stringify([extra, join(remoteRoot, 'missing')]) };
-  writeFileSync(join(f.root, 'ssh'), `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');\nconst flag=process.argv.at(-1).endsWith('--version')?'--version':'--stdio-request';\nconst result=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},flag],{input:require('node:fs').readFileSync(0),encoding:'utf8',env:{...process.env,...${JSON.stringify({HOME: remoteRoot, USERPROFILE: remoteRoot, SESSION_PEER_CODEX_HOMES: remoteEnv.SESSION_PEER_CODEX_HOMES})}}});\nprocess.stdout.write(result.stdout);process.exit(result.status);`, { mode: 0o700 });
+  writeFileSync(join(f.root, 'ssh'), `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process');\nconst flag=process.argv.at(-1).endsWith('--version')?'--version':'--stdio-request';\nconst result=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},flag],{input:require('node:fs').readFileSync(0),encoding:'utf8',env:{...process.env,...${JSON.stringify({HOME: remoteRoot, USERPROFILE: remoteRoot, SESSION_PEER_CODEX_HOMES: remoteEnv.SESSION_PEER_CODEX_HOMES})}}});\nprocess.stdout.write(result.stdout);process.exit(result.status);`, { mode: 0o700 });
   const env = { ...process.env, PATH: f.root + delimiter + process.env.PATH };
   for (const all of [[], ['--all']]) {
     const args = ['list', '--agent', 'codex', ...all];

@@ -115,9 +115,25 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。任意の `--ssh-opt`、IPv6 リテラル、Tailscale の正規名補完は非対応です。SSH alias / hostname を使ってください。片方向の接続成功は逆方向の接続を保証しません。
+既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。Tailscale の正規名補完は非対応です。片方向の接続成功は逆方向の接続を保証しません。
 
-Windows の SSH 宛先では `--remote-platform win32` を指定し、必要に応じて `--remote-bin 'C:\absolute\path\session-peer.cmd'` を使います。既に認証済みの OpenSSH 制御ソケットは `--ssh-control-path /local/absolute/socket` で選択できます。ホスト鍵の確認や新しいログイン権限を回避しません。Windows ローカルの Codex home には完全な `C:\Users\...\.codex` パスを使います。既存の Python CLI は自動削除・置換しません。
+Windows の SSH 宛先では `--remote-platform win32` を指定し、必要に応じて `--remote-bin 'C:\absolute\path\session-peer.cmd'` を使います。既に認証済みの OpenSSH 制御ソケットは、`--host` が 1 つだけのときに `--ssh-control-path /local/absolute/socket` で選択できます。ホスト鍵の確認や新しいログイン権限を回避しません。Windows ローカルの Codex home には完全な `C:\Users\...\.codex` パスを使います。既存の Python CLI は自動削除・置換しません。
+
+### 複数ホストと接続オプション
+
+0.2.1 以降のソース（未公開）は、繰り返しの `--host` と制限付きの `--ssh-opt` を受け付けます。
+
+```sh
+session-peer list --host alpha --host user@[2001:db8::1] \
+  --ssh-opt=-p --ssh-opt=2222 --ssh-opt=-i --ssh-opt="$HOME/.ssh/id_ed25519" --json
+```
+
+- `--host` が 1 つなら従来どおりオブジェクト 1 つを返します。`--host` を繰り返すと同じ順序の JSON 配列を返し、各要素に `schemaVersion`、`ok`、`host`、`command` があります。いずれかのホストが失敗すると終了コードは 1 です。テキスト出力は宛先ごとに `Host: <host>` ブロックを出力します。
+- すべてのホストとオプションは、`ssh` プロセスを 1 つも起動する前に検証します。1 つでも不正な値があれば、要求された全ホストについてコマンド全体を `submitted:false` で拒否します。同じ宛先の重複指定は `duplicate_ssh_host` です。
+- 各宛先は順番に、事前確認 1 回とリクエスト最大 1 回だけを受けます。拒否や `unknown` になったホストは次のホストを止めず、再試行も別宛先への再送もしません。要素ごとに結果を確認してから判断してください。
+- `--ssh-opt` で使えるのは `-p PORT`、`-l USER`、`-i IDENTITY_FILE`、`-o Port=…`、`-o User=…`、`-o IdentityFile=…`、`-o IdentitiesOnly=yes|no`、`-4`、`-6` だけです。`ProxyCommand`、`LocalCommand`、`-F`、`Include`、`-J`/`ProxyJump`、`BatchMode`/`StrictHostKeyChecking` の変更を含むそれ以外はすべて拒否します（`unsupported_ssh_option`）。踏み台ホストは `~/.ssh/config` に設定し、そのホストに `BatchMode yes` と `StrictHostKeyChecking yes` を指定してください。コマンドラインの設定は踏み台の接続には渡りません。
+- IPv6 リテラルは角括弧なし（`2001:db8::1`）でも角括弧付き（`[2001:db8::1]`、`user@[2001:db8::1]`）でも指定できます。ゾーン ID（`%`）は拒否します。
+- 結果に `sshUser` と `sshUserSource` が加わります。`USER@HOST` または `-l USER` なら `explicit`、接続せずに `ssh -G` で確認できれば `ssh_config_or_local_default`、確認できなければ `sshUser:null` と `unknown` です。`-l` と `USER@HOST` の併用は拒否します。
 
 ### 返信
 
