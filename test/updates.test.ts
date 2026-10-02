@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { acquireLock, acquireMutex, cacheDirectory, reclaimMutex, releaseMutex, compareVersions, manager, refreshCache, registryUrl, releaseLock, takeOverStaleLock, upgradeCommand, upgradeGuidance, validVersion, type Manager, type Probe } from '../dist/updates.js';
+import { acquireLock, cacheDirectory, compareVersions, manager, refreshCache, registryUrl, releaseLock, upgradeCommand, upgradeGuidance, validVersion, type Manager, type Probe } from '../dist/updates.js';
 
 const cli = resolve('dist/cli.js');
 const SENTINEL = 'REGISTRY-BODY-SENTINEL';
@@ -158,7 +158,7 @@ test('update --check reports npm dist-tags, writes a private atomic cache and le
   assert.equal(v.command, 'update'); assert.equal(v.ok, true); assert.equal(v.package, 'session-peer');
   assert.equal(v.current, '0.2.1'); assert.equal(v.latest, '0.2.2'); assert.equal(v.channel, 'latest'); assert.equal(v.distTag, 'latest');
   assert.equal(v.source, 'npm_registry'); assert.equal(v.status, 'update_available'); assert.equal(v.outdated, true); assert.equal(v.updated, false);
-  assert.equal(v.referenceVersion, '1.0.2');
+  assert.equal(v.referenceVersion, '1.0.2'); assert.equal(v.cache, 'written');
   // The test runs from a checkout; installed-path guidance is covered above and in package-smoke.
   assert.equal(v.managedBy, 'source'); assert.equal(v.updateCommand, null);
   assert.equal(v.skillsManagedBy, 'separate');
@@ -186,7 +186,7 @@ test('preview channel accepts prereleases, compares separately and does not repl
   const before = readFileSync(f.file, 'utf8');
   const ahead = await f.call(['update', '--check', '--channel', 'preview', '--json']);
   assert.equal(ahead.code, 0); assert.equal(ahead.value.latest, '0.3.0-preview.1'); assert.equal(ahead.value.channel, 'preview');
-  assert.equal(ahead.value.status, 'update_available'); assert.equal(ahead.value.outdated, true);
+  assert.equal(ahead.value.status, 'update_available'); assert.equal(ahead.value.outdated, true); assert.equal(ahead.value.cache, 'not_applicable');
   f.state.reply = { body: JSON.stringify({ latest: '0.2.1', preview: '0.1.0-preview.1' }) };
   const older = await f.call(['update', '--check', '--channel=preview', '--json']);
   assert.equal(older.value.status, 'ahead'); assert.equal(older.value.outdated, false); assert.equal(older.value.updateCommand, null);
@@ -328,11 +328,14 @@ test('concurrent invocations perform one bounded refresh; locks and failures bac
   for (const r of results) { assert.equal(r.code, 0); assert.equal('clientUpdate' in r.value, false); }
   await f.settled(1); await delay(500);
   assert.equal(f.requests.length, 1, 'single flight');
-  // A live lock suppresses refresh; a stale lock is replaced.
+  // Fail closed: a live or stale foreign lock suppresses refresh until it is removed by hand.
   rmSync(f.file); writeFileSync(f.lock, 'other');
   await f.call(['list', '--json'], on); await delay(1500);
   assert.equal(f.requests.length, 1); assert.equal(existsSync(f.file), false);
   const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
+  await f.call(['list', '--json'], on); await delay(1500);
+  assert.equal(f.requests.length, 1); assert.equal(readFileSync(f.lock, 'utf8'), 'other');
+  rmSync(f.lock);
   await f.call(['list', '--json'], on);
   await f.settled(2); assert.equal(f.requests.length, 2);
   // Offline/failed refresh records a backoff without a version and never alters output.
@@ -363,56 +366,7 @@ test('remote wire requests never read, refresh or report client notices', async 
   assert.deepEqual(f.requests, []); assert.deepEqual(readdirSync(f.cache), ['npm-update.json']);
 });
 
-test('lock generations: only the token holder releases; a stale lock is taken over once', async t => {
-  const f = await fixture(t);
-  const env = { SESSION_PEER_CACHE_DIR: f.cache };
-  const mine = acquireLock(env);
-  assert.ok(mine); assert.equal(readFileSync(f.lock, 'utf8'), mine);
-  assert.equal(acquireLock(env), undefined, 'a live lock is not shared');
-  // Another generation replaced the lock: neither release nor a finishing/failed worker may delete it.
-  writeFileSync(f.lock, 'NEW_OWNER');
-  assert.equal(releaseLock(mine, env), false);
-  const invalid = { ...env, SESSION_PEER_UPDATE_REGISTRY: 'http://registry.example/' };
-  await refreshCache({ ...invalid, SESSION_PEER_UPDATE_LOCK_TOKEN: mine });
-  await refreshCache(invalid);
-  await refreshCache({ ...invalid, SESSION_PEER_UPDATE_LOCK_TOKEN: 'NEW_OWNER' });
-  assert.equal(readFileSync(f.lock, 'utf8'), 'NEW_OWNER');
-  assert.deepEqual(f.requests, []);
-  rmSync(f.lock);
-  const owned = acquireLock(env);
-  assert.equal(releaseLock(owned, env), true); assert.equal(existsSync(f.lock), false);
-  // A judged OLD stale and took over; B judged the same OLD stale earlier and must not displace A.
-  writeFileSync(f.lock, 'OLD');
-  const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
-  const a = acquireLock(env);
-  assert.ok(a); assert.equal(readFileSync(f.lock, 'utf8'), a);
-  assert.equal(takeOverStaleLock('OLD', env), undefined);
-  assert.equal(readFileSync(f.lock, 'utf8'), a);
-  assert.equal(releaseLock(a, env), true);
-  assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp|aside)$/.test(name)), []);
-});
 
-test('concurrent stale takeover across processes yields exactly one owner', async t => {
-  const f = await fixture(t);
-  const module = pathToFileURL(resolve('dist/updates.js')).href;
-  mkdirSync(f.cache, { recursive: true, mode: 0o700 });
-  for (let round = 0; round < 3; round++) {
-    writeFileSync(f.lock, `STALE-${round}`);
-    const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
-    const tokens = await Promise.all(Array.from({ length: 8 }, async () => {
-      const child = spawn(process.execPath, ['--input-type=module', '-e', `import { acquireLock } from ${JSON.stringify(module)}; process.stdout.write(acquireLock() ?? '');`],
-        { env: { ...f.env }, stdio: ['ignore', 'pipe', 'pipe'] });
-      let out = ''; child.stdout.on('data', part => out += part); child.stderr.resume();
-      const [code] = await once(child, 'close'); assert.equal(code, 0);
-      return out;
-    }));
-    const winners = tokens.filter(Boolean);
-    assert.equal(winners.length, 1, `round ${round}: ${winners.length} owners`);
-    assert.equal(readFileSync(f.lock, 'utf8'), winners[0]);
-    assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp|aside)$/.test(name)), []);
-    rmSync(f.lock);
-  }
-});
 
 test('over SSH the local client adds its own notice; the receiver never reads or refreshes', { skip: process.platform === 'win32' && 'POSIX fake ssh' }, async t => {
   const f = await fixture(t);
@@ -434,68 +388,77 @@ test('over SSH the local client adds its own notice; the receiver never reads or
   assert.equal(existsSync(receiver), false); assert.deepEqual(f.requests, []);
 });
 
-test('cache publication is fenced to the current lock generation and never clobbers newer data', async t => {
-  const f = await fixture(t, { body: JSON.stringify({ latest: '0.2.2' }) });
-  const registry = f.env.SESSION_PEER_UPDATE_REGISTRY;
-  const env = { SESSION_PEER_CACHE_DIR: f.cache };
-  // Generation A goes stale and B takes over; B's successful result is published.
-  const a = acquireLock(env)!;
-  const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
-  const b = acquireLock(env)!;
-  assert.ok(a && b && a !== b); assert.equal(readFileSync(f.lock, 'utf8'), b);
-  f.seed('0.3.0');
-  const published = readFileSync(f.file, 'utf8');
-  // Review regression: the stale worker A fails (invalid registry) and must not publish or release.
-  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: 'http://registry.example/', SESSION_PEER_UPDATE_LOCK_TOKEN: a });
-  assert.equal(readFileSync(f.file, 'utf8'), published); assert.equal(readFileSync(f.lock, 'utf8'), b);
-  // A stale worker with a working registry is fenced too.
-  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry, SESSION_PEER_UPDATE_LOCK_TOKEN: a });
-  assert.equal(readFileSync(f.file, 'utf8'), published); assert.equal(readFileSync(f.lock, 'utf8'), b);
-  assert.equal(f.requests.length, 1);
-  // The current owner B fails slowly while a newer success (explicit check) lands: no clobber.
-  f.state.reply = { status: 503, body: SENTINEL, wait: 800 };
-  const pending = refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry, SESSION_PEER_UPDATE_LOCK_TOKEN: b });
-  await delay(200); f.seed('0.3.1');
-  const newer = readFileSync(f.file, 'utf8');
-  await pending;
-  assert.equal(readFileSync(f.file, 'utf8'), newer); assert.equal(existsSync(f.lock), false, 'owner still releases');
-  // The current owner publishes its result over an older record and releases.
-  f.seed('0.3.1', 25 * 3600_000);
-  f.state.reply = { body: JSON.stringify({ latest: '0.2.2' }) };
-  const c = acquireLock(env)!;
-  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry, SESSION_PEER_UPDATE_LOCK_TOKEN: c });
-  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.2.2'); assert.equal(existsSync(f.lock), false);
-  // Without a token nothing is fetched or written.
-  const count: number = f.requests.length, before = readFileSync(f.file, 'utf8');
-  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry });
-  assert.equal(f.requests.length, count); assert.equal(readFileSync(f.file, 'utf8'), before);
-});
-
-test('stale mutex reclamation and mutex release are fenced by inode and token', async t => {
+test('fail-closed lock: only its creator releases it; nothing takes over, moves or deletes a lock (review ② ③)', async t => {
   const f = await fixture(t);
   const env = { SESSION_PEER_CACHE_DIR: f.cache };
-  mkdirSync(f.cache, { recursive: true, mode: 0o700 });
+  const mine = acquireLock(env)!;
+  assert.ok(mine); assert.equal(acquireLock(env), undefined);
+  // ③: B's lock goes stale while B still runs; no other acquirer can take it over, so B's
+  // later release cannot delete a successor's lock.
+  const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
+  assert.equal(acquireLock(env), undefined); assert.equal(readFileSync(f.lock, 'utf8'), mine);
+  assert.equal(releaseLock(mine, env), true); assert.equal(existsSync(f.lock), false);
+  // A worker never releases or publishes over another generation's lock.
+  writeFileSync(f.lock, 'NEW_OWNER');
+  const stranger = '00000000-0000-4000-8000-000000000000';
+  assert.equal(releaseLock(stranger, env), false);
+  await refreshCache({ ...f.env, SESSION_PEER_UPDATE_LOCK_TOKEN: stranger });
+  await refreshCache(f.env);
+  assert.equal(readFileSync(f.lock, 'utf8'), 'NEW_OWNER'); assert.equal(existsSync(f.file), false); assert.deepEqual(f.requests, []);
+  // ②: stale lock and a leftover mutex from an earlier build are never moved or removed by
+  // notices or an explicit check (same inode and content afterwards).
   const mutex = `${f.lock}.takeover`;
-  const old = new Date(Date.now() - 120_000);
-  // Interleaving: R judges mutex X stale; another reclaimer removes X and a new holder creates Y.
-  writeFileSync(mutex, 'X'); utimesSync(mutex, old, old);
-  const judged = lstatSync(mutex, { bigint: true });
-  rmSync(mutex);
-  const holder = acquireMutex(env)!;
-  assert.ok(holder);
-  assert.equal(reclaimMutex(judged, env), false, 'a fresh mutex is never reclaimed');
-  assert.equal(readFileSync(mutex, 'utf8'), holder);
-  // A live (fresh) mutex is neither shared nor reclaimed.
-  assert.equal(acquireMutex(env), undefined, 'a live mutex is not shared or reclaimed');
-  assert.equal(readFileSync(mutex, 'utf8'), holder);
-  // A holder whose mutex was replaced never deletes the replacement.
-  rmSync(mutex); writeFileSync(mutex, 'NEW_HOLDER');
-  assert.equal(releaseMutex(holder, env), false);
-  assert.equal(readFileSync(mutex, 'utf8'), 'NEW_HOLDER');
-  // The exact stale inode is reclaimed; reclamation itself does not acquire.
-  utimesSync(mutex, old, old);
-  assert.equal(acquireMutex(env), undefined); assert.equal(existsSync(mutex), false);
-  const next = acquireMutex(env)!;
-  assert.ok(next); assert.equal(releaseMutex(next, env), true); assert.equal(existsSync(mutex), false);
-  assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp|aside)$/.test(name)), []);
+  writeFileSync(mutex, 'X'); utimesSync(mutex, old, old); utimesSync(f.lock, old, old);
+  const before = [lstatSync(f.lock, { bigint: true }).ino, lstatSync(mutex, { bigint: true }).ino];
+  const on = { SESSION_PEER_UPDATE_NOTICE: '1' };
+  await f.call(['list', '--json'], on); await delay(1000);
+  assert.deepEqual(f.requests, [], 'stale lock: background refresh skipped');
+  const check = await f.call(['update', '--check', '--json']);
+  assert.equal(check.code, 0); assert.equal(check.value.cache, 'skipped_stale_lock');
+  assert.match((await f.call(['update', '--check', '--output-format', 'text'])).stdout, /stale npm-update\.lock remains/);
+  assert.deepEqual([lstatSync(f.lock, { bigint: true }).ino, lstatSync(mutex, { bigint: true }).ino], before);
+  assert.equal(readFileSync(f.lock, 'utf8'), 'NEW_OWNER'); assert.equal(readFileSync(mutex, 'utf8'), 'X');
+  assert.deepEqual(readdirSync(f.cache).sort(), ['npm-update.lock', 'npm-update.lock.takeover']);
+});
+
+test('explicit and background cache writes are serialized by the same lock and never replace newer records (review ①)', async t => {
+  const f = await fixture(t, { body: JSON.stringify({ latest: '0.3.9' }) });
+  const env = { SESSION_PEER_CACHE_DIR: f.cache };
+  // ①: while a background owner holds the lock, an explicit check reports but does not write.
+  const background = acquireLock(env)!;
+  const locked = await f.call(['update', '--check', '--json']);
+  assert.equal(locked.code, 0); assert.equal(locked.value.latest, '0.3.9'); assert.equal(locked.value.cache, 'skipped_locked');
+  assert.equal(existsSync(f.file), false);
+  f.state.reply = { body: JSON.stringify({ latest: '0.2.2' }) };
+  await refreshCache({ ...f.env, SESSION_PEER_UPDATE_LOCK_TOKEN: background });
+  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.2.2'); assert.equal(existsSync(f.lock), false);
+  f.state.reply = { body: JSON.stringify({ latest: '0.3.9' }) };
+  const written = await f.call(['update', '--check', '--json']);
+  assert.equal(written.value.cache, 'written'); assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.3.9');
+  // A background owner whose start predates the current record publishes nothing but releases.
+  writeFileSync(f.file, JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry', channel: 'latest', latest: '0.3.9', checkedAt: Date.now() + 60_000 }));
+  const newer = readFileSync(f.file, 'utf8');
+  const late = acquireLock(env)!;
+  f.state.reply = { body: JSON.stringify({ latest: '0.2.2' }) };
+  await refreshCache({ ...f.env, SESSION_PEER_UPDATE_LOCK_TOKEN: late });
+  assert.equal(readFileSync(f.file, 'utf8'), newer); assert.equal(existsSync(f.lock), false);
+  const skipped = await f.call(['update', '--check', '--json']);
+  assert.equal(skipped.value.cache, 'skipped_newer'); assert.equal(readFileSync(f.file, 'utf8'), newer);
+  assert.deepEqual(readdirSync(f.cache), ['npm-update.json']);
+});
+
+test('concurrent lock acquisition across processes yields one owner, and none for a stale lock', async t => {
+  const f = await fixture(t);
+  const module = pathToFileURL(resolve('dist/updates.js')).href;
+  const race = () => Promise.all(Array.from({ length: 8 }, async () => {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', `import { acquireLock } from ${JSON.stringify(module)}; process.stdout.write(acquireLock() ?? '');`],
+      { env: { ...f.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = ''; child.stdout.on('data', part => out += part); child.stderr.resume();
+    const [code] = await once(child, 'close'); assert.equal(code, 0);
+    return out;
+  }));
+  const winners = (await race()).filter(Boolean);
+  assert.equal(winners.length, 1); assert.equal(readFileSync(f.lock, 'utf8'), winners[0]);
+  const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
+  assert.deepEqual((await race()).filter(Boolean), []); assert.equal(readFileSync(f.lock, 'utf8'), winners[0]);
 });

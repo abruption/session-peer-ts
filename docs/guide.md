@@ -340,16 +340,19 @@ network calls. Set `SESSION_PEER_UPDATE_NOTICE=1` to opt in. Then a fresh cache
 JSON results, or one line on stderr for text output. A missing, invalid or
 expired cache starts one detached refresh and never delays or changes the
 command's result or exit code; a failed refresh waits 1 hour before the next
-attempt. The refresh is single-flight: each attempt owns a lock by a random
-token, only that owner releases it, and a crashed owner's lock is taken over by
-exactly one invocation after 60 seconds. Only the current lock owner
-publishes the cache, and a stale or failed refresh never overwrites a newer
-record.
+attempt. Cache writes are single-flight and fail closed: every write, from a
+background refresh or an explicit check, happens only while holding
+`npm-update.lock`, and only over an older record. Nothing ever takes over or
+removes a lock it did not create. If a refresh crashed and left the lock behind,
+background refreshes stop, and `update --check` reports
+`cache: "skipped_stale_lock"`. Delete `npm-update.lock` by hand when no
+session-peer process is running.
 
 `--no-update-notice` and `SESSION_PEER_NO_UPDATE_NOTICE=1` suppress these
 background notices and refreshes. An explicit `update --check` is an intended
-request: it always contacts the registry and refreshes the cache for the
-`latest` channel. Notices belong to the local client. With `--host` the client
+request: it always contacts the registry and, for the `latest` channel, writes
+the cache when the lock is free (`cache` reports `written`, `skipped_locked`,
+`skipped_stale_lock`, `skipped_newer` or `failed`). Notices belong to the local client. With `--host` the client
 adds `clientUpdate` (or the stderr line) to its own top-level output, including
 results obtained over SSH. The receiver in `--stdio-request` mode never reads,
 refreshes or produces a notice.

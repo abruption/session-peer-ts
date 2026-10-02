@@ -2,7 +2,7 @@
 // replace npm-owned files, or touch Python installs, remote hosts or skills.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
+import { chmodSync, closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -201,121 +201,50 @@ export function writeCache(latest: string | null, env = process.env, now = Date.
     renameSync(temporary, join(directory, CACHE));
   } finally { rmSync(temporary, { force: true }); }
 }
-// Single flight. Each acquisition writes a random token into an O_EXCL lock;
-// the detached child inherits it. Stale takeover, cache publication and release
-// run under a short O_EXCL mutex (itself token-owned) and first re-read the lock
-// token, so only the current generation publishes or releases. A stale lock is
-// replaced by atomically renaming a new token file over the exact generation
-// observed, so the lock path is never missing. See PARITY.md for residual races.
+// Single flight, fail closed. Every cache write (background refresh or explicit
+// check) happens only while holding `npm-update.lock`, created with O_EXCL and a
+// random token. Nothing ever takes over, moves or deletes a lock it did not
+// create: an existing lock of any age makes the background refresh skip and
+// the explicit check skip its cache write. A lock left by a crashed refresh
+// stays until the user removes it (see PARITY.md).
 const TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const readLock = (lock: string) => { try { return readFileSync(lock, 'utf8'); } catch { return undefined; } };
-const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-function createLock(path: string): string | undefined {
-  const token = randomUUID();
+export function acquireLock(env = process.env): string | undefined {
+  const lock = join(privateDirectory(env), LOCK), token = randomUUID();
   let fd: number;
-  try { fd = openSync(path, 'wx', 0o600); }
+  try { fd = openSync(lock, 'wx', 0o600); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined; throw error; }
   try { writeSync(fd, token); } finally { closeSync(fd); }
   return token;
 }
-// Remove `path` only if `owned` confirms the exact file: it is renamed to a
-// unique name first (atomic), then checked, and restored with link() when it is
-// someone else's. Restoring never overwrites a file created in the meantime.
-function removeIfOwned(path: string, owned: (aside: string) => boolean): boolean {
-  const aside = `${path}.${randomUUID()}.aside`;
-  try { renameSync(path, aside); } catch { return false; }
-  let mine = false;
-  try { mine = owned(aside); } catch {}
-  if (!mine) {
-    try { linkSync(aside, path); }
-    catch (error) {
-      // Filesystems without hard links: rename back only while nothing newer exists.
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') try { if (!existsSync(path)) renameSync(aside, path); } catch {}
-    }
-  }
-  rmSync(aside, { force: true });
-  return mine;
+export function lockState(env = process.env, now = Date.now()): 'free' | 'held' | 'stale' {
+  try { return now - lstatSync(join(cacheDirectory(env), LOCK)).mtimeMs >= LOCK_STALE ? 'stale' : 'held'; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'free' : 'held'; }
 }
-const mutexPath = (env: NodeJS.ProcessEnv) => join(cacheDirectory(env), `${LOCK}.takeover`);
-type Identity = { dev: bigint; ino: bigint; mtimeNs: bigint };
-// A mutex is held only across a few file operations. One older than LOCK_STALE
-// belonged to a crashed process; it is reclaimed only if it is still the same
-// inode with the same mtime that was judged stale.
-export function reclaimMutex(observed: Identity, env = process.env): boolean {
-  return removeIfOwned(mutexPath(env), aside => {
-    const info = lstatSync(aside, { bigint: true });
-    return info.dev === observed.dev && info.ino === observed.ino && info.mtimeNs === observed.mtimeNs;
-  });
-}
-export function acquireMutex(env = process.env, now = Date.now()): string | undefined {
-  const path = mutexPath(env), token = createLock(path);
-  if (token) return token;
+// Only the creator removes its lock; nobody else changes the lock path.
+export function releaseLock(token: string | undefined, env = process.env): boolean {
   try {
-    const info = lstatSync(path, { bigint: true });
-    if (now - Number(info.mtimeMs) >= LOCK_STALE) reclaimMutex(info, env);
-  } catch {}
-  return undefined;
+    if (!token || !TOKEN.test(token)) return false;
+    const lock = join(cacheDirectory(env), LOCK);
+    if (readLock(lock) !== token) return false;
+    rmSync(lock, { force: true });
+    return true;
+  } catch { return false; }
 }
-export const releaseMutex = (token: string, env = process.env): boolean =>
-  removeIfOwned(mutexPath(env), aside => readFileSync(aside, 'utf8') === token);
-function exclusively<T>(env: NodeJS.ProcessEnv, now: number, action: () => T): T | undefined {
-  const token = acquireMutex(env, now);
-  if (!token) return undefined;
-  try { return action(); } finally { releaseMutex(token, env); }
+// Writes as the lock holder, and only over an older record.
+function publish(token: string, latest: string | null, started: number, env: NodeJS.ProcessEnv): 'written' | 'skipped_newer' | 'not_owner' | 'failed' {
+  try {
+    if (readLock(join(cacheDirectory(env), LOCK)) !== token) return 'not_owner';
+    const current = readCache(env);
+    if (current.checkedAt !== undefined && current.checkedAt >= started) return 'skipped_newer';
+    writeCache(latest, env);
+    return 'written';
+  } catch { return 'failed'; }
 }
-export function takeOverStaleLock(observed: string, env = process.env, now = Date.now()): string | undefined {
-  const lock = join(privateDirectory(env), LOCK);
-  return exclusively(env, now, () => {
-    if (readLock(lock) !== observed) return undefined;
-    const token = randomUUID(), temporary = `${lock}.${token}.tmp`;
-    try {
-      const fd = openSync(temporary, 'wx', 0o600);
-      try { writeSync(fd, token); } finally { closeSync(fd); }
-      // Windows can briefly refuse replacing a file another process is reading.
-      for (let tries = 0; ; tries++) {
-        try { renameSync(temporary, lock); break; }
-        catch (error) {
-          if (tries >= 20 || !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
-          pause(10);
-        }
-      }
-      return token;
-    } catch { return undefined; } finally { rmSync(temporary, { force: true }); }
-  });
-}
-export function acquireLock(env = process.env, now = Date.now()): string | undefined {
-  const lock = join(privateDirectory(env), LOCK);
-  const token = createLock(lock);
-  if (token) return token;
-  let observed: string, age: number;
-  // Read the token before the age so a replaced lock is never judged by an older mtime.
-  try { observed = readFileSync(lock, 'utf8'); age = now - lstatSync(lock).mtimeMs; }
-  catch { return createLock(lock); }
-  return age < LOCK_STALE ? undefined : takeOverStaleLock(observed, env, now);
-}
-// Runs `action` only while `token` is the current lock generation, then releases
-// the lock. A busy mutex is retried briefly; afterwards the lock expires as stale.
-function asOwner(token: string | undefined, env: NodeJS.ProcessEnv, action: (lock: string) => void): boolean {
-  if (!token || !TOKEN.test(token)) return false;
-  let lock: string;
-  try { lock = join(cacheDirectory(env), LOCK); } catch { return false; }
-  for (let tries = 0; tries < 50; tries++) {
-    const done = exclusively(env, Date.now(), () => {
-      if (readLock(lock) !== token) return false;
-      try { action(lock); } catch {}
-      rmSync(lock, { force: true });
-      return true;
-    });
-    if (done !== undefined) return done;
-    pause(10);
-  }
-  return false;
-}
-export const releaseLock = (token: string | undefined, env = process.env): boolean => asOwner(token, env, () => {});
-function scheduleRefresh(env: NodeJS.ProcessEnv, now: number): boolean {
+function scheduleRefresh(env: NodeJS.ProcessEnv): boolean {
   let token: string | undefined;
   try {
-    token = acquireLock(env, now);
+    token = acquireLock(env);
     if (!token) return false;
     const owned = token;
     const child = spawn(process.execPath, [fileURLToPath(new URL('./cli.js', import.meta.url)), REFRESH_ARG],
@@ -328,20 +257,18 @@ function scheduleRefresh(env: NodeJS.ProcessEnv, now: number): boolean {
     return false;
   }
 }
-// Background refresh: only the current lock generation publishes, and never over
-// a cache record written after this refresh started (e.g. an explicit check).
+// Background refresh by the inherited lock holder; without its token, nothing happens.
 export async function refreshCache(env = process.env): Promise<void> {
   const token = env[LOCK_TOKEN], started = Date.now();
-  if (!token || !TOKEN.test(token)) return;
-  let latest: string | null = null;
+  if (!token || !TOKEN.test(token) || readLock(join(cacheDirectory(env), LOCK)) !== token) return;
   try {
-    const tags = await distTags(env);
-    if (validVersion(tags.latest, true)) latest = tags.latest as string;
-  } catch {}
-  asOwner(token, env, () => {
-    const current = readCache(env);
-    if (current.checkedAt === undefined || current.checkedAt < started) writeCache(latest, env);
-  });
+    let latest: string | null = null;
+    try {
+      const tags = await distTags(env);
+      if (validVersion(tags.latest, true)) latest = tags.latest as string;
+    } catch {}
+    publish(token, latest, started, env);
+  } finally { releaseLock(token, env); }
 }
 
 const truthy = (value?: string) => ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase());
@@ -353,7 +280,7 @@ export function updateNotice(optOut: boolean, env = process.env, now = Date.now(
   try {
     if (!noticesEnabled(optOut, env)) return undefined;
     const state = readCache(env, now);
-    if (state.status !== 'fresh') { scheduleRefresh(env, now); return undefined; }
+    if (state.status !== 'fresh') { scheduleRefresh(env); return undefined; }
     if (!state.latest || compareVersions(VERSION, state.latest) >= 0) return undefined;
     const owner = manager();
     return { schemaVersion: 1, status: 'available', current: VERSION, latest: state.latest, channel: 'latest',
@@ -366,17 +293,26 @@ export const noticeText = (notice: Record<string, unknown>) =>
   (notice.command ? `Run: ${notice.command}` : String(notice.guidance));
 
 export async function checkUpdate(channel = 'latest', env = process.env): Promise<Record<string, unknown>> {
+  const started = Date.now();
   const tags = await distTags(env);
   if (tags[channel] === undefined) throw new Refusal('dist_tag_missing', 1);
   const latest = tags[channel];
   if (!validVersion(latest, channel === 'latest')) throw new Refusal('registry_response_invalid', 1);
-  if (channel === 'latest') try { writeCache(latest as string, env); } catch {}
+  // An intended request refreshes the shared cache under the same lock, or reports why it did not.
+  let cache = 'not_applicable';
+  if (channel === 'latest') {
+    try {
+      const token = acquireLock(env);
+      if (token) { cache = publish(token, latest as string, started, env); releaseLock(token, env); }
+      else cache = lockState(env) === 'stale' ? 'skipped_stale_lock' : 'skipped_locked';
+    } catch { cache = 'failed'; }
+  }
   const position = compareVersions(VERSION, latest as string), owner = manager();
   return { ok: true, package: PACKAGE, current: VERSION, latest, channel, distTag: channel, source: 'npm_registry',
     status: position < 0 ? 'update_available' : position === 0 ? 'up_to_date' : 'ahead', outdated: position < 0,
     updated: false, managedBy: owner, updateCommand: position < 0 ? upgradeCommand(owner, latest as string) : null,
     guidance: position < 0 ? upgradeGuidance(owner) : `No update is needed for the ${channel} dist-tag.`,
-    skills: inspectSkills(), skillsManagedBy: 'separate' };
+    cache, skills: inspectSkills(), skillsManagedBy: 'separate' };
 }
 // npm-owned files are never replaced in place; the owning manager installs updates.
 export function refuseSelfUpdate(channel = 'latest'): never {

@@ -23,6 +23,7 @@ export function renderOutput(value: Record<string, unknown>, format: OutputForma
     lines.push(`session-peer ${safe(value.current)} (typescript): ${value.status === 'update_available' ? `${safe(value.latest)} available` :
       value.status === 'ahead' ? `newer than ${safe(value.latest)}` : 'up to date'} on npm dist-tag ${safe(value.distTag)}.`);
     if (value.outdated === true) lines.push(value.updateCommand ? `Upgrade with: ${safe(value.updateCommand)}` : safe(value.guidance));
+    if (value.cache === 'skipped_stale_lock') lines.push('Update cache not written: a stale npm-update.lock remains; delete it while no session-peer process runs.');
     lines.push('Skills, Python installations and remote hosts are updated separately.');
   } else if (value.ok === true) {
     const target = value.target as Record<string, unknown> | undefined;

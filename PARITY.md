@@ -435,6 +435,7 @@ and are never compared; `referenceVersion` is unrelated to this check.
 | `status`, `outdated` | `update_available` (`outdated:true`), `up_to_date` or `ahead` |
 | `updated` | Always `false`; nothing is installed |
 | `managedBy`, `updateCommand`, `guidance` | Owner from the resolved CLI path, positively identified only: `npm` (global prefix whose `bin/session-peer` symlink or `session-peer.cmd` launcher targets this package: default, Homebrew, nvm, nvm-windows, fnm), `pnpm`/`yarn`/`bun` (global store whose `package.json` declares `session-peer`), `volta`, `npx`. Command only for those owners and only when outdated. `npm_project`/`pnpm_project` (project `package.json` declares the dependency), `source` (checkout) and `unknown` (anything else, such as an unconfirmed nvm-windows prefix) always get `null` plus a `guidance` sentence |
+| `cache` | `written`, `skipped_locked`, `skipped_stale_lock`, `skipped_newer`, `failed`, or `not_applicable` (preview channel) |
 | `skills`, `skillsManagedBy` | Same local TS skill metadata check as `doctor`; `separate` |
 
 Failures use the standard caught-failure envelope with `registry_timeout`,
@@ -460,7 +461,8 @@ refresh and returns immediately. A failed refresh stores `latest:null`, which
 suppresses attempts for 1 hour. Opt-out (`--no-update-notice`,
 `SESSION_PEER_NO_UPDATE_NOTICE`) suppresses these background notices and
 refreshes and wins over opt-in. An explicit `update --check` is an intended
-request: it always contacts the registry and, on `latest`, refreshes the cache.
+request: it always contacts the registry and, on `latest`, writes the cache under
+the same lock rules (reported as `cache`).
 Cache and network failures never change results or exit codes.
 
 Scope: notices belong to the invoking client. With `--host`, the client adds
@@ -471,31 +473,33 @@ Multi-host execution (#20/#84) is not part of this change: after #84 merges,
 #22 must be rebased with an integration test for the array shape, exactly one
 refresh per invocation and no wire notices.
 
-Single flight: the refresh lock `npm-update.lock` is created with `O_EXCL` and
-holds a random per-acquisition token, which the detached child inherits. A lock
-older than 60 s is taken over by renaming a new token file atomically over the
-exact stale generation that was observed, so the lock path is never missing and
-two takers cannot both win. Takeover, cache publication and release run under a
-short `O_EXCL` mutex, `npm-update.lock.takeover`, that is itself token-owned, and
-each re-reads the lock token first. Only the current generation publishes: a stale
-or tokenless worker never writes the cache or releases another generation's lock.
-A background refresh also never replaces a cache record written after it started
-(for example by an explicit `update --check`). Removal of the mutex or of a stale
-mutex is fenced: the file is renamed to a unique name, kept only if it is the
-holder's token or the exact inode and mtime judged stale (older than 60 s), and
-otherwise restored with `link()`, which never overwrites a newer file. If the
-mutex is busy for about 0.5 s, the owner leaves its lock to expire.
+Single flight, fail closed (changed after review). Earlier revisions of this PR
+reclaimed stale locks and used a takeover mutex; review found legal filesystem
+interleavings that let a newer cache record be overwritten or another
+generation's lock or mutex be deleted. That code is removed:
 
-Guaranteed: at most one lock owner per generation; only that owner publishes or
-releases; no worker deletes another generation's lock, a live mutex, or a cache
-record newer than its own start. Not guaranteed (documented residual): between
-renaming a mismatched mutex aside and restoring it, a third process can create a
-new mutex. Both holders can then act at once, which requires a mutex judged
-stale (a holder stalled for 60 s between two file operations) or a holder whose
-mutex was replaced. The result is at most one extra refresh or one
-cache write from the current generation. It never deletes another generation's
-lock. On filesystems without hard links, the restore falls back to a
-check-then-rename.
+- One lock, `npm-update.lock`, created with `O_EXCL` and holding a random token.
+  The notice path creates it before spawning the detached refresh, which inherits
+  the token. `update --check` creates it around its own cache write.
+- Every cache write (background or explicit) happens only while holding the
+  lock, and only when the existing record is older than the writer's start
+  (`checkedAt`); an explicit check that finds the lock held still reports its
+  result with `cache: "skipped_locked"`. A refresh without the current token does
+  nothing.
+- No code path takes over, renames or deletes a lock it did not create, and no
+  mutex exists. An existing lock of any age makes the background refresh skip.
+  The holder deletes its own lock after re-reading its token.
+
+Guaranteed, with no automatic recovery: at most one lock holder at a time (`O_EXCL`), so
+at most one background refresh and at most one cache writer at once; no writer
+replaces a record newer than its own start; no invocation deletes or moves a
+lock or file it did not create. Cost: a refresh that crashes while holding the
+lock (the detached child runs for at most about 3 seconds) blocks background
+refreshes until a user deletes `npm-update.lock` by hand while no session-peer
+process runs. `update --check` reports `cache: "skipped_stale_lock"` once the lock is older
+than 60 s; it never removes it. Manual deletion during a running refresh is the
+only way to break the guarantee (the holder could then remove a lock created
+after the deletion).
 
 Cache: `npm-update.json` (0600, atomic temp-file rename) in a 0700 directory
 owned by the user: `SESSION_PEER_CACHE_DIR` (absolute), else
@@ -511,12 +515,14 @@ registry responses without body leakage, manager guidance per install layout,
 including nvm, nvm-windows, fnm, Volta and ambiguous prefixes (`unknown`, no command),
 cache paths and modes, opt-in default off, flag/env opt-out, JSON additivity,
 text stderr, offline/invalid/expired/future caches, concurrent single-flight
-refresh, token-owned lock release (a foreign generation is never deleted, also
-by a refresh with an invalid registry), multi-process stale takeover with
-exactly one owner, fenced cache publication (a stale worker with a failed or
-working registry cannot overwrite the current result, and a slow failing owner
-cannot clobber a newer record), deterministic mutex interleavings (a fresh mutex
-is never reclaimed and a replaced holder never deletes the replacement), failure backoff, Python cache isolation, TS skill metadata,
+refresh, fail-closed live and stale locks (no refresh until manual removal),
+review regressions: an explicit check while a background holder runs reports
+`skipped_locked` and writes nothing, then the holder publishes; a holder whose
+start predates a newer record publishes nothing; a stale lock is never taken
+over, so its holder's release cannot remove a successor; a stale lock and a
+leftover mutex keep the same inode and content after notices and an explicit
+check; a non-holder token neither releases nor writes; multi-process
+acquisition yields one owner (none for a stale lock), failure backoff, Python cache isolation, TS skill metadata,
 wire isolation, and a POSIX fake-SSH `list --host` where only the client adds
 the notice. `test/package-smoke.ts` checks the installed
 package's guidance and unchanged files. All use a local fixture registry; no
