@@ -20,6 +20,8 @@ export function renderOutput(value: Record<string, unknown> | Record<string, unk
     lines.push(`Ready: ${value.ready === true ? 'yes' : 'no'}`);
     lines.push(`Agents: ${safe(JSON.stringify(value.agents ?? {}))}`);
     lines.push(`Capabilities: ${safe(JSON.stringify(value.capabilities ?? {}))}`);
+    const route = value.returnRoute as Record<string, unknown> | undefined;
+    lines.push(route ? `Return route: ${safe(route.status)} via ${safe(route.transport)} (${safe(route.reason)})` : 'Return route: not checked (use --check-return-route)');
   } else if (value.ok === true) {
     const target = value.target as Record<string, unknown> | undefined;
     lines.push(`${safe(value.status)}: ${safe(target?.agent)}:${safe(target?.pid ?? target?.id)}`);

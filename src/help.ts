@@ -13,6 +13,8 @@ Transport:
   --remote-bin ABSOLUTE_PATH          Remote session-peer executable
   --remote-platform posix|win32       Remote shell platform
   --ssh-control-path SOCKET           Existing SSH control socket (one --host only)
+  Tailscale status is a routing hint only (SESSION_PEER_TAILSCALE=off skips it):
+  known online peers use their MagicDNS name, known offline peers are refused.
   --no-update-notice                  Accepted compatibility flag
   -h, --help                         Show command help`;
   if (command === 'list') return `Usage: session-peer list [options]
@@ -27,6 +29,9 @@ Successful diagnostics exit 0 even when ready=false. Check readiness separately.
   --agent claude|codex                Filter one agent (default: both)
   --codex-home HOME                   Pin Codex metadata inspection
   --codex-bin PATH                    Inspect executable availability; never execute it
+  --check-return-route               Probe noninteractive SSH back to the return host
+  --reply-to USER@HOST                Return host to probe (default: reply-host env or tailnet)
+Forward reachability never implies a working return route.
 ${common}`;
   if (command === 'send') return `Usage: session-peer send --to TARGET [MESSAGE | --message TEXT | -m TEXT] [options]
 TARGET: Claude name/PID, claude:NAME/PID, codex:UUID, or session-peer reply URI.
@@ -36,9 +41,13 @@ Unicode names use exact Unicode 14.0.0 default casefold; collisions require PID.
   --codex-home HOME                   Explicit Codex home; otherwise select unique live writer
   --codex-bin PATH                    Native Codex executable
   --allow-inactive-codex-home         Queue only with explicit verified inactive home
-  --no-from                          Omit sender envelope
+  --no-from                          Omit detected Claude/Codex sender (From)
   --no-reply-to                       Do not add a reply route
-  --reply-address URI                 Explicit reply route (conflicts with --no-reply-to)
+  --reply-address URI                 Explicit reply route
+  --reply-to HOST                     Return host for the generated route; precedence:
+                                      --reply-to, SESSION_PEER_REPLY_HOST, CC_PEER_REPLY_HOST,
+                                      tailnet address. The three reply options are exclusive.
+Sender and Reply-To are inert metadata, never authentication.
 Queued/posted is not ACK. Unknown outcomes must not be retried automatically.
 ${common}`;
   return `session-peer ${VERSION} (TypeScript)

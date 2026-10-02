@@ -168,8 +168,8 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
 Node를 선택하는 래퍼를 지정할 수 있습니다. TypeScript 표시와 정확한 버전을 확인하므로
 다른 구현을 발견하면 거부합니다. BatchMode·StrictHostKeyChecking을 사용하며 새
 호스트 키 승인, 원격 런타임 설치, Python 대체 실행은 하지 않습니다. 메시지는 원격
-셸 인자가 아닌 JSON stdin 요청으로 전달합니다. Tailscale 정규 이름 보강은
-미지원입니다. 정방향 접속이 역방향 접속을 보장하지 않습니다.
+셸 인자가 아닌 JSON stdin 요청으로 전달합니다. 정방향 접속이 역방향 접속을 보장하지
+않습니다. 0.2.1 이후 소스는 Tailscale을 경로 힌트로만 사용합니다. [회신](#회신)을 참고하세요.
 
 Windows SSH 대상에는 `--remote-platform win32`를 명시하고, 원격 PATH에 없다면
 `--remote-bin 'C:\절대\경로\session-peer.cmd'`를 지정하세요. 이미 인증된 OpenSSH
@@ -247,12 +247,60 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 ### 회신
 
 `session-peer://v1/reply?...` URI를 `--to`로 사용할 수 있습니다. 알 수 없거나 중복된
-필드, 위험한 호스트, 잘못된 인코딩, 명시적 경로와의 충돌은 거부합니다.
-`--reply-address URI`는 명시적인 회신 주소를 추가할 뿐 자동 추론·검증하지 않습니다.
-새 회신 주소를 붙이지 않을 때는 `--no-reply-to`를 사용합니다. 유효한
-CODEX_THREAD_ID/CODEX_SESSION_ID는 참고용 From 정보에 사용하고 `--no-from`으로
-생략합니다. 모르는 발신자를 만들지 않으며 peer 정보는 권한 근거가 아닙니다. URI를
-셸 명령으로 실행하지 않습니다.
+필드, 위험한 호스트, 잘못된 인코딩, 명시적 경로와의 충돌은 거부합니다. peer 정보는
+권한 근거가 아니며 Reply-To URI를 셸 명령으로 실행하지 않습니다. 받은 Reply-To는 읽는
+사람을 위한 데이터일 뿐이고, 회신을 자동으로 관찰하거나 확인하지 않습니다.
+
+0.2.1 이후 소스(미배포)는 발신자 정보와 자동 회신 경로를 추가합니다.
+
+- **발신자.** Claude Code 안에서는 `CLAUDE_CODE_MESSAGING_SOCKET`이 등록된 살아 있는
+  세션 정확히 하나와 일치해야 합니다. 그 세션의 고유하고 출력 가능한 이름(아니면 PID)이
+  `From: claude:NAME`이 됩니다. Codex 안에서는 유효한 `CODEX_THREAD_ID`(또는
+  `CODEX_SESSION_ID`)가 `From: codex:UUID`가 됩니다. 증거가 충돌하거나 중첩되거나
+  유효하지 않으면 발신자를 정하지 않고, 이때는 회신 경로도 만들지 않습니다.
+  `--no-from`은 From만 생략합니다.
+- **자동 Reply-To.** 발신자가 있고 `--no-reply-to`가 없으면, 로컬 전송에는
+  `transport=local` URI를 붙입니다. SSH 전송이나 `--reply-to`를 쓰면 `transport=ssh`
+  URI를 붙이며, 호스트는 `--reply-to HOST`, `SESSION_PEER_REPLY_HOST`,
+  `CC_PEER_REPLY_HOST`, 이 장비의 tailnet 이름·주소 순으로 정합니다. 사용자가 없는
+  호스트에는 현재 사용자를 붙입니다. 호스트를 찾지 못하면 SSH 경로를 붙이지 않습니다.
+  `--reply-address URI`는 기존처럼 명시적인 대안입니다. `--reply-to`,
+  `--reply-address`, `--no-reply-to`는 함께 쓸 수 없습니다. 모든 URI는 `--to`와 같은
+  파서로 검증합니다.
+- **JSON.** `replyRoute`는 생성한 경로를 알려 줍니다. 로컬 경로는 `verified`
+  (`same_machine_route`), SSH 경로는 `unverified`(`reverse_ssh_not_checked`)입니다.
+  `--to`가 URI이면 `addressResolution`에 전송 방식을 기록하고, 로컬로 전달했다면
+  `normalizedFrom: "ssh_self"`를 함께 기록합니다.
+- **같은 장비.** SSH 회신 URI는 호스트에 현재 OS 사용자가 포함되고 이 장비를 가리키며
+  (`localhost`, 루프백, 호스트 이름, Tailscale 자기 노드), `--host`나 SSH 옵션을 주지
+  않았을 때만 로컬로 전달합니다. 사용자가 다르거나 없으면 SSH로 남습니다.
+- **Tailscale.** `tailscale status --json`(3초 제한)은 경로 힌트로만 씁니다. `Online`이
+  불리언 `true`인 피어(MagicDNS 켜짐)는 지정한 SSH 별칭을 그대로 대상으로 쓰고
+  `HostName=<MagicDNS 이름>`을 추가합니다. `HostKeyAlias=<원래 이름>`도 추가하지만,
+  사용자를 확인하는 같은 `ssh -G` 결과에 SSH 설정의 `HostKeyAlias`가 이미 있으면 그
+  값을 유지하고, 확인에 실패하면 아무것도 덮어쓰지 않습니다. 이때 결과의 `host`는
+  MagicDNS 이름, `sshHost`는 지정한 별칭입니다. `Online`이 불리언 `false`인 피어(MagicDNS가
+  꺼져 있어도)나 모호한 이름은 SSH 전에 거부합니다(`tailscale_peer_offline`,
+  `tailscale_destination_ambiguous`). 그 밖의 `Online` 값, MagicDNS 꺼짐, 모르는 이름,
+  중지되었거나 없는 Tailscale, `SESSION_PEER_TAILSCALE=off`는 일반 SSH로 처리합니다.
+- **회신 경로 점검.** `doctor --check-return-route [--reply-to USER@HOST]`는 진단 대상
+  장비(`--host` 대상 또는 현재 장비)에서 `ssh … USER@HOST 'exit 0'`을 실행합니다. batch
+  모드, 비밀번호·키보드 대화형 프롬프트 없음, 엄격한 호스트 키, 호스트 키 갱신 없음,
+  제어 소켓 없음, 접속 제한 5초를 적용합니다. 8초 제한은 마지막 `ssh` 명령에만
+  적용되며, 그 전의 Tailscale 상태(3초)와 `ssh -G`(5초) 조회에는 각자의 제한이 있습니다.
+  `exit 0`은 POSIX 셸, cmd.exe, PowerShell에서 모두 아무 일도 하지 않으므로, 회신
+  호스트는 이 중 하나를 기본 셸로 쓰는 OpenSSH 서버면 됩니다(픽스처 검증은 POSIX 회신
+  호스트만). `returnRoute`는 `verified` 또는 `failed`와 사유(`return_host_unavailable`,
+  `return_host_is_receiver`, `ssh_executable_missing`, `authentication_failed`,
+  `host_key_failed`, `timeout`, `transport_failed`, `remote_command_failed`)입니다. 로컬
+  점검에서는 같은 장비의 현재 사용자를 SSH 없이 로컬 경로로 처리합니다. `--host`를 쓰면
+  루프백 회신 호스트(`localhost`, `127.x`, `::1`)는 대상이 자기 자신으로 읽으므로 SSH
+  전에 거부합니다(`invalid_return_route`). 대상 자신의 이름은 `return_host_is_receiver`로
+  실패하며 검증된 로컬 경로로 보고하지 않습니다. 원격 전송도 루프백 회신 호스트를
+  알리지 않습니다(`invalid_reply_host`). 자동 실행이나 재시도는 하지 않으며, 정방향 접속이 된다고 이 점검을
+  통과한 것으로 보지 않습니다. 이 CLI가 시작하는 다른 `ssh`와 마찬가지로, 점검과 그
+  `ssh -G` 사용자 확인은 점검하는 장비에서 신뢰하는 SSH 설정(`ProxyCommand`, `Match exec`
+  포함)을 사용합니다(위의 신뢰 경계 참고). 명령줄 허용 목록은 그 파일에 적용되지 않습니다.
 
 ## 성공의 의미
 

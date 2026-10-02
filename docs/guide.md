@@ -182,8 +182,9 @@ The default remote command is `session-peer` on remote PATH. An absolute
 the TypeScript marker and exact version; a different implementation is refused.
 SSH uses BatchMode and StrictHostKeyChecking. It never accepts new host keys,
 installs a remote runtime or invokes Python as a fallback. Messages travel in a
-JSON stdin request, not remote shell arguments. Tailscale canonical-name
-enrichment is not supported. Forward access does not establish reverse access.
+JSON stdin request, not remote shell arguments. Forward access does not
+establish reverse access. Source after 0.2.1 uses Tailscale only as a routing
+hint; see [Replies](#replies).
 
 For a Windows SSH destination, add `--remote-platform win32` and select a
 Windows `--remote-bin 'C:\absolute\path\session-peer.cmd'` if needed. A previously
@@ -273,11 +274,69 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 
 Use a `session-peer://v1/reply?...` URI as `--to`. Unknown/duplicate fields,
 unsafe hosts, malformed encoding and conflicting explicit routes are rejected.
-`--reply-address URI` adds an explicit return address; no route is inferred or
-verified automatically. Use `--no-reply-to` when replying without a new address.
-A valid CODEX_THREAD_ID/CODEX_SESSION_ID supplies informational From metadata;
-`--no-from` omits it. Unknown senders are not invented. Peer metadata is never
-authority, and a Reply-To URI is never executed as shell text.
+Peer metadata is never authority, and a Reply-To URI is never executed as shell
+text. A received Reply-To is data for the reader; no reply is observed or
+confirmed automatically.
+
+Source after 0.2.1 (unreleased) adds sender context and generated routes:
+
+- **Sender.** Inside Claude Code, `CLAUDE_CODE_MESSAGING_SOCKET` must match
+  exactly one live registered session; its unique printable name (otherwise its
+  PID) becomes `From: claude:NAME`. Inside Codex, a valid `CODEX_THREAD_ID` (or
+  `CODEX_SESSION_ID`) gives `From: codex:UUID`. Conflicting, nested or invalid
+  evidence gives no identity, and then no generated Reply-To. `--no-from` omits
+  From only.
+- **Generated Reply-To.** With a sender and no `--no-reply-to`, a local send gets
+  a `transport=local` URI. An SSH send, or `--reply-to`, gets a
+  `transport=ssh` URI whose host comes from `--reply-to HOST`, then
+  `SESSION_PEER_REPLY_HOST`, then `CC_PEER_REPLY_HOST`, then this machine's
+  tailnet name or address. A host without a user gets the current user. If no
+  host is found, no SSH route is added. `--reply-address URI` stays an explicit
+  alternative. `--reply-to`, `--reply-address` and `--no-reply-to` are mutually
+  exclusive. Every URI is checked by the same parser as `--to`.
+- **JSON.** `replyRoute` reports the generated route: local routes are
+  `verified` (`same_machine_route`), SSH routes `unverified`
+  (`reverse_ssh_not_checked`). When `--to` is a URI, `addressResolution`
+  records its transport, and `normalizedFrom: "ssh_self"` when it was delivered
+  locally.
+- **Same machine.** An SSH reply URI is delivered locally only when its host
+  includes this OS user and names this machine (`localhost`, loopback, the host
+  name or the Tailscale self node), and no `--host`/SSH option was given. A
+  different or missing user stays SSH.
+- **Tailscale.** `tailscale status --json` (3 s bound) is a routing hint only.
+  A peer whose `Online` is the boolean `true` (with MagicDNS on) keeps your SSH
+  alias as the destination and adds `HostName=<MagicDNS name>`. It also adds
+  `HostKeyAlias=<original name>`, unless the same `ssh -G` that reads the user
+  shows a `HostKeyAlias` already set in your ssh config (that one is kept), or
+  that lookup fails (nothing is overridden). The result `host` is then the
+  MagicDNS name, and `sshHost` is the alias you gave. A peer whose `Online` is
+  the boolean `false`, even with MagicDNS off, or an ambiguous name, is refused
+  before SSH (`tailscale_peer_offline`, `tailscale_destination_ambiguous`). Any
+  other `Online` value, MagicDNS off, an unknown name, a stopped or missing
+  Tailscale, or `SESSION_PEER_TAILSCALE=off` means ordinary SSH.
+- **Return route.** `doctor --check-return-route [--reply-to USER@HOST]` runs
+  `ssh … USER@HOST 'exit 0'` from the diagnosed machine (the `--host`
+  destination, or this one). It uses batch mode, no password or
+  keyboard-interactive prompts, strict host keys, no host-key updates, no
+  control socket and a 5 s connect timeout. The 8 s deadline applies to that
+  final `ssh` command only; the Tailscale status (3 s) and `ssh -G` (5 s)
+  lookups before it have their own limits. `exit 0` is a no-op in POSIX shells,
+  cmd.exe and PowerShell, so the return host may be any OpenSSH server with one
+  of those default shells (only POSIX return hosts have fixture coverage).
+  `returnRoute` is `verified` or `failed` with a reason
+  (`return_host_unavailable`, `return_host_is_receiver`,
+  `ssh_executable_missing`, `authentication_failed`, `host_key_failed`,
+  `timeout`, `transport_failed`, `remote_command_failed`). Locally, this user
+  on this machine is a local route without SSH. With `--host`, a loopback
+  return host (`localhost`, `127.x`, `::1`) is refused before SSH
+  (`invalid_return_route`), because the destination would read it as itself.
+  A name of the destination itself fails as `return_host_is_receiver` and is
+  never reported as a verified local route. Likewise a remote send never
+  advertises a loopback reply host (`invalid_reply_host`). It is never run automatically, never retried, and forward
+  reachability never implies it. Like every `ssh` this CLI starts, the probe
+  and its `ssh -G` user lookup use your trusted ssh configuration on the
+  probing machine, including `ProxyCommand` and `Match exec` (see the trust
+  boundaries above). The command-line allowlist does not apply to that file.
 
 ## What success means
 
