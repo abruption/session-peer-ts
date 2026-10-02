@@ -1,6 +1,6 @@
 # Python compatibility and npm migration
 
-Updated 2026-09-29 KST. Python reference: **1.0.2**,
+Updated 2026-10-02 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
 This matrix describes **TS 0.2.1**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
@@ -29,7 +29,7 @@ not a missing implementation. Issue links describe work, not available features.
 | CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | 0.2.0: explicit JSON/text format, positional/named/stdin body, command help, exact Unicode 14.0.0 casefold with PID for ambiguity | Implemented; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
 | From / Reply-To | Caller detection, automatic return-route metadata, structured URI resolution | From uses Codex environment UUID only; explicit `--reply-address`; local/SSH Reply-To URI parsing with conflict checks | Partial; [#21](https://github.com/abruption/session-peer-ts/issues/21), 0.3.0 |
 | SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; one host; strict preflight; JSON stdin; explicit Windows PowerShell path | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) hosts/options, [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design, 0.3.0 |
-| Updates | Cached advisory client/skill notices; explicit manager-aware update commands | No update cache/command; `--no-update-notice` accepted as a no-op | Planned [#22](https://github.com/abruption/session-peer-ts/issues/22), 0.3.0 |
+| Updates | Cached advisory client/skill notices (on by default); GitHub release check; standalone self-update and remote push; package-manager guidance | Source: `update --check` reads npm dist-tags (`latest`/`preview`) with installation-manager guidance; no self-update or remote update; cached client notices are opt-in (`SESSION_PEER_UPDATE_NOTICE=1`), honor `--no-update-notice`/`SESSION_PEER_NO_UPDATE_NOTICE`; no skill notices. Published 0.2.1 only accepts `--no-update-notice` as a no-op | Partial in source for [#22](https://github.com/abruption/session-peer-ts/issues/22), 0.3.0; [update boundaries](#source-update-checks--22) |
 | Reusable execution API | Agent/transport capability adapters | Package root exposes pure protocol helpers only; no general typed execution API | Planned [#24](https://github.com/abruption/session-peer-ts/issues/24), Future — Agent integrations |
 | Skill guidance/setup | Companion `session-peer` skill targets Python | Separate `session-peer-ts` companion PR and exact-commit setup; baseline/version/help gates | Source [#25](https://github.com/abruption/session-peer-ts/issues/25), 0.2.0; no tag/publish |
 | MCP | Optional extra, restricted destinations; separate wake permission | Unsupported | Planned [#26](https://github.com/abruption/session-peer-ts/issues/26), Future — Agent integrations |
@@ -56,6 +56,7 @@ Source anchors at the baselines:
 | `CODEX_HOME`, default `~/.codex`, macOS Orca account homes | Source: bounded automatic Codex listing and writer safety inventory. Codex send selects a unique stable live home, or validates the explicit home against all competitors. Published 0.1.0 requires it for Codex list too. No recursive disk scan. |
 | `SESSION_PEER_CODEX_HOMES` | Source: JSON array of absolute or `~/` paths adds required listing homes and writer candidates. Invalid list configuration is rejected as a whole with other sources preserved; send keeps fail-closed inventory. Published 0.1.0 uses it only for writer checks. |
 | `CODEX_THREAD_ID`, `CODEX_SESSION_ID` | Valid UUID enables default From metadata; `--no-from` disables it. Claude/Antigravity caller detection is not implemented. |
+| `SESSION_PEER_UPDATE_NOTICE`, `SESSION_PEER_NO_UPDATE_NOTICE`, `SESSION_PEER_CACHE_DIR`, `SESSION_PEER_UPDATE_REGISTRY` | Source #22: opt-in cached notices, opt-out (wins), absolute cache directory override, and npm registry mirror for update checks (HTTPS, or loopback HTTP; no credentials). Python's `XDG_CACHE_HOME` `update.json` is not read; TS uses its own `npm-update.json`. |
 | Reply/update/Relay settings from Python | No blanket compatibility. Only the flags and environment reads in the TS baseline above are implemented. Do not infer a route or permission from an environment variable or From header. |
 | Runtime and native dependency | TS needs Node 22.13+ within 22.x or Node 24.x, plus a matching native lock binary. Python is not a TS runtime fallback. |
 | CLI ownership | Both distributions install `session-peer`; npm does not remove Python/uv/pipx/venv installations. Select one path deliberately and update it through its owning manager. |
@@ -131,7 +132,7 @@ TS normal envelopes have `schemaVersion`, `host`, `command`, `ok`, `version`,
 | `wake` | Optional, opt-in; failed activation may still have `submitted:true` and `ok:false` | Absent; unsupported option |
 | SSH metadata | Requested/resolved host and SSH metadata; multi-host list may be an array | Verified remote response adds `host`/`sshHost`; caught local SSH failure reports the local host; no host aggregation |
 | `error`, `retryAllowed` | Error/detail fields vary by path; submission may already have happened | Fixed error codes, caught failure has `retryAllowed:false`; native stderr/message body are not copied into errors |
-| `clientUpdate`, `skillUpdates` | Optional advisory notice metadata | Absent |
+| `clientUpdate`, `skillUpdates` | Optional advisory notice metadata | Source #22: `clientUpdate` only on completed local `list`/`send`/`doctor` JSON results when notices are opted in and a fresh npm cache shows a newer stable version; never on wire responses or caught failures. `skillUpdates` absent |
 
 An **absent** submission field is not `false`; `null` is not `false` either.
 Check `ok`, command, status, exit code and presence separately. TS unknown means
@@ -195,7 +196,7 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `--remote-platform win32` and the `.cmd` path. Retain existing SSH host trust
    and authentication; a control socket is not new authorization. Account for
    the size limits above and lack of multi-host aggregation.
-6. **Keep unsupported workflows on an explicit Python path.** Updates,
+6. **Keep unsupported workflows on an explicit Python path.** Remote updates,
    MCP, wake, Antigravity and paired devices need their existing implementation
    until their issues are delivered. Doctor is available in 0.2.0; 0.1.0 lacked this command. Updating npm does not update Python, skills,
    external Relay infrastructure or a remote host automatically. To return to
@@ -217,7 +218,8 @@ The implemented rows map to these repeatable checks:
 - [transport.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/transport.test.ts): real POSIX inbox, guarded queue, wrong/competing writer, unknown native outcome, inert Reply-To, host boundaries, SSH preflight/framing/loss.
 - [windows.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/windows.test.ts) and [windows-contract.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/windows-contract.test.ts): the bounded Windows native contracts described above.
 - [input-boundaries.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/input-boundaries.test.ts): exact 1,000,000-code-point / 32,768-byte message bounds, envelope overhead, 4,100,000-byte escaped JSON wire bound and invalid UTF-8 refusal. Python SSH limits are source-inspected here; these TS tests do not exercise the Python transport.
-- [types.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/types.test.ts), [package-smoke.ts](https://github.com/abruption/session-peer-ts/blob/main/test/package-smoke.ts), [release.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/release.test.ts): pure typed helpers, package/native loading, artifact and publication gates. They do not test future update/provisioning implementations.
+- [types.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/types.test.ts), [package-smoke.ts](https://github.com/abruption/session-peer-ts/blob/main/test/package-smoke.ts), [release.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/release.test.ts): pure typed helpers, package/native loading, artifact and publication gates. package-smoke also checks installed-path update guidance without network or file changes.
+- [updates.test.ts](https://github.com/abruption/session-peer-ts/blob/main/test/updates.test.ts): #22 update checks and notices against a local fixture registry (see below).
 
 Windows expansion belongs to [#34](https://github.com/abruption/session-peer-ts/issues/34);
 this matrix belongs to [#33](https://github.com/abruption/session-peer-ts/issues/33).
@@ -414,3 +416,69 @@ command, transport or JSON field. Callers may notice the stricter refusals below
 | Windows batch shims (#57) | A `.cmd`/`.bat` executable found first on `PATH` (or given explicitly) is reported as `executable_unsupported` by `send` and `doctor`, because Node cannot spawn them without a shell and a shell would interpret the message. Use the native `codex.exe`. |
 | Envelope trimming (#59, #64) | Leading/trailing `\n` is trimmed by index scanning instead of `/^\n+\|\n+$/`, which was quadratic on long interior newline runs (CodeQL `js/polynomial-redos`). Trimming semantics are unchanged. |
 | Windows owner inspection (#65) | The compiling `Add-Type` owner inspection waits up to 20000 ms; the compile-free creation-time probe keeps 8000 ms. Timeouts still refuse. |
+
+## Source update checks — #22
+
+Evidence date: 2026-10-02. Source only; published npm 0.2.1 has no `update`
+command. `session-peer update --check --json [--channel latest|preview]` makes one
+GET to `<registry>/-/package/session-peer/dist-tags` (default
+`https://registry.npmjs.org/`, 3-second timeout covering the body, 64 KiB body
+limit, redirects refused, no retries). `latest` must be a stable npm semver;
+`preview` may be a prerelease. Versions follow SemVer 2.0 precedence without a
+`v` prefix or build metadata. Python 1.0.2's GitHub tags are a different stream
+and are never compared; `referenceVersion` is unrelated to this check.
+
+| Field | Meaning |
+| --- | --- |
+| `current`, `latest`, `channel`, `distTag` | Running TS version, the dist-tag's version, and the tag name |
+| `source` | `npm_registry` |
+| `status`, `outdated` | `update_available` (`outdated:true`), `up_to_date` or `ahead` |
+| `updated` | Always `false`; nothing is installed |
+| `managedBy`, `updateCommand` | `npm`, `npm_project`, `pnpm`, `pnpm_project`, `yarn`, `bun`, `npx` or `source`, from the resolved CLI path; command only when outdated, `null` for a source checkout |
+| `skills`, `skillsManagedBy` | Same local TS skill metadata check as `doctor`; `separate` |
+
+Failures use the standard caught-failure envelope with `registry_timeout`,
+`registry_unreachable`, `registry_http_error`, `registry_response_invalid`,
+`dist_tag_missing` (exit 1), or `invalid_update_registry`,
+`unsupported_update_channel` (exit 2). Response bodies are never emitted.
+`update` without `--check` is `self_update_unsupported` (exit 2) with `updated:false`,
+`managedBy`, `updateCommand` (dist-tag spec) and `checkCommand`; it makes no
+request. `--host`, other list/send options and `--stdio-request` (error
+`remote_update_unsupported`) are refused, so a remote destination never performs
+update checks. `doctor` capabilities add `updateCheck:true`, `selfUpdate:false`.
+
+Notices are deliberately **opt-in** (Python's are on by default): agents and
+scripts call this CLI frequently, and an unrequested registry call or extra
+stderr line would change its no-network default. With
+`SESSION_PEER_UPDATE_NOTICE=1` (`1/true/yes/on`), completed local
+`list`/`send`/`doctor` results read only the local cache. A fresh (24 h) cache
+whose stable `latest` is newer adds `clientUpdate` (`schemaVersion`, `status`,
+`current`, `latest`, `channel`, `checkedAt`, `source: "npm_registry_cache"`,
+`managedBy`, `command`) to JSON, or one stderr line for text; stdout text is
+unchanged. A missing, invalid, future-dated or expired cache spawns one detached
+refresh (`O_EXCL` lock, stale after 60 s) and returns immediately. A failed
+refresh stores `latest:null`, which suppresses attempts for 1 hour. Explicit
+`update --check` on `latest` also refreshes the cache. Opt-out
+(`--no-update-notice`, `SESSION_PEER_NO_UPDATE_NOTICE`) wins over opt-in. The
+notice is computed once per invocation by the client, so SSH or later multi-host
+execution cannot multiply refreshes. Cache and network failures never change
+results or exit codes. A rare double refresh is possible only when two
+invocations replace the same stale lock at the same moment.
+
+Cache: `npm-update.json` (0600, atomic temp-file rename) in a 0700 directory
+owned by the user: `SESSION_PEER_CACHE_DIR` (absolute), else
+`$XDG_CACHE_HOME/session-peer` on macOS/Linux, `~/Library/Caches/session-peer`,
+`~/.cache/session-peer`, or `%LOCALAPPDATA%\session-peer\Cache`. It holds only
+package name, channel, version and timestamp. Windows relies on the per-user
+profile ACL instead of POSIX modes. No checks or notices modify npm-owned files,
+Python installations, remote hosts or skills.
+
+Acceptance evidence: `test/updates.test.ts` (POSIX and Windows CI) covers SemVer
+ordering, stable/prerelease tags, invalid/oversized/HTTP/redirect/timeout/offline
+registry responses without body leakage, manager guidance per install layout,
+cache paths and modes, opt-in default off, flag/env opt-out, JSON additivity,
+text stderr, offline/invalid/expired/future caches, concurrent single-flight
+refresh, live/stale locks, failure backoff, Python cache isolation, TS skill
+metadata and wire isolation. `test/package-smoke.ts` checks the installed
+package's guidance and unchanged files. All use a local fixture registry; no
+test contacts npm.

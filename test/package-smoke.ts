@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -23,7 +23,7 @@ try {
   let hash;
   for (let index = 0; index < 2; index++) {
     const [packed] = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', task]));
-    assert.deepEqual(packed.files.map((file: {path: string}) => file.path).sort(), ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'docs/guide.md', 'docs/guide.ko.md', 'docs/guide.ja.md', 'docs/guide.zh-CN.md', 'docs/api.md', 'dist/cli.js', 'dist/discovery.js', 'dist/diagnostics.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts', 'dist/discovery.d.ts', 'dist/diagnostics.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts', 'dist/send.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'package.json'].sort());
+    assert.deepEqual(packed.files.map((file: {path: string}) => file.path).sort(), ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md', 'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md', 'docs/guide.md', 'docs/guide.ko.md', 'docs/guide.ja.md', 'docs/guide.zh-CN.md', 'docs/api.md', 'dist/cli.js', 'dist/discovery.js', 'dist/diagnostics.js', 'dist/process.js', 'dist/protocol.js', 'dist/send.js', 'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts', 'dist/discovery.d.ts', 'dist/diagnostics.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts', 'dist/send.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'dist/updates.js', 'dist/updates.d.ts', 'package.json'].sort());
     const next = createHash('sha256').update(readFileSync(join(task, packed.filename))).digest('hex');
     if (hash) assert.equal(next, hash, 'same build must produce identical tarball');
     hash = next;
@@ -52,6 +52,16 @@ try {
   const result = JSON.parse(execFileSync(process.execPath, [entry, 'list', '--json'], {
     encoding: 'utf8', timeout: 10000, env: emptyEnv
   }));
+  // Installed-path ownership guidance; no network, cache or package-file change.
+  const files = () => JSON.stringify(readdirSync(installed, { recursive: true }).sort().map(name => [name, statSync(join(installed, String(name))).mtimeMs]));
+  const beforeUpdate = files();
+  const refused = spawnSync(process.execPath, [entry, 'update', '--json'], { encoding: 'utf8', timeout: 10000,
+    env: { ...emptyEnv, SESSION_PEER_UPDATE_REGISTRY: 'http://127.0.0.1:9/', SESSION_PEER_CACHE_DIR: join(task, 'update-cache') } });
+  assert.equal(refused.status, 2);
+  const guidance = JSON.parse(refused.stdout);
+  assert.equal(guidance.error, 'self_update_unsupported'); assert.equal(guidance.managedBy, 'npm_project');
+  assert.equal(guidance.updateCommand, 'npm install --ignore-scripts session-peer@latest');
+  assert.equal(files(), beforeUpdate); assert.equal(existsSync(join(task, 'update-cache')), false);
   assert.equal(result.discovery.claude.status, 'ok');
   assert.equal(result.discovery.codex.status, 'not_installed');
   assert.equal(result.ok, true);

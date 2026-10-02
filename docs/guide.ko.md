@@ -271,6 +271,49 @@ pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 
 확인을 미지원으로 표시합니다. 선택적 TS 스킬 메타데이터 검사도 설치를 하지 않습니다.
 [진단 경계](../PARITY.md#source-read-only-doctor--18--020)를 참고하세요. SSH 양쪽에 같은
 소스 빌드가 필요합니다.
+### 업데이트 확인과 알림 (소스, #22)
+
+```sh
+session-peer update --check --json
+session-peer update --check --channel preview --output-format text
+```
+
+공개 npm 0.2.1에는 없는 소스 기능입니다. `update --check`는 `session-peer`의 npm
+dist-tag를 한 번 요청하고(3초 제한, 재시도 없음) `current`, `latest`, `channel`(기본
+`latest`, 또는 `preview`), `source: "npm_registry"`, `status`(`update_available`,
+`up_to_date`, `ahead`), `managedBy`, `updateCommand`를 보고합니다. 명령은 실행 중인
+CLI 경로에서 정해집니다. 예를 들어 전역 npm 설치에는
+`npm install --global --ignore-scripts session-peer@0.2.2`를 안내하고, pnpm·Yarn·Bun·npx·
+프로젝트 로컬 설치에는 각자의 명령을, 소스 체크아웃에는 `null`을 돌려줍니다. npm 버전만
+보고하며 Python `session-peer` 릴리스는 별개의 버전 흐름이라 비교하지 않습니다. 레지스트리
+실패는 종료 코드 1과 `registry_timeout`, `registry_unreachable`, `registry_http_error`,
+`registry_response_invalid`, `dist_tag_missing` 중 하나로 보고하며 응답 본문은 출력하지
+않습니다.
+
+`--check` 없는 `update`는 아무것도 바꾸지 않습니다. `self_update_unsupported`(종료 코드
+2)로 거부하고 해당 설치를 관리하는 도구의 명령을 돌려줍니다. `update`는 로컬 전용이라
+`--host`를 거부하고 SSH wire 요청도 거부합니다. 원격 호스트, Python 설치, 별도로 관리되는
+`session-peer-ts` 스킬은 갱신하지 않습니다. 결과에는 로컬 TS 스킬 메타데이터(`skills`,
+`doctor`와 같은 계약)와 `skillsManagedBy: "separate"`가 포함됩니다.
+
+`list`, `send`, `doctor`의 캐시 기반 알림은 **기본적으로 꺼져 있습니다**. 이 CLI는 주로
+에이전트와 스크립트가 실행하므로 요청하지 않은 네트워크 호출을 하지 않아야 하기
+때문입니다. `SESSION_PEER_UPDATE_NOTICE=1`로 켜면, 24시간 이내의 캐시가 더 새로운 npm
+안정 버전을 가리킬 때 JSON 결과에 `clientUpdate` 객체를 추가하고 텍스트 출력에서는
+stderr에 한 줄을 씁니다. 캐시가 없거나 잘못됐거나 만료되면 분리된 갱신 프로세스를 하나만
+시작하며(배타적 잠금으로 단일 실행) 명령 결과와 종료 코드를 지연시키거나 바꾸지 않습니다.
+갱신이 실패하면 1시간 뒤에 다시 시도합니다. `--no-update-notice` 또는
+`SESSION_PEER_NO_UPDATE_NOTICE=1`은 알림과 갱신을 항상 끕니다. `--stdio-request`(SSH의
+원격 측)는 캐시를 읽거나 갱신하지 않습니다.
+
+캐시 파일은 `SESSION_PEER_CACHE_DIR`(절대 경로)의 `npm-update.json`이며, 없으면
+`$XDG_CACHE_HOME/session-peer`, `~/Library/Caches/session-peer`(macOS),
+`~/.cache/session-peer`(Linux), `%LOCALAPPDATA%\session-peer\Cache`(Windows)를 씁니다.
+0700 디렉터리에 0600 권한으로 원자적으로 기록하며 공개 버전 정보만 담습니다.
+`SESSION_PEER_UPDATE_REGISTRY`로 미러를 지정할 수 있습니다(HTTPS 또는 loopback 전용
+HTTP, 자격 증명 불가). npm 설정과 `.npmrc`는 읽지 않습니다.
+[업데이트 경계](../PARITY.md#source-update-checks--22)를 참고하세요.
+
 ## 에이전트 스킬: 명시적 설치
 
 별도 `session-peer-ts` 스킬은 동반 PR에서 관리되며 새 npm 또는 스킬 태그 발행이 아닙니다. 공개된 0.1.0 기본 기능을 지원하고 TypeScript 구현 표시와 도움말로 개발 기능을 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.

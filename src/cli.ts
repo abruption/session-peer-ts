@@ -9,13 +9,14 @@ import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send, CodexUnknownOutcome } from './send.js';
 import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
+import { CHANNELS, checkUpdate, noticeText, refreshCache, refuseSelfUpdate, REFRESH_ARG, updateNotice, UpdateRefusal } from './updates.js';
 
-type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string> };
-const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'];
-const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address'];
+type Options = { command: 'list' | 'send' | 'doctor' | 'update'; values: Map<string, string>; flags: Set<string> };
+const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home', '--check'];
+const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--channel'];
 export function parse(args: string[]): Options {
   const command = args[0];
-  if (command !== 'list' && command !== 'send' && command !== 'doctor') throw new Refusal('unsupported_command');
+  if (command !== 'list' && command !== 'send' && command !== 'doctor' && command !== 'update') throw new Refusal('unsupported_command');
   const values = new Map<string, string>(), flags = new Set<string>();
   let positional: string | undefined;
   let terminated = false;
@@ -48,6 +49,13 @@ export function parse(args: string[]): Options {
   if (values.has('--output-format') && !['json', 'text'].includes(values.get('--output-format')!)) throw new Refusal('unsupported_output_format');
   if (flags.has('--json') && values.get('--output-format') === 'text') throw new Refusal('conflicting_output_options');
   if (!flags.has('--json') && !values.has('--output-format')) throw new Refusal('json_output_required');
+  if (command === 'update') {
+    if (values.has('--channel') && !CHANNELS.includes(values.get('--channel')!)) throw new Refusal('unsupported_update_channel');
+    // Local client only: remote hosts and other installations update through their own managers.
+    if ([...values.keys()].some(k => !['--output-format', '--channel'].includes(k)) || [...flags].some(k => !['--json', '--check', '--no-update-notice'].includes(k))) throw new Refusal('inapplicable_option');
+    return { command, values, flags };
+  }
+  if (flags.has('--check') || values.has('--channel')) throw new Refusal('inapplicable_option');
   if (command === 'list' || command === 'doctor') {
     if (values.has('--agent') && !['claude', 'codex'].includes(values.get('--agent')!)) throw new Refusal('unsupported_agent');
     if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
@@ -164,9 +172,10 @@ try {
   if (!((major === 22 && minor! >= 13) || major === 24)) throw new Refusal('unsupported_node_version');
   if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
-  if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
+  if (args.length === 1 && args[0] === REFRESH_ARG) await refreshCache();
+  else if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
   else if ((args.length === 1 && ['--help', '-h'].includes(args[0]!)) ||
-    (args.length === 2 && ['list', 'send', 'doctor'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
+    (args.length === 2 && ['list', 'send', 'doctor', 'update'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
   else {
     const wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -176,10 +185,11 @@ try {
       if (!record || record.schemaVersion !== 1 || !Array.isArray(record.args) || record.args.some(a => typeof a !== 'string')) throw new Refusal('invalid_remote_request');
       args = record.args;
     }
-    command = ['list', 'send', 'doctor'].includes(args[0] ?? '') ? args[0]! : 'unknown';
+    command = ['list', 'send', 'doctor', 'update'].includes(args[0] ?? '') ? args[0]! : 'unknown';
     const options = parse(args);
     format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
     if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
+    if (wire && command === 'update') throw new Refusal('remote_update_unsupported');
     if (wire && (options.values.has('--host') || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
     let message: string | undefined;
     if (command === 'send') {
@@ -193,9 +203,14 @@ try {
     // Propagate the verified remote exit code so SSH and local refusals match.
     if (options.values.has('--host')) ({ value: result, exitCode } = await remote(options, message));
     else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
+    else if (command === 'update') result = options.flags.has('--check') ? await checkUpdate(options.values.get('--channel')) : refuseSelfUpdate(options.values.get('--channel'));
     else if (command === 'doctor') result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
     else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
-    console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result }, format));
+    // Cached advisory notice: additive JSON field, or stderr for text; never in wire mode.
+    const notice = wire || command === 'update' ? undefined : updateNotice(options.flags.has('--no-update-notice'));
+    console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: result.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...result,
+      ...(notice && format === 'json' ? { clientUpdate: notice } : {}) }, format));
+    if (notice && format === 'text') console.error(noticeText(notice));
     process.exitCode = exitCode ?? (result.ok === false ? 1 : 0);
   }
 } catch (error) {
@@ -205,6 +220,7 @@ try {
   console.log(renderOutput({ schemaVersion: 1, host: hostname(), command, ok: false,
     error: unknown ? 'outcome_unknown' : failure.code, status: unknown ? 'unknown' : 'refused',
     submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false,
-    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }) }, format));
+    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }),
+    ...(error instanceof UpdateRefusal ? error.guidance : {}) }, format));
   process.exitCode = unknown ? 1 : failure.exitCode;
 }

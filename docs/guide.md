@@ -300,6 +300,52 @@ pipe exists or accepts connections. `capabilities` explicitly excludes
 wake/wait/ACK and consumption confirmation. Optional TS skill metadata checks
 never install anything. See [diagnostic boundaries](../PARITY.md#source-read-only-doctor--18--020).
 SSH requires the same source build on both ends.
+### Update checks and notices (source, #22)
+
+```sh
+session-peer update --check --json
+session-peer update --check --channel preview --output-format text
+```
+
+This source command is not in published npm 0.2.1. `update --check` makes one
+request (3-second timeout, no retries) for the npm dist-tags of `session-peer`
+and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
+`source: "npm_registry"`, `status` (`update_available`, `up_to_date` or `ahead`),
+`managedBy` and `updateCommand`. The command is derived from the path of the
+running CLI, for example `npm install --global --ignore-scripts session-peer@0.2.2`
+for a global npm install; pnpm, Yarn, Bun, npx and project-local installs get
+their own command, and a source checkout gets `null`. It only reports versions
+from npm. Python `session-peer` releases are a separate stream and are never
+compared. Registry failures exit 1 with `registry_timeout`,
+`registry_unreachable`, `registry_http_error`, `registry_response_invalid` or
+`dist_tag_missing`; response bodies are never printed.
+
+`update` without `--check` does not modify anything: it refuses with
+`self_update_unsupported` (exit 2) and returns the owning manager's command.
+`update` is local only. It rejects `--host` and is refused over the SSH wire.
+Remote hosts, Python installations and the separately managed `session-peer-ts`
+skill are never updated; the result lists local TS skill metadata
+(`skills`, same contract as `doctor`) with `skillsManagedBy: "separate"`.
+
+Cached notices on `list`, `send` and `doctor` are **off by default** because
+this CLI is mainly run by agents and scripts that should not make unrequested
+network calls. Set `SESSION_PEER_UPDATE_NOTICE=1` to opt in. Then a fresh cache
+(24 hours) that shows a newer stable npm version adds a `clientUpdate` object to
+JSON results, or one line on stderr for text output. A missing, invalid or
+expired cache starts one detached refresh (single flight via an exclusive lock)
+and never delays or changes the command's result or exit code. A failed refresh
+waits 1 hour before the next attempt. `--no-update-notice` or
+`SESSION_PEER_NO_UPDATE_NOTICE=1` always disables notices and refreshes.
+`--stdio-request` (the remote side of SSH) never reads or refreshes the cache.
+
+The cache is `npm-update.json` in `SESSION_PEER_CACHE_DIR` (absolute), otherwise
+`$XDG_CACHE_HOME/session-peer`, `~/Library/Caches/session-peer` (macOS),
+`~/.cache/session-peer` (Linux) or `%LOCALAPPDATA%\session-peer\Cache`
+(Windows). It is written atomically with mode 0600 in a 0700 directory and
+holds only public version data. `SESSION_PEER_UPDATE_REGISTRY` selects a mirror
+(HTTPS, or HTTP on loopback only; no credentials). npm configuration and
+`.npmrc` are not read. See [update boundaries](../PARITY.md#source-update-checks--22).
+
 ## Agent skill: explicit installation
 
 The separate `session-peer-ts` companion skill is tracked in [companion PR #14](https://github.com/abruption/session-peer-skill/pull/14); it is not a new npm or skill-tag release. It supports the published 0.1.0 baseline, detects the TypeScript implementation marker, and checks help before using development capabilities. The Python `session-peer` skill remains separate.

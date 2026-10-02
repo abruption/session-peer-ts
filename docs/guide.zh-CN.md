@@ -182,6 +182,44 @@ session-peer doctor --host user@host --json
 存活进程公布了 pipe，并不证明 pipe 存在或可以连接。`capabilities` 明确将
 wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检查也不会安装任何内容。
 参见[诊断边界](../PARITY.md#source-read-only-doctor--18--020)。SSH 两端需要相同的源码构建。
+### 更新检查与提示（源码，#22）
+
+```sh
+session-peer update --check --json
+session-peer update --check --channel preview --output-format text
+```
+
+公开的 npm 0.2.1 不包含此命令。`update --check` 只请求一次 `session-peer` 的 npm
+dist-tag（3 秒超时，不重试），并报告 `current`、`latest`、`channel`（默认 `latest`，
+或 `preview`）、`source: "npm_registry"`、`status`（`update_available`、`up_to_date`、
+`ahead`）、`managedBy` 和 `updateCommand`。命令由当前运行的 CLI 路径决定：例如全局 npm
+安装会给出 `npm install --global --ignore-scripts session-peer@0.2.2`；pnpm、Yarn、Bun、
+npx 和项目本地安装各有对应命令；源码检出则返回 `null`。它只报告 npm 版本，Python 版
+`session-peer` 的发布是独立的版本序列，从不与之比较。注册表失败时退出码为 1，错误为
+`registry_timeout`、`registry_unreachable`、`registry_http_error`、
+`registry_response_invalid` 或 `dist_tag_missing`，不会输出响应正文。
+
+不带 `--check` 的 `update` 不会修改任何内容：它以 `self_update_unsupported`（退出码 2）
+拒绝，并返回负责该安装的管理器命令。`update` 仅限本地：拒绝 `--host`，也拒绝经由 SSH
+wire 的请求。远程主机、Python 安装和单独管理的 `session-peer-ts` 技能都不会被更新；结果
+会列出本地 TS 技能元数据（`skills`，与 `doctor` 相同的约定）以及
+`skillsManagedBy: "separate"`。
+
+`list`、`send`、`doctor` 的缓存提示**默认关闭**，因为此 CLI 主要由代理和脚本调用，
+不应发起未经请求的网络访问。设置 `SESSION_PEER_UPDATE_NOTICE=1` 开启后，若 24 小时内的
+缓存显示有更新的 npm 稳定版，JSON 结果会增加 `clientUpdate` 对象，文本输出则在 stderr
+写一行。缓存缺失、无效或过期时，只启动一个分离的刷新进程（通过排他锁保证单次执行），
+不会延迟或改变命令结果与退出码。刷新失败后 1 小时内不再尝试。`--no-update-notice` 或
+`SESSION_PEER_NO_UPDATE_NOTICE=1` 始终禁用提示和刷新。`--stdio-request`（SSH 远端）
+不会读取或刷新缓存。
+
+缓存文件为 `SESSION_PEER_CACHE_DIR`（绝对路径）下的 `npm-update.json`，否则依次为
+`$XDG_CACHE_HOME/session-peer`、`~/Library/Caches/session-peer`（macOS）、
+`~/.cache/session-peer`（Linux）或 `%LOCALAPPDATA%\session-peer\Cache`（Windows）。
+以 0600 权限原子写入 0700 目录，仅包含公开的版本信息。`SESSION_PEER_UPDATE_REGISTRY`
+可指定镜像（HTTPS，或仅限 loopback 的 HTTP；不允许凭据）。不会读取 npm 配置或 `.npmrc`。
+参见[更新边界](../PARITY.md#source-update-checks--22)。
+
 ## 显式安装代理技能
 
 独立的 `session-peer-ts` 技能在配套 PR 中管理，不代表新 npm 或技能标签发布。它支持已发布的 0.1.0 基础功能，通过 TypeScript 标识和帮助检查开发功能。Python 的 `session-peer` 技能仍独立保留。

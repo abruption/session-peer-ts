@@ -185,6 +185,49 @@ pipe の広告を確認するだけで、pipe の存在や接続可能性は保�
 `capabilities` は wake/wait/ACK と消費確認を未対応と明示します。任意の TS スキル
 メタデータ検査もインストールを行いません。[診断の境界](../PARITY.md#source-read-only-doctor--18--020)
 を参照してください。SSH の両端には同じソースビルドが必要です。
+### 更新確認と通知（ソース、#22）
+
+```sh
+session-peer update --check --json
+session-peer update --check --channel preview --output-format text
+```
+
+公開 npm 0.2.1 には含まれません。`update --check` は `session-peer` の npm dist-tag を
+1 回だけ取得し（3 秒のタイムアウト、再試行なし）、`current`、`latest`、`channel`（既定は
+`latest`、または `preview`）、`source: "npm_registry"`、`status`（`update_available`、
+`up_to_date`、`ahead`）、`managedBy`、`updateCommand` を返します。コマンドは実行中の CLI
+のパスから決まります。たとえばグローバル npm インストールでは
+`npm install --global --ignore-scripts session-peer@0.2.2` を案内し、pnpm・Yarn・Bun・npx・
+プロジェクトローカルのインストールにはそれぞれのコマンドを、ソースチェックアウトには
+`null` を返します。npm のバージョンだけを扱い、Python 版 `session-peer` のリリースは別の
+系列なので比較しません。レジストリの失敗は終了コード 1 と `registry_timeout`、
+`registry_unreachable`、`registry_http_error`、`registry_response_invalid`、
+`dist_tag_missing` のいずれかで報告し、応答本文は出力しません。
+
+`--check` なしの `update` は何も変更しません。`self_update_unsupported`（終了コード 2）で
+拒否し、そのインストールを管理するツールのコマンドを返します。`update` はローカル専用で、
+`--host` も SSH wire 経由の要求も拒否します。リモートホスト、Python のインストール、
+別管理の `session-peer-ts` スキルは更新しません。結果にはローカルの TS スキルメタデータ
+（`skills`、`doctor` と同じ契約）と `skillsManagedBy: "separate"` が含まれます。
+
+`list`、`send`、`doctor` のキャッシュ通知は**既定で無効**です。この CLI は主に
+エージェントやスクリプトから実行され、要求されていないネットワーク通信をすべきでない
+ためです。`SESSION_PEER_UPDATE_NOTICE=1` で有効にすると、24 時間以内のキャッシュが
+より新しい npm の安定版を示す場合に、JSON 結果へ `clientUpdate` オブジェクトを追加し、
+テキスト出力では stderr に 1 行を出します。キャッシュがない・不正・期限切れの場合は
+切り離した更新プロセスを 1 つだけ起動し（排他ロックによる単一実行）、コマンドの結果や
+終了コードを遅らせたり変えたりしません。更新に失敗した場合は 1 時間後まで再試行しません。
+`--no-update-notice` または `SESSION_PEER_NO_UPDATE_NOTICE=1` は通知と更新を常に無効に
+します。`--stdio-request`（SSH のリモート側）はキャッシュを読み書きしません。
+
+キャッシュは `SESSION_PEER_CACHE_DIR`（絶対パス）の `npm-update.json` で、未設定なら
+`$XDG_CACHE_HOME/session-peer`、`~/Library/Caches/session-peer`（macOS）、
+`~/.cache/session-peer`（Linux）、`%LOCALAPPDATA%\session-peer\Cache`（Windows）です。
+0700 のディレクトリに 0600 で原子的に書き込み、公開されたバージョン情報だけを保存します。
+`SESSION_PEER_UPDATE_REGISTRY` でミラーを指定できます（HTTPS、または loopback のみ HTTP。
+認証情報は不可）。npm の設定や `.npmrc` は読みません。
+[更新の境界](../PARITY.md#source-update-checks--22)を参照してください。
+
 ## エージェントスキルの明示的な導入
 
 別の `session-peer-ts` スキルを関連 PR で管理します。新しい npm 公開やスキルタグではありません。公開済み 0.1.0 の基本機能に対応し、TypeScript 表示とヘルプで開発機能を確認します。Python の `session-peer` スキルは別に維持します。
