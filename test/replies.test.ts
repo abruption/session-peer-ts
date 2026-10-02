@@ -280,11 +280,13 @@ test('remote send carries the detected SSH return route; self reply URIs normali
   assert.deepEqual(self.value.addressResolution, { uri: target(`${me}@origin`), transport: 'local', normalizedFrom: 'ssh_self' });
   assert.equal(f.calls().length, calls);
   // A different or unspecified user, or an explicit --host, stays an SSH route.
-  for (const [destination, extra] of [[`not-${me}@origin`, []], ['origin', []], [`${me}@origin`, ['--host', `${me}@origin`]]] as const) {
+  // A --ssh-jump implies SSH, so it also keeps a self URI on SSH (through the hop).
+  for (const [destination, extra] of [[`not-${me}@origin`, []], ['origin', []], [`${me}@origin`, ['--host', `${me}@origin`]], [`${me}@origin`, ['--ssh-jump', 'hop@jump']]] as const) {
     const before = f.calls().length;
     const remote = await f.invoke(['send', '--to', target(destination), ...extra, '--message', 'stays ssh', '--no-reply-to'], { ...on, FAKE_DOWN: destination });
     assert.equal(remote.value.error, 'ssh_unreachable', destination); assert.equal(remote.value.addressResolution.transport, 'ssh');
     assert.equal('normalizedFrom' in remote.value.addressResolution, false);
+    if (extra[0] === '--ssh-jump') assert.equal(remote.value.sshJump, 'hop@jump');
     assert.equal(f.calls().length, before + 1);
   }
   // Malformed and conflicting URIs are refused before any SSH or delivery.
