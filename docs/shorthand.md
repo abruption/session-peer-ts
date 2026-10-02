@@ -182,12 +182,16 @@ script's own exit code (3), not a 0/1 summary.
 
 The lifecycle fixture runs in every fixture shell: Bash on macOS/Linux, zsh where
 present (including macOS), and Windows PowerShell 5.1 on Windows Node 22/24. In an
-isolated `--prefix` it installs the packed version, activates `sp`, updates in
-place to a second, fixture-only version packed from a copy of the same files,
-and checks that `sp --version` and `session-peer --version` both report the new
-version. It then uninstalls the package and checks that both names fail as
+isolated `--prefix` it installs the packed version, activates `sp`, replaces it
+in place with a second, fixture-only version packed from a copy whose
+`package.json` version and compiled `VERSION` constant were changed (it sorts
+below the original, so this is a version replacement, not a registry upgrade),
+and checks that `sp --version` and `session-peer --version` both report the
+replacement. It then uninstalls the package and checks that both names fail as
 command not found (Bash/zsh exit 127, PowerShell `CommandNotFoundException`) and
-that deactivation removes `sp`. It never installs globally or edits a profile.
+that deactivation removes `sp`. Installation and replacement use the same
+prefix, so moving the canonical command to another PATH location is not covered.
+It never installs globally or edits a profile.
 
 These are isolated fixtures, not live message or ACK evidence. Submission,
 ownership, permissions and no-retry-on-unknown contracts remain those of the
