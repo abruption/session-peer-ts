@@ -101,36 +101,48 @@ export function route(destination: string, status?: Tailnet): Route {
 }
 // A loopback name always means the machine that evaluates it. Sent to another
 // machine as a return host, it would name the receiver, not the origin.
-// Numeric names are compared by value, without DNS: IPv4 in every inet_aton
-// form (127.1, 2130706433, 0x7f.1, 0177.0.0.1) and IPv4-mapped/compatible IPv6.
-function ipv4(name: string): number | undefined {
-  const parts = name.split('.');
-  if (parts.length > 4 || parts.some(part => !/^(?:0x[0-9a-f]+|0[0-7]*|[1-9]\d*)$/.test(part))) return undefined;
-  const values = parts.map(part => part.startsWith('0x') ? parseInt(part.slice(2), 16) : part.length > 1 && part.startsWith('0') ? parseInt(part, 8) : Number(part));
-  const last = values.pop()!, room = 2 ** (8 * (4 - values.length));
-  if (values.some(value => value > 255) || last >= room) return undefined;
-  return values.reduce((sum, value, index) => sum + value * 2 ** (8 * (3 - index)), 0) + last;
-}
-function ipv6Tail(name: string): number | undefined {
+// Two deliberately separate predicates. Non-canonical numeric host names
+// (leading zeros, fewer than four parts, hex/octal, single integers, overflow)
+// mean different addresses on different resolvers, so they are never guessed:
+// they always fail closed for a return host and never count as local.
+const OCTET = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
+const canonicalIPv4 = (name: string) => new RegExp(`^${OCTET}(?:\\.${OCTET}){3}$`).test(name) ? name.split('.').map(Number) : undefined;
+const numericLike = (name: string) => /^(?:0x[0-9a-f]*|\d+)(?:\.(?:0x[0-9a-f]*|\d+))*$/.test(name);
+// Canonical IPv6 text, or undefined for anything that is not an IPv6 literal.
+function ipv6(name: string): string | undefined {
   const literal = name.replace(/^\[|\]$/g, '');
-  if (!literal.includes(':') || !isIPv6(literal)) return undefined;
-  const canonical = new URL(`http://[${literal}]`).hostname.slice(1, -1);
-  if (canonical === '::') return 0;
-  const match = /^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(canonical);
-  return match ? parseInt(match[1]!, 16) * 65536 + parseInt(match[2]!, 16) : canonical === '::1' ? -1 : undefined;
+  return literal.includes(':') && isIPv6(literal) ? new URL(`http://[${literal}]`).hostname.slice(1, -1) : undefined;
 }
-export function loopback(destination: string): boolean {
+const mapped = (canonical: string) => {
+  const match = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(canonical);
+  return match ? [parseInt(match[1]!, 16) >> 8, parseInt(match[1]!, 16) & 255, parseInt(match[2]!, 16) >> 8, parseInt(match[2]!, 16) & 255] : undefined;
+};
+const loopbackOctets = (octets?: number[]) => !!octets && (octets[0] === 127 || octets[0] === 0);
+// Conservative: refuse anything that might name the machine evaluating it.
+// Used only to refuse return/reply hosts that would point at a receiver.
+export function unsafeReturnHost(destination: string): boolean {
   const name = lower(split(destination).name);
   if (name === 'localhost' || name.endsWith('.localhost')) return true;
-  const value = ipv4(name) ?? ipv6Tail(name);
-  // -1 is ::1; 0 is the unspecified address; 127.0.0.0/8 is IPv4 loopback.
-  return value !== undefined && (value === -1 || value === 0 || Math.floor(value / 2 ** 24) === 127);
+  const v6 = ipv6(name);
+  if (v6 !== undefined) return v6 === '::1' || v6 === '::' || loopbackOctets(mapped(v6)) || /^::[0-9a-f]{1,4}:[0-9a-f]{1,4}$/.test(v6);
+  const v4 = canonicalIPv4(name);
+  return v4 ? loopbackOctets(v4) : numericLike(name);
 }
-// Whether a host name (any user) names this machine: loopback, its host name
-// or its Tailscale self node. Independent of the login user's name.
+// Strict: only exact, canonical spellings of this machine's loopback may
+// normalize a route to local delivery. IPv4-compatible IPv6 (RFC 4291
+// section 2.5.5.1, deprecated) and non-canonical numerics never qualify.
+export function localName(destination: string): boolean {
+  const name = lower(split(destination).name);
+  if (name === 'localhost') return true;
+  const v6 = ipv6(name);
+  if (v6 !== undefined) return v6 === '::1' || mapped(v6)?.[0] === 127;
+  return canonicalIPv4(name)?.[0] === 127;
+}
+// Whether a host name (any user) may name this machine; conservative, for the
+// receiver side of a return-route probe. Independent of the login user's name.
 export function namesThisMachine(destination: string, status?: Tailnet): boolean {
   const name = lower(split(destination).name);
-  if (loopback(name) || name === lower(hostname())) return true;
+  if (unsafeReturnHost(name) || name === lower(hostname())) return true;
   return !!status?.self && names(status.self).has(name);
 }
 export function localUser(): string | undefined {
@@ -139,8 +151,13 @@ export function localUser(): string | undefined {
 // Same machine only when the destination names this OS user explicitly and a
 // local name; a missing or different user stays an SSH route.
 export function isSelf(destination: string, status?: Tailnet): boolean {
-  const { user } = split(destination);
-  return !!user && user === localUser() && namesThisMachine(destination, status);
+  const { user, name } = split(destination);
+  if (!user || user !== localUser()) return false;
+  const plain = lower(name);
+  if (numericLike(plain) && !canonicalIPv4(plain)) return false;
+  if (localName(destination) || plain === lower(hostname())) return true;
+  // Tailscale self names and addresses, compared exactly.
+  return !!status?.self && names(status.self).has(plain);
 }
 // This machine's tailnet address: MagicDNS name, else a 100.64.0.0/10 IPv4.
 export function detectedHost(status?: Tailnet): string | undefined {
