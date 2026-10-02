@@ -36,10 +36,14 @@ async function fixture(t: TestContext) {
 const fs=require('node:fs'),{spawnSync}=require('node:child_process');
 const args=process.argv.slice(2);
 if(args.includes('-G')){console.log('hostname x\\nuser config-user\\nport 22');process.exit(0);}
+const dest=args[args.indexOf('--')+1];
+if((process.env.FAKE_DOWN||'').split(',').includes(dest)){console.error('ssh: connect to host: Connection refused');process.exit(255);}
 if(args.at(-1).endsWith('--version')){console.log('session-peer 0.2.1 (typescript)');process.exit(0);}
 const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:fs.readFileSync(0,'utf8'),encoding:'utf8',
   env:{...process.env,SESSION_PEER_CACHE_DIR:${JSON.stringify(receiver)},SESSION_PEER_UPDATE_NOTICE:'1'}});
-process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+// FAKE_INJECT: a receiver response carrying a forged client-only field.
+let out=r.stdout;if(process.env.FAKE_INJECT){const v=JSON.parse(out);v.clientUpdate={command:'fixture-only'};out=JSON.stringify(v);}
+process.stdout.write(out);process.exit(r.status);`, { mode: 0o700 });
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: root, USERPROFILE: root, CLAUDE_CONFIG_DIR: join(root, '.claude'), ANTHROPIC_CONFIG_DIR: '',
     CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off',
     PATH: root + delimiter + process.env.PATH, SESSION_PEER_CACHE_DIR: cache, SESSION_PEER_NO_UPDATE_NOTICE: '',
@@ -103,4 +107,43 @@ test('each invocation schedules at most one refresh regardless of host count; re
   assert.equal(existsSync(f.receiver), false);
   await delay(500);
   assert.equal(f.requests.length, 2, 'no receiver-side registry requests');
+});
+
+test('failure policy: per-host results (including failed ones) may carry the advisory; top-level caught failures never do', posix, async t => {
+  const f = await fixture(t);
+  f.seed();
+  const down = { FAKE_DOWN: 'alpha' };
+  // A single-host preflight failure is a completed per-host result: same status and exit code, plus the advisory.
+  const off = await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json', '--no-update-notice'], down);
+  const on = await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json'], down);
+  const offValue = JSON.parse(off.stdout), { clientUpdate, ...onValue } = JSON.parse(on.stdout);
+  assert.equal(offValue.ok, false); assert.equal(offValue.error, 'ssh_unreachable');
+  assert.equal(on.code, off.code); assert.deepEqual(onValue, offValue); assert.equal(clientUpdate.latest, '0.2.2');
+  // Mixed array: element shape and exit code unchanged; text gets one stderr line for the invocation.
+  const mixedOff = await f.call(f.args(['--json', '--no-update-notice']), down), mixedOn = await f.call(f.args(['--json']), down);
+  assert.equal(mixedOn.code, mixedOff.code); assert.deepEqual(JSON.parse(mixedOn.stdout), JSON.parse(mixedOff.stdout));
+  const textOff = await f.call(f.args(['--output-format', 'text', '--no-update-notice']), down);
+  const textOn = await f.call(f.args(['--output-format', 'text']), down);
+  assert.equal(textOn.stdout, textOff.stdout); assert.equal(textOn.code, textOff.code);
+  assert.equal(textOn.stderr.match(/^Update available: /gm)?.length, 1);
+  // Top-level parse and local caught failures never carry it.
+  for (const args of [['list', '--host', 'alpha', '--json', '--bogus'], ['send', '--to', 'codex:bad', '--json', 'body'], ['list', '--host', 'alpha', '--host', 'alpha', '--json']]) {
+    const r = await f.call(args);
+    assert.notEqual(r.code, 0); assert.equal(r.stdout.includes('clientUpdate'), false); assert.equal(r.stderr, '');
+  }
+});
+
+test('clientUpdate is client-local: a remote-supplied value is dropped', posix, async t => {
+  const f = await fixture(t);
+  f.seed();
+  const inject = { FAKE_INJECT: '1' };
+  const array = JSON.parse((await f.call(f.args(['--json']), inject)).stdout);
+  assert.equal(array.length, 3); for (const item of array) assert.equal('clientUpdate' in item, false);
+  const optOut = JSON.parse((await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json', '--no-update-notice'], inject)).stdout);
+  assert.equal('clientUpdate' in optOut, false);
+  const local = JSON.parse((await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json'], inject)).stdout);
+  assert.equal(local.clientUpdate.source, 'npm_registry_cache'); assert.equal(local.clientUpdate.latest, '0.2.2');
+  assert.notEqual(local.clientUpdate.command, 'fixture-only');
+  const text = await f.call(f.args(['--output-format', 'text', '--no-update-notice']), inject);
+  assert.equal(text.stdout.includes('fixture-only'), false); assert.equal(text.stderr, '');
 });

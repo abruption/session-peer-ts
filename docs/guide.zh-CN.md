@@ -252,7 +252,9 @@ npm 版本，Python 版 `session-peer` 的发布是独立的版本序列，从�
 （`cache` 为 `written`、`skipped_locked`、`skipped_stale_lock`、`skipped_newer` 或 `failed`）。提示
 属于本地客户端：使用 `--host` 时，客户端会在自身的顶层输出（包括经由 SSH 获得的结果）中
 加入 `clientUpdate`（或 stderr 中的一行）。重复 `--host` 产生 JSON 数组时，数组及其元素保持原样，
-不加入 `clientUpdate`；文本输出仍在 stderr 写一行。无论主机数量多少，每次调用最多刷新一次。`--stdio-request` 模式的接收端从不读取或刷新
+不加入 `clientUpdate`；文本输出仍在 stderr 写一行。无论主机数量多少，每次调用最多刷新一次。失败的单主机结果（例如被拒绝的 SSH 预检）也可能带有提示，
+但解析错误和本地拒绝不会带；提示从不改变状态、退出码或重试判断。远程主机返回的 `clientUpdate`
+会被丢弃。`--stdio-request` 模式的接收端从不读取或刷新
 缓存，也不会产生提示。
 
 缓存文件为 `SESSION_PEER_CACHE_DIR`（绝对路径）下的 `npm-update.json`，否则依次为

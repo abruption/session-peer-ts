@@ -216,6 +216,8 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   if (command === 'send' && (value.consumptionConfirmed !== false ||
       (value.ok && (value.submitted !== !flags.has('--dry-run') || value.status !== expectedStatus)) ||
       (!value.ok && !((value.submitted === false && value.status === 'refused') || (value.submitted === null && value.status === 'unknown'))))) return uncertain();
+  // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
+  delete value.clientUpdate;
   return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: done.code! };
 }
 function failure(error: unknown, command: string, where: string): { value: Record<string, unknown>; exitCode: number } {
