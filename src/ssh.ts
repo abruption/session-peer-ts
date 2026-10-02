@@ -75,17 +75,24 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
 export function jumpOptions(ssh: string, jump: SshJump): string[] {
   return ['-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ProxyUseFdpass=no', '-o', `ProxyCommand=${proxyCommand(ssh, jump)}`];
 }
-// Like Python, ask OpenSSH which login user applies without connecting.
-export async function sshUser(ssh: string, destination: string, options: SshOptions): Promise<SshUser> {
+// Like Python, ask OpenSSH which login user applies without connecting. With
+// `force`, `ssh -G` also runs for an explicit user so the caller can see a
+// configured HostKeyAlias (`read` says whether the configuration was read).
+export async function sshConfig(ssh: string, destination: string, options: SshOptions, force = false): Promise<{ user: SshUser; read: boolean; hostKeyAlias?: string }> {
   const at = destination.lastIndexOf('@');
-  if (at > 0) return { sshUser: destination.slice(0, at), sshUserSource: 'explicit' };
-  if (options.user) return { sshUser: options.user, sshUserSource: 'explicit' };
+  const explicit: SshUser | undefined = at > 0 ? { sshUser: destination.slice(0, at), sshUserSource: 'explicit' } :
+    options.user ? { sshUser: options.user, sshUserSource: 'explicit' } : undefined;
+  if (explicit && !force) return { user: explicit, read: false };
   const done = await run(ssh, ['-G', ...options.args, '--', destination], { timeout: 5000 });
-  if (!done.interrupted && done.code === 0) {
-    for (const line of done.stdout.split(/\r?\n/)) {
-      const match = /^user (\S[^\x00-\x1f\x7f]{0,254})$/i.exec(line);
-      if (match) return { sshUser: match[1]!.trim(), sshUserSource: 'ssh_config_or_local_default' };
-    }
+  let user: SshUser = explicit ?? { sshUser: null, sshUserSource: 'unknown' }, hostKeyAlias: string | undefined;
+  if (done.interrupted || done.code !== 0) return { user, read: false };
+  for (const line of done.stdout.split(/\r?\n/)) {
+    const match = /^(user|hostkeyalias) (\S[^\x00-\x1f\x7f]{0,254})$/i.exec(line);
+    if (match?.[1]!.toLowerCase() === 'hostkeyalias') hostKeyAlias = match[2]!.trim();
+    else if (match && !explicit) user = { sshUser: match[2]!.trim(), sshUserSource: 'ssh_config_or_local_default' };
   }
-  return { sshUser: null, sshUserSource: 'unknown' };
+  return { user, read: true, ...(hostKeyAlias ? { hostKeyAlias } : {}) };
+}
+export async function sshUser(ssh: string, destination: string, options: SshOptions): Promise<SshUser> {
+  return (await sshConfig(ssh, destination, options)).user;
 }

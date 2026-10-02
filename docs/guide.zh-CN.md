@@ -114,7 +114,7 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-默认远程命令是 PATH 中的 `session-peer`。绝对路径 `--remote-bin` 也可选择使用受支持 Node 的包装器。握手检查 TypeScript 标记及精确版本，不同实现会被拒绝。SSH 使用 BatchMode 和 StrictHostKeyChecking，不自动接受新主机密钥、不安装远程运行时，也不会退回 Python。消息通过 JSON stdin 传输，不放进远程 shell 参数。不支持 Tailscale 规范名补全。正向访问不意味着反向访问已配置。
+默认远程命令是 PATH 中的 `session-peer`。绝对路径 `--remote-bin` 也可选择使用受支持 Node 的包装器。握手检查 TypeScript 标记及精确版本，不同实现会被拒绝。SSH 使用 BatchMode 和 StrictHostKeyChecking，不自动接受新主机密钥、不安装远程运行时，也不会退回 Python。消息通过 JSON stdin 传输，不放进远程 shell 参数。正向访问不意味着反向访问已配置。0.2.1 之后的源码只把 Tailscale 用作路由提示，见[回复](#回复)。
 
 对于 Windows SSH 目标，请指定 `--remote-platform win32`；若远端 PATH 中没有命令，再使用 `--remote-bin 'C:\absolute\path\session-peer.cmd'`。仅有一个 `--host` 时，可用 `--ssh-control-path /local/absolute/socket` 选择已认证的 OpenSSH 控制套接字；这不会跳过主机密钥验证或授予新登录。Windows 本机的 Codex home 使用完整 `C:\Users\...\.codex` 路径。已有 Python CLI 不会被自动删除或替换。
 
@@ -140,7 +140,16 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 
 ### 回复
 
-可将 `session-peer://v1/reply?...` URI 用作 `--to`。未知 / 重复字段、不安全主机、错误编码及与显式路由的冲突都会被拒绝。`--reply-address URI` 添加显式回信地址，不自动推断或验证回程。回复时不附加新地址可用 `--no-reply-to`。有效的 CODEX_THREAD_ID / CODEX_SESSION_ID 可提供参考性 From 信息，`--no-from` 可省略；不会虚构未知发送者。peer 元数据不是授权，Reply-To URI 也不会作为 shell 文本执行。
+可将 `session-peer://v1/reply?...` URI 用作 `--to`。未知 / 重复字段、不安全主机、错误编码及与显式路由的冲突都会被拒绝。peer 元数据不是授权，Reply-To URI 也不会作为 shell 文本执行。收到的 Reply-To 只是供阅读的数据，不会自动观察或确认回复。
+
+0.2.1 之后的源码（未发布）新增发送者信息和自动生成的回复路由：
+
+- **发送者。** 在 Claude Code 中，`CLAUDE_CODE_MESSAGING_SOCKET` 必须恰好匹配一个已注册且存活的会话；该会话唯一且可打印的名称（否则用 PID）成为 `From: claude:NAME`。在 Codex 中，有效的 `CODEX_THREAD_ID`（或 `CODEX_SESSION_ID`）成为 `From: codex:UUID`。证据冲突、嵌套或无效时不确定发送者，此时也不生成回复路由。`--no-from` 只省略 From。
+- **自动 Reply-To。** 有发送者且未指定 `--no-reply-to` 时，本机发送附加 `transport=local` 的 URI；SSH 发送或指定 `--reply-to` 时附加 `transport=ssh` 的 URI，主机依次取 `--reply-to HOST`、`SESSION_PEER_REPLY_HOST`、`CC_PEER_REPLY_HOST`、本机的 tailnet 名称或地址。不含用户的主机会加上当前用户。找不到主机时不附加 SSH 路由。`--reply-address URI` 仍是显式的替代方式。`--reply-to`、`--reply-address` 和 `--no-reply-to` 互斥。所有 URI 都用与 `--to` 相同的解析器校验。
+- **JSON。** `replyRoute` 报告生成的路由：本机路由为 `verified`（`same_machine_route`），SSH 路由为 `unverified`（`reverse_ssh_not_checked`）。`--to` 为 URI 时，`addressResolution` 记录其传输方式；若改为本机投递，还会记录 `normalizedFrom: "ssh_self"`。
+- **同一台机器。** 只有当 SSH 回复 URI 的主机包含当前操作系统用户、指向本机（`localhost`、回环地址、主机名或 Tailscale 自身节点），且未给出 `--host` 或 SSH 选项时，才改为本机投递。用户不同或缺失时仍走 SSH。
+- **Tailscale。** `tailscale status --json`（限时 3 秒）只作为路由提示。`Online` 为布尔值 `true` 的节点（MagicDNS 开启）保留你给出的 SSH 别名作为目标，并添加 `HostName=<MagicDNS 名称>`；同时添加 `HostKeyAlias=<原名称>`，但如果查询用户的同一次 `ssh -G` 显示 SSH 配置中已设置 `HostKeyAlias`，则保留该值，查询失败时也不覆盖任何设置。此时结果中的 `host` 为 MagicDNS 名称，`sshHost` 为你给出的别名。`Online` 为布尔值 `false` 的节点（即使 MagicDNS 关闭）或有歧义的名称在 SSH 之前被拒绝（`tailscale_peer_offline`、`tailscale_destination_ambiguous`）。其他 `Online` 值、MagicDNS 关闭、未知名称、已停止或未安装的 Tailscale，以及 `SESSION_PEER_TAILSCALE=off`，都按普通 SSH 处理。
+- **回程路由检查。** `doctor --check-return-route [--reply-to USER@HOST]` 在被诊断的机器（`--host` 目标或本机）上执行 `ssh … USER@HOST 'exit 0'`：batch 模式、禁止密码和键盘交互提示、严格主机密钥、不更新主机密钥、不使用控制套接字、连接超时 5 秒。8 秒时限只作用于最后这条 `ssh` 命令；此前的 Tailscale 状态查询（3 秒）和 `ssh -G` 查询（5 秒）各有自己的时限。`exit 0` 在 POSIX shell、cmd.exe 和 PowerShell 中都是空操作，因此回程主机可以是以其中任一为默认 shell 的 OpenSSH 服务器（只有 POSIX 回程主机有夹具覆盖）。`returnRoute` 为 `verified` 或 `failed`，并附原因（`return_host_unavailable`、`return_host_is_receiver`、`ssh_executable_missing`、`authentication_failed`、`host_key_failed`、`timeout`、`transport_failed`、`remote_command_failed`）。本机检查时，同一台机器的当前用户按本机路由处理，不启动 SSH。使用 `--host` 时，回环回程主机（`localhost`、`127.x`、`::1`）会被目标机器理解为它自己，因此在 SSH 之前被拒绝（`invalid_return_route`）。目标机器自身的名称以 `return_host_is_receiver` 失败，绝不报告为已验证的本机路由。远程发送同样不会公布回环回复主机（`invalid_reply_host`）。该检查从不自动运行、从不重试，正向可达也绝不代表回程可达。与本 CLI 启动的其他 `ssh` 一样，该检查及其 `ssh -G` 用户查询会使用执行检查的机器上受信任的 SSH 配置（包括 `ProxyCommand` 和 `Match exec`，见上文的信任边界）。命令行允许列表不适用于该配置文件。
 
 ## 成功含义与安全性
 

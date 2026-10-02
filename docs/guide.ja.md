@@ -115,7 +115,7 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。Tailscale の正規名補完は非対応です。片方向の接続成功は逆方向の接続を保証しません。
+既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。片方向の接続成功は逆方向の接続を保証しません。0.2.1 以降のソースは Tailscale を経路のヒントとしてのみ使います。[返信](#返信)を参照してください。
 
 Windows の SSH 宛先では `--remote-platform win32` を指定し、必要に応じて `--remote-bin 'C:\absolute\path\session-peer.cmd'` を使います。既に認証済みの OpenSSH 制御ソケットは、`--host` が 1 つだけのときに `--ssh-control-path /local/absolute/socket` で選択できます。ホスト鍵の確認や新しいログイン権限を回避しません。Windows ローカルの Codex home には完全な `C:\Users\...\.codex` パスを使います。既存の Python CLI は自動削除・置換しません。
 
@@ -141,7 +141,16 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 
 ### 返信
 
-`session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。`--reply-address URI` は明示的な返信先を付けますが、経路を自動推測・検証しません。新しい返信先なしで返すときは `--no-reply-to`。有効な CODEX_THREAD_ID / CODEX_SESSION_ID は参考用 From 情報になり、`--no-from` で省略できます。不明な送信者は捏造しません。peer 情報は権限ではなく、URI をシェルとして実行しません。
+`session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。peer 情報は権限ではなく、Reply-To URI をシェルとして実行しません。受け取った Reply-To は読み手のためのデータであり、返信を自動で観測・確認することはありません。
+
+0.2.1 以降のソース（未公開）は送信者情報と自動の返信経路を追加します。
+
+- **送信者。** Claude Code 内では、`CLAUDE_CODE_MESSAGING_SOCKET` が登録済みの生存セッションのちょうど 1 つと一致する必要があります。そのセッションの一意で表示可能な名前（そうでなければ PID）が `From: claude:NAME` になります。Codex 内では、有効な `CODEX_THREAD_ID`（または `CODEX_SESSION_ID`）が `From: codex:UUID` になります。証拠が矛盾・入れ子・不正な場合は送信者を決めず、その場合は返信経路も生成しません。`--no-from` は From だけを省きます。
+- **自動 Reply-To。** 送信者があり `--no-reply-to` がなければ、ローカル送信には `transport=local` の URI を付けます。SSH 送信または `--reply-to` 指定時は `transport=ssh` の URI を付け、ホストは `--reply-to HOST`、`SESSION_PEER_REPLY_HOST`、`CC_PEER_REPLY_HOST`、この端末の tailnet 名・アドレスの順に決めます。ユーザーのないホストには現在のユーザーを付けます。ホストが見つからなければ SSH 経路は付けません。`--reply-address URI` は従来どおり明示的な代替手段です。`--reply-to`、`--reply-address`、`--no-reply-to` は併用できません。すべての URI は `--to` と同じパーサーで検証します。
+- **JSON。** `replyRoute` は生成した経路を示します。ローカル経路は `verified`（`same_machine_route`）、SSH 経路は `unverified`（`reverse_ssh_not_checked`）です。`--to` が URI の場合、`addressResolution` に転送方式を記録し、ローカルに配送したときは `normalizedFrom: "ssh_self"` も記録します。
+- **同一端末。** SSH の返信 URI は、ホストに現在の OS ユーザーが含まれ、この端末（`localhost`、ループバック、ホスト名、Tailscale の自ノード）を指し、`--host` や SSH オプションがない場合に限りローカルに配送します。ユーザーが異なる・ない場合は SSH のままです。
+- **Tailscale。** `tailscale status --json`（上限 3 秒）は経路のヒントとしてのみ使います。`Online` が真偽値 `true` のピア（MagicDNS 有効）は、指定した SSH エイリアスを宛先のまま使い、`HostName=<MagicDNS 名>` を追加します。`HostKeyAlias=<元の名前>` も追加しますが、ユーザー確認と同じ `ssh -G` の結果に SSH 設定の `HostKeyAlias` がすでにあればそれを保持し、確認に失敗した場合は何も上書きしません。このとき結果の `host` は MagicDNS 名、`sshHost` は指定したエイリアスです。`Online` が真偽値 `false` のピア（MagicDNS が無効でも）や曖昧な名前は SSH の前に拒否します（`tailscale_peer_offline`、`tailscale_destination_ambiguous`）。それ以外の `Online` 値、MagicDNS 無効、不明な名前、停止中・未導入の Tailscale、`SESSION_PEER_TAILSCALE=off` は通常の SSH として扱います。
+- **返信経路の確認。** `doctor --check-return-route [--reply-to USER@HOST]` は、診断対象の端末（`--host` の宛先またはこの端末）から `ssh … USER@HOST 'exit 0'` を実行します。batch モード、パスワード・キーボード対話プロンプトなし、厳格なホスト鍵、ホスト鍵の更新なし、制御ソケットなし、接続タイムアウト 5 秒です。8 秒の上限は最後の `ssh` コマンドだけに適用され、その前の Tailscale 状態（3 秒）と `ssh -G`（5 秒）の確認にはそれぞれ別の上限があります。`exit 0` は POSIX シェル、cmd.exe、PowerShell のいずれでも何もしないため、返信先はこれらのいずれかを既定シェルとする OpenSSH サーバーであればよいです（フィクスチャでの検証は POSIX の返信先のみ）。`returnRoute` は `verified` または `failed` と理由（`return_host_unavailable`、`return_host_is_receiver`、`ssh_executable_missing`、`authentication_failed`、`host_key_failed`、`timeout`、`transport_failed`、`remote_command_failed`）です。ローカルでの確認では、同一端末の現在のユーザーは SSH を使わずローカル経路として扱います。`--host` を使う場合、ループバックの返信先（`localhost`、`127.x`、`::1`）は宛先が自分自身と解釈するため SSH の前に拒否します（`invalid_return_route`）。宛先自身の名前は `return_host_is_receiver` として失敗し、検証済みのローカル経路とは報告しません。リモート送信もループバックの返信先を通知しません（`invalid_reply_host`）。自動実行も再試行もせず、片方向の接続成功をこの確認の代わりにはしません。この CLI が起動する他の `ssh` と同じく、この確認とその `ssh -G` によるユーザー確認は、確認する端末の信頼された SSH 設定（`ProxyCommand`、`Match exec` を含む）を使います（上記の信頼境界を参照）。コマンドラインの許可リストはその設定ファイルには適用されません。
 
 ## 成功の意味と安全性
 
