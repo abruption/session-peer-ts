@@ -195,30 +195,42 @@ session-peer update --check --channel preview --output-format text
 公開 npm 0.2.1 には含まれません。`update --check` は `session-peer` の npm dist-tag を
 1 回だけ取得し（3 秒のタイムアウト、再試行なし）、`current`、`latest`、`channel`（既定は
 `latest`、または `preview`）、`source: "npm_registry"`、`status`（`update_available`、
-`up_to_date`、`ahead`）、`managedBy`、`updateCommand` を返します。コマンドは実行中の CLI
-のパスから決まります。たとえばグローバル npm インストールでは
-`npm install --global --ignore-scripts session-peer@0.2.2` を案内し、pnpm・Yarn・Bun・npx・
-プロジェクトローカルのインストールにはそれぞれのコマンドを、ソースチェックアウトには
-`null` を返します。npm のバージョンだけを扱い、Python 版 `session-peer` のリリースは別の
-系列なので比較しません。レジストリの失敗は終了コード 1 と `registry_timeout`、
-`registry_unreachable`、`registry_http_error`、`registry_response_invalid`、
-`dist_tag_missing` のいずれかで報告し、応答本文は出力しません。
+`up_to_date`、`ahead`）、`managedBy`、`updateCommand`、`guidance` を返します。コマンドは、
+実行中の CLI のパスからインストールの管理者を確実に特定できた場合にだけ示します。
+対象は、自身の `session-peer` ランチャーがこのパッケージを指す npm グローバル prefix
+（既定、Homebrew、nvm、nvm-windows、fnm。例：
+`npm install --global --ignore-scripts session-peer@0.2.2`）、マニフェストで
+`session-peer` を宣言している pnpm・Yarn・Bun のグローバルストア、Volta、npx キャッシュ
+です。プロジェクトへのインストール（`npm_project`、`pnpm_project`）、ソースチェック
+アウト（`source`）、それ以外（`unknown`）では `updateCommand: null` と `guidance` の文だけを
+返すため、無関係なカレントディレクトリを変更するコマンドは出しません。npm のバージョン
+だけを扱い、Python 版 `session-peer` のリリースは別の系列なので比較しません。レジストリの
+失敗は終了コード 1 と `registry_timeout`、`registry_unreachable`、`registry_http_error`、
+`registry_response_invalid`、`dist_tag_missing` のいずれかで報告し、応答本文は出力しません。
 
 `--check` なしの `update` は何も変更しません。`self_update_unsupported`（終了コード 2）で
-拒否し、そのインストールを管理するツールのコマンドを返します。`update` はローカル専用で、
-`--host` も SSH wire 経由の要求も拒否します。リモートホスト、Python のインストール、
-別管理の `session-peer-ts` スキルは更新しません。結果にはローカルの TS スキルメタデータ
-（`skills`、`doctor` と同じ契約）と `skillsManagedBy: "separate"` が含まれます。
+拒否し、`managedBy`、`updateCommand`、`guidance`、`checkCommand` を返します。`update`
+自体はローカル専用で、`--host` も SSH wire 経由の要求も拒否します。リモートホスト、
+Python のインストール、別管理の `session-peer-ts` スキルは更新しません。結果にはローカルの
+TS スキルメタデータ（`skills`、`doctor` と同じ契約）と `skillsManagedBy: "separate"` が
+含まれます。
 
 `list`、`send`、`doctor` のキャッシュ通知は**既定で無効**です。この CLI は主に
 エージェントやスクリプトから実行され、要求されていないネットワーク通信をすべきでない
 ためです。`SESSION_PEER_UPDATE_NOTICE=1` で有効にすると、24 時間以内のキャッシュが
 より新しい npm の安定版を示す場合に、JSON 結果へ `clientUpdate` オブジェクトを追加し、
 テキスト出力では stderr に 1 行を出します。キャッシュがない・不正・期限切れの場合は
-切り離した更新プロセスを 1 つだけ起動し（排他ロックによる単一実行）、コマンドの結果や
-終了コードを遅らせたり変えたりしません。更新に失敗した場合は 1 時間後まで再試行しません。
-`--no-update-notice` または `SESSION_PEER_NO_UPDATE_NOTICE=1` は通知と更新を常に無効に
-します。`--stdio-request`（SSH のリモート側）はキャッシュを読み書きしません。
+切り離した更新プロセスを 1 つ起動し、コマンドの結果や終了コードを遅らせたり変えたり
+しません。更新に失敗した場合は 1 時間後まで再試行しません。更新は単一実行です。各試行は
+ランダムなトークンでロックを所有し、その所有者だけが解放します。異常終了した所有者の
+ロックは 60 秒後にちょうど 1 つの呼び出しだけが引き継ぎます。
+
+`--no-update-notice` と `SESSION_PEER_NO_UPDATE_NOTICE=1` は、これらのバックグラウンド
+通知と更新を抑止します。明示的な `update --check` は意図された要求なので、常に
+レジストリに問い合わせ、`latest` チャネルのキャッシュを更新します。通知はローカルの
+クライアントに属します。`--host` を使うと、クライアントは SSH で得た結果を含む自身の
+最上位出力に `clientUpdate`（または stderr の 1 行）を追加します。`--stdio-request`
+モードの受信側はキャッシュを読まず、更新せず、通知も生成しません。
 
 キャッシュは `SESSION_PEER_CACHE_DIR`（絶対パス）の `npm-update.json` で、未設定なら
 `$XDG_CACHE_HOME/session-peer`、`~/Library/Caches/session-peer`（macOS）、

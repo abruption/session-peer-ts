@@ -7,9 +7,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { createServer, type IncomingMessage } from 'node:http';
 import { type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { cacheDirectory, compareVersions, manager, registryUrl, upgradeCommand, validVersion } from '../dist/updates.js';
+import { acquireLock, cacheDirectory, compareVersions, manager, refreshCache, registryUrl, releaseLock, takeOverStaleLock, upgradeCommand, upgradeGuidance, validVersion, type Manager, type Probe } from '../dist/updates.js';
 
 const cli = resolve('dist/cli.js');
 const SENTINEL = 'REGISTRY-BODY-SENTINEL';
@@ -74,23 +75,52 @@ test('npm semver ordering covers stable, prerelease and invalid tags', () => {
   assert.throws(() => compareVersions('v1.0.2', '0.2.1'));
 });
 
-test('package-manager guidance follows the resolved CLI path and never self-updates', () => {
-  const cases: [string, NodeJS.Platform, string, string | null][] = [
-    ['/usr/local/lib/node_modules/session-peer/dist/updates.js', 'linux', 'npm', 'npm install --global --ignore-scripts session-peer@0.2.2'],
-    ['/home/u/.nvm/versions/node/v24.16.0/lib/node_modules/session-peer/dist/updates.js', 'darwin', 'npm', 'npm install --global --ignore-scripts session-peer@0.2.2'],
-    ['C:\\Users\\u\\AppData\\Roaming\\npm\\node_modules\\session-peer\\dist\\updates.js', 'win32', 'npm', 'npm install --global --ignore-scripts session-peer@0.2.2'],
-    ['C:\\work\\app\\node_modules\\session-peer\\dist\\updates.js', 'win32', 'npm_project', 'npm install --ignore-scripts session-peer@0.2.2'],
-    ['/work/app/node_modules/session-peer/dist/updates.js', 'linux', 'npm_project', 'npm install --ignore-scripts session-peer@0.2.2'],
-    ['/home/u/.local/share/pnpm/global/5/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux', 'pnpm', 'pnpm add --global --ignore-scripts session-peer@0.2.2'],
-    ['/work/app/node_modules/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux', 'pnpm_project', 'pnpm add --ignore-scripts session-peer@0.2.2'],
-    ['/home/u/.config/yarn/global/node_modules/session-peer/dist/updates.js', 'linux', 'yarn', 'yarn global add --ignore-scripts session-peer@0.2.2'],
-    ['/home/u/.bun/install/global/node_modules/session-peer/dist/updates.js', 'darwin', 'bun', 'bun add --global --ignore-scripts session-peer@0.2.2'],
-    ['/home/u/.npm/_npx/abc123/node_modules/session-peer/dist/updates.js', 'linux', 'npx', 'npx --yes --ignore-scripts session-peer@0.2.2 --version'],
-    ['/src/session-peer-ts/dist/updates.js', 'linux', 'source', null],
+test('package-manager guidance requires a positively identified owner; uncertain prefixes get no command', () => {
+  // Synthetic filesystem: `files` are readable contents, `links` resolve launchers to real paths.
+  const probe = (files: Record<string, string>, links: Record<string, string> = {}): Probe => ({
+    read: path => { if (!(path in files)) throw new Error('ENOENT'); return files[path]!; },
+    real: path => { if (path in links) return links[path]!; if (path in files) return path; throw new Error('ENOENT'); }
+  });
+  const declared = JSON.stringify({ dependencies: { 'session-peer': '0.2.1' } });
+  const posixGlobal = (prefix: string) => probe({ [`${prefix}/lib/node_modules/session-peer/dist/cli.js`]: '' },
+    { [`${prefix}/bin/session-peer`]: `${prefix}/lib/node_modules/session-peer/dist/cli.js` });
+  const windowsGlobal = (prefix: string) => probe({ [`${prefix}/session-peer.cmd`]: '@ECHO off\r\nnode "%dp0%\\node_modules\\session-peer\\dist\\cli.js" %*\r\n' });
+  const cmd = { npm: 'npm install --global --ignore-scripts session-peer@0.2.2' };
+  const cases: [string, NodeJS.Platform, Probe, string, string | null][] = [
+    ['/usr/local/lib/node_modules/session-peer/dist/updates.js', 'linux', posixGlobal('/usr/local'), 'npm', cmd.npm],
+    ['/home/u/.nvm/versions/node/v24.16.0/lib/node_modules/session-peer/dist/updates.js', 'darwin', posixGlobal('/home/u/.nvm/versions/node/v24.16.0'), 'npm', cmd.npm],
+    ['/home/u/.local/share/fnm/node-versions/v24.16.0/installation/lib/node_modules/session-peer/dist/updates.js', 'linux',
+      posixGlobal('/home/u/.local/share/fnm/node-versions/v24.16.0/installation'), 'npm', cmd.npm],
+    ['C:\\Users\\u\\AppData\\Roaming\\npm\\node_modules\\session-peer\\dist\\updates.js', 'win32', windowsGlobal('C:/Users/u/AppData/Roaming/npm'), 'npm', cmd.npm],
+    ['C:/Users/reviewer/AppData/Roaming/nvm/v24.16.0/node_modules/session-peer/dist/updates.js', 'win32', windowsGlobal('C:/Users/reviewer/AppData/Roaming/nvm/v24.16.0'), 'npm', cmd.npm],
+    // Review counterexample: nvm-windows-looking prefix without its launcher is not a project.
+    ['C:/Users/reviewer/AppData/Roaming/nvm/v24.16.0/node_modules/session-peer/dist/updates.js', 'win32', probe({}), 'unknown', null],
+    // A posix global layout whose launcher is missing or belongs to another program (e.g. Python's).
+    ['/home/u/.nvm/versions/node/v24.16.0/lib/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
+    ['/home/u/.local/lib/node_modules/session-peer/dist/updates.js', 'linux',
+      probe({ '/home/u/.local/lib/node_modules/session-peer/dist/cli.js': '' }, { '/home/u/.local/bin/session-peer': '/home/u/.local/share/pipx/venvs/session-peer/bin/session-peer' }), 'unknown', null],
+    ['/home/u/.volta/tools/image/packages/session-peer/lib/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'volta', 'volta install session-peer@0.2.2'],
+    ['C:/Users/u/AppData/Local/Volta/tools/image/packages/session-peer/node_modules/session-peer/dist/updates.js', 'win32', probe({}), 'volta', 'volta install session-peer@0.2.2'],
+    ['C:\\work\\app\\node_modules\\session-peer\\dist\\updates.js', 'win32', probe({ 'C:/work/app/package.json': declared }), 'npm_project', null],
+    ['/work/app/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/work/app/package.json': declared }), 'npm_project', null],
+    ['/work/app/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/work/app/package.json': JSON.stringify({ dependencies: { other: '1' } }) }), 'unknown', null],
+    ['/work/app/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
+    ['/home/u/.local/share/pnpm/global/5/node_modules/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux',
+      probe({ '/home/u/.local/share/pnpm/global/5/package.json': declared }), 'pnpm', 'pnpm add --global --ignore-scripts session-peer@0.2.2'],
+    ['/work/app/node_modules/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/work/app/package.json': declared }), 'pnpm_project', null],
+    ['/work/app/node_modules/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
+    ['/home/u/.config/yarn/global/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/home/u/.config/yarn/global/package.json': declared }), 'yarn', 'yarn global add --ignore-scripts session-peer@0.2.2'],
+    ['/home/u/.config/yarn/global/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
+    ['/home/u/.bun/install/global/node_modules/session-peer/dist/updates.js', 'darwin', probe({ '/home/u/.bun/install/global/package.json': declared }), 'bun', 'bun add --global --ignore-scripts session-peer@0.2.2'],
+    ['/home/u/.npm/_npx/abc123/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'npx', 'npx --yes --ignore-scripts session-peer@0.2.2 --version'],
+    ['/src/session-peer-ts/dist/updates.js', 'linux', probe({ '/src/session-peer-ts/package.json': JSON.stringify({ name: 'session-peer' }) }), 'source', null],
+    ['/src/other/dist/updates.js', 'linux', probe({}), 'unknown', null],
+    ['/opt/unrelated/node_modules/other/updates.js', 'linux', probe({}), 'unknown', null],
   ];
-  for (const [path, platform, owner, command] of cases) {
-    assert.equal(manager(path, platform), owner, path);
-    assert.equal(upgradeCommand(manager(path, platform), '0.2.2'), command);
+  for (const [path, platform, files, owner, command] of cases) {
+    assert.equal(manager(path, platform, files), owner, `${platform} ${path}`);
+    assert.equal(upgradeCommand(owner as Manager, '0.2.2'), command, path);
+    if (command === null) assert.ok(upgradeGuidance(owner as Manager).length > 0);
   }
 });
 
@@ -241,13 +271,13 @@ test('cached notices are off by default, opt-in additive, stderr-only in text an
   assert.equal(json.code, 0); assert.equal(json.stderr, '');
   const { clientUpdate, ...rest } = json.value;
   assert.deepEqual(rest, plain.value);
-  assert.deepEqual(Object.keys(clientUpdate).sort(), ['channel', 'checkedAt', 'command', 'current', 'latest', 'managedBy', 'schemaVersion', 'source', 'status']);
+  assert.deepEqual(Object.keys(clientUpdate).sort(), ['channel', 'checkedAt', 'command', 'current', 'guidance', 'latest', 'managedBy', 'schemaVersion', 'source', 'status']);
   assert.equal(clientUpdate.status, 'available'); assert.equal(clientUpdate.current, '0.2.1'); assert.equal(clientUpdate.latest, '0.2.2');
   assert.equal(clientUpdate.source, 'npm_registry_cache'); assert.match(clientUpdate.checkedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
   const textOff = await f.call(['list', '--output-format', 'text']);
   const textOn = await f.call(['list', '--output-format', 'text'], { SESSION_PEER_UPDATE_NOTICE: 'yes' });
   assert.equal(textOn.stdout, textOff.stdout); assert.equal(textOn.code, textOff.code);
-  assert.match(textOn.stderr, /^Update available: session-peer 0\.2\.1 -> 0\.2\.2 \(npm dist-tag latest\)\. Update this source checkout and rebuild\.\n$/);
+  assert.match(textOn.stderr, /^Update available: session-peer 0\.2\.1 -> 0\.2\.2 \(npm dist-tag latest\)\. This is a source checkout; update it with git and rebuild\.\n$/);
   const doctor = await f.call(['doctor', '--json'], on);
   assert.equal(doctor.value.clientUpdate.latest, '0.2.2'); assert.equal(doctor.value.capabilities.updateCheck, true); assert.equal(doctor.value.capabilities.selfUpdate, false);
   const refusal = await f.call(['send', '--to', 'codex:bad', '--json', 'hi'], on);
@@ -331,4 +361,75 @@ test('remote wire requests never read, refresh or report client notices', async 
   assert.equal('clientUpdate' in seeded.value, false);
   await delay(1000);
   assert.deepEqual(f.requests, []); assert.deepEqual(readdirSync(f.cache), ['npm-update.json']);
+});
+
+test('lock generations: only the token holder releases; a stale lock is taken over once', async t => {
+  const f = await fixture(t);
+  const env = { SESSION_PEER_CACHE_DIR: f.cache };
+  const mine = acquireLock(env);
+  assert.ok(mine); assert.equal(readFileSync(f.lock, 'utf8'), mine);
+  assert.equal(acquireLock(env), undefined, 'a live lock is not shared');
+  // Another generation replaced the lock: neither release nor a finishing/failed worker may delete it.
+  writeFileSync(f.lock, 'NEW_OWNER');
+  assert.equal(releaseLock(mine, env), false);
+  const invalid = { ...env, SESSION_PEER_UPDATE_REGISTRY: 'http://registry.example/' };
+  await refreshCache({ ...invalid, SESSION_PEER_UPDATE_LOCK_TOKEN: mine });
+  await refreshCache(invalid);
+  await refreshCache({ ...invalid, SESSION_PEER_UPDATE_LOCK_TOKEN: 'NEW_OWNER' });
+  assert.equal(readFileSync(f.lock, 'utf8'), 'NEW_OWNER');
+  assert.deepEqual(f.requests, []);
+  rmSync(f.lock);
+  const owned = acquireLock(env);
+  assert.equal(releaseLock(owned, env), true); assert.equal(existsSync(f.lock), false);
+  // A judged OLD stale and took over; B judged the same OLD stale earlier and must not displace A.
+  writeFileSync(f.lock, 'OLD');
+  const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
+  const a = acquireLock(env);
+  assert.ok(a); assert.equal(readFileSync(f.lock, 'utf8'), a);
+  assert.equal(takeOverStaleLock('OLD', env), undefined);
+  assert.equal(readFileSync(f.lock, 'utf8'), a);
+  assert.equal(releaseLock(a, env), true);
+  assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp)$/.test(name)), []);
+});
+
+test('concurrent stale takeover across processes yields exactly one owner', async t => {
+  const f = await fixture(t);
+  const module = pathToFileURL(resolve('dist/updates.js')).href;
+  mkdirSync(f.cache, { recursive: true, mode: 0o700 });
+  for (let round = 0; round < 3; round++) {
+    writeFileSync(f.lock, `STALE-${round}`);
+    const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
+    const tokens = await Promise.all(Array.from({ length: 8 }, async () => {
+      const child = spawn(process.execPath, ['--input-type=module', '-e', `import { acquireLock } from ${JSON.stringify(module)}; process.stdout.write(acquireLock() ?? '');`],
+        { env: { ...f.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = ''; child.stdout.on('data', part => out += part); child.stderr.resume();
+      const [code] = await once(child, 'close'); assert.equal(code, 0);
+      return out;
+    }));
+    const winners = tokens.filter(Boolean);
+    assert.equal(winners.length, 1, `round ${round}: ${winners.length} owners`);
+    assert.equal(readFileSync(f.lock, 'utf8'), winners[0]);
+    assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp)$/.test(name)), []);
+    rmSync(f.lock);
+  }
+});
+
+test('over SSH the local client adds its own notice; the receiver never reads or refreshes', { skip: process.platform === 'win32' && 'POSIX fake ssh' }, async t => {
+  const f = await fixture(t);
+  f.seed('0.2.2');
+  const bin = join(f.root, 'bin'), receiver = join(f.root, 'receiver-cache');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'ssh'), `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');const flag=process.argv.at(-1).endsWith('--version')?'--version':'--stdio-request';` +
+    `const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},flag],{input:require('node:fs').readFileSync(0),encoding:'utf8',env:{...process.env,SESSION_PEER_CACHE_DIR:${JSON.stringify(receiver)}}});` +
+    `process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  const on = { SESSION_PEER_UPDATE_NOTICE: '1', PATH: `${bin}${delimiter}${process.env.PATH}` };
+  const json = await f.call(['list', '--host', 'audit', '--json'], on);
+  assert.equal(json.code, 0, json.stdout); assert.equal(json.value.host, 'audit');
+  assert.equal(json.value.clientUpdate.latest, '0.2.2'); assert.equal(json.stderr, '');
+  const text = await f.call(['list', '--host', 'audit', '--output-format', 'text'], on);
+  assert.equal(text.code, 0); assert.equal(text.stderr.match(/Update available/g)?.length, 1);
+  const off = await f.call(['list', '--host', 'audit', '--json', '--no-update-notice'], on);
+  assert.equal('clientUpdate' in off.value, false);
+  await delay(1000);
+  assert.equal(existsSync(receiver), false); assert.deepEqual(f.requests, []);
 });

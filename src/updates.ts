@@ -2,7 +2,7 @@
 // replace npm-owned files, or touch Python installs, remote hosts or skills.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, unlinkSync, writeSync } from 'node:fs';
+import { chmodSync, closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,7 @@ import { VERSION } from './protocol.js';
 
 export const PACKAGE = 'session-peer';
 export const REFRESH_ARG = '--_refresh-update-cache';
+const LOCK_TOKEN = 'SESSION_PEER_UPDATE_LOCK_TOKEN';
 export const CHANNELS = ['latest', 'preview'];
 const TIMEOUT = 3000, RESPONSE_LIMIT = 65536, CACHE_LIMIT = 4096;
 const TTL = 24 * 3600_000, FAILURE_TTL = 3600_000, LOCK_STALE = 60_000;
@@ -52,30 +53,65 @@ export function compareVersions(a: string, b: string): number {
   return order(x, y);
 }
 
-export type Manager = 'npm' | 'npm_project' | 'pnpm' | 'pnpm_project' | 'yarn' | 'bun' | 'npx' | 'source';
-// Guidance follows the resolved CLI file; a checkout or `npm link` is source-managed.
-export function manager(path = fileURLToPath(import.meta.url), platform = process.platform): Manager {
-  const file = path.replace(/\\/g, '/').toLowerCase();
-  if (!file.includes('/node_modules/session-peer/')) return 'source';
-  if (file.includes('/_npx/')) return 'npx';
-  if (file.includes('/pnpm/global/')) return 'pnpm';
-  if (file.includes('/.pnpm/')) return 'pnpm_project';
-  if (file.includes('/.bun/install/global/')) return 'bun';
-  if (/\/yarn\/(?:data\/)?global\//.test(file)) return 'yarn';
-  const global = platform === 'win32' ? /\/(?:npm|nodejs)\/node_modules\/session-peer\// : /\/lib\/node_modules\/session-peer\//;
-  return global.test(file) ? 'npm' : 'npm_project';
+export type Manager = 'npm' | 'npm_project' | 'pnpm' | 'pnpm_project' | 'yarn' | 'bun' | 'volta' | 'npx' | 'source' | 'unknown';
+export type Probe = { read: (path: string) => string; real: (path: string) => string };
+const disk: Probe = {
+  read: path => { if (statSync(path).size > 1_048_576) throw new Error('too_large'); return readFileSync(path, 'utf8'); },
+  real: path => realpathSync(path).replace(/\\/g, '/')
+};
+const declares = (root: string, probe: Probe): boolean => {
+  try {
+    const value = JSON.parse(probe.read(`${root}/package.json`)) as Record<string, unknown>;
+    return ['dependencies', 'devDependencies', 'optionalDependencies'].some(key => {
+      const group = value?.[key];
+      return !!group && typeof group === 'object' && Object.hasOwn(group, PACKAGE);
+    });
+  } catch { return false; }
+};
+const attempt = (check: () => boolean) => { try { return check(); } catch { return false; } };
+// Guidance follows the resolved CLI file, and only a positively identified owner
+// gets a command: an npm global prefix whose own launcher points at this package
+// (default, Homebrew, nvm, nvm-windows, fnm), a manager-specific global store
+// whose manifest declares session-peer, or Volta/npx stores. Anything else is
+// `unknown` (no command), never a guess that could modify the current project.
+export function manager(path = fileURLToPath(import.meta.url), platform = process.platform, probe: Probe = disk): Manager {
+  const file = path.replace(/\\/g, '/');
+  const match = /^(.*)\/node_modules\/session-peer\/dist\/[^/]+$/.exec(file);
+  if (!match) {
+    const root = /^(.*)\/dist\/[^/]+$/.exec(file)?.[1];
+    return root && !/\/node_modules\//.test(file) && attempt(() => JSON.parse(probe.read(`${root}/package.json`)).name === PACKAGE) ? 'source' : 'unknown';
+  }
+  const parent = match[1]!, lower = parent.toLowerCase();
+  if (/\/_npx\/[0-9a-f]+$/.test(lower)) return 'npx';
+  if (/\/\.?volta\/tools\/image\/packages\/session-peer(?:\/lib)?$/.test(lower)) return 'volta';
+  const store = lower.lastIndexOf('/node_modules/.pnpm/');
+  if (store >= 0) {
+    const root = parent.slice(0, store);
+    if (!declares(root, probe)) return 'unknown';
+    return /\/pnpm\/global\/\d+$/.test(root.toLowerCase()) ? 'pnpm' : 'pnpm_project';
+  }
+  if (/\/yarn\/(?:data\/)?global$/.test(lower)) return declares(parent, probe) ? 'yarn' : 'unknown';
+  if (/\/\.bun\/install\/global$/.test(lower)) return declares(parent, probe) ? 'bun' : 'unknown';
+  const cli = `${parent}/node_modules/session-peer/dist/cli.js`;
+  if (platform === 'win32') {
+    if (attempt(() => probe.read(`${parent}/session-peer.cmd`).replace(/\\/g, '/').toLowerCase().includes('/node_modules/session-peer/dist/cli.js'))) return 'npm';
+  } else if (lower.endsWith('/lib') && attempt(() => probe.real(`${parent.slice(0, -4)}/bin/session-peer`) === probe.real(cli))) return 'npm';
+  return declares(parent, probe) ? 'npm_project' : 'unknown';
 }
-const COMMANDS: Record<Manager, ((spec: string) => string) | undefined> = {
+const COMMANDS: Partial<Record<Manager, (spec: string) => string>> = {
   npm: spec => `npm install --global --ignore-scripts ${spec}`,
-  npm_project: spec => `npm install --ignore-scripts ${spec}`,
   pnpm: spec => `pnpm add --global --ignore-scripts ${spec}`,
-  pnpm_project: spec => `pnpm add --ignore-scripts ${spec}`,
   yarn: spec => `yarn global add --ignore-scripts ${spec}`,
   bun: spec => `bun add --global --ignore-scripts ${spec}`,
-  npx: spec => `npx --yes --ignore-scripts ${spec} --version`,
-  source: undefined
+  volta: spec => `volta install ${spec}`,
+  npx: spec => `npx --yes --ignore-scripts ${spec} --version`
 };
 export const upgradeCommand = (owner: Manager, target: string): string | null => COMMANDS[owner]?.(`${PACKAGE}@${target}`) ?? null;
+export const upgradeGuidance = (owner: Manager): string =>
+  owner === 'source' ? 'This is a source checkout; update it with git and rebuild.' :
+  owner === 'npm_project' || owner === 'pnpm_project' ? 'Update the session-peer dependency in the project that installed it.' :
+  owner === 'unknown' ? 'The installing package manager could not be identified; update session-peer with the tool that installed it.' :
+  `Run updateCommand to upgrade this ${owner} installation.`;
 
 export function registryUrl(env = process.env): URL {
   let url: URL;
@@ -165,31 +201,87 @@ export function writeCache(latest: string | null, env = process.env, now = Date.
     renameSync(temporary, join(directory, CACHE));
   } finally { rmSync(temporary, { force: true }); }
 }
-// Single flight: the O_EXCL lock is created here and removed by the detached child.
-function scheduleRefresh(env: NodeJS.ProcessEnv, now: number): boolean {
-  let owned: string | undefined;
+// Single flight. Each acquisition writes a random token into an O_EXCL lock.
+// Every other change to the lock path (stale takeover, release) happens under a
+// short O_EXCL takeover mutex and re-reads the token first: a release deletes
+// only its own generation, and a takeover atomically renames a new lock over
+// the exact stale generation it observed, so the lock path is never missing.
+// Residual risk: a mutex older than LOCK_STALE is treated as crashed and
+// removed, which could race only with a holder stalled for that long.
+const TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const readLock = (lock: string) => { try { return readFileSync(lock, 'utf8'); } catch { return undefined; } };
+function createLock(lock: string): string | undefined {
+  const token = randomUUID();
+  let fd: number;
+  try { fd = openSync(lock, 'wx', 0o600); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined; throw error; }
+  try { writeSync(fd, token); } finally { closeSync(fd); }
+  return token;
+}
+function exclusively<T>(lock: string, now: number, action: () => T): T | undefined {
+  const mutex = `${lock}.takeover`;
+  try { closeSync(openSync(mutex, 'wx', 0o600)); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') try { if (now - lstatSync(mutex).mtimeMs >= LOCK_STALE) rmSync(mutex, { force: true }); } catch {}
+    return undefined;
+  }
+  try { return action(); } finally { rmSync(mutex, { force: true }); }
+}
+export function takeOverStaleLock(observed: string, env = process.env, now = Date.now()): string | undefined {
+  const lock = join(privateDirectory(env), LOCK);
+  return exclusively(lock, now, () => {
+    if (readLock(lock) !== observed) return undefined;
+    const token = randomUUID(), temporary = `${lock}.${token}.tmp`;
+    try {
+      const fd = openSync(temporary, 'wx', 0o600);
+      try { writeSync(fd, token); } finally { closeSync(fd); }
+      // Windows can briefly refuse replacing a file another process is reading.
+      for (let tries = 0; ; tries++) {
+        try { renameSync(temporary, lock); break; }
+        catch (error) {
+          if (tries >= 20 || !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        }
+      }
+      return token;
+    } catch { return undefined; } finally { rmSync(temporary, { force: true }); }
+  });
+}
+export function acquireLock(env = process.env, now = Date.now()): string | undefined {
+  const lock = join(privateDirectory(env), LOCK);
+  const token = createLock(lock);
+  if (token) return token;
+  let observed: string, age: number;
+  // Read the token before the age so a replaced lock is never judged by an older mtime.
+  try { observed = readFileSync(lock, 'utf8'); age = now - lstatSync(lock).mtimeMs; }
+  catch { return createLock(lock); }
+  return age < LOCK_STALE ? undefined : takeOverStaleLock(observed, env, now);
+}
+// A busy mutex leaves the lock to expire as stale; it never deletes another generation.
+export function releaseLock(token: string | undefined, env = process.env, now = Date.now()): boolean {
   try {
-    const lock = join(privateDirectory(env), LOCK);
-    let fd: number;
-    try { fd = openSync(lock, 'wx', 0o600); }
-    catch (error) {
-      // A stale lock (crashed refresh) is replaced once; losing that race skips.
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || now - lstatSync(lock).mtimeMs < LOCK_STALE) return false;
-      unlinkSync(lock);
-      fd = openSync(lock, 'wx', 0o600);
-    }
-    owned = lock;
-    try { writeSync(fd, String(process.pid)); } finally { closeSync(fd); }
+    if (!token || !TOKEN.test(token)) return false;
+    const lock = join(cacheDirectory(env), LOCK);
+    return exclusively(lock, now, () => { if (readLock(lock) !== token) return false; rmSync(lock, { force: true }); return true; }) ?? false;
+  } catch { return false; }
+}
+function scheduleRefresh(env: NodeJS.ProcessEnv, now: number): boolean {
+  let token: string | undefined;
+  try {
+    token = acquireLock(env, now);
+    if (!token) return false;
+    const owned = token;
     const child = spawn(process.execPath, [fileURLToPath(new URL('./cli.js', import.meta.url)), REFRESH_ARG],
-      { detached: true, stdio: 'ignore', windowsHide: true, env });
-    child.once('error', () => { try { rmSync(lock, { force: true }); } catch {} });
+      { detached: true, stdio: 'ignore', windowsHide: true, env: { ...env, [LOCK_TOKEN]: owned } });
+    child.once('error', () => releaseLock(owned, env));
     child.unref();
     return true;
   } catch {
-    if (owned) try { rmSync(owned, { force: true }); } catch {}
+    releaseLock(token, env);
     return false;
   }
 }
+// Releases only the lock generation named by the inherited token, if any.
 export async function refreshCache(env = process.env): Promise<void> {
   try {
     let latest: string | null = null;
@@ -198,9 +290,7 @@ export async function refreshCache(env = process.env): Promise<void> {
       if (validVersion(tags.latest, true)) latest = tags.latest as string;
     } catch {}
     try { writeCache(latest, env); } catch {}
-  } finally {
-    try { rmSync(join(cacheDirectory(env), LOCK), { force: true }); } catch {}
-  }
+  } finally { releaseLock(env[LOCK_TOKEN], env); }
 }
 
 const truthy = (value?: string) => ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase());
@@ -217,12 +307,12 @@ export function updateNotice(optOut: boolean, env = process.env, now = Date.now(
     const owner = manager();
     return { schemaVersion: 1, status: 'available', current: VERSION, latest: state.latest, channel: 'latest',
       checkedAt: new Date(state.checkedAt!).toISOString().replace(/\.\d{3}Z$/, 'Z'), source: 'npm_registry_cache',
-      managedBy: owner, command: upgradeCommand(owner, state.latest) };
+      managedBy: owner, command: upgradeCommand(owner, state.latest), guidance: upgradeGuidance(owner) };
   } catch { return undefined; }
 }
 export const noticeText = (notice: Record<string, unknown>) =>
   `Update available: session-peer ${notice.current} -> ${notice.latest} (npm dist-tag latest). ` +
-  (notice.command ? `Run: ${notice.command}` : 'Update this source checkout and rebuild.');
+  (notice.command ? `Run: ${notice.command}` : String(notice.guidance));
 
 export async function checkUpdate(channel = 'latest', env = process.env): Promise<Record<string, unknown>> {
   const tags = await distTags(env);
@@ -233,12 +323,12 @@ export async function checkUpdate(channel = 'latest', env = process.env): Promis
   const position = compareVersions(VERSION, latest as string), owner = manager();
   return { ok: true, package: PACKAGE, current: VERSION, latest, channel, distTag: channel, source: 'npm_registry',
     status: position < 0 ? 'update_available' : position === 0 ? 'up_to_date' : 'ahead', outdated: position < 0,
-    updated: false, managedBy: owner, updateCommand: position < 0 ? upgradeCommand(owner, latest as string) : null,
+    updated: false, managedBy: owner, updateCommand: position < 0 ? upgradeCommand(owner, latest as string) : null, guidance: upgradeGuidance(owner),
     skills: inspectSkills(), skillsManagedBy: 'separate' };
 }
 // npm-owned files are never replaced in place; the owning manager installs updates.
 export function refuseSelfUpdate(channel = 'latest'): never {
   const owner = manager();
   throw new UpdateRefusal('self_update_unsupported', { updated: false, managedBy: owner,
-    updateCommand: upgradeCommand(owner, channel), checkCommand: `session-peer update --check${channel === 'latest' ? '' : ` --channel ${channel}`} --json` });
+    updateCommand: upgradeCommand(owner, channel), guidance: upgradeGuidance(owner), checkCommand: `session-peer update --check${channel === 'latest' ? '' : ` --channel ${channel}`} --json` });
 }

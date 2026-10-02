@@ -60,7 +60,8 @@ try {
   assert.equal(refused.status, 2);
   const guidance = JSON.parse(refused.stdout);
   assert.equal(guidance.error, 'self_update_unsupported'); assert.equal(guidance.managedBy, 'npm_project');
-  assert.equal(guidance.updateCommand, 'npm install --ignore-scripts session-peer@latest');
+  // A prefix install is a project proven by its package.json; no command could safely target it from any cwd.
+  assert.equal(guidance.updateCommand, null); assert.match(guidance.guidance, /project that installed it/);
   assert.equal(files(), beforeUpdate); assert.equal(existsSync(join(task, 'update-cache')), false);
   assert.equal(result.discovery.claude.status, 'ok');
   assert.equal(result.discovery.codex.status, 'not_installed');

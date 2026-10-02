@@ -132,7 +132,7 @@ TS normal envelopes have `schemaVersion`, `host`, `command`, `ok`, `version`,
 | `wake` | Optional, opt-in; failed activation may still have `submitted:true` and `ok:false` | Absent; unsupported option |
 | SSH metadata | Requested/resolved host and SSH metadata; multi-host list may be an array | Verified remote response adds `host`/`sshHost`; caught local SSH failure reports the local host; no host aggregation |
 | `error`, `retryAllowed` | Error/detail fields vary by path; submission may already have happened | Fixed error codes, caught failure has `retryAllowed:false`; native stderr/message body are not copied into errors |
-| `clientUpdate`, `skillUpdates` | Optional advisory notice metadata | Source #22: `clientUpdate` only on completed local `list`/`send`/`doctor` JSON results when notices are opted in and a fresh npm cache shows a newer stable version; never on wire responses or caught failures. `skillUpdates` absent |
+| `clientUpdate`, `skillUpdates` | Optional advisory notice metadata | Source #22: `clientUpdate` only on the invoking client's completed `list`/`send`/`doctor` JSON results (including a verified SSH result, added locally) when notices are opted in and a fresh npm cache shows a newer stable version; never produced by a `--stdio-request` receiver or on caught failures. `skillUpdates` absent |
 
 An **absent** submission field is not `false`; `null` is not `false` either.
 Check `ok`, command, status, exit code and presence separately. TS unknown means
@@ -434,7 +434,7 @@ and are never compared; `referenceVersion` is unrelated to this check.
 | `source` | `npm_registry` |
 | `status`, `outdated` | `update_available` (`outdated:true`), `up_to_date` or `ahead` |
 | `updated` | Always `false`; nothing is installed |
-| `managedBy`, `updateCommand` | `npm`, `npm_project`, `pnpm`, `pnpm_project`, `yarn`, `bun`, `npx` or `source`, from the resolved CLI path; command only when outdated, `null` for a source checkout |
+| `managedBy`, `updateCommand`, `guidance` | Owner from the resolved CLI path, positively identified only: `npm` (global prefix whose `bin/session-peer` symlink or `session-peer.cmd` launcher targets this package: default, Homebrew, nvm, nvm-windows, fnm), `pnpm`/`yarn`/`bun` (global store whose `package.json` declares `session-peer`), `volta`, `npx`. Command only for those owners and only when outdated. `npm_project`/`pnpm_project` (project `package.json` declares the dependency), `source` (checkout) and `unknown` (anything else, such as an unconfirmed nvm-windows prefix) always get `null` plus a `guidance` sentence |
 | `skills`, `skillsManagedBy` | Same local TS skill metadata check as `doctor`; `separate` |
 
 Failures use the standard caught-failure envelope with `registry_timeout`,
@@ -442,7 +442,7 @@ Failures use the standard caught-failure envelope with `registry_timeout`,
 `dist_tag_missing` (exit 1), or `invalid_update_registry`,
 `unsupported_update_channel` (exit 2). Response bodies are never emitted.
 `update` without `--check` is `self_update_unsupported` (exit 2) with `updated:false`,
-`managedBy`, `updateCommand` (dist-tag spec) and `checkCommand`; it makes no
+`managedBy`, `updateCommand` (dist-tag spec, same owner rules), `guidance` and `checkCommand`; it makes no
 request. `--host`, other list/send options and `--stdio-request` (error
 `remote_update_unsupported`) are refused, so a remote destination never performs
 update checks. `doctor` capabilities add `updateCheck:true`, `selfUpdate:false`.
@@ -456,14 +456,32 @@ whose stable `latest` is newer adds `clientUpdate` (`schemaVersion`, `status`,
 `current`, `latest`, `channel`, `checkedAt`, `source: "npm_registry_cache"`,
 `managedBy`, `command`) to JSON, or one stderr line for text; stdout text is
 unchanged. A missing, invalid, future-dated or expired cache spawns one detached
-refresh (`O_EXCL` lock, stale after 60 s) and returns immediately. A failed
-refresh stores `latest:null`, which suppresses attempts for 1 hour. Explicit
-`update --check` on `latest` also refreshes the cache. Opt-out
-(`--no-update-notice`, `SESSION_PEER_NO_UPDATE_NOTICE`) wins over opt-in. The
-notice is computed once per invocation by the client, so SSH or later multi-host
-execution cannot multiply refreshes. Cache and network failures never change
-results or exit codes. A rare double refresh is possible only when two
-invocations replace the same stale lock at the same moment.
+refresh and returns immediately. A failed refresh stores `latest:null`, which
+suppresses attempts for 1 hour. Opt-out (`--no-update-notice`,
+`SESSION_PEER_NO_UPDATE_NOTICE`) suppresses these background notices and
+refreshes and wins over opt-in. An explicit `update --check` is an intended
+request: it always contacts the registry and, on `latest`, refreshes the cache.
+Cache and network failures never change results or exit codes.
+
+Scope: notices belong to the invoking client. With `--host`, the client adds
+`clientUpdate` (or its stderr line) to its own top-level output, including the
+verified result obtained over SSH; the `--stdio-request` receiver never reads,
+refreshes or produces a notice. The notice is computed once per invocation.
+Multi-host execution (#20/#84) is not part of this change: after #84 merges,
+#22 must be rebased with an integration test for the array shape, exactly one
+refresh per invocation and no wire notices.
+
+Single flight: the refresh lock `npm-update.lock` is created with `O_EXCL` and
+holds a random per-acquisition token, which the detached child inherits. Only
+that token's holder releases it, and only after re-reading the token; a refresh
+without a matching token never touches another generation's lock. A lock older
+than 60 s is taken over by renaming a new token file atomically over the exact
+stale generation that was observed, so the lock path is never missing and two
+takers cannot both win. Release and takeover run under a short `O_EXCL`
+`npm-update.lock.takeover` mutex; if it is busy, release leaves the lock to
+expire. Residual risk: a mutex older than 60 s is treated as crashed and
+removed, which could race only with a holder stalled that long between two file
+operations.
 
 Cache: `npm-update.json` (0600, atomic temp-file rename) in a 0700 directory
 owned by the user: `SESSION_PEER_CACHE_DIR` (absolute), else
@@ -476,9 +494,13 @@ Python installations, remote hosts or skills.
 Acceptance evidence: `test/updates.test.ts` (POSIX and Windows CI) covers SemVer
 ordering, stable/prerelease tags, invalid/oversized/HTTP/redirect/timeout/offline
 registry responses without body leakage, manager guidance per install layout,
+including nvm, nvm-windows, fnm, Volta and ambiguous prefixes (`unknown`, no command),
 cache paths and modes, opt-in default off, flag/env opt-out, JSON additivity,
 text stderr, offline/invalid/expired/future caches, concurrent single-flight
-refresh, live/stale locks, failure backoff, Python cache isolation, TS skill
-metadata and wire isolation. `test/package-smoke.ts` checks the installed
+refresh, token-owned lock release (a foreign generation is never deleted, also
+by a refresh with an invalid registry), multi-process stale takeover with
+exactly one owner, failure backoff, Python cache isolation, TS skill metadata,
+wire isolation, and a POSIX fake-SSH `list --host` where only the client adds
+the notice. `test/package-smoke.ts` checks the installed
 package's guidance and unchanged files. All use a local fixture registry; no
 test contacts npm.

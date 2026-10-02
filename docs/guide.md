@@ -311,32 +311,46 @@ This source command is not in published npm 0.2.1. `update --check` makes one
 request (3-second timeout, no retries) for the npm dist-tags of `session-peer`
 and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 `source: "npm_registry"`, `status` (`update_available`, `up_to_date` or `ahead`),
-`managedBy` and `updateCommand`. The command is derived from the path of the
-running CLI, for example `npm install --global --ignore-scripts session-peer@0.2.2`
-for a global npm install; pnpm, Yarn, Bun, npx and project-local installs get
-their own command, and a source checkout gets `null`. It only reports versions
-from npm. Python `session-peer` releases are a separate stream and are never
-compared. Registry failures exit 1 with `registry_timeout`,
-`registry_unreachable`, `registry_http_error`, `registry_response_invalid` or
-`dist_tag_missing`; response bodies are never printed.
+`managedBy`, `updateCommand` and `guidance`. A command is given only when the
+installation's owner is positively identified from the running CLI's path:
+an npm global prefix whose own `session-peer` launcher points at this package
+(default, Homebrew, nvm, nvm-windows and fnm prefixes), for example
+`npm install --global --ignore-scripts session-peer@0.2.2`; a pnpm, Yarn or Bun
+global store whose manifest declares `session-peer`; Volta; or the npx cache.
+Project installs (`npm_project`, `pnpm_project`), source checkouts (`source`)
+and anything else (`unknown`) get `updateCommand: null` and a `guidance`
+sentence instead, so no command can modify an unrelated current directory.
+Only npm versions are reported. Python `session-peer` releases are a separate
+stream and are never compared. Registry failures exit 1 with
+`registry_timeout`, `registry_unreachable`, `registry_http_error`,
+`registry_response_invalid` or `dist_tag_missing`; response bodies are never printed.
 
 `update` without `--check` does not modify anything: it refuses with
-`self_update_unsupported` (exit 2) and returns the owning manager's command.
-`update` is local only. It rejects `--host` and is refused over the SSH wire.
-Remote hosts, Python installations and the separately managed `session-peer-ts`
-skill are never updated; the result lists local TS skill metadata
-(`skills`, same contract as `doctor`) with `skillsManagedBy: "separate"`.
+`self_update_unsupported` (exit 2) and returns `managedBy`, `updateCommand`,
+`guidance` and `checkCommand`. `update` itself is local only: it rejects
+`--host` and is refused over the SSH wire. Remote hosts, Python installations
+and the separately managed `session-peer-ts` skill are never updated; the
+result lists local TS skill metadata (`skills`, same contract as `doctor`) with
+`skillsManagedBy: "separate"`.
 
 Cached notices on `list`, `send` and `doctor` are **off by default** because
 this CLI is mainly run by agents and scripts that should not make unrequested
 network calls. Set `SESSION_PEER_UPDATE_NOTICE=1` to opt in. Then a fresh cache
 (24 hours) that shows a newer stable npm version adds a `clientUpdate` object to
 JSON results, or one line on stderr for text output. A missing, invalid or
-expired cache starts one detached refresh (single flight via an exclusive lock)
-and never delays or changes the command's result or exit code. A failed refresh
-waits 1 hour before the next attempt. `--no-update-notice` or
-`SESSION_PEER_NO_UPDATE_NOTICE=1` always disables notices and refreshes.
-`--stdio-request` (the remote side of SSH) never reads or refreshes the cache.
+expired cache starts one detached refresh and never delays or changes the
+command's result or exit code; a failed refresh waits 1 hour before the next
+attempt. The refresh is single-flight: each attempt owns a lock by a random
+token, only that owner releases it, and a crashed owner's lock is taken over by
+exactly one invocation after 60 seconds.
+
+`--no-update-notice` and `SESSION_PEER_NO_UPDATE_NOTICE=1` suppress these
+background notices and refreshes. An explicit `update --check` is an intended
+request: it always contacts the registry and refreshes the cache for the
+`latest` channel. Notices belong to the local client. With `--host` the client
+adds `clientUpdate` (or the stderr line) to its own top-level output, including
+results obtained over SSH. The receiver in `--stdio-request` mode never reads,
+refreshes or produces a notice.
 
 The cache is `npm-update.json` in `SESSION_PEER_CACHE_DIR` (absolute), otherwise
 `$XDG_CACHE_HOME/session-peer`, `~/Library/Caches/session-peer` (macOS),

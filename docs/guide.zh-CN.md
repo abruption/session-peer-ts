@@ -192,26 +192,35 @@ session-peer update --check --channel preview --output-format text
 公开的 npm 0.2.1 不包含此命令。`update --check` 只请求一次 `session-peer` 的 npm
 dist-tag（3 秒超时，不重试），并报告 `current`、`latest`、`channel`（默认 `latest`，
 或 `preview`）、`source: "npm_registry"`、`status`（`update_available`、`up_to_date`、
-`ahead`）、`managedBy` 和 `updateCommand`。命令由当前运行的 CLI 路径决定：例如全局 npm
-安装会给出 `npm install --global --ignore-scripts session-peer@0.2.2`；pnpm、Yarn、Bun、
-npx 和项目本地安装各有对应命令；源码检出则返回 `null`。它只报告 npm 版本，Python 版
-`session-peer` 的发布是独立的版本序列，从不与之比较。注册表失败时退出码为 1，错误为
-`registry_timeout`、`registry_unreachable`、`registry_http_error`、
+`ahead`）、`managedBy`、`updateCommand` 和 `guidance`。只有根据当前 CLI 路径能确切识别
+安装的管理方时才给出命令：其自身 `session-peer` 启动器指向本包的 npm 全局 prefix
+（默认、Homebrew、nvm、nvm-windows、fnm，例如
+`npm install --global --ignore-scripts session-peer@0.2.2`），清单中声明了
+`session-peer` 的 pnpm、Yarn、Bun 全局存储，Volta，或 npx 缓存。项目安装
+（`npm_project`、`pnpm_project`）、源码检出（`source`）以及其他情况（`unknown`）只返回
+`updateCommand: null` 和一句 `guidance`，因此不会给出可能修改无关当前目录的命令。它只报告
+npm 版本，Python 版 `session-peer` 的发布是独立的版本序列，从不与之比较。注册表失败时
+退出码为 1，错误为 `registry_timeout`、`registry_unreachable`、`registry_http_error`、
 `registry_response_invalid` 或 `dist_tag_missing`，不会输出响应正文。
 
 不带 `--check` 的 `update` 不会修改任何内容：它以 `self_update_unsupported`（退出码 2）
-拒绝，并返回负责该安装的管理器命令。`update` 仅限本地：拒绝 `--host`，也拒绝经由 SSH
-wire 的请求。远程主机、Python 安装和单独管理的 `session-peer-ts` 技能都不会被更新；结果
-会列出本地 TS 技能元数据（`skills`，与 `doctor` 相同的约定）以及
-`skillsManagedBy: "separate"`。
+拒绝，并返回 `managedBy`、`updateCommand`、`guidance` 和 `checkCommand`。`update` 本身
+仅限本地：拒绝 `--host`，也拒绝经由 SSH wire 的请求。远程主机、Python 安装和单独管理的
+`session-peer-ts` 技能都不会被更新；结果会列出本地 TS 技能元数据（`skills`，与 `doctor`
+相同的约定）以及 `skillsManagedBy: "separate"`。
 
 `list`、`send`、`doctor` 的缓存提示**默认关闭**，因为此 CLI 主要由代理和脚本调用，
 不应发起未经请求的网络访问。设置 `SESSION_PEER_UPDATE_NOTICE=1` 开启后，若 24 小时内的
 缓存显示有更新的 npm 稳定版，JSON 结果会增加 `clientUpdate` 对象，文本输出则在 stderr
-写一行。缓存缺失、无效或过期时，只启动一个分离的刷新进程（通过排他锁保证单次执行），
-不会延迟或改变命令结果与退出码。刷新失败后 1 小时内不再尝试。`--no-update-notice` 或
-`SESSION_PEER_NO_UPDATE_NOTICE=1` 始终禁用提示和刷新。`--stdio-request`（SSH 远端）
-不会读取或刷新缓存。
+写一行。缓存缺失、无效或过期时会启动一个分离的刷新进程，不会延迟或改变命令结果与退出码；
+刷新失败后 1 小时内不再尝试。刷新是单次执行的：每次尝试以随机令牌持有锁，只有持有者才能
+释放；异常退出者的锁在 60 秒后只会被恰好一个调用接管。
+
+`--no-update-notice` 和 `SESSION_PEER_NO_UPDATE_NOTICE=1` 会抑制这些后台提示和刷新。
+显式的 `update --check` 是有意的请求，总会访问注册表并刷新 `latest` 通道的缓存。提示
+属于本地客户端：使用 `--host` 时，客户端会在自身的顶层输出（包括经由 SSH 获得的结果）中
+加入 `clientUpdate`（或 stderr 中的一行）。`--stdio-request` 模式的接收端从不读取或刷新
+缓存，也不会产生提示。
 
 缓存文件为 `SESSION_PEER_CACHE_DIR`（绝对路径）下的 `npm-update.json`，否则依次为
 `$XDG_CACHE_HOME/session-peer`、`~/Library/Caches/session-peer`（macOS）、
