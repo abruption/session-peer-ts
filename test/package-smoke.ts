@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { shorthandFixture } from './shorthand-contract.ts';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 const task = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-node-pack-'));
 const npm = process.env.npm_execpath;
 assert.ok(npm, 'invoke through npm run test:package');
-const runNpm = (args: string[]) => execFileSync(process.execPath, [npm, ...args], { encoding: 'utf8', timeout: 60000 });
+const runNpm = (args: string[], cwd?: string) => execFileSync(process.execPath, [npm, ...args], { encoding: 'utf8', timeout: 60000, cwd });
 try {
   const metadata = JSON.parse(readFileSync('package.json', 'utf8'));
   assert.equal(metadata.private, false);
@@ -89,7 +89,23 @@ try {
   execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '--strict', '--module', 'NodeNext', '--target', 'ES2022', '--skipLibCheck', consumer], {encoding:'utf8'});
   assert.deepEqual(result.sessions, []);
   for (const name of ['sp', 'sp.cmd', 'sp.ps1']) assert.equal(existsSync(join(prefix, 'node_modules/.bin', name)), false, 'npm must not install an sp bin');
-  shorthandFixture(installed, join(prefix, 'node_modules/.bin'), task).lifecycle(prefix, npm, join(task, `${metadata.name}-${metadata.version}.tgz`));
+  // A second fixture-only version proves that an in-place update changes what
+  // both names run. It is packed from a private copy and never published.
+  const staging = join(task, 'update-staging');
+  cpSync(installed, staging, { recursive: true });
+  const nextVersion = `${metadata.version}-fixture.1`;
+  const stagedMetadata = JSON.parse(readFileSync(join(staging, 'package.json'), 'utf8'));
+  stagedMetadata.version = nextVersion;
+  writeFileSync(join(staging, 'package.json'), JSON.stringify(stagedMetadata, null, 2) + '\n');
+  const protocol = join(staging, 'dist/protocol.js');
+  const constant = `export const VERSION = '${metadata.version}';`;
+  assert.ok(readFileSync(protocol, 'utf8').includes(constant));
+  writeFileSync(protocol, readFileSync(protocol, 'utf8').replace(constant, `export const VERSION = '${nextVersion}';`));
+  const [nextPacked] = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', task], staging));
+  assert.equal(nextPacked.version, nextVersion);
+  shorthandFixture(installed, join(prefix, 'node_modules/.bin'), task).lifecycle(prefix, npm,
+    { tarball: join(task, `${metadata.name}-${metadata.version}.tgz`), version: `session-peer ${metadata.version} (typescript)` },
+    { tarball: join(task, nextPacked.filename), version: `session-peer ${nextVersion} (typescript)` });
   assert.equal(existsSync(binary), false);
   assert.equal(existsSync(join(prefix, 'node_modules', metadata.name)), false);
   console.log(JSON.stringify({ packageSmoke: 'pass', reproducibleSha256: hash, cleanInstall: true, uninstall: true }));

@@ -65,6 +65,9 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     [...dry, '--message=space 한글 🚀'], [...dry, '--', '-leading 한글'], [...dry, '--message', '-'],
   ];
   for (const shell of shells) {
+    // The runner must report a script's own exit code, not a 0/1 summary.
+    const sanity = execute(shell, 'exit 3\n');
+    assert.equal(sanity.status, 3, `${shell} runner exit code: ${sanity.stdout} ${sanity.stderr}`);
     // Collect every case before asserting so one CI run reports all mismatches.
     const failures: string[] = [];
     for (const args of cases) {
@@ -72,7 +75,7 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
       const short = invoke(shell, true, args, 'stdin 한글\nsecond line');
       const expected = args.includes('--allow-inactive-codex-home') ? 0 : args.includes('--bad') || args.includes('--message') ? 2 : 0;
       let detail = '';
-      if (short.status !== direct.status || short.stdout !== direct.stdout) detail = 'alias differs from canonical';
+      if (short.status !== direct.status || short.stdout !== direct.stdout || short.stderr !== direct.stderr) detail = 'alias differs from canonical';
       else if (short.status !== expected) detail = `exit ${short.status}, expected ${expected}`;
       else if (args.includes('--allow-inactive-codex-home')) {
         try { const result = JSON.parse(short.stdout); if (result.status !== 'validated' || result.submitted !== false) detail = 'not validated'; }
@@ -84,8 +87,11 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     const args = ['one two', '한글 🚀', '--', '-leading', "single'quote", '$HOME;$(echo BAD)&|%PATH%!^'];
     const direct = invoke(shell, false, args, 'stdin α\nsecond line', true);
     const short = invoke(shell, true, args, 'stdin α\nsecond line', true);
-    assert.equal(short.status, 7, `${shell} capture: direct=${direct.status} ${direct.stdout} ${direct.stderr}; alias=${short.stdout} ${short.stderr}`);
+    const report = `${shell} capture: direct=${direct.status} ${direct.stdout} ${direct.stderr}; alias=${short.status} ${short.stdout} ${short.stderr}`;
+    assert.equal(direct.status, 7, report);
+    assert.equal(short.status, 7, report);
     assert.equal(short.stdout, direct.stdout);
+    assert.equal(short.stderr, direct.stderr);
     const captured = JSON.parse(short.stdout);
     assert.deepEqual(captured.args, args, `${shell}: arguments must not be reparsed: ${short.stdout}`);
     assert.ok(captured.stdin.includes('stdin α\nsecond line'), `${shell}: preserve stdin`);
@@ -112,33 +118,51 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     console.log(JSON.stringify({ shorthandContract: shell, status: 'pass' }));
   }
   return {
-    lifecycle(prefix: string, npm: string, tarball: string) {
-      const shell = shells[0]!;
-      const body = shell === 'powershell' ? psClear + `. $env:SP_ACTIVATOR
-$before = & sp --version
-& $env:SP_NODE $env:SP_NPM install --prefix $env:SP_PREFIX --ignore-scripts --no-audit --no-fund $env:SP_TARBALL | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'reinstall failed' }
-$after = & sp --version
-if ($before -ne $after) { throw 'alias changed after update' }
+    // Install version A, activate, update in place to version B, then uninstall,
+    // in every shell. The alias must follow the canonical command, not pin A.
+    lifecycle(prefix: string, npm: string, from: { tarball: string; version: string }, to: { tarball: string; version: string }) {
+      const npmFlags = ['--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund'];
+      for (const shell of shells) {
+        const install = spawnSync(process.execPath, [npm, 'install', ...npmFlags, from.tarball], { encoding: 'utf8', timeout: 120000 });
+        assert.equal(install.status, 0, `${shell} install ${from.version}: ${install.stderr}`);
+        const body = shell === 'powershell' ? psClear + `. $env:SP_ACTIVATOR
+function Assert-Version([string]$name, [string]$expected, [string]$stage) {
+    $actual = (& $name --version | Out-String).Trim()
+    if ($actual -ne $expected) { throw "$name $stage reported '$actual', expected '$expected'" }
+}
+Assert-Version sp $env:SP_VERSION_A 'before update'
+Assert-Version session-peer $env:SP_VERSION_A 'before update'
+& $env:SP_NODE $env:SP_NPM install --prefix $env:SP_PREFIX --ignore-scripts --no-audit --no-fund $env:SP_TARBALL_B | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'update failed' }
+Assert-Version sp $env:SP_VERSION_B 'after update'
+Assert-Version session-peer $env:SP_VERSION_B 'after update'
 & $env:SP_NODE $env:SP_NPM uninstall --prefix $env:SP_PREFIX --ignore-scripts --no-audit --no-fund session-peer | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'uninstall failed' }
-try { & sp --version; throw 'unexpected command after uninstall' } catch [System.Management.Automation.CommandNotFoundException] { }
+foreach ($name in 'sp', 'session-peer') {
+    try { & $name --version; throw "$name still runs after uninstall" }
+    catch [System.Management.Automation.CommandNotFoundException] { }
+}
 Remove-Item Alias:sp
 if (Get-Command sp -ListImported -ErrorAction SilentlyContinue) { throw 'sp remains' }
-` : `shopt -s expand_aliases
-. "$SP_ACTIVATOR" || exit $?
-before=$(sp --version) || exit $?
-"$SP_NODE" "$SP_NPM" install --prefix "$SP_PREFIX" --ignore-scripts --no-audit --no-fund "$SP_TARBALL" >/dev/null || exit $?
-after=$(sp --version) || exit $?
-[ "$before" = "$after" ] || exit 1
+exit 0
+` : (shell === 'bash' ? 'shopt -s expand_aliases\n' : '') + `. "$SP_ACTIVATOR" || exit $?
+[ "$(sp --version)" = "$SP_VERSION_A" ] || { echo "sp before update: $(sp --version)" >&2; exit 11; }
+[ "$(session-peer --version)" = "$SP_VERSION_A" ] || { echo "session-peer before update" >&2; exit 12; }
+"$SP_NODE" "$SP_NPM" install --prefix "$SP_PREFIX" --ignore-scripts --no-audit --no-fund "$SP_TARBALL_B" >/dev/null || exit $?
+[ "$(sp --version)" = "$SP_VERSION_B" ] || { echo "sp after update: $(sp --version)" >&2; exit 13; }
+[ "$(session-peer --version)" = "$SP_VERSION_B" ] || { echo "session-peer after update" >&2; exit 14; }
 "$SP_NODE" "$SP_NPM" uninstall --prefix "$SP_PREFIX" --ignore-scripts --no-audit --no-fund session-peer >/dev/null || exit $?
-if sp --version; then exit 1; fi
-unalias sp
+missing=$(sp --version 2>&1); code=$?
+case "$code:$missing" in 127:*'not found'*) ;; *) echo "sp after uninstall: $code $missing" >&2; exit 15 ;; esac
+missing=$(session-peer --version 2>&1); code=$?
+case "$code:$missing" in 127:*'not found'*) ;; *) echo "session-peer after uninstall: $code $missing" >&2; exit 16 ;; esac
+unalias sp || exit 17
 ! command -v sp
 `;
-      const result = execute(shell, body, [], { SP_NPM: npm, SP_PREFIX: prefix, SP_TARBALL: tarball });
-      assert.equal(result.status, 0, `${shell} lifecycle: ${result.stdout} ${result.stderr}`);
-      console.log(JSON.stringify({ shorthandLifecycle: shell, reinstall: true, uninstall: true }));
+        const result = execute(shell, body, [], { SP_NPM: npm, SP_PREFIX: prefix, SP_TARBALL_B: to.tarball, SP_VERSION_A: from.version, SP_VERSION_B: to.version });
+        assert.equal(result.status, 0, `${shell} lifecycle: ${result.stdout} ${result.stderr}`);
+        console.log(JSON.stringify({ shorthandLifecycle: shell, update: `${from.version} -> ${to.version}`, uninstall: true }));
+      }
     }
   };
 }
