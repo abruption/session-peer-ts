@@ -223,7 +223,10 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`, `ConnectTimeout=10`,
   `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`,
   `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes` and
-  `PermitLocalCommand=no`, then `-W [target]:port`. The hop needs its own
+  `PermitLocalCommand=no`, then `-W [target]:port`. The outer `ssh` also gets
+  `ControlMaster=no`, `ControlPath=none` and `ProxyUseFdpass=no`, so a
+  configured control master cannot bypass the hop. `ProxyCommand` runs through
+  your login shell (`$SHELL`); only POSIX-compatible shells are expected. The hop needs its own
   known_hosts entry. `--ssh-opt` values apply to the target, not the hop; the
   hop otherwise uses your ssh config for that host. Only one hop is supported.
   `--ssh-jump` conflicts with `--ssh-control-path` (`conflicting_ssh_jump`) and

@@ -2,7 +2,7 @@
 // sshUser metadata. Fake ssh executables only; no network or live session.
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -10,7 +10,7 @@ import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { host } from '../dist/protocol.js';
-import { proxyCommand, sshJump, sshOptions } from '../dist/ssh.js';
+import { jumpOptions, proxyCommand, sshJump, sshOptions } from '../dist/ssh.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const posix = { skip: process.platform === 'win32' };
@@ -271,7 +271,8 @@ process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   assert.deepEqual(listed.value.map((item: { sshJump: string }) => item.sshJump), ['hop@jump:2200', 'hop@jump:2200']);
   const outer = calls().filter(call => !call.hop), hops = calls().filter(call => call.hop);
   assert.equal(outer.length, 4); assert.equal(hops.length, 4);
-  for (const call of outer) assert.deepEqual(call.args.slice(0, 11), [...fixed, '-o', `ProxyCommand=${expected}`, '-p', '2222']);
+  for (const call of outer) assert.deepEqual(call.args.slice(0, 17), [...fixed, '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ProxyUseFdpass=no',
+    '-o', `ProxyCommand=${expected}`, '-p', '2222']);
   const hop = (target: string) => ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ConnectTimeout=10',
     '-o', 'ConnectionAttempts=1', '-o', 'ProxyCommand=none', '-o', 'ProxyJump=none', '-o', 'ControlPath=none', '-o', 'ForwardAgent=no',
     '-o', 'ClearAllForwardings=yes', '-o', 'PermitLocalCommand=no', '-p', '2200', '-l', 'hop', '-W', `[${target}]:2222`, '--', 'jump'];
@@ -299,4 +300,27 @@ test('--ssh-jump is refused on a Windows client until its ProxyCommand handling 
   const f = fixture(t);
   const refused = await f.invoke(['list', '--host', 'alpha', '--ssh-jump', 'hop@jump']);
   assert.equal(refused.code, 2); assert.equal(refused.value.error, 'ssh_jump_unsupported_platform'); assert.deepEqual(f.calls(), []);
+});
+
+// Real OpenSSH configuration evaluation only (`ssh -G -F <fixture>`): no connection.
+const realSsh = spawnSync('ssh', ['-V'], { encoding: 'utf8' });
+test('--ssh-jump outer options override a configured control master, control path and fd passing', { skip: process.platform === 'win32' || realSsh.status !== 0 }, t => {
+  const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-jump-config-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const config = join(dir, 'config');
+  writeFileSync(config, 'Host target\n  ControlMaster auto\n  ControlPath ~/.ssh/cm-%r@%h:%p\n  ProxyUseFdpass yes\nHost jumped\n  ProxyJump cfg@cfgjump\n');
+  const evaluate = (extra: string[], destination = 'target') => {
+    const done = spawnSync('ssh', ['-G', '-F', config, ...extra, '--', destination], { encoding: 'utf8', timeout: 5000 });
+    assert.equal(done.status, 0);
+    return Object.fromEntries(done.stdout.split('\n').map(line => [line.split(' ')[0]!, line.slice(line.indexOf(' ') + 1)]));
+  };
+  const before = evaluate([]);
+  assert.equal(before.controlmaster, 'auto'); assert.ok(before.controlpath); assert.equal(before.proxyusefdpass, 'yes');
+  const after = evaluate(jumpOptions('/usr/bin/ssh', sshJump('hop@jump')));
+  assert.equal(after.controlmaster, 'false'); assert.equal(after.controlpath, undefined); assert.equal(after.proxyusefdpass, 'no');
+  assert.equal(after.proxycommand, proxyCommand('/usr/bin/ssh', sshJump('hop@jump')));
+  // A configured ProxyJump for the destination is replaced by the fixed hop.
+  assert.equal(evaluate([], 'jumped').proxyjump, 'cfg@cfgjump');
+  const replaced = evaluate(jumpOptions('/usr/bin/ssh', sshJump('hop@jump')), 'jumped');
+  assert.equal(replaced.proxyjump, undefined); assert.equal(replaced.proxycommand, proxyCommand('/usr/bin/ssh', sshJump('hop@jump')));
 });
