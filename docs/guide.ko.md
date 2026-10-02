@@ -294,8 +294,10 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `return_host_is_receiver`, `ssh_executable_missing`, `authentication_failed`,
   `host_key_failed`, `timeout`, `transport_failed`, `remote_command_failed`)입니다. 로컬
   점검에서는 같은 장비의 현재 사용자를 SSH 없이 로컬 경로로 처리합니다. `--host`를 쓰면
-  루프백 회신 호스트(`localhost`, `127.x`, `::1`)는 대상이 자기 자신으로 읽으므로 SSH
-  전에 거부합니다(`invalid_return_route`). 대상 자신의 이름은 `return_host_is_receiver`로
+  루프백 회신 호스트(`localhost`, `*.localhost`, 그리고 `127.1`, `2130706433`, `0x7f.1`,
+  `[::ffff:127.0.0.1]`처럼 어떤 숫자 표기든 127.0.0.0/8, `0.0.0.0`, `::1`, `::` 주소이며, DNS
+  없이 값으로 비교)는 대상이 자기 자신으로 읽으므로 SSH
+  전에 거부합니다(`invalid_return_route`). 대상 자신의 이름은 사용자와 관계없이 `return_host_is_receiver`로
   실패하며 검증된 로컬 경로로 보고하지 않습니다. 원격 전송도 루프백 회신 호스트를
   알리지 않습니다(`invalid_reply_host`). 자동 실행이나 재시도는 하지 않으며, 정방향 접속이 된다고 이 점검을
   통과한 것으로 보지 않습니다. 이 CLI가 시작하는 다른 `ssh`와 마찬가지로, 점검과 그

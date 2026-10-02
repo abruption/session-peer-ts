@@ -328,9 +328,12 @@ Source after 0.2.1 (unreleased) adds sender context and generated routes:
   `ssh_executable_missing`, `authentication_failed`, `host_key_failed`,
   `timeout`, `transport_failed`, `remote_command_failed`). Locally, this user
   on this machine is a local route without SSH. With `--host`, a loopback
-  return host (`localhost`, `127.x`, `::1`) is refused before SSH
+  return host is refused before SSH: `localhost`, `*.localhost`, and any
+  127.0.0.0/8, `0.0.0.0`, `::1` or `::` address in any numeric form (`127.1`,
+  `2130706433`, `0x7f.1`, `[::ffff:127.0.0.1]`, …), compared by value without
+  DNS. It is refused
   (`invalid_return_route`), because the destination would read it as itself.
-  A name of the destination itself fails as `return_host_is_receiver` and is
+  A name of the destination itself, for any user, fails as `return_host_is_receiver` and is
   never reported as a verified local route. Likewise a remote send never
   advertises a loopback reply host (`invalid_reply_host`). It is never run automatically, never retried, and forward
   reachability never implies it. Like every `ssh` this CLI starts, the probe
