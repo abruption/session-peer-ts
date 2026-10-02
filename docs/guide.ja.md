@@ -129,11 +129,14 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 ```
 
 - `--host` が 1 つなら従来どおりオブジェクト 1 つを返します。`--host` を繰り返すと同じ順序の JSON 配列を返し、各要素に `schemaVersion`、`ok`、`host`、`command` があります。いずれかのホストが失敗すると終了コードは 1 です。テキスト出力は宛先ごとに `Host: <host>` ブロックを出力します。
-- すべてのホストとオプションは、`ssh` プロセスを 1 つも起動する前に検証します。1 つでも不正な値があれば、要求された全ホストについてコマンド全体を `submitted:false` で拒否します。同じ宛先の重複指定は `duplicate_ssh_host` です。
+- すべてのホストとオプションは、`ssh` プロセスを 1 つも起動する前に検証します。1 つでも不正な値があれば、コマンド全体を `submitted:false` で拒否します。`--` より前の `--host VALUE` と `--host=VALUE` を先に集めるため、それが 2 つ以上あれば、不明なオプションや値の欠落を含むすべての拒否が、ホストごとに 1 要素の配列になります。それより少なければ 1 つのオブジェクトです。
+- 同じ宛先の重複指定は `duplicate_ssh_host` です。この確認は宛先の文字列（ユーザー、大文字小文字を区別しないホスト名、正規化した IPv6）だけを比較します。同じ端末を指す別のエイリアスやアドレスは検出しません。
+- 型付きの踏み台ホスト経路は未対応のままです（#20）。`-J`/`ProxyJump` は下記のとおりセキュリティ上の理由で拒否します。
 - 各宛先は順番に、事前確認 1 回とリクエスト最大 1 回だけを受けます。拒否や `unknown` になったホストは次のホストを止めず、再試行も別宛先への再送もしません。要素ごとに結果を確認してから判断してください。
 - `--ssh-opt` で使えるのは `-p PORT`、`-l USER`、`-i IDENTITY_FILE`、`-o Port=…`、`-o User=…`、`-o IdentityFile=…`、`-o IdentitiesOnly=yes|no`、`-4`、`-6` だけです。`ProxyCommand`、`LocalCommand`、`-F`、`Include`、`-J`/`ProxyJump`、`BatchMode`/`StrictHostKeyChecking` の変更を含むそれ以外はすべて拒否します（`unsupported_ssh_option`）。踏み台ホストは `~/.ssh/config` に設定し、そのホストに `BatchMode yes` と `StrictHostKeyChecking yes` を指定してください。コマンドラインの設定は踏み台の接続には渡りません。
 - IPv6 リテラルは角括弧なし（`2001:db8::1`）でも角括弧付き（`[2001:db8::1]`、`user@[2001:db8::1]`）でも指定できます。ゾーン ID（`%`）は拒否します。
-- 結果に `sshUser` と `sshUserSource` が加わります。`USER@HOST` または `-l USER` なら `explicit`、接続せずに `ssh -G` で確認できれば `ssh_config_or_local_default`、確認できなければ `sshUser:null` と `unknown` です。`-l` と `USER@HOST` の併用は拒否します。
+- 結果に `sshUser` と `sshUserSource` が加わります。`USER@HOST` または `-l USER` なら `explicit`、`ssh -G` で確認できれば `ssh_config_or_local_default`、確認できなければ `sshUser:null` と `unknown` です。`-l` と `USER@HOST` の併用は拒否します。明示的なユーザーがない場合、ホストごとにローカルの `ssh -G` を 1 回（最大 5 秒）実行します。接続はしませんが、ssh(1)・ssh_config(5) のとおり通常の `ssh` と同様に SSH 設定を評価し、`Match exec` のコマンドも実行されます。
+- 信頼境界は 2 つです。許可リストが対象とするのは、この CLI がコマンドラインで渡すオプションだけです。ユーザーの `~/.ssh/config`（およびシステム設定）は信頼されたユーザー設定であり、その `ProxyCommand`、`ProxyJump`、`Match exec` などは、自分で実行する `ssh` と同じく、この CLI が起動するすべての `ssh` に適用されます。
 
 ### 返信
 

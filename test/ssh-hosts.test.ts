@@ -15,8 +15,11 @@ import { sshOptions } from '../dist/ssh.js';
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const posix = { skip: process.platform === 'win32' };
 type Call = { args: string[]; input: string };
-// Logs every invocation. `-G` answers user metadata; FAKE_DOWN destinations fail
-// the version preflight; FAKE_LOSS destinations lose the request response.
+// Logs every invocation. `-G` answers user metadata (FAKE_G=fail or a FAKE_G_FAIL
+// destination makes it fail); FAKE_DOWN destinations fail the version preflight.
+// FAKE_LOSS destinations exit 255 on the request WITHOUT running the remote CLI:
+// a classification fixture for unknown/no-retry, not evidence of a delivered
+// message whose response was lost.
 function fixture(t: TestContext) {
   const path = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-ssh-hosts-')));
   mkdirSync(join(path, '.claude/sessions'), { recursive: true });
@@ -27,7 +30,7 @@ const fs=require('node:fs'),{spawnSync}=require('node:child_process');
 const args=process.argv.slice(2),input=args.includes('-G')?'':fs.readFileSync(0,'utf8');
 fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({args,input})+'\\n');
 const dest=args[args.indexOf('--')+1],list=k=>(process.env[k]||'').split(',');
-if(args.includes('-G')){if(process.env.FAKE_G==='fail')process.exit(255);console.log('hostname x\\nuser config-user\\nport 22');process.exit(0);}
+if(args.includes('-G')){if(process.env.FAKE_G==='fail'||list('FAKE_G_FAIL').includes(dest))process.exit(255);console.log('hostname x\\nuser config-user\\nport 22');process.exit(0);}
 if(list('FAKE_DOWN').includes(dest)){console.error('ssh: connect to host: Connection refused SECRET-SENTINEL');process.exit(255);}
 if(args.at(-1).endsWith('--version')){console.log('session-peer 0.2.1 (typescript)');process.exit(0);}
 if(list('FAKE_LOSS').includes(dest))process.exit(255);
@@ -116,12 +119,17 @@ test('every route and option is validated before any ssh process starts', posix,
     [['list', ...pair, '--remote-bin', 'relative/bin'], 'invalid_remote_bin'],
     [['send', ...pair, '--to', 'fixture', '--message', ''], 'invalid_message'],
     [['send', ...pair, '--to', 'session-peer://v1/reply?agent=claude&session=w&transport=ssh&host=alpha', '--message', 'x'], 'reply_route_conflict'],
+    // Syntax refusals are still attributed to every --host value the parser would read.
+    [['list', ...pair, '--bogus'], 'unsupported_option'],
+    [['list', '--host=alpha', '--host', 'beta', '--all=x'], 'invalid_option'],
+    [['list', ...pair, '--remote-bin'], 'invalid_option'],
   ];
   for (const [args, error] of cases) {
     const result = await f.invoke(args);
     assert.equal(result.code, 2, args.join(' '));
     assert.ok(Array.isArray(result.value), args.join(' '));
-    assert.deepEqual(result.value.map((item: { host: string }) => item.host), args.filter((_, i) => args[i - 1] === '--host'));
+    const hosts = args.flatMap((arg, i) => arg.startsWith('--host=') ? [arg.slice(7)] : args[i - 1] === '--host' ? [arg] : []);
+    assert.deepEqual(result.value.map((item: { host: string }) => item.host), hosts);
     for (const item of result.value) {
       assert.ok(envelope(item)); assert.equal(item.ok, false); assert.equal(item.error, error, args.join(' '));
       assert.equal(item.submitted, false); assert.equal(item.retryAllowed, false);
@@ -129,6 +137,11 @@ test('every route and option is validated before any ssh process starts', posix,
   }
   const flat = await f.invoke(['list', '--ssh-opt=-p', '--ssh-opt=22']);
   assert.equal(flat.value.error, 'inapplicable_option'); assert.equal(Array.isArray(flat.value), false);
+  // Fewer than two --host values (or hosts only after `--`) stay one flat refusal.
+  for (const args of [['list', '--host', 'alpha', '--bogus'], ['send', '--to', 'x', '--', '--host', 'a', '--host', 'b']]) {
+    const single = await f.invoke(args);
+    assert.equal(Array.isArray(single.value), false, args.join(' ')); assert.equal(single.code, 2); assert.equal(single.value.submitted, false);
+  }
   assert.deepEqual(f.calls(), []);
 });
 
@@ -153,12 +166,18 @@ test('repeated --host runs in order with per-host results and partial-failure ex
   const text = await f.invoke(['list', '--agent', 'claude', '--host', 'alpha', '--host', 'beta'], { FAKE_DOWN: 'beta' }, ['--output-format', 'text']);
   assert.equal(text.code, 1);
   assert.equal(text.stdout, 'Host: alpha\nNo sessions found.\nDiscovery claude: {"status":"ok"}\n\nHost: beta\nNo sessions found.\nError: ssh_unreachable\n');
+  // A failed user lookup for one host leaves that host's dispatch and every other result intact.
+  const before = f.calls().length;
+  const partial = await f.invoke(['list', '--agent', 'claude', '--host', 'alpha', '--host', 'beta', '--host', 'gamma'], { FAKE_G_FAIL: 'beta' });
+  assert.equal(partial.code, 0); assert.deepEqual(partial.value.map((item: { ok: boolean }) => item.ok), [true, true, true]);
+  assert.deepEqual(partial.value.map((item: { sshUserSource: string }) => item.sshUserSource), ['ssh_config_or_local_default', 'unknown', 'ssh_config_or_local_default']);
+  assert.equal(f.calls().slice(before).filter(call => kind(call) === 'request').length, 3);
   const single = await f.invoke(['list', '--agent', 'claude', '--host', 'alpha'], { FAKE_G: 'fail' });
   assert.equal(Array.isArray(single.value), false); assert.equal(single.value.host, 'alpha');
   assert.equal(single.value.sshUser, null); assert.equal(single.value.sshUserSource, 'unknown');
 });
 
-test('multi-host send: one attempt per destination, unknown stays unknown, body never in argv', posix, async t => {
+test('multi-host send: one attempt per destination, unknown classification never retries, body never in argv', posix, async t => {
   const f = fixture(t), messages = await inbox(t, f.path);
   const body = 'SECRET-SENTINEL $(touch pwned) `id` \'quote\' 한글 🚀';
   const sent = await f.invoke(['send', '--host', 'alpha', '--host', 'beta', '--host', 'gamma', '--host', 'delta', '--to', String(process.pid),

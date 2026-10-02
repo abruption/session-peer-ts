@@ -424,16 +424,22 @@ after 0.2.1; it is not part of any published version. Compared with Python
 | Area | Python 1.0.2 | TS source |
 | --- | --- | --- |
 | Repeated `--host` | Ordered per-host loop; one host stays flat, several return a JSON array; any failure exits 1 | Same shape and order for `list`, `send` and `doctor`. Every element keeps `schemaVersion`, `ok`, `host` (as requested) and `command`. Any failed host makes the overall exit 1; a single host keeps its own 0/1/2 exit code |
-| Validation before dispatch | Host/option checks run inside the loop, so an earlier host may already be contacted | Every host, `--ssh-opt`, message and remote option is validated before any `ssh` process starts (including `ssh -G`). A refusal with several hosts is repeated for each requested host with `submitted:false`. A repeated destination (case-insensitive host, canonical IPv6) is `duplicate_ssh_host` |
+| Validation before dispatch | Host/option checks run inside the loop, so an earlier host may already be contacted. argparse syntax errors print usage to stderr (exit 2) without JSON; other pre-dispatch errors are attributed to each `--host` | Every host, `--ssh-opt`, message and remote option is validated before any `ssh` process starts (including `ssh -G`). TS always answers in JSON. Every `--host VALUE`/`--host=VALUE` before `--` is collected before any other check, so with two or more of them every pre-dispatch refusal, including syntax errors such as an unknown option or a missing value, is an array with one `submitted:false` element per host; with fewer it is one flat object |
+| Duplicate destinations | Not checked | `duplicate_ssh_host` for a repeated destination string (user, case-insensitive host name, canonical IPv6). Syntactic only: aliases or addresses of the same physical host are not detected |
 | Attempts | One attempt per host | One preflight and at most one request per destination. Refused/unknown hosts are reported in place; later hosts still get their single attempt. No failover, resend or retry after `unknown` |
 | `--ssh-opt` | Arbitrary ssh arguments minus a substring blocklist (`proxycommand`, `localcommand`, `permitlocalcommand`) | Allowlist only: `-p PORT`, `-l USER`, `-i IDENTITY_FILE`, `-o Port=`/`User=`/`IdentityFile=`/`IdentitiesOnly=yes\|no`, `-4`, `-6`, as separate or attached tokens. Anything else is `unsupported_ssh_option`; a bad, duplicate or dash-leading value is `invalid_ssh_option`. Identity paths refuse `%` and `$` (OpenSSH token/environment expansion). Options are re-emitted canonically after the fixed `BatchMode=yes`, `StrictHostKeyChecking=yes` and `ConnectTimeout=10`, which OpenSSH therefore keeps |
-| Jump hosts | `ProxyJump` allowed through `--ssh-opt` | Refused. OpenSSH starts the jump hop without the command-line `BatchMode`/`StrictHostKeyChecking`; configure the jump in `~/.ssh/config` with those settings instead |
-| User | `sshUser`/`sshUserSource`: `explicit` from `USER@HOST`, else `ssh -G` (`ssh_config_or_local_default`), else `unknown` | Same fields and sources; `-l USER` also counts as `explicit`. `-l` together with `USER@HOST` is `conflicting_ssh_user`, because `-l` silently wins |
+| Jump hosts | `ProxyJump` allowed through `--ssh-opt` | **Open (#20 Partial).** `-J`/`ProxyJump` is refused as a security decision, not a completed requirement: OpenSSH starts the jump hop without the command-line `BatchMode`/`StrictHostKeyChecking`. Until typed jump routing exists, configure the jump in `~/.ssh/config` with those settings |
+| User | `sshUser`/`sshUserSource`: `explicit` from `USER@HOST`, else `ssh -G` (`ssh_config_or_local_default`), else `unknown` | Same fields and sources; `-l USER` also counts as `explicit`. `-l` together with `USER@HOST` is `conflicting_ssh_user`, because `-l` silently wins. Without an explicit user, one local `ssh -G` runs per host (5 s limit). It does not connect, but per ssh(1)/ssh_config(5) it evaluates the user's ssh configuration, including `Match exec` commands, as Python's lookup does. A failed or unexpected lookup gives `unknown` for that host only |
+| Trust boundary | Blocklisted command-line options; user ssh config trusted | The allowlist governs only options this CLI puts on the `ssh` command line. The user's and system ssh_config are trusted user configuration: `ProxyCommand`, `ProxyJump`, `Match exec`, `Include` and similar settings there apply to every `ssh` this CLI starts, as for the user's own `ssh` |
 | IPv6 | Passed through to `ssh` | `2001:db8::1`, `[2001:db8::1]` and `user@[2001:db8::1]` are accepted; brackets are removed for `ssh`, `sshHost` shows the destination used. Zone IDs (`%`) are refused |
 | Control socket / Windows | n/a | `--ssh-control-path` requires exactly one `--host`. `--remote-platform win32` and `--remote-bin` apply to every host with the same encoded PowerShell command |
 | Text output | Per-host human blocks | Per-host blocks prefixed by `Host: <host>` |
 
 Evidence: POSIX fake-`ssh` fixtures in `test/ssh-hosts.test.ts` (ordering,
-argv, zero invocations on invalid input, partial/unknown results, IPv6,
-POSIX/Windows remote commands, body absent from argv) and a two-host case in
-the Windows native fixture. No real SSH destination was contacted.
+argv, zero invocations on invalid input including syntax errors, flat versus
+array refusals, partial results, per-host `ssh -G` failure, IPv6, POSIX/Windows
+remote commands, body absent from argv) and a two-host case in the Windows
+native fixture. The `unknown` case is a classification fixture: the fake exits
+255 on the request without running the remote CLI, so it shows that `unknown`
+is never retried, not that a delivered message's response was lost. No real
+SSH destination was contacted.
