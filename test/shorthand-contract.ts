@@ -64,6 +64,9 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     ['list', '--bad', '--json'], ['send', '--message', '--dry-run', '--json'],
     [...dry, '--message=space 한글 🚀'], [...dry, '--', '-leading 한글'], [...dry, '--message', '-'],
   ];
+  // Node 22 prefixes its SQLite ExperimentalWarning with the process ID; only
+  // that per-process number is normalized before comparing stderr.
+  const stderrOf = (result: { stderr: string }) => result.stderr.replace(/\(node:\d+\)/g, '(node:PID)');
   for (const shell of shells) {
     // The runner must report a script's own exit code, not a 0/1 summary.
     const sanity = execute(shell, 'exit 3\n');
@@ -75,7 +78,7 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
       const short = invoke(shell, true, args, 'stdin 한글\nsecond line');
       const expected = args.includes('--allow-inactive-codex-home') ? 0 : args.includes('--bad') || args.includes('--message') ? 2 : 0;
       let detail = '';
-      if (short.status !== direct.status || short.stdout !== direct.stdout || short.stderr !== direct.stderr) detail = 'alias differs from canonical';
+      if (short.status !== direct.status || short.stdout !== direct.stdout || stderrOf(short) !== stderrOf(direct)) detail = 'alias differs from canonical';
       else if (short.status !== expected) detail = `exit ${short.status}, expected ${expected}`;
       else if (args.includes('--allow-inactive-codex-home')) {
         try { const result = JSON.parse(short.stdout); if (result.status !== 'validated' || result.submitted !== false) detail = 'not validated'; }
@@ -91,7 +94,7 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     assert.equal(direct.status, 7, report);
     assert.equal(short.status, 7, report);
     assert.equal(short.stdout, direct.stdout);
-    assert.equal(short.stderr, direct.stderr);
+    assert.equal(stderrOf(short), stderrOf(direct));
     const captured = JSON.parse(short.stdout);
     assert.deepEqual(captured.args, args, `${shell}: arguments must not be reparsed: ${short.stdout}`);
     assert.ok(captured.stdin.includes('stdin α\nsecond line'), `${shell}: preserve stdin`);
