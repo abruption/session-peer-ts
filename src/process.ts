@@ -23,9 +23,11 @@ export function executable(name: string): string {
   throw new Refusal('executable_unavailable', 1);
 }
 export type Done = { code: number | null; stdout: string; stderr: string; spawned: boolean; interrupted: boolean };
-// On POSIX every child leads its own process group, so a timeout, an output
-// overflow or a signal to this CLI reaps the child and every descendant it
-// started (such as a jump ProxyCommand) and nothing else. Windows has no
+// On POSIX every child is started detached: a new session and process group
+// with no controlling terminal. A timeout, an output overflow or a signal to
+// this CLI reaps that group, which includes descendants such as a jump
+// ProxyCommand, and nothing else; a descendant that calls setsid() itself has
+// left the group and is out of scope (there is no PID scanning). Windows has no
 // equivalent here: only the child is killed and descendants may linger.
 const groups = new Set<number>();
 const posix = process.platform !== 'win32';
@@ -65,13 +67,15 @@ export function run(binary: string, args: string[], options: {
       if (child.exitCode !== null || child.signalCode !== null) setTimeout(() => finish(child.exitCode), 100);
     };
     const timer = setTimeout(stop, options.timeout ?? 3000);
-    child.once('spawn', () => {
-      spawned = true;
-      if (posix && child.pid !== undefined) {
-        if (!groups.size) for (const name of signals) process.on(name, forward);
-        groups.add(child.pid);
-      }
-    });
+    const register = () => {
+      if (!posix || child.pid === undefined || groups.has(child.pid)) return;
+      if (!groups.size) for (const name of signals) process.on(name, forward);
+      groups.add(child.pid);
+    };
+    // Register as soon as the PID exists, so a signal arriving before the
+    // 'spawn' event still reaps the group; 'spawn' remains the fallback.
+    register();
+    child.once('spawn', () => { spawned = true; register(); });
     child.stdin.on('error', () => { /* Close/exit determines outcome, never resend. */ });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (part: string) => {
