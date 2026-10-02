@@ -22,6 +22,12 @@ export function renderOutput(value: Record<string, unknown> | Record<string, unk
     lines.push(`Capabilities: ${safe(JSON.stringify(value.capabilities ?? {}))}`);
     const route = value.returnRoute as Record<string, unknown> | undefined;
     lines.push(route ? `Return route: ${safe(route.status)} via ${safe(route.transport)} (${safe(route.reason)})` : 'Return route: not checked (use --check-return-route)');
+  } else if (value.command === 'update' && value.ok === true) {
+    lines.push(`session-peer ${safe(value.current)} (typescript): ${value.status === 'update_available' ? `${safe(value.latest)} available` :
+      value.status === 'ahead' ? `newer than ${safe(value.latest)}` : 'up to date'} on npm dist-tag ${safe(value.distTag)}.`);
+    if (value.outdated === true) lines.push(value.updateCommand ? `Upgrade with: ${safe(value.updateCommand)}` : safe(value.guidance));
+    if (value.cache === 'skipped_stale_lock') lines.push('Update cache not written: a stale npm-update.lock remains; delete it while no session-peer process runs.');
+    lines.push('Skills, Python installations and remote hosts are updated separately.');
   } else if (value.ok === true) {
     const target = value.target as Record<string, unknown> | undefined;
     lines.push(`${safe(value.status)}: ${safe(target?.agent)}:${safe(target?.pid ?? target?.id)}`);
@@ -31,6 +37,8 @@ export function renderOutput(value: Record<string, unknown> | Record<string, unk
   }
   if (value.ok === false) {
     lines.push(`Error: ${safe(value.error ?? 'operation_failed')}`);
+    if (value.command === 'update' && value.error === 'self_update_unsupported')
+      lines.push(value.updateCommand ? `This installation is managed by ${safe(value.managedBy)}. Upgrade with: ${safe(value.updateCommand)}` : safe(value.guidance));
     if (value.command === 'send') lines.push(value.submitted === null ? 'Submission outcome unknown. Do not retry automatically.' : 'Nothing submitted.');
   }
   return lines.join('\n');
