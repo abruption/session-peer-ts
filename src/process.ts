@@ -23,15 +23,55 @@ export function executable(name: string): string {
   throw new Refusal('executable_unavailable', 1);
 }
 export type Done = { code: number | null; stdout: string; stderr: string; spawned: boolean; interrupted: boolean };
+// On POSIX every child leads its own process group, so a timeout, an output
+// overflow or a signal to this CLI reaps the child and every descendant it
+// started (such as a jump ProxyCommand) and nothing else. Windows has no
+// equivalent here: only the child is killed and descendants may linger.
+const groups = new Set<number>();
+const posix = process.platform !== 'win32';
+const reap = (pid: number | undefined) => { if (pid) try { process.kill(-pid, 'SIGKILL'); } catch { /* Already gone (ESRCH). */ } };
+const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+// A detached group no longer receives the terminal's Ctrl-C, so forward
+// termination signals as a group kill, then re-raise with default handling.
+function forward(signal: NodeJS.Signals) {
+  for (const pid of groups) reap(pid);
+  groups.clear();
+  for (const name of signals) process.removeListener(name, forward);
+  process.kill(process.pid, signal);
+}
 export function run(binary: string, args: string[], options: {
   env?: NodeJS.ProcessEnv; input?: string; timeout?: number; limit?: number;
 } = {}): Promise<Done> {
   return new Promise(resolve => {
-    let stdout = '', stderr = '', bytes = 0, spawned = false, interrupted = false;
-    const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'] });
-    const stop = () => { interrupted = true; child.kill('SIGKILL'); };
+    let stdout = '', stderr = '', bytes = 0, spawned = false, interrupted = false, finished = false, stopped = false;
+    const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: posix });
+    const release = () => {
+      if (child.pid === undefined || !groups.delete(child.pid) || groups.size) return;
+      for (const name of signals) process.removeListener(name, forward);
+    };
+    const finish = (code: number | null) => {
+      if (finished) return;
+      finished = true; clearTimeout(timer); release();
+      resolve({ code, stdout, stderr, spawned, interrupted });
+    };
+    const stop = () => {
+      if (stopped || finished) return;
+      stopped = interrupted = true;
+      if (posix) reap(child.pid); else child.kill('SIGKILL');
+      // A descendant outside our reach (Windows) may still hold the pipes:
+      // stop reading so completion depends on the exit, not on their close.
+      child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+      // Already exited (only a descendant was left): complete after the grace.
+      if (child.exitCode !== null || child.signalCode !== null) setTimeout(() => finish(child.exitCode), 100);
+    };
     const timer = setTimeout(stop, options.timeout ?? 3000);
-    child.once('spawn', () => { spawned = true; });
+    child.once('spawn', () => {
+      spawned = true;
+      if (posix && child.pid !== undefined) {
+        if (!groups.size) for (const name of signals) process.on(name, forward);
+        groups.add(child.pid);
+      }
+    });
     child.stdin.on('error', () => { /* Close/exit determines outcome, never resend. */ });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (part: string) => {
@@ -47,7 +87,12 @@ export function run(binary: string, args: string[], options: {
       if (bytes > (options.limit ?? 1024 * 1024)) stop();
     });
     child.once('error', () => { interrupted = true; });
-    child.once('close', code => { clearTimeout(timer); resolve({ code, stdout, stderr, spawned, interrupted }); });
+    // After a kill, the exit plus a short fixed grace bounds completion even if
+    // a pipe never closes; otherwise 'close' (all output read) completes it.
+    // A descendant that keeps the pipes open after the child exits runs into
+    // the same deadline and is reaped with the group.
+    child.once('exit', code => { if (stopped) setTimeout(() => finish(code), 100); });
+    child.once('close', code => finish(code));
     child.stdin.end(options.input);
   });
 }
