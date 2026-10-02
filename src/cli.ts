@@ -9,7 +9,7 @@ import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send, CodexUnknownOutcome } from './send.js';
 import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
-import { proxyCommand, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
+import { jumpOptions, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
 
 type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions; jump?: SshJump };
 const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'];
@@ -167,7 +167,7 @@ async function remote(options: Options, ssh: string, target: string, message?: s
   // OpenSSH keeps the first value obtained, so the fixed hardening options
   // precede the allowlisted user options and cannot be overridden by them.
   const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10',
-    ...(options.jump ? ['-o', `ProxyCommand=${proxyCommand(ssh, options.jump)}`] : []),
+    ...(options.jump ? jumpOptions(ssh, options.jump) : []),
     ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), ...options.ssh.args, '--', target];
   const preflight = await run(ssh, [...base, invoke('--version')], { timeout: 15000 });
   const preflightError = sshPreflightFailure(preflight, VERSION_LINE);

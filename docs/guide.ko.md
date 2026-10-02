@@ -205,7 +205,10 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `ssh`는 `BatchMode=yes`, `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`,
   `ConnectTimeout=10`, `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`,
   `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes`,
-  `PermitLocalCommand=no`로 실행되고 `-W [대상]:포트`로 연결합니다. 점프 호스트에도
+  `PermitLocalCommand=no`로 실행되고 `-W [대상]:포트`로 연결합니다. 바깥쪽 `ssh`에도
+  `ControlMaster=no`, `ControlPath=none`, `ProxyUseFdpass=no`를 지정하므로, 설정된 제어
+  마스터가 점프 구간을 우회할 수 없습니다. `ProxyCommand`는 로그인 셸(`$SHELL`)로
+  실행되며 POSIX 호환 셸만 전제합니다. 점프 호스트에도
   known_hosts 항목이 따로 필요합니다. `--ssh-opt` 값은 점프 호스트가 아니라 대상에
   적용되며, 점프 구간은 그 밖에는 해당 호스트의 SSH 설정을 따릅니다. 점프는 한 단계만
   지원합니다. `--ssh-control-path`와 함께 쓸 수 없고(`conflicting_ssh_jump`), Win32-OpenSSH의

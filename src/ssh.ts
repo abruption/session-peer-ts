@@ -69,6 +69,12 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
     '-o', 'ClearAllForwardings=yes', '-o', 'PermitLocalCommand=no', ...(jump.port ? ['-p', jump.port] : []), '-l', jump.user,
     '-W', "'[%h]:%p'", '--', jump.host].join(' ');
 }
+// Outer options for a jump: a configured ControlMaster/ControlPath could reuse
+// an existing master and bypass the hop, and ProxyUseFdpass would change how the
+// proxy hands over its connection, so all three are fixed before user options.
+export function jumpOptions(ssh: string, jump: SshJump): string[] {
+  return ['-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ProxyUseFdpass=no', '-o', `ProxyCommand=${proxyCommand(ssh, jump)}`];
+}
 // Like Python, ask OpenSSH which login user applies without connecting.
 export async function sshUser(ssh: string, destination: string, options: SshOptions): Promise<SshUser> {
   const at = destination.lastIndexOf('@');
