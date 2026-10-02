@@ -9,11 +9,11 @@ import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send, CodexUnknownOutcome } from './send.js';
 import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
-import { sshOptions, sshUser, type SshOptions } from './ssh.js';
+import { proxyCommand, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
 
-type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions };
+type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions; jump?: SshJump };
 const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home'];
-const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt'];
+const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt', '--ssh-jump'];
 // Repeated in order; every other value option is single.
 const REPEATED = ['--host', '--ssh-opt'];
 // Requested destinations, so a command-wide refusal can be attributed to each.
@@ -99,6 +99,15 @@ export function parse(args: string[]): Options {
   const ssh = sshOptions(repeated.get('--ssh-opt')!);
   // `ssh -l` silently overrides USER@HOST, so both together are ambiguous.
   if (ssh.user !== undefined && hosts.some(item => item.includes('@'))) throw new Refusal('conflicting_ssh_user');
+  let jump: SshJump | undefined;
+  if (values.has('--ssh-jump')) {
+    if (!hosts.length) throw new Refusal('inapplicable_option');
+    jump = sshJump(values.get('--ssh-jump')!);
+    // An existing control master would bypass the hop entirely.
+    if (values.has('--ssh-control-path')) throw new Refusal('conflicting_ssh_jump');
+    // Win32-OpenSSH starts ProxyCommand without a POSIX shell; not yet proven.
+    if (process.platform === 'win32') throw new Refusal('ssh_jump_unsupported_platform');
+  }
   if (values.has('--ssh-control-path')) {
     // One control socket multiplexes one destination, never several.
     if (hosts.length !== 1) throw new Refusal('inapplicable_option');
@@ -111,7 +120,7 @@ export function parse(args: string[]): Options {
     if (!hosts.length || (values.get('--remote-platform') === 'win32' ?
       !/^[A-Za-z]:\\[^\r\n]+$/.test(binary) : !/^\/[\x20-\x7e]+$/.test(binary))) throw new Refusal('invalid_remote_bin');
   }
-  return { command, values, flags, hosts, ssh };
+  return { command, values, flags, hosts, ssh, ...(jump ? { jump } : {}) };
 }
 async function input(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -158,6 +167,7 @@ async function remote(options: Options, ssh: string, target: string, message?: s
   // OpenSSH keeps the first value obtained, so the fixed hardening options
   // precede the allowlisted user options and cannot be overridden by them.
   const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10',
+    ...(options.jump ? ['-o', `ProxyCommand=${proxyCommand(ssh, options.jump)}`] : []),
     ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), ...options.ssh.args, '--', target];
   const preflight = await run(ssh, [...base, invoke('--version')], { timeout: 15000 });
   const preflightError = sshPreflightFailure(preflight, VERSION_LINE);
@@ -207,7 +217,8 @@ async function remotes(options: Options, message?: string): Promise<{ value: Rec
     try { outcome = await remote(options, ssh, target, message); }
     // One destination keeps the existing flat local-host failure shape.
     catch (error) { outcome = failure(error, options.command, options.hosts.length === 1 ? hostname() : requestedHost); }
-    results.push({ ...outcome.value, ...(options.hosts.length > 1 ? { host: requestedHost } : {}), sshHost: target, ...user });
+    results.push({ ...outcome.value, ...(options.hosts.length > 1 ? { host: requestedHost } : {}), sshHost: target, ...user,
+      ...(options.jump ? { sshJump: options.jump.spec } : {}) });
     exitCode = options.hosts.length === 1 ? outcome.exitCode : outcome.exitCode === 0 && exitCode === 0 ? 0 : 1;
   }
   return { value: results, exitCode };
@@ -237,7 +248,7 @@ try {
     const options = parse(args);
     format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
     if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
-    if (wire && (options.hosts.length || options.ssh.args.length || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
+    if (wire && (options.hosts.length || options.ssh.args.length || options.jump || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path'))) throw new Refusal('nested_transport_forbidden');
     let message: string | undefined;
     if (command === 'send') {
       message = options.values.get('--message');

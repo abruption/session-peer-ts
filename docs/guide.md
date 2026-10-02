@@ -215,8 +215,20 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 - The same destination twice is `duplicate_ssh_host`. This check compares the
   destination text only (user, case-insensitive host name, canonical IPv6). Two
   aliases or addresses for the same machine are not detected.
-- Typed jump-host routing is still open (#20). `-J`/`ProxyJump` is refused for
-  security, as described below.
+- `--ssh-jump USER@HOST[:PORT]` (once, POSIX clients) routes every `ssh` call
+  for every `--host` through one jump host. The user is required, IPv6 needs
+  brackets (`hop@[2001:db8::1]:22`), and `%`, `$`, quotes, spaces and other
+  shell characters are refused (`invalid_ssh_jump`). Instead of `-J`, the CLI
+  builds a fixed `ProxyCommand`. The hop runs `ssh` with `BatchMode=yes`,
+  `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`, `ConnectTimeout=10`,
+  `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`,
+  `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes` and
+  `PermitLocalCommand=no`, then `-W [target]:port`. The hop needs its own
+  known_hosts entry. `--ssh-opt` values apply to the target, not the hop; the
+  hop otherwise uses your ssh config for that host. Only one hop is supported.
+  `--ssh-jump` conflicts with `--ssh-control-path` (`conflicting_ssh_jump`) and
+  is refused on Windows clients (`ssh_jump_unsupported_platform`) until
+  Win32-OpenSSH's `ProxyCommand` handling is verified. Results add `sshJump`.
 - Each destination gets one preflight and at most one request, in order. A
   refused or `unknown` host does not stop the next host and is never retried or
   resent elsewhere. Check each element before acting on it.
@@ -224,9 +236,9 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `-o Port=…`, `-o User=…`, `-o IdentityFile=…`, `-o IdentitiesOnly=yes|no`,
   `-4` and `-6`. Everything else, including `ProxyCommand`, `LocalCommand`,
   `-F`, `Include`, `-J`/`ProxyJump` and any `BatchMode`/`StrictHostKeyChecking`
-  change, is refused (`unsupported_ssh_option`). Configure a jump host in
-  `~/.ssh/config` and give that host `BatchMode yes` and
-  `StrictHostKeyChecking yes`; the command-line settings do not reach the jump hop.
+  change, is refused (`unsupported_ssh_option`). Use `--ssh-jump` instead of
+  `-J`: OpenSSH's own `-J` hop does not receive the command-line `BatchMode` or
+  `StrictHostKeyChecking`.
 - IPv6 literals may be bare (`2001:db8::1`) or bracketed (`[2001:db8::1]`,
   `user@[2001:db8::1]`); zone IDs are refused.
 - Results add `sshUser` and `sshUserSource`: `explicit` for `USER@HOST` or

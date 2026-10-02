@@ -10,7 +10,7 @@ import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { host } from '../dist/protocol.js';
-import { sshOptions } from '../dist/ssh.js';
+import { proxyCommand, sshJump, sshOptions } from '../dist/ssh.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const posix = { skip: process.platform === 'win32' };
@@ -227,4 +227,76 @@ test('allowlisted options follow the fixed hardening options on POSIX and Window
     const encoded = call.args.at(-1)!.match(/^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/)![1]!;
     assert.equal(Buffer.from(encoded, 'base64').toString('utf16le'), "& 'C:\\Program Files\\sp\\session-peer.cmd' --version");
   }
+});
+
+test('--ssh-jump is parsed strictly and builds one fixed, hardened ProxyCommand', () => {
+  assert.deepEqual(sshJump('hop@jump'), { user: 'hop', host: 'jump', spec: 'hop@jump' });
+  assert.deepEqual(sshJump('hop@jump.example:2200'), { user: 'hop', host: 'jump.example', port: '2200', spec: 'hop@jump.example:2200' });
+  assert.deepEqual(sshJump('hop@[2001:db8::1]:22'), { user: 'hop', host: '2001:db8::1', port: '22', spec: 'hop@[2001:db8::1]:22' });
+  for (const value of ['jump', '@jump', 'hop@', 'hop@j;id', 'hop@$(id)', 'hop@`id`', 'hop@j%h', 'h%r@jump', 'hop@-oProxyCommand=x', '-oProxyCommand=x',
+    'hop@j k', 'hop@j\nk', "hop@j'k", 'hop@2001:db8::1', 'hop@[2001:db8::1', 'hop@[192.0.2.1]', 'hop@j:0', 'hop@j:022', 'hop@j:65536', 'hop@j:22:33',
+    'hop@j,k', 'a@b@c', 'hop@j:', '']) assert.throws(() => sshJump(value), /invalid_ssh_jump/, JSON.stringify(value));
+  assert.equal(proxyCommand("/opt/a b/it's %p/ssh", sshJump('hop@[2001:db8::1]:2222')),
+    "'/opt/a b/it'\\''s %%p/ssh' -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o UpdateHostKeys=no -o ConnectTimeout=10 -o ConnectionAttempts=1 " +
+    "-o ProxyCommand=none -o ProxyJump=none -o ControlPath=none -o ForwardAgent=no -o ClearAllForwardings=yes -o PermitLocalCommand=no " +
+    "-p 2222 -l hop -W '[%h]:%p' -- 2001:db8::1");
+});
+
+test('--ssh-jump sends every SSH call through the fixed hop; invalid input starts no ssh', posix, async t => {
+  const f = fixture(t), bin = join(f.path, "bin dir 'q' %p"), log = join(f.path, 'jump-calls');
+  mkdirSync(bin);
+  // The outer fake expands %h/%p/%r/%n/%% like OpenSSH and runs ProxyCommand via
+  // /bin/sh -c exec; the hop (same fake, recognized by -W) only records its argv.
+  writeFileSync(join(bin, 'ssh'), `#!${process.execPath}
+const fs=require('node:fs'),{spawnSync}=require('node:child_process');
+const args=process.argv.slice(2);
+if(args.includes('-W')){fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({hop:true,args})+'\\n');process.exit(0);}
+if(args.includes('-G')){console.log('user config-user');process.exit(0);}
+const input=fs.readFileSync(0,'utf8');
+const dest=args[args.indexOf('--')+1],name=dest.slice(dest.lastIndexOf('@')+1),port=args.includes('-p')?args[args.indexOf('-p')+1]:'22';
+const proxy=args.find(a=>a.startsWith('ProxyCommand='));
+if(proxy){const cmd=proxy.slice(13).replace(/%(.)/g,(m,c)=>c==='%'?'%':c==='h'?name:c==='p'?port:c==='n'?dest:c==='r'?'config-user':m);
+  if(spawnSync('/bin/sh',['-c','exec '+cmd],{stdio:'inherit'}).status!==0)process.exit(255);}
+fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({hop:false,args,input})+'\\n');
+if(args.at(-1).endsWith('--version')){console.log('session-peer 0.2.1 (typescript)');process.exit(0);}
+const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});
+process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  const env = { PATH: bin + delimiter + f.env.PATH };
+  const calls = (): { hop: boolean; args: string[]; input?: string }[] => existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line)) : [];
+  const fixed = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10'];
+  const expected = proxyCommand(realpathSync(join(bin, 'ssh')), sshJump('hop@jump:2200'));
+  const listed = await f.invoke(['list', '--agent', 'claude', '--host', 'alpha', '--host', 'u@[2001:db8::1]', '--ssh-jump', 'hop@jump:2200',
+    '--ssh-opt=-p', '--ssh-opt=2222'], env);
+  assert.equal(listed.code, 0);
+  assert.deepEqual(listed.value.map((item: { sshJump: string }) => item.sshJump), ['hop@jump:2200', 'hop@jump:2200']);
+  const outer = calls().filter(call => !call.hop), hops = calls().filter(call => call.hop);
+  assert.equal(outer.length, 4); assert.equal(hops.length, 4);
+  for (const call of outer) assert.deepEqual(call.args.slice(0, 11), [...fixed, '-o', `ProxyCommand=${expected}`, '-p', '2222']);
+  const hop = (target: string) => ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ConnectTimeout=10',
+    '-o', 'ConnectionAttempts=1', '-o', 'ProxyCommand=none', '-o', 'ProxyJump=none', '-o', 'ControlPath=none', '-o', 'ForwardAgent=no',
+    '-o', 'ClearAllForwardings=yes', '-o', 'PermitLocalCommand=no', '-p', '2200', '-l', 'hop', '-W', `[${target}]:2222`, '--', 'jump'];
+  assert.deepEqual(hops.map(call => call.args), [hop('alpha'), hop('alpha'), hop('2001:db8::1'), hop('2001:db8::1')]);
+  // The message stays in stdin JSON; neither the outer nor the hop argv carries it.
+  const sent = await f.invoke(['send', '--host', 'alpha', '--ssh-jump', 'hop@jump', '--to', 'fixture', '--message', 'SECRET-SENTINEL $(touch pwned)', '--dry-run'], env);
+  assert.equal(sent.value.sshJump, 'hop@jump');
+  for (const call of calls()) assert.equal(call.args.some(arg => arg.includes('SECRET-SENTINEL') || arg.includes('pwned')), false);
+  assert.equal(existsSync(join(f.path, 'pwned')), false);
+  const before = calls().length;
+  for (const value of ['hop@j;touch pwned', 'hop@$(touch pwned)', 'hop@j%h', '-oProxyCommand=touch', 'jump', 'hop@2001:db8::1:22', 'hop@j\nk']) {
+    const refused = await f.invoke(['list', '--host', 'alpha', '--host', 'beta', '--ssh-jump', value], env);
+    assert.equal(refused.code, 2);
+    for (const item of refused.value) { assert.equal(item.error, 'invalid_ssh_jump', JSON.stringify(value)); assert.equal(item.submitted, false); }
+  }
+  for (const [args, error] of [[['--host', 'alpha', '--ssh-jump', 'hop@jump', '--ssh-control-path', join(f.path, 'missing')], 'conflicting_ssh_jump'],
+    [['--ssh-jump', 'hop@jump'], 'inapplicable_option'], [['--host', 'alpha', '--ssh-jump', 'hop@a', '--ssh-jump', 'hop@b'], 'invalid_option'],
+    [['--host', 'alpha', '--ssh-opt=-J', '--ssh-opt=hop@jump'], 'unsupported_ssh_option'], [['--host', 'alpha', '--ssh-opt=-oProxyCommand=x'], 'unsupported_ssh_option']] as const) {
+    assert.equal((await f.invoke(['list', ...args], env)).value.error, error, args.join(' '));
+  }
+  assert.equal(calls().length, before); assert.equal(existsSync(join(f.path, 'pwned')), false);
+});
+
+test('--ssh-jump is refused on a Windows client until its ProxyCommand handling is proven', { skip: process.platform !== 'win32' }, async t => {
+  const f = fixture(t);
+  const refused = await f.invoke(['list', '--host', 'alpha', '--ssh-jump', 'hop@jump']);
+  assert.equal(refused.code, 2); assert.equal(refused.value.error, 'ssh_jump_unsupported_platform'); assert.deepEqual(f.calls(), []);
 });
