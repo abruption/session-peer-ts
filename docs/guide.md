@@ -342,7 +342,9 @@ expired cache starts one detached refresh and never delays or changes the
 command's result or exit code; a failed refresh waits 1 hour before the next
 attempt. The refresh is single-flight: each attempt owns a lock by a random
 token, only that owner releases it, and a crashed owner's lock is taken over by
-exactly one invocation after 60 seconds.
+exactly one invocation after 60 seconds. Only the current lock owner
+publishes the cache, and a stale or failed refresh never overwrites a newer
+record.
 
 `--no-update-notice` and `SESSION_PEER_NO_UPDATE_NOTICE=1` suppress these
 background notices and refreshes. An explicit `update --check` is an intended

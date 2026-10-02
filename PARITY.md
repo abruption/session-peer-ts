@@ -454,7 +454,7 @@ stderr line would change its no-network default. With
 `list`/`send`/`doctor` results read only the local cache. A fresh (24 h) cache
 whose stable `latest` is newer adds `clientUpdate` (`schemaVersion`, `status`,
 `current`, `latest`, `channel`, `checkedAt`, `source: "npm_registry_cache"`,
-`managedBy`, `command`) to JSON, or one stderr line for text; stdout text is
+`managedBy`, `command`, `guidance`) to JSON, or one stderr line for text; stdout text is
 unchanged. A missing, invalid, future-dated or expired cache spawns one detached
 refresh and returns immediately. A failed refresh stores `latest:null`, which
 suppresses attempts for 1 hour. Opt-out (`--no-update-notice`,
@@ -472,16 +472,30 @@ Multi-host execution (#20/#84) is not part of this change: after #84 merges,
 refresh per invocation and no wire notices.
 
 Single flight: the refresh lock `npm-update.lock` is created with `O_EXCL` and
-holds a random per-acquisition token, which the detached child inherits. Only
-that token's holder releases it, and only after re-reading the token; a refresh
-without a matching token never touches another generation's lock. A lock older
-than 60 s is taken over by renaming a new token file atomically over the exact
-stale generation that was observed, so the lock path is never missing and two
-takers cannot both win. Release and takeover run under a short `O_EXCL`
-`npm-update.lock.takeover` mutex; if it is busy, release leaves the lock to
-expire. Residual risk: a mutex older than 60 s is treated as crashed and
-removed, which could race only with a holder stalled that long between two file
-operations.
+holds a random per-acquisition token, which the detached child inherits. A lock
+older than 60 s is taken over by renaming a new token file atomically over the
+exact stale generation that was observed, so the lock path is never missing and
+two takers cannot both win. Takeover, cache publication and release run under a
+short `O_EXCL` mutex, `npm-update.lock.takeover`, that is itself token-owned, and
+each re-reads the lock token first. Only the current generation publishes: a stale
+or tokenless worker never writes the cache or releases another generation's lock.
+A background refresh also never replaces a cache record written after it started
+(for example by an explicit `update --check`). Removal of the mutex or of a stale
+mutex is fenced: the file is renamed to a unique name, kept only if it is the
+holder's token or the exact inode and mtime judged stale (older than 60 s), and
+otherwise restored with `link()`, which never overwrites a newer file. If the
+mutex is busy for about 0.5 s, the owner leaves its lock to expire.
+
+Guaranteed: at most one lock owner per generation; only that owner publishes or
+releases; no worker deletes another generation's lock, a live mutex, or a cache
+record newer than its own start. Not guaranteed (documented residual): between
+renaming a mismatched mutex aside and restoring it, a third process can create a
+new mutex. Both holders can then act at once, which requires a mutex judged
+stale (a holder stalled for 60 s between two file operations) or a holder whose
+mutex was replaced. The result is at most one extra refresh or one
+cache write from the current generation. It never deletes another generation's
+lock. On filesystems without hard links, the restore falls back to a
+check-then-rename.
 
 Cache: `npm-update.json` (0600, atomic temp-file rename) in a 0700 directory
 owned by the user: `SESSION_PEER_CACHE_DIR` (absolute), else
@@ -499,7 +513,10 @@ cache paths and modes, opt-in default off, flag/env opt-out, JSON additivity,
 text stderr, offline/invalid/expired/future caches, concurrent single-flight
 refresh, token-owned lock release (a foreign generation is never deleted, also
 by a refresh with an invalid registry), multi-process stale takeover with
-exactly one owner, failure backoff, Python cache isolation, TS skill metadata,
+exactly one owner, fenced cache publication (a stale worker with a failed or
+working registry cannot overwrite the current result, and a slow failing owner
+cannot clobber a newer record), deterministic mutex interleavings (a fresh mutex
+is never reclaimed and a replaced holder never deletes the replacement), failure backoff, Python cache isolation, TS skill metadata,
 wire isolation, and a POSIX fake-SSH `list --host` where only the client adds
 the notice. `test/package-smoke.ts` checks the installed
 package's guidance and unchanged files. All use a local fixture registry; no

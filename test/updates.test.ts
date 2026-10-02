@@ -3,14 +3,14 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
 import { type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { acquireLock, cacheDirectory, compareVersions, manager, refreshCache, registryUrl, releaseLock, takeOverStaleLock, upgradeCommand, upgradeGuidance, validVersion, type Manager, type Probe } from '../dist/updates.js';
+import { acquireLock, acquireMutex, cacheDirectory, reclaimMutex, releaseMutex, compareVersions, manager, refreshCache, registryUrl, releaseLock, takeOverStaleLock, upgradeCommand, upgradeGuidance, validVersion, type Manager, type Probe } from '../dist/updates.js';
 
 const cli = resolve('dist/cli.js');
 const SENTINEL = 'REGISTRY-BODY-SENTINEL';
@@ -389,7 +389,7 @@ test('lock generations: only the token holder releases; a stale lock is taken ov
   assert.equal(takeOverStaleLock('OLD', env), undefined);
   assert.equal(readFileSync(f.lock, 'utf8'), a);
   assert.equal(releaseLock(a, env), true);
-  assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp)$/.test(name)), []);
+  assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp|aside)$/.test(name)), []);
 });
 
 test('concurrent stale takeover across processes yields exactly one owner', async t => {
@@ -409,7 +409,7 @@ test('concurrent stale takeover across processes yields exactly one owner', asyn
     const winners = tokens.filter(Boolean);
     assert.equal(winners.length, 1, `round ${round}: ${winners.length} owners`);
     assert.equal(readFileSync(f.lock, 'utf8'), winners[0]);
-    assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp)$/.test(name)), []);
+    assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp|aside)$/.test(name)), []);
     rmSync(f.lock);
   }
 });
@@ -432,4 +432,70 @@ test('over SSH the local client adds its own notice; the receiver never reads or
   assert.equal('clientUpdate' in off.value, false);
   await delay(1000);
   assert.equal(existsSync(receiver), false); assert.deepEqual(f.requests, []);
+});
+
+test('cache publication is fenced to the current lock generation and never clobbers newer data', async t => {
+  const f = await fixture(t, { body: JSON.stringify({ latest: '0.2.2' }) });
+  const registry = f.env.SESSION_PEER_UPDATE_REGISTRY;
+  const env = { SESSION_PEER_CACHE_DIR: f.cache };
+  // Generation A goes stale and B takes over; B's successful result is published.
+  const a = acquireLock(env)!;
+  const old = new Date(Date.now() - 120_000); utimesSync(f.lock, old, old);
+  const b = acquireLock(env)!;
+  assert.ok(a && b && a !== b); assert.equal(readFileSync(f.lock, 'utf8'), b);
+  f.seed('0.3.0');
+  const published = readFileSync(f.file, 'utf8');
+  // Review regression: the stale worker A fails (invalid registry) and must not publish or release.
+  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: 'http://registry.example/', SESSION_PEER_UPDATE_LOCK_TOKEN: a });
+  assert.equal(readFileSync(f.file, 'utf8'), published); assert.equal(readFileSync(f.lock, 'utf8'), b);
+  // A stale worker with a working registry is fenced too.
+  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry, SESSION_PEER_UPDATE_LOCK_TOKEN: a });
+  assert.equal(readFileSync(f.file, 'utf8'), published); assert.equal(readFileSync(f.lock, 'utf8'), b);
+  assert.equal(f.requests.length, 1);
+  // The current owner B fails slowly while a newer success (explicit check) lands: no clobber.
+  f.state.reply = { status: 503, body: SENTINEL, wait: 800 };
+  const pending = refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry, SESSION_PEER_UPDATE_LOCK_TOKEN: b });
+  await delay(200); f.seed('0.3.1');
+  const newer = readFileSync(f.file, 'utf8');
+  await pending;
+  assert.equal(readFileSync(f.file, 'utf8'), newer); assert.equal(existsSync(f.lock), false, 'owner still releases');
+  // The current owner publishes its result over an older record and releases.
+  f.seed('0.3.1', 25 * 3600_000);
+  f.state.reply = { body: JSON.stringify({ latest: '0.2.2' }) };
+  const c = acquireLock(env)!;
+  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry, SESSION_PEER_UPDATE_LOCK_TOKEN: c });
+  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.2.2'); assert.equal(existsSync(f.lock), false);
+  // Without a token nothing is fetched or written.
+  const count: number = f.requests.length, before = readFileSync(f.file, 'utf8');
+  await refreshCache({ ...env, SESSION_PEER_UPDATE_REGISTRY: registry });
+  assert.equal(f.requests.length, count); assert.equal(readFileSync(f.file, 'utf8'), before);
+});
+
+test('stale mutex reclamation and mutex release are fenced by inode and token', async t => {
+  const f = await fixture(t);
+  const env = { SESSION_PEER_CACHE_DIR: f.cache };
+  mkdirSync(f.cache, { recursive: true, mode: 0o700 });
+  const mutex = `${f.lock}.takeover`;
+  const old = new Date(Date.now() - 120_000);
+  // Interleaving: R judges mutex X stale; another reclaimer removes X and a new holder creates Y.
+  writeFileSync(mutex, 'X'); utimesSync(mutex, old, old);
+  const judged = lstatSync(mutex, { bigint: true });
+  rmSync(mutex);
+  const holder = acquireMutex(env)!;
+  assert.ok(holder);
+  assert.equal(reclaimMutex(judged, env), false, 'a fresh mutex is never reclaimed');
+  assert.equal(readFileSync(mutex, 'utf8'), holder);
+  // A live (fresh) mutex is neither shared nor reclaimed.
+  assert.equal(acquireMutex(env), undefined, 'a live mutex is not shared or reclaimed');
+  assert.equal(readFileSync(mutex, 'utf8'), holder);
+  // A holder whose mutex was replaced never deletes the replacement.
+  rmSync(mutex); writeFileSync(mutex, 'NEW_HOLDER');
+  assert.equal(releaseMutex(holder, env), false);
+  assert.equal(readFileSync(mutex, 'utf8'), 'NEW_HOLDER');
+  // The exact stale inode is reclaimed; reclamation itself does not acquire.
+  utimesSync(mutex, old, old);
+  assert.equal(acquireMutex(env), undefined); assert.equal(existsSync(mutex), false);
+  const next = acquireMutex(env)!;
+  assert.ok(next); assert.equal(releaseMutex(next, env), true); assert.equal(existsSync(mutex), false);
+  assert.deepEqual(readdirSync(f.cache).filter(name => /\.(?:takeover|tmp|aside)$/.test(name)), []);
 });
