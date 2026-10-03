@@ -10,7 +10,10 @@ Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
 Candidate source: main after #79, #84, #86, #85, #75 and #83 plus the 0.3.0
 preparation PR. Changes and known limitations are listed in
-[PARITY.md](PARITY.md#030-remote-usability-and-maintenance). Local macOS arm64,
+[PARITY.md](PARITY.md#030-remote-usability-and-maintenance). The local checks
+below ran at checkpoint `ed2548cda56f369a9d46fecf8c0c4ddbff2e5e78` on base
+`b910cca6ba2f84d5ca6e4d5c234cafcaf3fcbd58`; later commits on the preparation PR
+changed documentation only. Local macOS arm64,
 Node 24.16.0/npm 11.15.0, with the pinned Python reference: 121 tests, 116
 passed, 5 Windows-only skipped, 0 failed; `test:types`, package smoke (including
 the Bash/zsh shorthand contract and lifecycle), repository checker and

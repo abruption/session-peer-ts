@@ -59,7 +59,7 @@ JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록�
 JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때만 `queueId`가 추가되며,
 둘 다 소비 확인은 아닙니다. [홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
 공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
-SSH 양쪽에는 동일한 0.3.0 빌드를 사용하세요.
+SSH 양쪽에는 같은 TypeScript 클라이언트 버전(0.3.0)이 필요합니다.
 
 ### 0.2.0 CLI 사용성
 
@@ -397,7 +397,7 @@ session-peer doctor --host user@host --json
 pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 wake/wait/ACK와 소비
 확인을 미지원으로 표시합니다. 선택적 TS 스킬 메타데이터 검사도 설치를 하지 않습니다.
 [진단 경계](../PARITY.md#source-read-only-doctor--18--020)를 참고하세요. SSH 양쪽에 같은
-소스 빌드가 필요합니다.
+TypeScript 클라이언트 버전이 필요합니다.
 ### 업데이트 확인과 알림 (0.3.0, #22)
 
 ```sh

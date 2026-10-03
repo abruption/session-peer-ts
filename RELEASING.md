@@ -7,7 +7,9 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## Current public release — 0.2.1
+<a id="current-public-release--021"></a>
+
+## Public release checkpoint — 0.2.1 (2026-09-29 KST)
 
 `session-peer@0.2.1` was published on 2026-09-29 KST. Public verification passed
 with `latest=0.2.1` and unchanged `preview=0.1.0-preview.1`; see the
@@ -23,7 +25,9 @@ The reviewed stable target is 0.3.0, the remote usability and maintenance
 release ([changes and known limitations](PARITY.md#030-remote-usability-and-maintenance)).
 Its preparation PR pins previous stable 0.2.1 integrity:
 `sha512-bPjriJZf7OQ5niZafwxNgMYo0DVpZldELEjp640xAfBMjBCAJatT2hPMTG9oV7xDX2ULCPUmox9+vFWc5nw0Mg==`
-(provenance `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.2.1`).
+(recorded attestation URL
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.2.1`; the script
+checks only its registry origin).
 The preview integrity remains pinned as a preservation check. No existing tag is
 removed. The outcome of this procedure is recorded only in a dated VALIDATION.md
 section; this document does not assert it.
@@ -33,8 +37,11 @@ section; this document does not assert it.
 2. Check npm environment reviewers and main-only deployment policy, package
    ownership/2FA and stage-only Trusted Publisher mapping. Inspect pending stages
    with authenticated `npm stage list session-peer`; stop on a conflicting stage.
-3. Require 0.3.0 absent, `latest=0.2.1`, `preview=0.1.0-preview.1`, and the 0.2.1
-   and preview integrity/provenance records unchanged. The script enforces these.
+3. Require 0.3.0 absent, `latest=0.2.1` and `preview=0.1.0-preview.1`. The script
+   enforces these tags, the exact 0.2.1 and preview integrity values, and that their
+   attestation metadata URLs are on the npm registry origin. It does not pin
+   provenance contents or the full attestation URL; compare those manually with
+   the dated public records before approval.
 4. Obtain final approval naming the **exact merged main SHA** (40 characters),
    **0.3.0**, **stable-stage** and `latest` promotion to 0.3.0. An instruction to
    prepare the release does not identify a future merged SHA. Do not replay any

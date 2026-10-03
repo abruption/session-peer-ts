@@ -38,7 +38,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。0.2.0 でも明示的なコマンド形式を利用できます。
 
-対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH 両端で同一の0.2.1 ビルドを使ってください。
+対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（0.3.0）が必要です。
 
 ### 0.2.0 CLI の使いやすさ
 
@@ -215,7 +215,7 @@ writer ロック取得、メッセージ送信はしません。Windows では�
 pipe の広告を確認するだけで、pipe の存在や接続可能性は保証しません。
 `capabilities` は wake/wait/ACK と消費確認を未対応と明示します。任意の TS スキル
 メタデータ検査もインストールを行いません。[診断の境界](../PARITY.md#source-read-only-doctor--18--020)
-を参照してください。SSH の両端には同じソースビルドが必要です。
+を参照してください。SSH の両端には同じ TypeScript クライアントのバージョンが必要です。
 ### 更新確認と通知（0.3.0、#22）
 
 ```sh

@@ -101,7 +101,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, use the same 0.3.0 build on both ends.
+On SSH, both ends need the same TypeScript client version (0.3.0).
 
 ## Requirements
 
@@ -452,7 +452,7 @@ inbox readiness means a live process advertises a pipe; it does not prove the
 pipe exists or accepts connections. `capabilities` explicitly excludes
 wake/wait/ACK and consumption confirmation. Optional TS skill metadata checks
 never install anything. See [diagnostic boundaries](../PARITY.md#source-read-only-doctor--18--020).
-SSH requires the same source build on both ends.
+SSH requires the same TypeScript client version on both ends.
 ### Update checks and notices (0.3.0, #22)
 
 ```sh
