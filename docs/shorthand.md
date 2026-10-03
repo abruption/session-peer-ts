@@ -2,9 +2,10 @@
 
 [README](../README.md) · [User guide](guide.md)
 
-This is a source feature planned for 0.3.0 ([#74](https://github.com/abruption/session-peer-ts/issues/74)).
-The public npm 0.2.1 archive does **not** contain these activation files. For now,
-use a reviewed checkout or its [locally built tarball](guide.md#build-from-source).
+This feature ships with 0.3.0 and later ([#74](https://github.com/abruption/session-peer-ts/issues/74)).
+The npm 0.2.1 and earlier archives do **not** contain these activation files;
+install 0.3.0 or later, or use a reviewed checkout or its
+[locally built tarball](guide.md#build-from-source).
 
 `session-peer` is the canonical command. `sp` is an opt-in alias in your current
 Bash/zsh session or PowerShell scope. It resolves the same command on PATH: there
@@ -20,10 +21,9 @@ co-installation is outside this feature's scope.
 
 ## Checking for the activation files
 
-`--version` alone cannot tell whether an installation contains these files: a
-local source build reports the same version as public 0.2.1 until the version is
-raised for release. Check for the files in the installed package directory
-instead:
+An installation that reports 0.3.0 or later contains these files. `--version`
+alone is not conclusive for a source build, which reports its checkout's
+package version. Check for the files in the installed package directory:
 
 ```sh
 # Global npm installation:
@@ -39,7 +39,7 @@ Test-Path (Join-Path (npm root --prefix <prefix>) 'session-peer/shorthand/sp.ps1
 ```
 
 A missing file means that installation predates the feature (for example the
-public 0.2.1 archive); its `session-peer` command still works, but `sp` cannot
+0.2.1 archive); its `session-peer` command still works, but `sp` cannot
 be activated from it.
 
 ## Why activation is explicit

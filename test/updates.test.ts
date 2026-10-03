@@ -16,7 +16,7 @@ import { acquireLock, cacheDirectory, checkUpdate, compareVersions, manager, ref
 const cli = resolve('dist/cli.js');
 const SENTINEL = 'REGISTRY-BODY-SENTINEL';
 type Reply = { status?: number; body?: string; wait?: number };
-async function fixture(t: TestContext, reply: Reply = { body: JSON.stringify({ latest: '0.2.2', preview: '0.3.0-preview.1' }) }) {
+async function fixture(t: TestContext, reply: Reply = { body: JSON.stringify({ latest: '0.3.1', preview: '0.4.0-preview.1' }) }) {
   const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-updates-'));
   mkdirSync(join(root, '.claude/sessions'), { recursive: true });
   const requests: string[] = [];
@@ -82,11 +82,11 @@ test('package-manager guidance requires a positively identified owner; uncertain
     read: path => { if (!(path in files)) throw new Error('ENOENT'); return files[path]!; },
     real: path => { if (path in links) return links[path]!; if (path in files) return path; throw new Error('ENOENT'); }
   });
-  const declared = JSON.stringify({ dependencies: { 'session-peer': '0.2.1' } });
+  const declared = JSON.stringify({ dependencies: { 'session-peer': '0.3.0' } });
   const posixGlobal = (prefix: string) => probe({ [`${prefix}/lib/node_modules/session-peer/dist/cli.js`]: '' },
     { [`${prefix}/bin/session-peer`]: `${prefix}/lib/node_modules/session-peer/dist/cli.js` });
   const windowsGlobal = (prefix: string) => probe({ [`${prefix}/session-peer.cmd`]: '@ECHO off\r\nnode "%dp0%\\node_modules\\session-peer\\dist\\cli.js" %*\r\n' });
-  const cmd = { npm: 'npm install --global --ignore-scripts session-peer@0.2.2' };
+  const cmd = { npm: 'npm install --global --ignore-scripts session-peer@0.3.1' };
   const cases: [string, NodeJS.Platform, Probe, string, string | null][] = [
     ['/usr/local/lib/node_modules/session-peer/dist/updates.js', 'linux', posixGlobal('/usr/local'), 'npm', cmd.npm],
     ['/home/u/.nvm/versions/node/v24.16.0/lib/node_modules/session-peer/dist/updates.js', 'darwin', posixGlobal('/home/u/.nvm/versions/node/v24.16.0'), 'npm', cmd.npm],
@@ -100,27 +100,27 @@ test('package-manager guidance requires a positively identified owner; uncertain
     ['/home/u/.nvm/versions/node/v24.16.0/lib/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
     ['/home/u/.local/lib/node_modules/session-peer/dist/updates.js', 'linux',
       probe({ '/home/u/.local/lib/node_modules/session-peer/dist/cli.js': '' }, { '/home/u/.local/bin/session-peer': '/home/u/.local/share/pipx/venvs/session-peer/bin/session-peer' }), 'unknown', null],
-    ['/home/u/.volta/tools/image/packages/session-peer/lib/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'volta', 'volta install session-peer@0.2.2'],
-    ['C:/Users/u/AppData/Local/Volta/tools/image/packages/session-peer/node_modules/session-peer/dist/updates.js', 'win32', probe({}), 'volta', 'volta install session-peer@0.2.2'],
+    ['/home/u/.volta/tools/image/packages/session-peer/lib/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'volta', 'volta install session-peer@0.3.1'],
+    ['C:/Users/u/AppData/Local/Volta/tools/image/packages/session-peer/node_modules/session-peer/dist/updates.js', 'win32', probe({}), 'volta', 'volta install session-peer@0.3.1'],
     ['C:\\work\\app\\node_modules\\session-peer\\dist\\updates.js', 'win32', probe({ 'C:/work/app/package.json': declared }), 'npm_project', null],
     ['/work/app/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/work/app/package.json': declared }), 'npm_project', null],
     ['/work/app/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/work/app/package.json': JSON.stringify({ dependencies: { other: '1' } }) }), 'unknown', null],
     ['/work/app/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
-    ['/home/u/.local/share/pnpm/global/5/node_modules/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux',
-      probe({ '/home/u/.local/share/pnpm/global/5/package.json': declared }), 'pnpm', 'pnpm add --global --ignore-scripts session-peer@0.2.2'],
-    ['/work/app/node_modules/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/work/app/package.json': declared }), 'pnpm_project', null],
-    ['/work/app/node_modules/.pnpm/session-peer@0.2.1/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
-    ['/home/u/.config/yarn/global/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/home/u/.config/yarn/global/package.json': declared }), 'yarn', 'yarn global add --ignore-scripts session-peer@0.2.2'],
+    ['/home/u/.local/share/pnpm/global/5/node_modules/.pnpm/session-peer@0.3.0/node_modules/session-peer/dist/updates.js', 'linux',
+      probe({ '/home/u/.local/share/pnpm/global/5/package.json': declared }), 'pnpm', 'pnpm add --global --ignore-scripts session-peer@0.3.1'],
+    ['/work/app/node_modules/.pnpm/session-peer@0.3.0/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/work/app/package.json': declared }), 'pnpm_project', null],
+    ['/work/app/node_modules/.pnpm/session-peer@0.3.0/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
+    ['/home/u/.config/yarn/global/node_modules/session-peer/dist/updates.js', 'linux', probe({ '/home/u/.config/yarn/global/package.json': declared }), 'yarn', 'yarn global add --ignore-scripts session-peer@0.3.1'],
     ['/home/u/.config/yarn/global/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'unknown', null],
-    ['/home/u/.bun/install/global/node_modules/session-peer/dist/updates.js', 'darwin', probe({ '/home/u/.bun/install/global/package.json': declared }), 'bun', 'bun add --global --ignore-scripts session-peer@0.2.2'],
-    ['/home/u/.npm/_npx/abc123/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'npx', 'npx --yes --ignore-scripts session-peer@0.2.2 --version'],
+    ['/home/u/.bun/install/global/node_modules/session-peer/dist/updates.js', 'darwin', probe({ '/home/u/.bun/install/global/package.json': declared }), 'bun', 'bun add --global --ignore-scripts session-peer@0.3.1'],
+    ['/home/u/.npm/_npx/abc123/node_modules/session-peer/dist/updates.js', 'linux', probe({}), 'npx', 'npx --yes --ignore-scripts session-peer@0.3.1 --version'],
     ['/src/session-peer-ts/dist/updates.js', 'linux', probe({ '/src/session-peer-ts/package.json': JSON.stringify({ name: 'session-peer' }) }), 'source', null],
     ['/src/other/dist/updates.js', 'linux', probe({}), 'unknown', null],
     ['/opt/unrelated/node_modules/other/updates.js', 'linux', probe({}), 'unknown', null],
   ];
   for (const [path, platform, files, owner, command] of cases) {
     assert.equal(manager(path, platform, files), owner, `${platform} ${path}`);
-    assert.equal(upgradeCommand(owner as Manager, '0.2.2'), command, path);
+    assert.equal(upgradeCommand(owner as Manager, '0.3.1'), command, path);
     if (command === null) assert.ok(upgradeGuidance(owner as Manager).length > 0);
   }
 });
@@ -157,7 +157,7 @@ test('update --check reports npm dist-tags, writes a private atomic cache and le
   assert.deepEqual(f.requests, ['/-/package/session-peer/dist-tags']);
   const v = r.value;
   assert.equal(v.command, 'update'); assert.equal(v.ok, true); assert.equal(v.package, 'session-peer');
-  assert.equal(v.current, '0.2.1'); assert.equal(v.latest, '0.2.2'); assert.equal(v.channel, 'latest'); assert.equal(v.distTag, 'latest');
+  assert.equal(v.current, '0.3.0'); assert.equal(v.latest, '0.3.1'); assert.equal(v.channel, 'latest'); assert.equal(v.distTag, 'latest');
   assert.equal(v.source, 'npm_registry'); assert.equal(v.status, 'update_available'); assert.equal(v.outdated, true); assert.equal(v.updated, false);
   assert.equal(v.referenceVersion, '1.0.2'); assert.equal(v.cache, 'written');
   // The test runs from a checkout; installed-path guidance is covered above and in package-smoke.
@@ -168,31 +168,31 @@ test('update --check reports npm dist-tags, writes a private atomic cache and le
   assert.deepEqual([readFileSync(skill), readFileSync(python)], before);
   const cached = JSON.parse(readFileSync(f.file, 'utf8'));
   assert.deepEqual(Object.keys(cached).sort(), ['channel', 'checkedAt', 'latest', 'package', 'schemaVersion', 'source']);
-  assert.equal(cached.latest, '0.2.2');
+  assert.equal(cached.latest, '0.3.1');
   assert.deepEqual(readdirSync(f.cache), ['npm-update.json']);
   if (process.platform !== 'win32') {
     assert.equal(statSync(f.cache).mode & 0o777, 0o700); assert.equal(statSync(f.file).mode & 0o777, 0o600);
   }
   const text = await f.call(['update', '--check', '--output-format', 'text']);
-  assert.equal(text.code, 0); assert.match(text.stdout, /0\.2\.1 \(typescript\): 0\.2\.2 available on npm dist-tag latest/);
+  assert.equal(text.code, 0); assert.match(text.stdout, /0\.3\.0 \(typescript\): 0\.3\.1 available on npm dist-tag latest/);
   assert.match(text.stdout, /source checkout/); assert.equal(text.stderr, '');
-  f.state.reply = { body: JSON.stringify({ latest: '0.2.1' }) };
+  f.state.reply = { body: JSON.stringify({ latest: '0.3.0' }) };
   const current = await f.call(['update', '--check', '--json']);
   assert.equal(current.value.status, 'up_to_date'); assert.equal(current.value.outdated, false); assert.equal(current.value.updateCommand, null);
 });
 
 test('preview channel accepts prereleases, compares separately and does not replace the stable cache', async t => {
   const f = await fixture(t);
-  f.seed('0.2.1');
+  f.seed('0.3.0');
   const before = readFileSync(f.file, 'utf8');
   const ahead = await f.call(['update', '--check', '--channel', 'preview', '--json']);
-  assert.equal(ahead.code, 0); assert.equal(ahead.value.latest, '0.3.0-preview.1'); assert.equal(ahead.value.channel, 'preview');
+  assert.equal(ahead.code, 0); assert.equal(ahead.value.latest, '0.4.0-preview.1'); assert.equal(ahead.value.channel, 'preview');
   assert.equal(ahead.value.status, 'update_available'); assert.equal(ahead.value.outdated, true); assert.equal(ahead.value.cache, 'not_applicable');
-  f.state.reply = { body: JSON.stringify({ latest: '0.2.1', preview: '0.1.0-preview.1' }) };
+  f.state.reply = { body: JSON.stringify({ latest: '0.3.0', preview: '0.1.0-preview.1' }) };
   const older = await f.call(['update', '--check', '--channel=preview', '--json']);
   assert.equal(older.value.status, 'ahead'); assert.equal(older.value.outdated, false); assert.equal(older.value.updateCommand, null);
   assert.equal(readFileSync(f.file, 'utf8'), before);
-  f.state.reply = { body: JSON.stringify({ latest: '0.2.1' }) };
+  f.state.reply = { body: JSON.stringify({ latest: '0.3.0' }) };
   const missing = await f.call(['update', '--check', '--channel', 'preview', '--json']);
   assert.equal(missing.code, 1); assert.equal(missing.value.error, 'dist_tag_missing');
 });
@@ -205,7 +205,7 @@ test('invalid, failed and slow registry responses refuse without printing bodies
     [{ body: JSON.stringify({ latest: 9, note: SENTINEL }) }, 'registry_response_invalid'],
     [{ body: `[${JSON.stringify(SENTINEL)}]` }, 'registry_response_invalid'],
     [{ body: `${SENTINEL} not json` }, 'registry_response_invalid'],
-    [{ body: JSON.stringify({ latest: '0.2.2', padding: SENTINEL.repeat(4000) }) }, 'registry_response_invalid'],
+    [{ body: JSON.stringify({ latest: '0.3.1', padding: SENTINEL.repeat(4000) }) }, 'registry_response_invalid'],
     [{ status: 500, body: SENTINEL }, 'registry_http_error'],
     [{ status: 302, body: SENTINEL }, 'registry_unreachable'],
   ];
@@ -217,7 +217,7 @@ test('invalid, failed and slow registry responses refuse without printing bodies
     const text = await f.call(['update', '--check', '--output-format=text']);
     assert.match(text.stdout, new RegExp(`Error: ${error}`)); assert.equal(text.stdout.includes(SENTINEL), false);
   }
-  f.state.reply = { body: JSON.stringify({ latest: '0.2.2' }), wait: 8000 };
+  f.state.reply = { body: JSON.stringify({ latest: '0.3.1' }), wait: 8000 };
   const started = Date.now();
   const slow = await f.call(['update', '--check', '--json']);
   assert.equal(slow.value.error, 'registry_timeout'); assert.ok(Date.now() - started < 7000, 'bounded timeout');
@@ -264,7 +264,7 @@ test('update without --check refuses with ownership guidance and no network; opt
 
 test('cached notices are off by default, opt-in additive, stderr-only in text and opt-out wins', async t => {
   const f = await fixture(t);
-  f.seed('0.2.2');
+  f.seed('0.3.1');
   const plain = await f.call(['list', '--json']);
   assert.equal(plain.code, 0); assert.equal('clientUpdate' in plain.value, false); assert.equal(plain.stderr, '');
   const on = { SESSION_PEER_UPDATE_NOTICE: '1' };
@@ -273,14 +273,14 @@ test('cached notices are off by default, opt-in additive, stderr-only in text an
   const { clientUpdate, ...rest } = json.value;
   assert.deepEqual(rest, plain.value);
   assert.deepEqual(Object.keys(clientUpdate).sort(), ['channel', 'checkedAt', 'command', 'current', 'guidance', 'latest', 'managedBy', 'schemaVersion', 'source', 'status']);
-  assert.equal(clientUpdate.status, 'available'); assert.equal(clientUpdate.current, '0.2.1'); assert.equal(clientUpdate.latest, '0.2.2');
+  assert.equal(clientUpdate.status, 'available'); assert.equal(clientUpdate.current, '0.3.0'); assert.equal(clientUpdate.latest, '0.3.1');
   assert.equal(clientUpdate.source, 'npm_registry_cache'); assert.match(clientUpdate.checkedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
   const textOff = await f.call(['list', '--output-format', 'text']);
   const textOn = await f.call(['list', '--output-format', 'text'], { SESSION_PEER_UPDATE_NOTICE: 'yes' });
   assert.equal(textOn.stdout, textOff.stdout); assert.equal(textOn.code, textOff.code);
-  assert.match(textOn.stderr, /^Update available: session-peer 0\.2\.1 -> 0\.2\.2 \(npm dist-tag latest\)\. This is a source checkout; update it with git and rebuild\.\n$/);
+  assert.match(textOn.stderr, /^Update available: session-peer 0\.3\.0 -> 0\.3\.1 \(npm dist-tag latest\)\. This is a source checkout; update it with git and rebuild\.\n$/);
   const doctor = await f.call(['doctor', '--json'], on);
-  assert.equal(doctor.value.clientUpdate.latest, '0.2.2'); assert.equal(doctor.value.capabilities.updateCheck, true); assert.equal(doctor.value.capabilities.selfUpdate, false);
+  assert.equal(doctor.value.clientUpdate.latest, '0.3.1'); assert.equal(doctor.value.capabilities.updateCheck, true); assert.equal(doctor.value.capabilities.selfUpdate, false);
   const refusal = await f.call(['send', '--to', 'codex:bad', '--json', 'hi'], on);
   assert.equal(refusal.code, 2); assert.equal('clientUpdate' in refusal.value, false);
   for (const [args, extra] of [[['list', '--json', '--no-update-notice'], on], [['list', '--json'], { ...on, SESSION_PEER_NO_UPDATE_NOTICE: 'TRUE' }],
@@ -288,7 +288,7 @@ test('cached notices are off by default, opt-in additive, stderr-only in text an
     const r = await f.call(args, extra);
     assert.equal(r.code, 0); assert.equal(r.stderr, ''); assert.equal(r.value?.clientUpdate, undefined);
   }
-  f.seed('0.2.1');
+  f.seed('0.3.0');
   assert.equal('clientUpdate' in (await f.call(['list', '--json'], on)).value, false);
   // Python's own update.json in the same directory is a different release stream.
   writeFileSync(join(f.cache, 'update.json'), JSON.stringify({ schemaVersion: 1, latest: '9.9.9', checkedAt: Math.floor(Date.now() / 1000) }));
@@ -304,26 +304,26 @@ test('missing, expired and invalid caches refresh once in the background without
   assert.deepEqual(first.value, baseline.value); assert.equal(first.code, baseline.code); assert.equal(first.stderr, '');
   await f.settled(1);
   assert.equal(f.requests.length, 1);
-  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.2.2');
+  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.3.1');
   if (process.platform !== 'win32') assert.equal(statSync(f.file).mode & 0o777, 0o600);
-  assert.equal((await f.call(['list', '--json'], on)).value.clientUpdate.latest, '0.2.2');
+  assert.equal((await f.call(['list', '--json'], on)).value.clientUpdate.latest, '0.3.1');
   assert.equal(f.requests.length, 1, 'fresh cache does not refresh');
-  f.seed('0.2.2', 25 * 3600_000);
+  f.seed('0.3.1', 25 * 3600_000);
   assert.equal('clientUpdate' in (await f.call(['list', '--json'], on)).value, false, 'expired cache is not shown');
   await f.settled(2); assert.equal(f.requests.length, 2);
   for (const content of ['not json', JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry', channel: 'latest', latest: '0.3.0-rc.1', checkedAt: Date.now() }),
-    JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry', channel: 'latest', latest: '0.2.2', checkedAt: Date.now() + 3600_000 }), 'x'.repeat(5000)]) {
+    JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry', channel: 'latest', latest: '0.3.1', checkedAt: Date.now() + 3600_000 }), 'x'.repeat(5000)]) {
     const count: number = f.requests.length;
     writeFileSync(f.file, content);
     const r = await f.call(['list', '--json'], on);
     assert.equal(r.code, 0); assert.equal('clientUpdate' in r.value, false);
     await f.settled(count + 1); assert.equal(f.requests.length, count + 1);
-    assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.2.2');
+    assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.3.1');
   }
 });
 
 test('concurrent invocations perform one bounded refresh; locks and failures back off', async t => {
-  const f = await fixture(t, { body: JSON.stringify({ latest: '0.2.2' }), wait: 1000 });
+  const f = await fixture(t, { body: JSON.stringify({ latest: '0.3.1' }), wait: 1000 });
   const on = { SESSION_PEER_UPDATE_NOTICE: '1' };
   const results = await Promise.all(Array.from({ length: 8 }, () => f.call(['list', '--json'], on)));
   for (const r of results) { assert.equal(r.code, 0); assert.equal('clientUpdate' in r.value, false); }
@@ -341,7 +341,7 @@ test('concurrent invocations perform one bounded refresh; locks and failures bac
   await f.settled(2); assert.equal(f.requests.length, 2);
   // Offline/failed refresh records a backoff without a version and never alters output.
   f.state.reply = { status: 503, body: SENTINEL };
-  f.seed('0.2.2', 25 * 3600_000);
+  f.seed('0.3.1', 25 * 3600_000);
   const offline = await f.call(['list', '--json'], on);
   assert.equal(offline.code, 0); assert.equal(offline.stdout.includes(SENTINEL), false);
   await f.settled(3); assert.equal(f.requests.length, 3);
@@ -360,7 +360,7 @@ test('remote wire requests never read, refresh or report client notices', async 
   const on = { SESSION_PEER_UPDATE_NOTICE: '1' };
   const wire = await f.call(['--stdio-request'], on, JSON.stringify({ schemaVersion: 1, args: ['list', '--json'] }));
   assert.equal(wire.code, 0); assert.equal('clientUpdate' in wire.value, false);
-  f.seed('0.2.2');
+  f.seed('0.3.1');
   const seeded = await f.call(['--stdio-request'], on, JSON.stringify({ schemaVersion: 1, args: ['doctor', '--json'] }));
   assert.equal('clientUpdate' in seeded.value, false);
   await delay(1000);
@@ -371,7 +371,7 @@ test('remote wire requests never read, refresh or report client notices', async 
 
 test('over SSH the local client adds its own notice; the receiver never reads or refreshes', { skip: process.platform === 'win32' && 'POSIX fake ssh' }, async t => {
   const f = await fixture(t);
-  f.seed('0.2.2');
+  f.seed('0.3.1');
   const bin = join(f.root, 'bin'), receiver = join(f.root, 'receiver-cache');
   mkdirSync(bin);
   writeFileSync(join(bin, 'ssh'), `#!${process.execPath}\nconst {spawnSync}=require('node:child_process');const flag=process.argv.at(-1).endsWith('--version')?'--version':'--stdio-request';` +
@@ -380,7 +380,7 @@ test('over SSH the local client adds its own notice; the receiver never reads or
   const on = { SESSION_PEER_UPDATE_NOTICE: '1', PATH: `${bin}${delimiter}${process.env.PATH}` };
   const json = await f.call(['list', '--host', 'audit', '--json'], on);
   assert.equal(json.code, 0, json.stdout); assert.equal(json.value.host, 'audit');
-  assert.equal(json.value.clientUpdate.latest, '0.2.2'); assert.equal(json.stderr, '');
+  assert.equal(json.value.clientUpdate.latest, '0.3.1'); assert.equal(json.stderr, '');
   const text = await f.call(['list', '--host', 'audit', '--output-format', 'text'], on);
   assert.equal(text.code, 0); assert.equal(text.stderr.match(/Update available/g)?.length, 1);
   const off = await f.call(['list', '--host', 'audit', '--json', '--no-update-notice'], on);
@@ -430,9 +430,9 @@ test('explicit and background cache writes are serialized by the same lock and n
   const locked = await f.call(['update', '--check', '--json']);
   assert.equal(locked.code, 0); assert.equal(locked.value.latest, '0.3.9'); assert.equal(locked.value.cache, 'skipped_locked');
   assert.equal(existsSync(f.file), false);
-  f.state.reply = { body: JSON.stringify({ latest: '0.2.2' }) };
+  f.state.reply = { body: JSON.stringify({ latest: '0.3.1' }) };
   await refreshCache({ ...f.env, SESSION_PEER_UPDATE_LOCK_TOKEN: background });
-  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.2.2'); assert.equal(existsSync(f.lock), false);
+  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.3.1'); assert.equal(existsSync(f.lock), false);
   f.state.reply = { body: JSON.stringify({ latest: '0.3.9' }) };
   const written = await f.call(['update', '--check', '--json']);
   assert.equal(written.value.cache, 'written'); assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.3.9');
@@ -440,7 +440,7 @@ test('explicit and background cache writes are serialized by the same lock and n
   writeFileSync(f.file, JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry', channel: 'latest', latest: '0.3.9', checkedAt: Date.now() + 60_000 }));
   const newer = readFileSync(f.file, 'utf8');
   const late = acquireLock(env)!;
-  f.state.reply = { body: JSON.stringify({ latest: '0.2.2' }) };
+  f.state.reply = { body: JSON.stringify({ latest: '0.3.1' }) };
   await refreshCache({ ...f.env, SESSION_PEER_UPDATE_LOCK_TOKEN: late });
   assert.equal(readFileSync(f.file, 'utf8'), newer); assert.equal(existsSync(f.lock), false);
   const skipped = await f.call(['update', '--check', '--json']);
@@ -465,7 +465,7 @@ test('concurrent lock acquisition across processes yields one owner, and none fo
 });
 
 test('lock I/O failures: a failed token write removes only its own new lock; an unverifiable lock maps to cache failed', async t => {
-  const f = await fixture(t, { body: JSON.stringify({ latest: '0.2.2' }) });
+  const f = await fixture(t, { body: JSON.stringify({ latest: '0.3.1' }) });
   const env = { ...f.env };
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
   const token = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -487,7 +487,7 @@ test('lock I/O failures: a failed token write removes only its own new lock; an 
   syncBuiltinESMExports();
   const result = await checkUpdate('latest', env);
   t.mock.restoreAll(); syncBuiltinESMExports();
-  assert.equal(result.cache, 'failed'); assert.equal(result.latest, '0.2.2'); assert.equal(existsSync(f.file), false);
+  assert.equal(result.cache, 'failed'); assert.equal(result.latest, '0.3.1'); assert.equal(existsSync(f.file), false);
   // Release failed too, so the lock is left for documented manual recovery.
   assert.ok(existsSync(f.lock));
 });

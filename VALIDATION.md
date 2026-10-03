@@ -1,10 +1,31 @@
-# Validation record — updated 2026-10-02 KST
+# Validation record — updated 2026-10-03 KST
 
-This dated record covers public 0.2.0 verification and historical 0.1.0 public
-verification, candidate checks and live-agent observations. Older sections
+This dated record covers public 0.2.1 and 0.2.0 verification, historical 0.1.0
+public verification, candidate checks and live-agent observations. Older sections
 describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
+
+## 0.3.0 candidate checks — 2026-10-03 KST
+
+Candidate source: main after #79, #84, #86, #85, #75 and #83 plus the 0.3.0
+preparation PR. Changes and known limitations are listed in
+[PARITY.md](PARITY.md#030-remote-usability-and-maintenance). The local checks
+below ran at checkpoint `ed2548cda56f369a9d46fecf8c0c4ddbff2e5e78` on base
+`b910cca6ba2f84d5ca6e4d5c234cafcaf3fcbd58`; later commits on the preparation PR
+changed documentation only. Local macOS arm64,
+Node 24.16.0/npm 11.15.0, with the pinned Python reference: 121 tests, 116
+passed, 5 Windows-only skipped, 0 failed; `test:types`, package smoke (including
+the Bash/zsh shorthand contract and lifecycle), repository checker and
+`npm audit` (0 vulnerabilities) passed. Release `pack` and `artifact` validated
+the 51-file allowlist, and an isolated `--ignore-scripts` install of the local
+tarball into a temporary prefix printed `session-peer 0.3.0 (typescript)` and
+uninstalled cleanly. The packaged READMEs and guides were read from that tarball.
+Each included PR passed the full macOS/Linux/Windows Node 22/24 matrix,
+CodeQL and the release gate on its head. These are fixture results, not
+live-TUI ACKs and not public release evidence; 0.3.0 publication requires the
+procedure in [RELEASING.md](RELEASING.md#030-stable-release-procedure) and a
+dated public record.
 
 ## Remote deployment workflow, POSIX cell (#23 F5) — 2026-10-02 KST
 

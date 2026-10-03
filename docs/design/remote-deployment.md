@@ -31,19 +31,19 @@ SSH, so a destination needs only a usable Python and a POSIX shell. Its
 `install.sh --host` additionally pushes the program to
 `$HOME/.local/share/session-peer` and links `$HOME/.local/bin/session-peer`.
 
-The TypeScript client deliberately does not do that. In 0.2.1 the local client
+The TypeScript client deliberately does not do that. In 0.2.1 and 0.3.0 the local client
 runs `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10`
 and, before any message leaves the machine:
 
 1. runs `<remote-bin> --version` with no message (15 s timeout);
-2. requires stdout to equal exactly `session-peer 0.2.1 (typescript)`
-   (`VERSION_LINE` in `src/protocol.ts`), otherwise refuses with a fixed code
-   from `sshPreflightFailure` in `src/cli.ts`;
+2. requires stdout to equal exactly the client's own version line, for example
+   `session-peer 0.3.0 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
+   otherwise refuses with a fixed code from `sshPreflightFailure` in `src/cli.ts`;
 3. sends a `schemaVersion: 1` JSON request on stdin to
    `<remote-bin> --stdio-request` and verifies the `schemaVersion: 1` response
    shape, command, exit code and send status before reporting success.
 
-Unreleased source after 0.2.1 ([#20](https://github.com/abruption/session-peer-ts/issues/20))
+0.3.0 ([#20](https://github.com/abruption/session-peer-ts/issues/20))
 adds ordered repeated `--host`, an allowlisted `--ssh-opt`, a single-hop
 `--ssh-jump` for POSIX clients, and IPv6 literals. Each destination still gets
 the same message-free, exact-version `--version` preflight before its one

@@ -49,24 +49,24 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 覆盖其他安装管理器的文件。
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.1
+npm install --global --ignore-scripts session-peer@0.3.0
 session-peer --version
 ```
 
-预期输出：`session-peer 0.2.1 (typescript)`。隔离安装、源码构建、Windows 和
+预期输出：`session-peer 0.3.0 (typescript)`。隔离安装、源码构建、Windows 和
 卸载步骤见下方详细指南。
 
-可选的 `sp` 简写是面向 0.3.0 的源码功能，不包含在已发布的 npm 0.2.1 中。
+可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
 请参阅[显式启用、冲突与停用(英文)](docs/shorthand.md)。
 
 ### Update
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
-下面示例将旧 npm 安装更新至 0.2.1。CLI 没有自更新命令。
+下面示例将旧 npm 安装更新至 0.3.0。CLI 不会安装更新，`session-peer update --check` 只做检查。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.2.1
+npm install --global --ignore-scripts session-peer@0.3.0
 session-peer --version
 ```
 

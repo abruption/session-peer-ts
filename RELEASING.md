@@ -7,15 +7,66 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## Current public release — 0.2.1
+<a id="current-public-release--021"></a>
+
+## Public release checkpoint — 0.2.1 (2026-09-29 KST)
 
 `session-peer@0.2.1` was published on 2026-09-29 KST. Public verification passed
 with `latest=0.2.1` and unchanged `preview=0.1.0-preview.1`; see the
 [dated 0.2.1 verification record](VALIDATION.md#public-021--2026-09-29-kst).
 0.2.0 was published on 2026-09-28 KST
-([record](VALIDATION.md#public-020--2026-09-28-kst)). The 0.2.1 and 0.2.0
-procedures below are completed history, not repeatable dispatches. A future
-release requires a new reviewed version and baseline preparation PR.
+([record](VALIDATION.md#public-020--2026-09-28-kst)). The completed 0.2.1 and
+0.2.0 procedures below are history, not repeatable dispatches. A future release
+requires a new reviewed version and baseline preparation PR.
+
+## 0.3.0 stable release procedure
+
+The reviewed stable target is 0.3.0, the remote usability and maintenance
+release ([changes and known limitations](PARITY.md#030-remote-usability-and-maintenance)).
+Its preparation PR pins previous stable 0.2.1 integrity:
+`sha512-bPjriJZf7OQ5niZafwxNgMYo0DVpZldELEjp640xAfBMjBCAJatT2hPMTG9oV7xDX2ULCPUmox9+vFWc5nw0Mg==`
+(recorded attestation URL
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.2.1`; the script
+checks only its registry origin).
+The preview integrity remains pinned as a preservation check. No existing tag is
+removed. The outcome of this procedure is recorded only in a dated VALIDATION.md
+section; this document does not assert it.
+
+1. Merge the reviewed 0.3.0 preparation PR into main and require successful
+   exact-main CI (including Windows Node 22/24, CodeQL and the release gate).
+2. Check npm environment reviewers and main-only deployment policy, package
+   ownership/2FA and stage-only Trusted Publisher mapping. Inspect pending stages
+   with authenticated `npm stage list session-peer`; stop on a conflicting stage.
+3. Require 0.3.0 absent, `latest=0.2.1` and `preview=0.1.0-preview.1`. The script
+   enforces these tags, the exact 0.2.1 and preview integrity values, and that their
+   attestation metadata URLs are on the npm registry origin. It does not pin
+   provenance contents or the full attestation URL; compare those manually with
+   the dated public records before approval.
+4. Obtain final approval naming the **exact merged main SHA** (40 characters),
+   **0.3.0**, **stable-stage** and `latest` promotion to 0.3.0. An instruction to
+   prepare the release does not identify a future merged SHA. Do not replay any
+   historical approval.
+5. Dispatch `publish.yml` on main with `mode=stable-stage`, `version=0.3.0`,
+   `source_sha=<approved 40-character main SHA>`, and
+   `confirmation=session-peer@0.3.0 stable-stage`.
+6. Before approving the protected npm environment, download the prepare job's
+   `npm-release-<SHA>` artifact and apply the documentation gate below, including
+   `docs/shorthand.md` and `docs/design/remote-deployment.md`.
+7. Staging uses Node 24/npm 11.15.0 (release-tool requirements in [Sources](#sources))
+   and OIDC with upload retries disabled. Record the stage ID, compare the staged
+   tarball with the retained artifact, and obtain the separate final npm 2FA
+   approval, which publishes 0.3.0 and promotes `latest`.
+8. After approval, run `node scripts/release.mjs artifact` and
+   `node scripts/release.mjs verify` on that exact source/artifact and append dated
+   public evidence to VALIDATION.md.
+
+Release notes must state that SSH requires the same version on both ends, so
+0.2.1 and 0.3.0 hosts refuse each other at preflight; upgrade endpoints together.
+They must also list the known limitations: `--ssh-jump` is refused on Windows
+clients (#20 Partial); the remote deployment design (#23) is a proposal whose
+Windows cell and newest receipt/recovery rules are unvalidated; update notices
+are opt-in, and their Windows refresh, failure and forged-field cells are
+unverified.
 
 ## Completed 0.2.1 stable release procedure
 

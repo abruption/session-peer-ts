@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-This guide covers 0.2.1, a reliability and hardening update to 0.2.0 ([changes](../PARITY.md#021-reliability-and-hardening)). [Public 0.2.0 release evidence](../VALIDATION.md#public-020--2026-09-28-kst) records the previous publication. References to 0.1.0 below describe the older release.
+This guide covers 0.3.0, which adds multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand to 0.2.1 ([changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.2.1 release evidence](../VALIDATION.md#public-021--2026-09-29-kst) records the previous publication. References to 0.1.0 below describe the older release.
 
 ## Contents
 
@@ -24,7 +24,7 @@ This guide covers 0.2.1, a reliability and hardening update to 0.2.0 ([changes](
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-This guide describes **0.2.1**. The npm package and CLI command are both **`session-peer`**. This
+This guide describes **0.3.0**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -33,8 +33,8 @@ Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.1
-session-peer --version  # session-peer 0.2.1 (typescript)
+npm install --global --ignore-scripts session-peer@0.3.0
+session-peer --version  # session-peer 0.3.0 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -101,7 +101,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, use the same 0.2.1 build on both ends.
+On SSH, both ends need the same TypeScript client version (0.3.0).
 
 ## Requirements
 
@@ -125,11 +125,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.2.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.0.tgz
 session-peer --version
 ```
 
-Expected: `session-peer 0.2.1 (typescript)`. Keep the `./...tgz` path to
+Expected: `session-peer 0.3.0 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -149,7 +149,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.1.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.0.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -183,7 +183,7 @@ the TypeScript marker and exact version; a different implementation is refused.
 SSH uses BatchMode and StrictHostKeyChecking. It never accepts new host keys,
 installs a remote runtime or invokes Python as a fallback. Messages travel in a
 JSON stdin request, not remote shell arguments. Forward access does not
-establish reverse access. Source after 0.2.1 uses Tailscale only as a routing
+establish reverse access. Since 0.3.0, Tailscale is used only as a routing
 hint; see [Replies](#replies).
 
 For a Windows SSH destination, add `--remote-platform win32` and select a
@@ -196,7 +196,7 @@ is not removed or replaced by this client.
 
 ### Several hosts and connection options
 
-Source after 0.2.1 (unreleased) accepts repeated `--host` and a constrained
+Since 0.3.0 (not in 0.2.1 or earlier), the CLI accepts repeated `--host` and a constrained
 `--ssh-opt`:
 
 ```sh
@@ -284,7 +284,7 @@ Peer metadata is never authority, and a Reply-To URI is never executed as shell
 text. A received Reply-To is data for the reader; no reply is observed or
 confirmed automatically.
 
-Source after 0.2.1 (unreleased) adds sender context and generated routes:
+Since 0.3.0 (not in 0.2.1 or earlier), the CLI adds sender context and generated routes:
 
 - **Sender.** Inside Claude Code, `CLAUDE_CODE_MESSAGING_SOCKET` must match
   exactly one live registered session; its unique printable name (otherwise its
@@ -410,12 +410,13 @@ separate approval. Licensed under [MIT](../LICENSE).
 
 ## Package release
 
-Version 0.2.0 was published and verified on 2026-09-28 KST; see the
-[public release record](../VALIDATION.md#public-020--2026-09-28-kst). Check the
-exact version and current tags before installing:
+Version 0.2.1 was published and verified on 2026-09-29 KST and 0.2.0 on
+2026-09-28 KST; see the [0.2.1 public release record](../VALIDATION.md#public-021--2026-09-29-kst).
+Later releases add their own dated records. Check the exact version and current
+tags before installing:
 
 ```sh
-npm view session-peer@0.2.0 version dist.integrity
+npm view session-peer@0.3.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -451,15 +452,15 @@ inbox readiness means a live process advertises a pipe; it does not prove the
 pipe exists or accepts connections. `capabilities` explicitly excludes
 wake/wait/ACK and consumption confirmation. Optional TS skill metadata checks
 never install anything. See [diagnostic boundaries](../PARITY.md#source-read-only-doctor--18--020).
-SSH requires the same source build on both ends.
-### Update checks and notices (source, #22)
+SSH requires the same TypeScript client version on both ends.
+### Update checks and notices (0.3.0, #22)
 
 ```sh
 session-peer update --check --json
 session-peer update --check --channel preview --output-format text
 ```
 
-This source command is not in published npm 0.2.1. `update --check` makes one
+This command was added in 0.3.0; 0.2.1 and earlier do not have it. `update --check` makes one
 request (3-second timeout, no retries) for the npm dist-tags of `session-peer`
 and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 `source: "npm_registry"`, `status` (`update_available`, `up_to_date` or `ahead`),
@@ -467,7 +468,7 @@ and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 installation's owner is positively identified from the running CLI's path:
 an npm global prefix whose own `session-peer` launcher points at this package
 (default, Homebrew, nvm, nvm-windows and fnm prefixes), for example
-`npm install --global --ignore-scripts session-peer@0.2.2`; a pnpm, Yarn or Bun
+`npm install --global --ignore-scripts session-peer@0.3.1`; a pnpm, Yarn or Bun
 global store whose manifest declares `session-peer`; Volta; or the npx cache.
 Project installs (`npm_project`, `pnpm_project`), source checkouts (`source`)
 and anything else (`unknown`) get `updateCommand: null` and a `guidance`
@@ -549,5 +550,5 @@ install a runtime. See [compatibility and validation](../PARITY.md#source-ts-ski
 
 ## Optional sp shorthand
 
-Optional `sp` shorthand is a source feature planned for 0.3.0, not included in
-public npm 0.2.1. See [explicit activation and collisions](shorthand.md).
+Optional `sp` shorthand ships with 0.3.0 and later (not 0.2.1 or earlier) and is
+never enabled automatically. See [explicit activation and collisions](shorthand.md).
