@@ -620,3 +620,18 @@ wire isolation, and a POSIX fake-SSH `list --host` where only the client adds
 the notice. `test/package-smoke.ts` checks the installed
 package's guidance and unchanged files. All use a local fixture registry; no
 test contacts npm.
+
+## Source optional shorthand — #74 — planned 0.3.0
+
+The source ships opt-in Bash/zsh and PowerShell aliases for `sp`. Public npm
+0.2.1 has no activation assets. npm still registers only canonical `session-peer`.
+Sourcing in the caller's shell/scope refuses existing sp executables, aliases and
+functions; no install hook, profile/PATH edits or runtime dispatcher is added.
+The alias resolves the same canonical command with the same arguments, stdin,
+output, exit codes and delivery boundaries. Automation/SSH/help/version retain
+canonical identity. See [activation and lifecycle](docs/shorthand.md).
+
+Python/TS co-installation is excluded; replacing an implementation respects its
+original manager. This TS change does not implement additional Python features.
+Package fixtures cover name equivalence, collisions, an in-place version update
+and removal on every supported shell. They do not establish live delivery or ACK.

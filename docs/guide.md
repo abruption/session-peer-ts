@@ -540,3 +540,8 @@ agent/scope. Restart the agent if its catalog is cached. Runtime and skill
 lifecycles are independent: npm `--ignore-scripts` works, no postinstall invokes
 Skills CLI, and installing this skill does not overwrite the Python skill or
 install a runtime. See [compatibility and validation](../PARITY.md#source-ts-skill-guidance--25--020).
+
+## Optional sp shorthand
+
+Optional `sp` shorthand is a source feature planned for 0.3.0, not included in
+public npm 0.2.1. See [explicit activation and collisions](shorthand.md).

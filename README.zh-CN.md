@@ -56,6 +56,9 @@ session-peer --version
 预期输出：`session-peer 0.2.1 (typescript)`。隔离安装、源码构建、Windows 和
 卸载步骤见下方详细指南。
 
+可选的 `sp` 简写是面向 0.3.0 的源码功能，不包含在已发布的 npm 0.2.1 中。
+请参阅[显式启用、冲突与停用(英文)](docs/shorthand.md)。
+
 ### Update
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
