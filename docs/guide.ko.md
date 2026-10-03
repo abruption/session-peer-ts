@@ -168,15 +168,81 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
 Node를 선택하는 래퍼를 지정할 수 있습니다. TypeScript 표시와 정확한 버전을 확인하므로
 다른 구현을 발견하면 거부합니다. BatchMode·StrictHostKeyChecking을 사용하며 새
 호스트 키 승인, 원격 런타임 설치, Python 대체 실행은 하지 않습니다. 메시지는 원격
-셸 인자가 아닌 JSON stdin 요청으로 전달합니다. 임의의 `--ssh-opt`, IPv6 리터럴,
-Tailscale 정규 이름 보강은 미지원이므로 SSH 별칭·호스트명을 사용하세요. 정방향 접속이
-역방향 접속을 보장하지 않습니다.
+셸 인자가 아닌 JSON stdin 요청으로 전달합니다. Tailscale 정규 이름 보강은
+미지원입니다. 정방향 접속이 역방향 접속을 보장하지 않습니다.
 
 Windows SSH 대상에는 `--remote-platform win32`를 명시하고, 원격 PATH에 없다면
 `--remote-bin 'C:\절대\경로\session-peer.cmd'`를 지정하세요. 이미 인증된 OpenSSH
-제어 소켓은 `--ssh-control-path /로컬/절대/소켓`으로 선택할 수 있습니다. 이는 호스트 키
+제어 소켓은 `--host`가 정확히 하나일 때 `--ssh-control-path /로컬/절대/소켓`으로 선택할 수 있습니다. 이는 호스트 키
 검증을 우회하거나 새 로그인을 허용하지 않습니다. Windows 로컬 Codex 홈은
 `C:\Users\...\.codex`처럼 전체 경로를 사용합니다. 기존 Python CLI는 자동 제거·교체하지 않습니다.
+
+### 여러 호스트와 연결 옵션
+
+0.2.1 이후 소스(미배포)는 반복 `--host`와 제한된 `--ssh-opt`를 받습니다.
+
+```sh
+session-peer list --host alpha --host user@[2001:db8::1] \
+  --ssh-opt=-p --ssh-opt=2222 --ssh-opt=-i --ssh-opt="$HOME/.ssh/id_ed25519" --json
+```
+
+- `--host`가 하나면 기존처럼 객체 하나를 반환합니다. `--host`를 반복하면 같은 순서의
+  JSON 배열을 반환하며, 모든 원소에 `schemaVersion`, `ok`, `host`, `command`가 있습니다.
+  한 호스트라도 실패하면 종료 코드는 1입니다. 텍스트 출력은 대상마다 `Host: <host>`
+  블록을 출력합니다.
+- 모든 호스트와 옵션은 `ssh` 프로세스를 하나라도 시작하기 전에 검증합니다. 값 하나가
+  잘못되면 명령 전체를 `submitted:false`로 거부합니다. `--` 앞의 `--host VALUE`와
+  `--host=VALUE`를 먼저 모으므로, 이런 값이 둘 이상이면 알 수 없는 옵션이나 값 누락을
+  포함한 모든 거부가 호스트마다 원소가 하나씩인 배열로 나옵니다. 그보다 적으면 객체
+  하나로 나옵니다.
+- 같은 대상을 두 번 지정하면 `duplicate_ssh_host`입니다. 이 검사는 대상 문자열(사용자,
+  대소문자 무시 호스트 이름, 정규화한 IPv6)만 비교합니다. 같은 장비를 가리키는 서로 다른
+  별칭이나 주소는 감지하지 않습니다.
+- `--ssh-jump USER@HOST[:PORT]`(한 번, POSIX 클라이언트)는 모든 `--host`의 모든 `ssh`
+  호출을 점프 호스트 하나를 거쳐 보냅니다. 사용자는 필수이고, IPv6는 괄호가 필요하며
+  (`hop@[2001:db8::1]:22`), `%`, `$`, 따옴표, 공백 등 셸 문자는 거부합니다
+  (`invalid_ssh_jump`). `-J` 대신 CLI가 고정된 `ProxyCommand`를 만듭니다. 점프 구간의
+  `ssh`는 `BatchMode=yes`, `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`,
+  `ConnectTimeout=10`, `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`,
+  `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes`,
+  `PermitLocalCommand=no`로 실행되고 `-W [대상]:포트`로 연결합니다. 바깥쪽 `ssh`에도
+  `ControlMaster=no`, `ControlPath=none`, `ProxyUseFdpass=no`를 지정하므로, 설정된 제어
+  마스터가 점프 구간을 우회할 수 없습니다. `ProxyCommand`는 로그인 셸(`$SHELL`)로
+  실행됩니다. sh, bash, zsh로 검증했으며 그 밖의 로그인 셸(예: fish, csh)은 검증하지
+  않았습니다. 점프 호스트에도 known_hosts 항목이 따로 필요합니다. `-4`/`-6`을 포함한
+  `--ssh-opt` 값은 대상에만 적용되고 점프 호스트에는 전달되지 않으며, 점프 구간은 그 밖에는 해당 호스트의 SSH 설정을 따릅니다. 점프는 한 단계만
+  지원합니다. `--ssh-control-path`와 함께 쓸 수 없고(`conflicting_ssh_jump`), Win32-OpenSSH의
+  `ProxyCommand` 처리를 검증하기 전까지 Windows 클라이언트에서는 거부합니다
+  (`ssh_jump_unsupported_platform`). 결과에 `sshJump`가 추가됩니다.
+- 시간 제한은 유한합니다. POSIX에서는 `ssh`마다 제어 터미널이 없는 새 세션·프로세스 그룹으로 분리해 시작합니다.
+  정리는 그 그룹에만 적용되며, `setsid()`로 그룹을 벗어난 하위 프로세스는 범위 밖이고 PID
+  검색은 하지 않습니다.
+  시간 초과나 출력 한도 초과 시 점프 `ProxyCommand`처럼 출력 파이프를 붙잡은 하위 프로세스를
+  포함해 그룹 전체를 종료하고 곧바로 반환합니다. CLI가 Ctrl-C, SIGTERM, SIGHUP을 받아도
+  종료 전에 그룹을 함께 종료합니다. Windows에서는 직접 실행한 자식만 종료하므로 하위
+  프로세스가 남을 수 있지만, 호출은 기한에 반환합니다. 사전 확인 시간 초과는 거부
+  (`ssh_preflight_timeout`), 요청 시간 초과는 `unknown`이며 재시도하지 않습니다.
+- 각 대상은 순서대로 사전 확인 한 번과 요청 최대 한 번만 받습니다. 거부되거나
+  `unknown`인 호스트가 다음 호스트를 막지 않으며, 재시도하거나 다른 곳으로 다시 보내지
+  않습니다. 원소마다 결과를 확인한 뒤 판단하세요.
+- `--ssh-opt`는 `-p PORT`, `-l USER`, `-i IDENTITY_FILE`, `-o Port=…`, `-o User=…`,
+  `-o IdentityFile=…`, `-o IdentitiesOnly=yes|no`, `-4`, `-6`만 허용합니다.
+  `ProxyCommand`, `LocalCommand`, `-F`, `Include`, `-J`/`ProxyJump`,
+  `BatchMode`/`StrictHostKeyChecking` 변경을 포함한 나머지는 모두 거부합니다
+  (`unsupported_ssh_option`). `-J` 대신 `--ssh-jump`를 쓰세요. OpenSSH 자체의 `-J`
+  점프 구간에는 명령줄의 `BatchMode`와 `StrictHostKeyChecking`이 전달되지 않습니다.
+- IPv6 리터럴은 괄호 없이(`2001:db8::1`) 또는 괄호로(`[2001:db8::1]`,
+  `user@[2001:db8::1]`) 쓸 수 있습니다. 영역 ID(`%`)는 거부합니다.
+- 결과에 `sshUser`, `sshUserSource`가 추가됩니다. `USER@HOST`나 `-l USER`이면
+  `explicit`, `ssh -G`로 확인하면 `ssh_config_or_local_default`, 확인하지 못하면
+  `sshUser:null`과 `unknown`입니다. `-l`과 `USER@HOST`를 함께 쓰면 거부합니다. 명시적인
+  사용자가 없으면 호스트마다 로컬 `ssh -G`를 한 번(최대 5초) 실행합니다. 접속하지는
+  않지만 ssh(1)·ssh_config(5)에 설명된 대로 일반 `ssh`와 똑같이 SSH 설정을 평가하며,
+  `Match exec` 명령도 실행됩니다.
+- 신뢰 경계는 두 가지입니다. 허용 목록은 이 CLI가 명령줄로 넘기는 옵션에만 적용됩니다.
+  사용자의 `~/.ssh/config`(와 시스템 설정)는 신뢰하는 사용자 설정이며, 그 안의
+  `ProxyCommand`, `ProxyJump`, `Match exec` 등은 직접 실행하는 `ssh`와 똑같이 이 CLI가
+  시작하는 모든 `ssh`에 적용됩니다.
 
 ### 회신
 

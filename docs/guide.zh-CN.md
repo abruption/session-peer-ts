@@ -114,9 +114,29 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-默认远程命令是 PATH 中的 `session-peer`。绝对路径 `--remote-bin` 也可选择使用受支持 Node 的包装器。握手检查 TypeScript 标记及精确版本，不同实现会被拒绝。SSH 使用 BatchMode 和 StrictHostKeyChecking，不自动接受新主机密钥、不安装远程运行时，也不会退回 Python。消息通过 JSON stdin 传输，不放进远程 shell 参数。不支持任意 `--ssh-opt`、IPv6 字面量或 Tailscale 规范名补全，请使用 SSH 别名 / 主机名。正向访问不意味着反向访问已配置。
+默认远程命令是 PATH 中的 `session-peer`。绝对路径 `--remote-bin` 也可选择使用受支持 Node 的包装器。握手检查 TypeScript 标记及精确版本，不同实现会被拒绝。SSH 使用 BatchMode 和 StrictHostKeyChecking，不自动接受新主机密钥、不安装远程运行时，也不会退回 Python。消息通过 JSON stdin 传输，不放进远程 shell 参数。不支持 Tailscale 规范名补全。正向访问不意味着反向访问已配置。
 
-对于 Windows SSH 目标，请指定 `--remote-platform win32`；若远端 PATH 中没有命令，再使用 `--remote-bin 'C:\absolute\path\session-peer.cmd'`。可用 `--ssh-control-path /local/absolute/socket` 选择已认证的 OpenSSH 控制套接字；这不会跳过主机密钥验证或授予新登录。Windows 本机的 Codex home 使用完整 `C:\Users\...\.codex` 路径。已有 Python CLI 不会被自动删除或替换。
+对于 Windows SSH 目标，请指定 `--remote-platform win32`；若远端 PATH 中没有命令，再使用 `--remote-bin 'C:\absolute\path\session-peer.cmd'`。仅有一个 `--host` 时，可用 `--ssh-control-path /local/absolute/socket` 选择已认证的 OpenSSH 控制套接字；这不会跳过主机密钥验证或授予新登录。Windows 本机的 Codex home 使用完整 `C:\Users\...\.codex` 路径。已有 Python CLI 不会被自动删除或替换。
+
+### 多主机与连接选项
+
+0.2.1 之后的源码（未发布）接受重复的 `--host` 和受限的 `--ssh-opt`：
+
+```sh
+session-peer list --host alpha --host user@[2001:db8::1] \
+  --ssh-opt=-p --ssh-opt=2222 --ssh-opt=-i --ssh-opt="$HOME/.ssh/id_ed25519" --json
+```
+
+- 只有一个 `--host` 时与以前一样返回单个对象。重复 `--host` 时按相同顺序返回 JSON 数组，每个元素都有 `schemaVersion`、`ok`、`host` 和 `command`。任一主机失败时退出码为 1。文本输出为每个目标打印一个 `Host: <host>` 块。
+- 在启动任何 `ssh` 进程之前校验所有主机和选项。只要有一个值无效，就拒绝整个命令并返回 `submitted:false`。`--` 之前的 `--host VALUE` 和 `--host=VALUE` 会先被收集，因此当它们有两个或更多时，任何拒绝（包括未知选项或缺少值）都会输出为每个主机一个元素的数组；少于两个时输出单个对象。
+- 重复指定同一目标会返回 `duplicate_ssh_host`。该检查只比较目标文本（用户、不区分大小写的主机名、规范化的 IPv6），无法识别指向同一台机器的不同别名或地址。
+- `--ssh-jump USER@HOST[:PORT]`（只能指定一次，限 POSIX 客户端）让所有 `--host` 的每次 `ssh` 调用都经过同一台跳板机。必须指定用户，IPv6 需要方括号（`hop@[2001:db8::1]:22`），`%`、`$`、引号、空格等 shell 字符会被拒绝（`invalid_ssh_jump`）。CLI 不使用 `-J`，而是构造一个固定的 `ProxyCommand`：跳板段的 `ssh` 以 `BatchMode=yes`、`StrictHostKeyChecking=yes`、`UpdateHostKeys=no`、`ConnectTimeout=10`、`ConnectionAttempts=1`、`ProxyCommand=none`、`ProxyJump=none`、`ControlPath=none`、`ForwardAgent=no`、`ClearAllForwardings=yes`、`PermitLocalCommand=no` 运行，再通过 `-W [目标]:端口` 连接。外层 `ssh` 也会设置 `ControlMaster=no`、`ControlPath=none` 和 `ProxyUseFdpass=no`，因此已配置的控制主连接无法绕过跳板机。`ProxyCommand` 通过你的登录 shell（`$SHELL`）运行，已在 sh、bash 和 zsh 中验证，其他登录 shell（如 fish、csh）未验证。跳板机也需要自己的 known_hosts 条目。`--ssh-opt` 的值（包括 `-4`/`-6`）只作用于目标，不会传给跳板机；除此之外，跳板段遵循你的 SSH 配置中该主机的设置。只支持一级跳板。它与 `--ssh-control-path` 冲突（`conflicting_ssh_jump`），在验证 Win32-OpenSSH 的 `ProxyCommand` 处理之前，Windows 客户端会拒绝它（`ssh_jump_unsupported_platform`）。结果新增 `sshJump`。
+- 超时是有界的。在 POSIX 上，每个 `ssh` 都以分离方式启动：位于一个没有控制终端的新会话和进程组中。清理只覆盖该进程组；通过 `setsid()` 离开该组的子孙进程不在范围内，也不会扫描 PID。超时或输出超限时，会终止整个进程组，包括仍占用输出管道的跳板 `ProxyCommand` 等子孙进程，随后调用很快返回。CLI 收到 Ctrl-C、SIGTERM 或 SIGHUP 时，也会在退出前终止该进程组。在 Windows 上只终止直接子进程，子孙进程可能残留，但调用仍会在截止时间返回。预检超时视为拒绝（`ssh_preflight_timeout`），请求超时为 `unknown`，且不会重试。
+- 每个目标按顺序只进行一次预检和最多一次请求。被拒绝或 `unknown` 的主机不会阻止下一个主机，也不会重试或改发到其他目标。请逐个检查元素后再采取行动。
+- `--ssh-opt` 只接受 `-p PORT`、`-l USER`、`-i IDENTITY_FILE`、`-o Port=…`、`-o User=…`、`-o IdentityFile=…`、`-o IdentitiesOnly=yes|no`、`-4` 和 `-6`。其他选项一律拒绝（`unsupported_ssh_option`），包括 `ProxyCommand`、`LocalCommand`、`-F`、`Include`、`-J`/`ProxyJump` 以及对 `BatchMode`/`StrictHostKeyChecking` 的修改。请用 `--ssh-jump` 代替 `-J`：OpenSSH 自带的 `-J` 跳板连接不会获得命令行中的 `BatchMode` 和 `StrictHostKeyChecking`。
+- IPv6 字面量可以不带方括号（`2001:db8::1`），也可以带方括号（`[2001:db8::1]`、`user@[2001:db8::1]`）；区域 ID（`%`）会被拒绝。
+- 结果新增 `sshUser` 和 `sshUserSource`：`USER@HOST` 或 `-l USER` 为 `explicit`；通过 `ssh -G` 得到的为 `ssh_config_or_local_default`；无法确定时为 `sshUser:null` 和 `unknown`。同时使用 `-l` 和 `USER@HOST` 会被拒绝。没有显式用户时，会为每个主机在本地运行一次 `ssh -G`（最长 5 秒）。它不建立连接，但如 ssh(1) 和 ssh_config(5) 所述，会像普通 `ssh` 一样解析 SSH 配置，包括执行 `Match exec` 命令。
+- 存在两条信任边界。允许列表只约束本 CLI 在命令行上传递的选项。你自己的 `~/.ssh/config`（以及系统配置）属于受信任的用户配置，其中的 `ProxyCommand`、`ProxyJump`、`Match exec` 等设置，会像你自己运行 `ssh` 时一样，作用于本 CLI 启动的每个 `ssh`。
 
 ### 回复
 

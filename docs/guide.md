@@ -182,17 +182,92 @@ The default remote command is `session-peer` on remote PATH. An absolute
 the TypeScript marker and exact version; a different implementation is refused.
 SSH uses BatchMode and StrictHostKeyChecking. It never accepts new host keys,
 installs a remote runtime or invokes Python as a fallback. Messages travel in a
-JSON stdin request, not remote shell arguments. Arbitrary `--ssh-opt`, IPv6
-literals and Tailscale canonical-name enrichment are not supported; use an SSH
-alias/hostname. Forward access does not establish reverse access.
+JSON stdin request, not remote shell arguments. Tailscale canonical-name
+enrichment is not supported. Forward access does not establish reverse access.
 
 For a Windows SSH destination, add `--remote-platform win32` and select a
 Windows `--remote-bin 'C:\absolute\path\session-peer.cmd'` if needed. A previously
 authenticated OpenSSH control socket can be selected with
-`--ssh-control-path /absolute/local/socket`; this does not bypass host-key
-verification or grant a new login. For local Windows Codex commands, use a full
+`--ssh-control-path /absolute/local/socket` with exactly one `--host`; this
+does not bypass host-key verification or grant a new login. For local Windows Codex commands, use a full
 `C:\Users\...\.codex` path for `--codex-home`. The Python CLI, if present,
 is not removed or replaced by this client.
+
+### Several hosts and connection options
+
+Source after 0.2.1 (unreleased) accepts repeated `--host` and a constrained
+`--ssh-opt`:
+
+```sh
+session-peer list --host alpha --host user@[2001:db8::1] \
+  --ssh-opt=-p --ssh-opt=2222 --ssh-opt=-i --ssh-opt="$HOME/.ssh/id_ed25519" --json
+```
+
+- One `--host` returns one object, as before. Repeated `--host` returns a JSON
+  array in the same order; every element has `schemaVersion`, `ok`, `host` and
+  `command`. If any host fails, the exit code is 1. Text output prints one
+  `Host: <host>` block per destination.
+- All hosts and options are validated before any `ssh` process starts. One bad
+  value refuses the whole command with `submitted:false`. Every `--host VALUE`
+  or `--host=VALUE` before `--` is collected first, so with two or more of them
+  any refusal, including an unknown option or a missing value, is an array with
+  one element per host. With fewer, it is one flat object.
+- The same destination twice is `duplicate_ssh_host`. This check compares the
+  destination text only (user, case-insensitive host name, canonical IPv6). Two
+  aliases or addresses for the same machine are not detected.
+- `--ssh-jump USER@HOST[:PORT]` (once, POSIX clients) routes every `ssh` call
+  for every `--host` through one jump host. The user is required, IPv6 needs
+  brackets (`hop@[2001:db8::1]:22`), and `%`, `$`, quotes, spaces and other
+  shell characters are refused (`invalid_ssh_jump`). Instead of `-J`, the CLI
+  builds a fixed `ProxyCommand`. The hop runs `ssh` with `BatchMode=yes`,
+  `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`, `ConnectTimeout=10`,
+  `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`,
+  `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes` and
+  `PermitLocalCommand=no`, then `-W [target]:port`. The outer `ssh` also gets
+  `ControlMaster=no`, `ControlPath=none` and `ProxyUseFdpass=no`, so a
+  configured control master cannot bypass the hop. `ProxyCommand` runs through
+  your login shell (`$SHELL`). It was verified with sh, bash and zsh; other
+  login shells (for example fish or csh) are unverified. The hop needs its own
+  known_hosts entry. `--ssh-opt` values, including `-4`/`-6`, apply to the
+  target only and are not passed to the hop; the
+  hop otherwise uses your ssh config for that host. Only one hop is supported.
+  `--ssh-jump` conflicts with `--ssh-control-path` (`conflicting_ssh_jump`) and
+  is refused on Windows clients (`ssh_jump_unsupported_platform`) until
+  Win32-OpenSSH's `ProxyCommand` handling is verified. Results add `sshJump`.
+- Timeouts are bounded. On POSIX each `ssh` starts detached: in a new session
+  and process group with no controlling terminal. Cleanup covers that group
+  only; a descendant that leaves it with `setsid()` is out of scope, and there
+  is no PID scanning. At
+  a timeout or output overflow the whole group is killed, including a jump
+  `ProxyCommand` or any other descendant still holding the output pipes, and the
+  call returns shortly after. Ctrl-C, SIGTERM or SIGHUP to the CLI also kills the
+  group before the CLI exits. On Windows only the direct child is killed, so
+  descendants may linger, but the call still returns at the deadline. A preflight
+  timeout is a refusal (`ssh_preflight_timeout`); a request timeout is `unknown`
+  and is never retried.
+- Each destination gets one preflight and at most one request, in order. A
+  refused or `unknown` host does not stop the next host and is never retried or
+  resent elsewhere. Check each element before acting on it.
+- `--ssh-opt` accepts only `-p PORT`, `-l USER`, `-i IDENTITY_FILE`,
+  `-o Port=…`, `-o User=…`, `-o IdentityFile=…`, `-o IdentitiesOnly=yes|no`,
+  `-4` and `-6`. Everything else, including `ProxyCommand`, `LocalCommand`,
+  `-F`, `Include`, `-J`/`ProxyJump` and any `BatchMode`/`StrictHostKeyChecking`
+  change, is refused (`unsupported_ssh_option`). Use `--ssh-jump` instead of
+  `-J`: OpenSSH's own `-J` hop does not receive the command-line `BatchMode` or
+  `StrictHostKeyChecking`.
+- IPv6 literals may be bare (`2001:db8::1`) or bracketed (`[2001:db8::1]`,
+  `user@[2001:db8::1]`); zone IDs are refused.
+- Results add `sshUser` and `sshUserSource`: `explicit` for `USER@HOST` or
+  `-l USER`, `ssh_config_or_local_default` from `ssh -G`, or `unknown` with
+  `sshUser:null`. `-l` together with `USER@HOST` is refused. Without an explicit
+  user, a local `ssh -G` runs once per host, limited to 5 s. It does not
+  connect, but as ssh(1) and ssh_config(5) describe, it evaluates your ssh
+  configuration, including `Match exec` commands, just as a normal `ssh` would.
+- Two trust boundaries apply. The allowlist governs only the options this CLI
+  passes on the command line. Your own `~/.ssh/config` (and the system config)
+  is trusted user configuration: its `ProxyCommand`, `ProxyJump`, `Match exec`
+  and similar settings run for every `ssh` this CLI starts, exactly as they do
+  for your own `ssh` commands.
 
 ### Replies
 

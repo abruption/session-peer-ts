@@ -9,6 +9,8 @@ import { syncBuiltinESMExports } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { doctor, diagnoseCodex, diagnoseClaude, inspectSkills } from '../dist/diagnostics.js';
 const cli = resolve('dist/cli.js');
+// Answers `ssh -G` user metadata lookups without logging them as SSH dispatches.
+const sshConfigUser = "if(process.argv.includes('-G')){console.log('user fixture-user');process.exit(0);}";
 function fixture(t: TestContext) {
   const root = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-doctor-')));
   const previous = { ...process.env };
@@ -134,7 +136,7 @@ test('skill compatibility reads only bounded TS metadata and rejects Python/malf
 test('POSIX SSH doctor version-checks then sends JSON stdin and performs zero dispatch', { skip: process.platform === 'win32' }, t => {
   const f = fixture(t); f.db();
   const calls = join(f.root, 'calls');
-  const source = `#!${process.execPath}\nconst fs=require('node:fs');const {spawnSync}=require('node:child_process');
+  const source = `#!${process.execPath}\n${sshConfigUser}const fs=require('node:fs');const {spawnSync}=require('node:child_process');
 const flag=process.argv.at(-1).endsWith('--version')?'--version':'--stdio-request';
 const input=fs.readFileSync(0,'utf8');fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify({flag,input})+'\\n');
 const child=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},flag],{input,encoding:'utf8',env:process.env});process.stdout.write(child.stdout);process.exit(child.status);`;
