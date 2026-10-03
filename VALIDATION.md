@@ -1,10 +1,56 @@
 # Validation record — updated 2026-10-03 KST
 
-This dated record covers public 0.2.1 and 0.2.0 verification, historical 0.1.0
+This dated record covers public 0.3.0, 0.2.1 and 0.2.0 verification, historical 0.1.0
 public verification, candidate checks and live-agent observations. Older sections
 describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
+
+## Public 0.3.0 — 2026-10-03 KST
+
+`session-peer@0.3.0` was published at `2026-10-03T05:14:44.917Z`
+(14:14:44.917 KST). The registry reports `latest=0.3.0` and unchanged
+`preview=0.1.0-preview.1`.
+
+- Published source: `05418b21fcdef890826325d56b07bb3dabce3bb0`, the #89 merge.
+  Its [exact-main CI](https://github.com/abruption/session-peer-ts/actions/runs/37096923337)
+  and [CodeQL](https://github.com/abruption/session-peer-ts/actions/runs/37096922981)
+  passed. The [stage-only publication run](https://github.com/abruption/session-peer-ts/actions/runs/37098738865)
+  completed prepare/publish; GitHub records `abruption` approving environment `npm`.
+- Stage ID: `cc0797c4-fbde-4cb0-a01b-806ff8409b39`. The authenticated stage
+  download, retained Actions artifact and public registry tarball were compared
+  byte for byte. All were the same 184,811-byte, 51-file package.
+- SHA-256: `96315c907339ed7f2def7ac3a02c40b621ca385448884eb69b7d2d975771b797`.
+- Registry integrity:
+  `sha512-mdtikUMrGmMrdVSvPXdJcZeouTeuixOTzGwFKPhN66ATZqTohu9HKbejgOwXJe0/zrO+nt9asCAzAEhiHWDYGA==`.
+- Public SLSA provenance matches the package SHA-512, source SHA, repository,
+  `.github/workflows/publish.yml` and run `37098738865/attempts/1`.
+- From the exact published source/artifact, `release.mjs artifact` and `verify`
+  passed on macOS arm64, Node 24.16.0/npm 11.15.0. A fresh public install with
+  `--ignore-scripts` printed `session-peer 0.3.0 (typescript)`, listed no Claude
+  sessions in its isolated home, and uninstalled with its launcher removed.
+  `npm audit signatures` cryptographically verified registry signatures for
+  **3 packages** and attestations for **2 packages**; these are package counts.
+
+### Released documentation and scope
+
+The released archive retains a stale migration sentence in PARITY.md claiming
+that multi-host aggregation is absent, although its 0.3.0 feature contract and
+runtime support ordered repeated `--host` results. [PR #91](https://github.com/abruption/session-peer-ts/pull/91)
+corrected the source at `f6fedfc08c0f374eec1a3b5e2e6bfd09bc98dd71`.
+That correction is **not in the immutable public 0.3.0 archive**; it will be
+included when a later version is packaged. The corrected local candidate was
+not the published artifact. No replacement stage or same-version republication
+was executed after the public release was confirmed.
+
+SSH still requires the same TS version on both ends: 0.2.1 and 0.3.0 refuse each
+other at preflight. Coordinate endpoint upgrades. #20 remains partial for
+Windows-client jump routing; #23's Windows deployment cell and newer Linux
+receipt/recovery rules remain unvalidated. Update notices' Windows refresh,
+failure and forged-field cells also remain unverified. Public installation
+evidence above is local macOS evidence; Windows evidence is CI fixtures. No
+fleet upgrade or GitHub tag/release is claimed by this record. The demo's actual
+0.2.1 ACK remains its own historical evidence.
 
 ## 0.3.0 candidate checks — 2026-10-03 KST
 
@@ -23,9 +69,10 @@ tarball into a temporary prefix printed `session-peer 0.3.0 (typescript)` and
 uninstalled cleanly. The packaged READMEs and guides were read from that tarball.
 Each included PR passed the full macOS/Linux/Windows Node 22/24 matrix,
 CodeQL and the release gate on its head. These are fixture results, not
-live-TUI ACKs and not public release evidence; 0.3.0 publication requires the
-procedure in [RELEASING.md](RELEASING.md#030-stable-release-procedure) and a
-dated public record.
+live-TUI ACKs and not public release evidence. At this candidate checkpoint,
+publication still required the procedure in
+[RELEASING.md](RELEASING.md#030-stable-release-procedure) and a dated public
+record. Completed public evidence is recorded [above](#public-030--2026-10-03-kst).
 
 ## Remote deployment workflow, POSIX cell (#23 F5) — 2026-10-02 KST
 
