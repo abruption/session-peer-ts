@@ -49,6 +49,7 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "fs-ext-extra-prebuilt": "2.2.14"
+    "fs-ext-extra-prebuilt": "2.2.14",
+    "smol-toml": "1.9.0"
   }
 }

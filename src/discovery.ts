@@ -3,6 +3,7 @@
 import { lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { parse as parseTOML } from 'smol-toml';
 import { windowsProcessStart } from './windows.js';
 
 type Row = Record<string, unknown>;
@@ -18,7 +19,8 @@ export function sqliteHome(home: string): 'default' | 'configured' | 'unknown' {
     if (!stat.isFile() || stat.size > 1024 * 1024) return 'unknown';
     text = readFileSync(file, 'utf8');
   } catch (error) { return ['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '') ? 'default' : 'unknown'; }
-  return /^[ \t]*["']?sqlite_home["']?[ \t]*=/m.test(text) ? 'configured' : 'default';
+  try { return Object.hasOwn(parseTOML(text), 'sqlite_home') ? 'configured' : 'default'; }
+  catch { return 'unknown'; }
 }
 
 function missing(error: unknown): boolean {
