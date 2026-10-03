@@ -211,6 +211,57 @@ session-peer doctor --host user@host --json
 存活进程公布了 pipe，并不证明 pipe 存在或可以连接。`capabilities` 明确将
 wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检查也不会安装任何内容。
 参见[诊断边界](../PARITY.md#source-read-only-doctor--18--020)。SSH 两端需要相同的源码构建。
+### 更新检查与提示（源码，#22）
+
+```sh
+session-peer update --check --json
+session-peer update --check --channel preview --output-format text
+```
+
+公开的 npm 0.2.1 不包含此命令。`update --check` 只请求一次 `session-peer` 的 npm
+dist-tag（3 秒超时，不重试），并报告 `current`、`latest`、`channel`（默认 `latest`，
+或 `preview`）、`source: "npm_registry"`、`status`（`update_available`、`up_to_date`、
+`ahead`）、`managedBy`、`updateCommand` 和 `guidance`。只有根据当前 CLI 路径能确切识别
+安装的管理方时才给出命令：其自身 `session-peer` 启动器指向本包的 npm 全局 prefix
+（默认、Homebrew、nvm、nvm-windows、fnm，例如
+`npm install --global --ignore-scripts session-peer@0.2.2`），清单中声明了
+`session-peer` 的 pnpm、Yarn、Bun 全局存储，Volta，或 npx 缓存。项目安装
+（`npm_project`、`pnpm_project`）、源码检出（`source`）以及其他情况（`unknown`）只返回
+`updateCommand: null` 和一句 `guidance`，因此不会给出可能修改无关当前目录的命令。它只报告
+npm 版本，Python 版 `session-peer` 的发布是独立的版本序列，从不与之比较。注册表失败时
+退出码为 1，错误为 `registry_timeout`、`registry_unreachable`、`registry_http_error`、
+`registry_response_invalid` 或 `dist_tag_missing`，不会输出响应正文。
+
+不带 `--check` 的 `update` 不会修改任何内容：它以 `self_update_unsupported`（退出码 2）
+拒绝，并返回 `managedBy`、`updateCommand`、`guidance` 和 `checkCommand`。`update` 本身
+仅限本地：拒绝 `--host`，也拒绝经由 SSH wire 的请求。远程主机、Python 安装和单独管理的
+`session-peer-ts` 技能都不会被更新；结果会列出本地 TS 技能元数据（`skills`，与 `doctor`
+相同的约定）以及 `skillsManagedBy: "separate"`。
+
+`list`、`send`、`doctor` 的缓存提示**默认关闭**，因为此 CLI 主要由代理和脚本调用，
+不应发起未经请求的网络访问。设置 `SESSION_PEER_UPDATE_NOTICE=1` 开启后，若 24 小时内的
+缓存显示有更新的 npm 稳定版，JSON 结果会增加 `clientUpdate` 对象，文本输出则在 stderr
+写一行。缓存缺失、无效或过期时会启动一个分离的刷新进程，不会延迟或改变命令结果与退出码；
+刷新失败后 1 小时内不再尝试。缓存写入是单次执行的，并在失败时保持关闭：无论是后台刷新还是
+显式检查，写入都只在持有 `npm-update.lock` 时进行，且只覆盖更旧的记录。任何调用都不会接管或
+删除不是自己创建的锁。若刷新异常退出，或因 I/O 错误未能释放锁而留下锁，后台刷新会停止，`update --check` 会报告
+`cache: "skipped_stale_lock"`。请在没有 session-peer 进程运行时手动删除 `npm-update.lock`。
+
+`--no-update-notice` 和 `SESSION_PEER_NO_UPDATE_NOTICE=1` 会抑制这些后台提示和刷新。
+显式的 `update --check` 是有意的请求，总会访问注册表；对 `latest` 通道，在锁空闲时写入缓存
+（`cache` 为 `written`、`skipped_locked`、`skipped_stale_lock`、`skipped_newer` 或 `failed`）。提示
+属于本地客户端：使用 `--host` 时，客户端会在自身的顶层输出（包括经由 SSH 获得的结果）中
+加入 `clientUpdate`（或 stderr 中的一行）。重复 `--host` 产生 JSON 数组时，数组及其元素保持原样，
+不加入 `clientUpdate`；文本输出仍在 stderr 写一行。无论主机数量多少，每次调用最多刷新一次。`--stdio-request` 模式的接收端从不读取或刷新
+缓存，也不会产生提示。
+
+缓存文件为 `SESSION_PEER_CACHE_DIR`（绝对路径）下的 `npm-update.json`，否则依次为
+`$XDG_CACHE_HOME/session-peer`、`~/Library/Caches/session-peer`（macOS）、
+`~/.cache/session-peer`（Linux）或 `%LOCALAPPDATA%\session-peer\Cache`（Windows）。
+以 0600 权限原子写入 0700 目录，仅包含公开的版本信息。`SESSION_PEER_UPDATE_REGISTRY`
+可指定镜像（HTTPS，或仅限 loopback 的 HTTP；不允许凭据）。不会读取 npm 配置或 `.npmrc`。
+参见[更新边界](../PARITY.md#source-update-checks--22)。
+
 ## 显式安装代理技能
 
 独立的 `session-peer-ts` 技能在配套 PR 中管理，不代表新 npm 或技能标签发布。它支持已发布的 0.1.0 基础功能，通过 TypeScript 标识和帮助检查开发功能。Python 的 `session-peer` 技能仍独立保留。

@@ -9,20 +9,21 @@ import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send, CodexUnknownOutcome } from './send.js';
 import { HomeRefusal } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
+import { CHANNELS, checkUpdate, noticeText, refreshCache, refuseSelfUpdate, REFRESH_ARG, updateNotice, UpdateRefusal } from './updates.js';
 import { jumpOptions, sshConfig, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
 import { configuredHost, detectedHost, isSelf, probeReturnRoute, unsafeReturnHost, replyUri, returnHost, route, sender, tailnet, type Tailnet } from './replies.js';
 
-type Options = { command: 'list' | 'send' | 'doctor'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions; jump?: SshJump;
+type Options = { command: 'list' | 'send' | 'doctor' | 'update'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions; jump?: SshJump;
   address?: { uri: string; transport: 'local' | 'ssh'; implicit: boolean } };
-const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home', '--check-return-route'];
-const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt', '--ssh-jump', '--reply-to', '--return-route-host'];
+const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home', '--check-return-route', '--check'];
+const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt', '--ssh-jump', '--reply-to', '--return-route-host', '--channel'];
 // Repeated in order; every other value option is single.
 const REPEATED = ['--host', '--ssh-opt'];
 // Requested destinations, so a command-wide refusal can be attributed to each.
 let requested: string[] = [];
 export function parse(args: string[]): Options {
   const command = args[0];
-  if (command !== 'list' && command !== 'send' && command !== 'doctor') throw new Refusal('unsupported_command');
+  if (command !== 'list' && command !== 'send' && command !== 'doctor' && command !== 'update') throw new Refusal('unsupported_command');
   // Collect requested hosts before any other validation, so that even a syntax
   // refusal with several --host values is attributed to each of them. Value
   // options consume their next token, as in the loop below; `--` ends options.
@@ -66,6 +67,14 @@ export function parse(args: string[]): Options {
   if (values.has('--output-format') && !['json', 'text'].includes(values.get('--output-format')!)) throw new Refusal('unsupported_output_format');
   if (flags.has('--json') && values.get('--output-format') === 'text') throw new Refusal('conflicting_output_options');
   if (!flags.has('--json') && !values.has('--output-format')) throw new Refusal('json_output_required');
+  if (command === 'update') {
+    if (values.has('--channel') && !CHANNELS.includes(values.get('--channel')!)) throw new Refusal('unsupported_update_channel');
+    // Local client only: remote hosts and other installations update through their own managers.
+    if ([...values.keys()].some(k => !['--output-format', '--channel'].includes(k)) || [...flags].some(k => !['--json', '--check', '--no-update-notice'].includes(k))) throw new Refusal('inapplicable_option');
+    if (hosts.length || repeated.get('--ssh-opt')!.length) throw new Refusal('inapplicable_option');
+    return { command, values, flags, hosts: [], ssh: { args: [] } };
+  }
+  if (flags.has('--check') || values.has('--channel')) throw new Refusal('inapplicable_option');
   if (command === 'list' || command === 'doctor') {
     if (values.has('--agent') && !['claude', 'codex'].includes(values.get('--agent')!)) throw new Refusal('unsupported_agent');
     if (values.has('--codex-home') && !values.get('--codex-home')) throw new Refusal('invalid_codex_home');
@@ -216,7 +225,8 @@ function failure(error: unknown, command: string, where: string): { value: Recor
   return { exitCode: unknown ? 1 : refusal.exitCode, value: { schemaVersion: 1, host: where, command, ok: false,
     error: unknown ? 'outcome_unknown' : refusal.code, status: unknown ? 'unknown' : 'refused',
     submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false,
-    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }) } };
+    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }),
+    ...(error instanceof UpdateRefusal ? error.guidance : {}) } };
 }
 // Destinations run in order, one attempt each. A failure or unknown outcome is
 // reported for that destination only; it is never retried or failed over.
@@ -259,9 +269,10 @@ try {
   if (!((major === 22 && minor! >= 13) || major === 24)) throw new Refusal('unsupported_node_version');
   if (!['darwin', 'linux', 'win32'].includes(process.platform)) throw new Refusal('unsupported_platform');
   let args = process.argv.slice(2);
-  if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
+  if (args.length === 1 && args[0] === REFRESH_ARG) await refreshCache();
+  else if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
   else if ((args.length === 1 && ['--help', '-h'].includes(args[0]!)) ||
-    (args.length === 2 && ['list', 'send', 'doctor'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
+    (args.length === 2 && ['list', 'send', 'doctor', 'update'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
   else {
     wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -271,10 +282,11 @@ try {
       if (!record || record.schemaVersion !== 1 || !Array.isArray(record.args) || record.args.some(a => typeof a !== 'string')) throw new Refusal('invalid_remote_request');
       args = record.args;
     }
-    command = ['list', 'send', 'doctor'].includes(args[0] ?? '') ? args[0]! : 'unknown';
+    command = ['list', 'send', 'doctor', 'update'].includes(args[0] ?? '') ? args[0]! : 'unknown';
     const options = parse(args);
     format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
     if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
+    if (wire && command === 'update') throw new Refusal('remote_update_unsupported');
     if (wire && (options.hosts.length || options.ssh.args.length || options.jump || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path') ||
       options.values.has('--reply-to') || options.flags.has('--check-return-route'))) throw new Refusal('nested_transport_forbidden');
     if (!wire && options.values.has('--return-route-host')) throw new Refusal('unsupported_option');
@@ -328,6 +340,7 @@ try {
     // Propagate the verified remote exit code so SSH and local refusals match.
     if (options.hosts.length) ({ value: results, exitCode } = await remotes(options, await tailnetStatus(), message, returnTo));
     else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
+    else if (command === 'update') result = options.flags.has('--check') ? await checkUpdate(options.values.get('--channel')) : refuseSelfUpdate(options.values.get('--channel'));
     else if (command === 'doctor') {
       result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
       // Opt-in reverse probe: locally, or on the destination when it arrives over the wire.
@@ -339,8 +352,14 @@ try {
     // Without a return host there is nothing to probe from the destination.
     if (command === 'doctor' && options.flags.has('--check-return-route') && !returnTo) results = results?.map(item => item.ok === false ? item : ({ ...item, returnRoute: { status: 'failed', transport: 'ssh', host: null, reason: 'return_host_unavailable' } }));
     const shape = (item: Record<string, unknown>) => ({ schemaVersion: 1, host: hostname(), command, ok: item.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...item });
+    // Cached advisory notice, computed once per invocation by this client and never
+    // in wire mode. JSON: additive `clientUpdate` on a flat (single-result) object
+    // only; a repeated --host array keeps its exact element shape. Text: one stderr line.
+    const notice = wire || command === 'update' ? undefined : updateNotice(options.flags.has('--no-update-notice'));
+    const array = !!results && results.length > 1;
     // One destination stays flat; repeated --host returns an ordered array.
-    console.log(renderOutput(results && results.length > 1 ? results.map(shape) : shape(results?.[0] ?? result), format));
+    console.log(renderOutput(array ? results!.map(shape) : { ...shape(results?.[0] ?? result), ...(notice && format === 'json' ? { clientUpdate: notice } : {}) }, format));
+    if (notice && format === 'text') console.error(noticeText(notice));
     process.exitCode = exitCode ?? (result.ok === false ? 1 : 0);
   }
 } catch (error) {
