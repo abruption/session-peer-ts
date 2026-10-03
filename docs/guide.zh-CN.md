@@ -138,6 +138,8 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 - 结果新增 `sshUser` 和 `sshUserSource`：`USER@HOST` 或 `-l USER` 为 `explicit`；通过 `ssh -G` 得到的为 `ssh_config_or_local_default`；无法确定时为 `sshUser:null` 和 `unknown`。同时使用 `-l` 和 `USER@HOST` 会被拒绝。没有显式用户时，会为每个主机在本地运行一次 `ssh -G`（最长 5 秒）。它不建立连接，但如 ssh(1) 和 ssh_config(5) 所述，会像普通 `ssh` 一样解析 SSH 配置，包括执行 `Match exec` 命令。
 - 存在两条信任边界。允许列表只约束本 CLI 在命令行上传递的选项。你自己的 `~/.ssh/config`（以及系统配置）属于受信任的用户配置，其中的 `ProxyCommand`、`ProxyJump`、`Match exec` 等设置，会像你自己运行 `ssh` 时一样，作用于本 CLI 启动的每个 `ssh`。
 
+关于在不依赖 Python 的情况下准备目标机器（按版本划分的专用安装目录、完整性校验、所有权与回滚规则），以及独立于包版本的协议兼容性约定，设计提案见[远程部署 ADR](design/remote-deployment.md)。该提案尚未实现，上述相同版本要求仍然适用。
+
 ### 回复
 
 可将 `session-peer://v1/reply?...` URI 用作 `--to`。未知 / 重复字段、不安全主机、错误编码及与显式路由的冲突都会被拒绝。peer 元数据不是授权，Reply-To URI 也不会作为 shell 文本执行。收到的 Reply-To 只是供阅读的数据，不会自动观察或确认回复。

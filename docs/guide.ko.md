@@ -244,6 +244,11 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `ProxyCommand`, `ProxyJump`, `Match exec` 등은 직접 실행하는 `ssh`와 똑같이 이 CLI가
   시작하는 모든 `ssh`에 적용됩니다.
 
+Python 없이 대상 머신을 준비하는 방법(버전별 전용 설치 디렉터리, 무결성 검증, 소유권·롤백
+규칙)과 패키지 버전과 분리된 프로토콜 호환성 계약에 대한 설계 제안은
+[원격 배포 ADR](design/remote-deployment.md)에 있습니다. 아직 구현되지 않았으며, 위의 동일 버전
+요구 사항은 그대로 적용됩니다.
+
 ### 회신
 
 `session-peer://v1/reply?...` URI를 `--to`로 사용할 수 있습니다. 알 수 없거나 중복된

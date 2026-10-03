@@ -139,6 +139,8 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 - 結果に `sshUser` と `sshUserSource` が加わります。`USER@HOST` または `-l USER` なら `explicit`、`ssh -G` で確認できれば `ssh_config_or_local_default`、確認できなければ `sshUser:null` と `unknown` です。`-l` と `USER@HOST` の併用は拒否します。明示的なユーザーがない場合、ホストごとにローカルの `ssh -G` を 1 回（最大 5 秒）実行します。接続はしませんが、ssh(1)・ssh_config(5) のとおり通常の `ssh` と同様に SSH 設定を評価し、`Match exec` のコマンドも実行されます。
 - 信頼境界は 2 つです。許可リストが対象とするのは、この CLI がコマンドラインで渡すオプションだけです。ユーザーの `~/.ssh/config`（およびシステム設定）は信頼されたユーザー設定であり、その `ProxyCommand`、`ProxyJump`、`Match exec` などは、自分で実行する `ssh` と同じく、この CLI が起動するすべての `ssh` に適用されます。
 
+Python を使わずに宛先を準備する方法（バージョンごとの専用インストールディレクトリ、整合性検証、所有権とロールバックの規則）と、パッケージのバージョンから独立したプロトコル互換性契約の設計案は [リモート配備 ADR](design/remote-deployment.md) にあります。まだ実装されておらず、上記の同一バージョン要件は引き続き適用されます。
+
 ### 返信
 
 `session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。peer 情報は権限ではなく、Reply-To URI をシェルとして実行しません。受け取った Reply-To は読み手のためのデータであり、返信を自動で観測・確認することはありません。

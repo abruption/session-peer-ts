@@ -56,7 +56,7 @@ function anchors(content) {
   }
   return ids;
 }
-for (const file of [...locales, ...guides, 'docs/api.md', 'docs/shorthand.md', 'SECURITY.md']) {
+for (const file of [...locales, ...guides, 'docs/api.md', 'docs/shorthand.md', 'docs/design/remote-deployment.md', 'PARITY.md', 'SECURITY.md']) {
   const content = read(file);
   for (const match of content.matchAll(/\]\(([^)]+)\)/g)) {
     if (/^[a-z]+:/i.test(match[1])) continue;
@@ -81,7 +81,7 @@ for (const path of ['node_modules/sample', 'dist/cli.js', '.worktree/example/fil
   assert.ok(ignored(path), `must ignore ${path}`);
 }
 for (const path of ['package-lock.json', '.env.example', 'src/cli.ts', 'test/fixtures/public.json',
-  '.github/workflows/ci.yml', ...locales, ...guides, 'docs/api.md', 'docs/shorthand.md', 'shorthand/sp.sh', 'shorthand/sp.ps1']) {
+  '.github/workflows/ci.yml', ...locales, ...guides, 'docs/api.md', 'docs/shorthand.md', 'shorthand/sp.sh', 'shorthand/sp.ps1', 'docs/design/remote-deployment.md']) {
   assert.ok(!ignored(path), `must not ignore ${path}`);
 }
 if (process.env.PR_TITLE) {
