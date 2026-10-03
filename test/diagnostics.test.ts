@@ -186,10 +186,17 @@ test('unreadable Claude metadata is unknown while malformed JSON is invalid', t 
 
 test('doctor reports a relocated Codex sqlite_home as unsupported instead of reading a stale state DB', async t => {
   const f = fixture(t); f.db();
-  writeFileSync(join(f.home, 'config.toml'), 'sqlite_home = "/relocated"\n');
-  const result = await diagnoseCodex(f.home, process.execPath) as any;
-  assert.equal(result.homes[0].status, 'unsupported'); assert.equal(result.homes[0].code, 'unsupported_codex_sqlite_home');
-  assert.equal(result.ready, false);
-  writeFileSync(join(f.home, 'config.toml'), 'model = "fixture"\n');
+  for (const key of ['sqlite_home', '"sqlite_home"', "'sqlite_home'", '"sqlite\\u005fhome"']) {
+    writeFileSync(join(f.home, 'config.toml'), `${key} = "/relocated"\n`);
+    const result = await diagnoseCodex(f.home, process.execPath) as any;
+    assert.equal(result.homes[0].status, 'unsupported', key);
+    assert.equal(result.homes[0].code, 'unsupported_codex_sqlite_home', key);
+    assert.equal(result.ready, false);
+  }
+  writeFileSync(join(f.home, 'config.toml'), 'model = "sqlite_home = /relocated"\n# sqlite_home = "/commented"\n[profiles.p]\nmodel = "fixture"\n');
   assert.equal(((await diagnoseCodex(f.home, process.execPath)) as any).homes[0].code, 'state_db_readable');
+  writeFileSync(join(f.home, 'config.toml'), 'sqlite_home = [\n');
+  const invalid = await diagnoseCodex(f.home, process.execPath) as any;
+  assert.equal(invalid.homes[0].status, 'unknown');
+  assert.equal(invalid.homes[0].code, 'codex_config_unreadable');
 });

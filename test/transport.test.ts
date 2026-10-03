@@ -245,6 +245,11 @@ test('a configured Codex sqlite_home is refused before dry-run or queue', async 
     const refused = await invoke([...args, ...extra], env);
     assert.equal(refused.error, 'unsupported_codex_sqlite_home'); assert.equal(refused.submitted, false);
   }
+  writeFileSync(join(home, 'config.toml'), '"sqlite\\u005fhome" = "/relocated"\n');
+  for (const extra of [['--dry-run'], []]) {
+    const refused = await invoke([...args, '--allow-inactive-codex-home', ...extra], env);
+    assert.equal(refused.error, 'unsupported_codex_sqlite_home'); assert.equal(refused.submitted, false);
+  }
   assert.throws(() => readFileSync(count));
 });
 
