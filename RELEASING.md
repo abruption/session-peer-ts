@@ -7,6 +7,16 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## Public release checkpoint — 0.3.0 (2026-10-03 KST)
+
+`session-peer@0.3.0` is public with `latest=0.3.0` and unchanged
+`preview=0.1.0-preview.1`; see the [dated verification and documentation
+discrepancy](VALIDATION.md#public-030--2026-10-03-kst). The published source is
+`05418b21fcdef890826325d56b07bb3dabce3bb0`, not the later #91 documentation
+correction. The completed steps below are history. Do not replay them or stage
+0.3.0 again; a later release requires a newly reviewed version, registry
+baseline and exact source approval.
+
 <a id="current-public-release--021"></a>
 
 ## Public release checkpoint — 0.2.1 (2026-09-29 KST)
@@ -19,7 +29,9 @@ with `latest=0.2.1` and unchanged `preview=0.1.0-preview.1`; see the
 0.2.0 procedures below are history, not repeatable dispatches. A future release
 requires a new reviewed version and baseline preparation PR.
 
-## 0.3.0 stable release procedure
+<a id="030-stable-release-procedure"></a>
+
+## Completed 0.3.0 stable release procedure
 
 The reviewed stable target is 0.3.0, the remote usability and maintenance
 release ([changes and known limitations](PARITY.md#030-remote-usability-and-maintenance)).
@@ -29,8 +41,9 @@ Its preparation PR pins previous stable 0.2.1 integrity:
 `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.2.1`; the script
 checks only its registry origin).
 The preview integrity remains pinned as a preservation check. No existing tag is
-removed. The outcome of this procedure is recorded only in a dated VALIDATION.md
-section; this document does not assert it.
+removed. These historical steps alone do not constitute public evidence; see
+the [dated verification record](VALIDATION.md#public-030--2026-10-03-kst) for
+the actual outcome and archive documentation discrepancy.
 
 1. Merge the reviewed 0.3.0 preparation PR into main and require successful
    exact-main CI (including Windows Node 22/24, CodeQL and the release gate).
