@@ -75,10 +75,11 @@ function Openers([string]$location) {
 `;
 
 // Add-Type compiles the helper with csc on every inspectWindows call, which has
-// exceeded 8 s on slow runners (#47, #65). Timeouts still fail closed. The
-// compile-free creation-time probe keeps the shorter deadline.
+// exceeded 8 s on slow runners (#47, #65). Timeouts still fail closed.
 export const COMPILED_INSPECTION_TIMEOUT_MS = 20000;
-export const START_PROBE_TIMEOUT_MS = 8000;
+// The compile-free creation-time probe also exceeded 8 s on a cold runner (#78);
+// discovery runs it once per listed PID, so it stays below the compiling path.
+export const START_PROBE_TIMEOUT_MS = 15000;
 export function inspectWindows(mode: 'identity' | 'openers', value: string): WindowsProcess[] {
   if (process.platform !== 'win32') throw new Refusal('windows_inspection_unavailable', 1);
   const encodedValue = Buffer.from(value, 'utf8').toString('base64');

@@ -107,9 +107,20 @@ Windows test files run serially so concurrent PowerShell compilation does not
 consume the native inspector's fixed timeout; assertions and production deadlines
 are unchanged. Separately (#65), the compiling `Add-Type` owner inspection now has
 a 20000 ms deadline after a slow runner exceeded 8000 ms on main (CI run
-36419550921, attempt 1); the compile-free creation-time probe keeps 8000 ms, and
-timeouts still refuse. Each native subtest cleans its children even after assertion
-failure. Package smoke verifies unified empty discovery without executables on PATH.
+36419550921, attempt 1). The compile-free creation-time probe moved from 8000 ms
+to 15000 ms (#78) after CI run 36542897023 (`windows-native (24)`) killed it at its
+8000 ms deadline (observed 8024 ms including termination; the probe's actual
+completion time is unknown). 15000 ms is a mitigation margin, not proof that slow
+machines or CI never exceed it. Probes run sequentially, once per probe-eligible
+Claude session record (N, including stale records), so a full scan's worst-case
+probe budget is roughly 15 × N seconds plus I/O and termination overhead, an
+increase of 7 × N seconds over the former 8 × N; the compiling path's 20000 ms
+deadline is per call, not a scan bound. A Claude dry-run scans once and returns
+after selection. A real Claude send scans during selection and, only if selection
+succeeds, again during revalidation, so its worst case is about 15 × (N1 + N2)
+seconds for the two scans' record counts; a refusal at selection has no second scan.
+Timeouts still exclude the process. Each native subtest
+cleans its children even after assertion failure. Package smoke verifies unified empty discovery without executables on PATH.
 These are fixture contracts, not new live-TUI ACKs. CI evidence belongs to the
 issue's PR-head checks; publication requires separate release preparation.
 
