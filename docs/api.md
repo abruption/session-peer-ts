@@ -21,7 +21,7 @@ console.log(envelope('Please review and reply.', true, address));
 | `VERSION` | Package version string. |
 | `VERSION_LINE` | CLI version string including the TypeScript marker. |
 | `reply(uri)` | Parse a supported Reply-To URI into `{ to, host?, home? }`; throw on invalid input. Parsing does not discover or authorize the destination. |
-| `envelope(text, noFrom, address?)` | Trim leading/trailing newlines, optionally prepend valid Codex sender metadata from the environment, and append a validated Reply-To URI. Returns text only. |
+| `envelope(text, noFrom, address?, sender?)` | Trim leading/trailing newlines, optionally prepend sender metadata, and append a validated Reply-To URI. `sender` is `{ agent, id }` or `null` for none; when omitted, a valid Codex UUID from the environment is used. Returns text only. |
 
 The example uses a placeholder PID and performs no delivery. These helpers do
 not verify a live writer, establish a return route, or confirm consumption.

@@ -35,9 +35,12 @@ export function reply(value: string): { to: string; host?: string; home?: string
     ...(transport === 'ssh' ? { host: host(fields.get('host')!) } : {}),
     ...(fields.has('codexHome') ? { home: fields.get('codexHome')! } : {}) };
 }
-export function envelope(text: string, noFrom: boolean, address?: string): string {
-  const sender = process.env.CODEX_THREAD_ID || process.env.CODEX_SESSION_ID;
-  const from = !noFrom && sender && uuid(sender) ? `From: codex:${sender}\n\n` : '';
+// `sender` is an already-detected identity (null: none). Omitted, a valid
+// Codex environment UUID is used, as in earlier versions.
+export function envelope(text: string, noFrom: boolean, address?: string, sender?: { agent: string; id: string } | null): string {
+  const thread = process.env.CODEX_THREAD_ID || process.env.CODEX_SESSION_ID;
+  const identity = sender !== undefined ? sender : thread && uuid(thread) ? { agent: 'codex', id: thread } : null;
+  const from = !noFrom && identity ? `From: ${identity.agent}:${identity.id}\n\n` : '';
   if (address) reply(address);
   // Trim edge newlines by index: /\n+$/ is quadratic on long interior newline runs.
   let start = 0, end = text.length;
