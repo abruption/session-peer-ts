@@ -112,3 +112,10 @@ test('text output retains unknown semantics and escapes terminal controls',()=>{
  for(const code of ['202e','2066','2069','200b','061c','feff','200f']) assert.match(bidi,new RegExp('\\\\u'+code));
  assert.match(renderOutput({command:'list',ok:true,sessions:[{agent:'claude',pid:1,name:'한글 🚀'}]},'text'),/한글 🚀/);
 });
+test('text renderer survives decoded JSON values with unusable string coercion',()=>{
+ const malformed={toString:null};
+ const text=renderOutput([{command:'send',host:malformed,ok:true,status:'posted',target:{agent:malformed,pid:123},submitted:true}], 'text');
+ assert.match(text,/Host: \{"toString":null\}/);
+ assert.match(text,/posted: \{"toString":null\}:123/);
+ for(const value of [null,{},[],[null,{}]]) assert.doesNotThrow(()=>renderOutput({command:'send',ok:false,error:value,submitted:null},'text'));
+});
