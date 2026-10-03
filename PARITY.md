@@ -135,7 +135,7 @@ TS normal envelopes have `schemaVersion`, `host`, `command`, `ok`, `version`,
 | `wake` | Optional, opt-in; failed activation may still have `submitted:true` and `ok:false` | Absent; unsupported option |
 | SSH metadata | Requested/resolved host and SSH metadata; multi-host list may be an array | Verified remote response adds `host`/`sshHost`; caught local SSH failure for one host reports the local host. Unreleased source adds `sshUser`/`sshUserSource` and returns an ordered array for repeated `--host` (see #20 section); with a resolved Tailscale peer, `host` is its MagicDNS name and `sshHost` the requested alias (#21) |
 | `error`, `retryAllowed` | Error/detail fields vary by path; submission may already have happened | Fixed error codes, caught failure has `retryAllowed:false`; native stderr/message body are not copied into errors |
-| `clientUpdate`, `skillUpdates` | Optional advisory notice metadata | Source #22: `clientUpdate` only on the invoking client's completed `list`/`send`/`doctor` JSON results (including a single verified SSH result, added locally; never inside a repeated `--host` array) when notices are opted in and a fresh npm cache shows a newer stable version; never produced by a `--stdio-request` receiver or on caught failures. `skillUpdates` absent |
+| `clientUpdate`, `skillUpdates` | Optional advisory notice metadata | Source #22: client-local. Added by the invoking client to a flat (single-result) `list`/`send`/`doctor` JSON result, including a single `--host` result that failed or is unknown, when notices are opted in and a fresh npm cache shows a newer stable version. Never inside a repeated `--host` array, never on top-level parse/local caught failures, never produced by a `--stdio-request` receiver; a remote-supplied `clientUpdate` is dropped. It never changes status, exit code, consumption or retry decisions. `skillUpdates` absent |
 
 An **absent** submission field is not `false`; `null` is not `false` either.
 Check `ok`, command, status, exit code and presence separately. TS unknown means
@@ -537,12 +537,30 @@ Scope: notices belong to the invoking client. With `--host`, the client adds
 `clientUpdate` (or its stderr line) to its own top-level output, including the
 verified result obtained over SSH; the `--stdio-request` receiver never reads,
 refreshes or produces a notice. The notice is computed once per invocation.
-Multi-host (integration candidate with #20/#21): when repeated `--host` returns
-a JSON array, the array keeps request order and every element keeps its exact
-shape; no `clientUpdate` is added to elements, and no wrapper object is
-introduced. Text output keeps the single stderr line. At most one background
-refresh is scheduled per invocation regardless of the number of hosts.
-Evidence: `test/integration-multihost-updates.test.ts`.
+Multi-host and failures (integration candidate with #20/#21):
+
+- Repeated `--host` JSON array: request order and every element's exact shape are
+  kept; no `clientUpdate` in elements and no wrapper object.
+- Flat result: one destination (local or a single `--host`) gets the additive
+  field, also when that per-host result failed (preflight refusal, remote
+  `ok:false`) or is unknown. Top-level parse errors and local caught failures
+  (the top-level catch path in `cli.ts`) never get it.
+- Text output: one stderr line per invocation, for flat or array output and
+  with failed, mixed or successful hosts; stdout is unchanged.
+- The advisory never changes status, exit code, `submitted`,
+  `consumptionConfirmed` or `retryAllowed`.
+- `clientUpdate` is reserved for the client: `remote()` deletes any
+  `clientUpdate` in a verified receiver response before it is shown.
+- Refresh count: the notice is computed at a single call site after dispatch,
+  once per invocation. The fixture evidence is indirect: registry request counts
+  with the single-flight cache lock (one request for three hosts, none from
+  receivers). It does not instrument the call itself.
+
+Evidence: POSIX `test/integration-multihost-updates.test.ts` (fake ssh).
+Windows: `test/windows-contract.test.ts` checks one opted-in repeated `--host`
+array (no element field), one text stderr line and a flat single-host field
+through the encoded PowerShell fixture; it is not evidence for the refresh count
+or the failure/forged-field cases, which are POSIX-only.
 
 Single flight, fail closed (changed after review). Earlier revisions of this PR
 reclaimed stale locks and used a takeover mutex; review found legal filesystem

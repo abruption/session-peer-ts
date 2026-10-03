@@ -503,7 +503,11 @@ adds `clientUpdate` (or the stderr line) to its own top-level output, including
 results obtained over SSH. When repeated `--host` produces a JSON array, the
 array and its elements keep their exact shape and no `clientUpdate` is added;
 text output still gets the single stderr line. Each invocation refreshes at most
-once, regardless of the number of hosts. The receiver in `--stdio-request` mode never reads,
+once, regardless of the number of hosts. A single-host result that failed
+(for example a refused SSH preflight) can still carry the advisory, but parse
+errors and local refusals never do, and the advisory never changes status, exit
+code or retry decisions. A `clientUpdate` sent back by a remote host is
+discarded. The receiver in `--stdio-request` mode never reads,
 refreshes or produces a notice.
 
 The cache is `npm-update.json` in `SESSION_PEER_CACHE_DIR` (absolute), otherwise
