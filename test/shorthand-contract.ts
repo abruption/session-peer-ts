@@ -23,6 +23,10 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     HOME: home, USERPROFILE: home, CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]',
     CLAUDE_CONFIG_DIR: join(home, '.claude'), ANTHROPIC_CONFIG_DIR: '',
     CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', CODEX_SQLITE_HOME: '',
+    // Same isolation as test/fixtures/isolate-env.mjs, which test:package does not
+    // preload: no real tailnet lookup, sender identity, reply host or notices.
+    SESSION_PEER_TAILSCALE: 'off', CLAUDE_CODE_MESSAGING_SOCKET: '', SESSION_PEER_REPLY_HOST: '',
+    CC_PEER_REPLY_HOST: '', SESSION_PEER_UPDATE_NOTICE: '',
     SP_NODE: process.execPath, SP_ROOT: root, SP_STDIN: '' };
   const psHeader = `$ErrorActionPreference = 'Stop'\n$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)\n`;
   const psClear = 'Remove-Item Alias:sp -Force -ErrorAction Stop\n';
