@@ -15,7 +15,7 @@ const failure = (error: unknown, missing: string, unknown: string): Check => {
     { status: 'unknown', code: unknown };
 };
 export const capabilities = {
-  list: true, send: true, doctor: true, wake: false, wait: false, ack: false,
+  list: true, send: true, doctor: true, updateCheck: true, selfUpdate: false, wake: false, wait: false, ack: false,
   consumptionConfirmation: false, transports: ['local', 'ssh'], agents: ['claude', 'codex']
 };
 function tool(name: string): Check {

@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import timers from 'node:timers/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { send } from '../dist/send.js';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -264,6 +264,38 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const pairCalls = f.log('FIXTURE_SSH_LOG').slice(sshBefore);
     assert.deepEqual(pairCalls.map(call => call.args[call.args.indexOf('--') + 1]), ['fixture', 'fixture', 'user@2001:db8::1', 'user@2001:db8::1']);
     for (const call of pairCalls) assert.deepEqual(call.args.slice(call.args.indexOf('-p'), call.args.indexOf('-p') + 2), ['-p', '2222']);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    // #22 with #20: an opted-in client notice (fresh cache, no refresh) never enters the
+    // repeated --host array; text gets one stderr line; one flat host carries the field.
+    const cacheDir = join(f.root, 'update-cache'); mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(join(cacheDir, 'npm-update.json'), JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry',
+      channel: 'latest', latest: '99.0.0', checkedAt: Date.now() }));
+    const noticeEnv = { FIXTURE_REMOTE_PROFILE: remoteProfile, FIXTURE_REMOTE_HOMES: '[]', SESSION_PEER_UPDATE_NOTICE: '1',
+      SESSION_PEER_NO_UPDATE_NOTICE: '', SESSION_PEER_CACHE_DIR: cacheDir, SESSION_PEER_UPDATE_REGISTRY: 'http://127.0.0.1:9/' };
+    const raw = async (extra: string[]) => {
+      const child = spawn(process.execPath, [cli, ...extra], { env: { ...process.env, ...noticeEnv } });
+      let stdout = '', stderr = ''; child.stdout!.on('data', part => { stdout += part; }); child.stderr!.on('data', part => { stderr += part; });
+      child.stdin!.end();
+      const timer = setTimeout(() => child.kill(), 120000);
+      const [code] = await once(child, 'close'); clearTimeout(timer);
+      return { code, stdout, stderr };
+    };
+    const pairArgs = ['list', '--agent', 'codex', '--host', 'fixture', '--host', 'user@[2001:db8::1]', '--remote-platform', 'win32',
+      '--remote-bin', remote, '--ssh-opt=-p', '--ssh-opt=2222'];
+    const noticedJson = await raw([...pairArgs, '--json']);
+    assert.equal(noticedJson.code, 0, noticedJson.stderr); assert.equal(noticedJson.stderr, '');
+    const noticedPair = JSON.parse(noticedJson.stdout);
+    assert.deepEqual(noticedPair.map((item: { host: string }) => item.host), ['fixture', 'user@[2001:db8::1]']);
+    for (const item of noticedPair) assert.equal('clientUpdate' in item, false);
+    const noticedText = await raw([...pairArgs, '--output-format', 'text']);
+    assert.equal(noticedText.code, 0); assert.equal(noticedText.stderr.match(/^Update available: session-peer \S+ -> 99\.0\.0 /gm)?.length, 1);
+    const flat = await raw(['list', '--agent', 'codex', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote, '--json']);
+    const flatValue = JSON.parse(flat.stdout);
+    assert.equal(flat.code, 0, flat.stderr); assert.equal(flatValue.ok, true); assert.equal(flatValue.sshHost, 'fixture');
+    assert.equal(flatValue.clientUpdate.latest, '99.0.0');
+    const quietText = await raw([...pairArgs, '--output-format', 'text', '--no-update-notice']);
+    assert.equal(quietText.code, noticedText.code); assert.equal(noticedText.stdout, quietText.stdout); assert.equal(quietText.stderr, '');
+    assert.deepEqual(readdirSync(cacheDir), ['npm-update.json']);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
     await f.stop(owner);
     const inactive = await f.invoke([...args, '--allow-inactive-codex-home']);
