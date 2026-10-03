@@ -270,6 +270,12 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   and similar settings run for every `ssh` this CLI starts, exactly as they do
   for your own `ssh` commands.
 
+A proposed design for provisioning destinations without Python (a private,
+versioned install directory, integrity checks, ownership and rollback rules)
+and for a protocol compatibility contract separate from package versions is in
+[Remote deployment ADR](design/remote-deployment.md). It is not implemented; the exact
+same-version requirement above still applies.
+
 ### Replies
 
 Use a `session-peer://v1/reply?...` URI as `--to`. Unknown/duplicate fields,

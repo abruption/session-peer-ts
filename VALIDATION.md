@@ -1,10 +1,128 @@
-# Validation record — updated 2026-09-28 KST
+# Validation record — updated 2026-10-02 KST
 
 This dated record covers public 0.2.0 verification and historical 0.1.0 public
 verification, candidate checks and live-agent observations. Older sections
 describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
+
+## Remote deployment workflow, POSIX cell (#23 F5) — 2026-10-02 KST
+
+The operator workflow in
+[docs/design/remote-deployment.md](docs/design/remote-deployment.md) was run by
+hand on a user-provided Linux host (label `linux-x64-sandbox`). All work was
+confined to a new, dedicated test directory that was removed afterwards; the
+host itself is not disposable. Host egress could not be disabled, so offline
+install flags were used and nothing was downloaded on the host. This covers
+the **POSIX cell only**. The Windows cell has not been run, so the
+F5 criterion of #23 remains open. Nothing outside a single test root on the
+destination was written. No agent session was contacted, and no message was
+submitted.
+
+### Environment
+
+| Item | Value |
+| --- | --- |
+| Destination | Debian 13 (trixie), Linux 6.18, x86_64, glibc 2.41, non-root account without sudo, umask 0077 |
+| SSH | Server OpenSSH_10.0p2 Debian-7+deb13u4. Client OpenSSH_10.3p1 with `BatchMode=yes`, `StrictHostKeyChecking=yes`, `ConnectTimeout=10`, the pre-pinned host-key alias, and no control socket. No host key was accepted or edited |
+| Destination Node | None on PATH. Official `node-v24.21.0-linux-x64` (npm 11.19.0, ABI 137) and `node-v22.23.3-linux-x64` (npm 10.9.9, ABI 127) were unpacked inside the test root |
+| Operator | macOS arm64, Node 24.16.0. `session-peer` 0.2.1 was installed from the verified tarball into a private temporary prefix, not globally |
+
+### Integrity (step 1, on the operator)
+
+All of the following were verified on the operator before any upload.
+
+- **`session-peer-0.2.1.tgz`**
+  - SHA-256 `6bf3c99d12260ce2e9421909b27326f1663ce6945aa798bc90ca1e17da675e43`, equal to the [0.2.1 record](#public-021--2026-09-29-kst).
+  - Integrity `sha512-bPjriJZf…5nw0Mg==`, equal to the registry value.
+  - SLSA provenance names commit `a9c42334da8f7faf83f0b9bb1fe52f1c695dfe8d` and `.github/workflows/publish.yml`.
+- **Dependencies, pinned to that commit's `package-lock.json`**
+  - `fs-ext-extra-prebuilt-2.2.14.tgz`: SHA-256 `1a2b5bf6…a712`; SHA-512 matches the lockfile.
+  - `nan-2.29.0.tgz`: SHA-256 `038073cb…8af6`; SHA-512 matches the lockfile.
+- **Registry signatures:** `npm audit signatures` in a scratch offline install reported 2 verified registry signatures and 1 verified attestation.
+- **Node tarballs** (downloaded from nodejs.org): SHA-256 matched `SHASUMS256.txt` for v22.23.3 and v24.21.0. The OpenPGP signature on `SHASUMS256.txt` was **not** verified, because no `gpg` was available.
+- **After upload:** the destination's `sha256sum` matched for every uploaded file.
+
+### Installs produced
+
+All installs used `<node> <npm-cli.js> install --offline --ignore-scripts`
+with an empty per-run cache, an empty `--userconfig` and an isolated `HOME`.
+Each added 3 packages, and the staging `package-lock.json` integrity values
+equal the release lockfile.
+
+| Install | Recorded Node | id16 | Manifest SHA-256 | Files |
+| --- | --- | --- | --- | --- |
+| A | v24.21.0, ABI 137 | `3220dc6bc02772f0` | `65da80c7…f7f3f` | 153 |
+| B (Node path change) | v22.23.3, ABI 127, different path | `d323791c5632ed2e` | `5e12598a…6aea5` | 153 |
+| S (swap path) | v24.21.0 at a path later swapped | `111e7af6bc1de967` | — | 153 |
+
+The identity JSON contained `package`, `version`, `sha256`, `lockIntegrity`,
+`platform:"linux"`, `arch:"x64"`, `libc:"glibc"`, `nodeMajor`, `modules` and
+the Node realpath (redacted here).
+
+### Results
+
+| Step or case | Outcome |
+| --- | --- |
+| 2. Root trust | `lstat` from the account home down to the root: real directories, owned by the user, mode 700, no symlinks |
+| 3. Staging | Created exclusively, mode 700; destination SHA-256 equal to the operator's |
+| 5–6. Staging probe, with no final directory present | The self-locating wrapper printed `session-peer 0.2.1 (typescript)` under `env -i PATH=/usr/bin:/bin`. The native `flock` probe loaded from staging (Node 24 ABI 137; Node 22 ABI 127) |
+| 7. Activation under lock | `mkdir` lock taken, target `absent`, `fs.renameSync` succeeded |
+| 8. Post-activation checks | Real directory, owned, mode 700; staging gone; marker hash and name match; manifest matches; wrapper banner exact; native probe ok. The receipt was written, then the lock released |
+| 8. Operator `doctor --host --remote-bin <absolute path> --json` (A, B and S) | `ok:true`, `diagnosticCompleted:true`, `implementation:"typescript"`, `version:"0.2.1"`, `ready:false` (no agents in the isolated home). Only A ran it **before** its receipt and lock release (see the order deviation below) |
+| 8. Operator `send --host … --to 999999 --dry-run --json` (A and B) | `ok:false`, `error:"no_reachable_target"`, `status:"refused"`, `submitted:false`, exit 2. Not run for S |
+| Same identity already installed | `already_provisioned`; this run's staging was discarded. Abbreviated: staging was created and classified without a second install |
+| Foreign directory at the target | `foreign` (`no_valid_marker`). Activation refused with `target_exists`; retention removal refused with `foreign_refused`; the foreign file's SHA-256 was unchanged |
+| Empty directory at the target | `empty`. Activation refused with `target_exists` |
+| `rename(2)` on this kernel | Non-empty `ENOTEMPTY`; **empty replaced**; file `ENOTDIR`; symlink `ENOTDIR`; absent ok. This matches the ADR's stated POSIX scope |
+| Python-style stub on a test-only PATH | Preflight with it as `--remote-bin` gave `remote_version_mismatch`. Its SHA-256 `19b6aab2…fec0` was identical before and after all cases |
+| Lock contention | A second acquire gave `EEXIST` (`lock_held`) |
+| Failed activation | A staging tree altered after its manifest was written activated, then post-activation checks failed (`manifest:false`). It was rolled back through `.failed-*` and deleted; the target was absent afterwards |
+| Run died after activation (no receipt) | Lock `held`, `autoStale:false`; target `owned_no_receipt`. Break-lock naming another run was refused. After the operator journal confirmed that the run had ended, break-lock rolled back the unreceipted target. This was the rule at that date; the current ADR instead releases the old lock and recovers under a fresh lock, which is unvalidated |
+| Run died after its receipt | Break-lock kept the install (`kept`) and removed only the lock; the install then classified as `already_provisioned` |
+| Lock without `owner.json` | `held_unowned`, `autoStale:false`. A break naming a run was refused, and a new acquire was refused. It was removed only by an explicit unowned break |
+| Same-path Node major swap 24→22 (install S) | **Undetected**, as the ADR states: the wrapper exited 0 with the exact banner, and the native probe loaded the Node 22 binary. The harness's existing-target check still reported `already_provisioned`. A runtime-identity comparison (the logic proposed for `launch.mjs`) reported `differs:["nodeMajor","modules"]`. Recomputing step 2 produced a new identity (`f4f323b466c56e60`) |
+| Rollback to a previous directory | After callers were switched back from B to A, operator `doctor` via A returned `ok:true` |
+| Retention | Removing A while it was configured was refused (`configured_for_caller`). B was removed together with its receipt. The foreign fixture was refused |
+| Cleanup | Markers and receipts were listed, then the whole test root was deleted and confirmed absent |
+
+### Deviations and limits
+
+- **Root location:** the root was `<test-root>/data/session-peer-ts`, which is
+  the ADR layout with `XDG_DATA_HOME=<test-root>/data`.
+- **Network:** destination egress could not be disabled. Offline npm flags
+  were used instead, and nothing was downloaded on the destination.
+- **Execution:** the steps were driven by a test harness script, uploaded and
+  hash-checked, and run with the recorded Node. This is not the proposed F6
+  helper; the identity launcher, manifest and lock exist only in that harness.
+- **Isolation shim:** the operator `doctor` and `send` runs went through a
+  test-only shim (`env -i`, with `HOME`, `CLAUDE_CONFIG_DIR` and
+  `SESSION_PEER_CODEX_HOMES` inside the test root, and `PATH=/usr/bin:/bin`)
+  in front of the install wrapper. This kept discovery from reading the
+  account's real agent directories. Version preflight still executed the
+  install wrapper.
+- **Initial npm check:** the first `npm --version` checks ran with the
+  account's real `HOME`. npm's user configuration was therefore readable to
+  that process. No writes outside the test root were observed, but this was
+  not independently verified, and the account's npm directories were
+  deliberately not inspected. All later npm runs used the isolated `HOME`,
+  which remained empty.
+- **Operator-check order (harness deviation):** in the original execution
+  order of the private log, only install A ran the operator `doctor` and
+  dry-run before writing its receipt and releasing the lock, as step 8
+  required. B (run B3) wrote its receipt and released the lock first, and ran
+  the operator checks afterwards. S wrote its receipt and released the lock
+  before an operator `doctor`, and had no dry-run. For B and S, step 8 is
+  therefore only partially evidenced. Their remote activation, verification,
+  native-lock and lock results stand as recorded. This is based on the
+  original command order and timestamps in the private log, which is
+  chronological and was not rearranged.
+- **Rule version:** the run used the ADR rules at the PR's fifth commit.
+  Recovery, receipt and trust rules added later were not exercised here.
+- **Harness gap:** the existing-target check did not recompute runtime
+  identity, which is why it reported `already_provisioned` after the swap.
+- **Not covered:** Windows (the F5 cell is still open), arm64, musl, macOS
+  destinations, glibc older than 2.28, and the empty-directory race window.
 
 ## Public 0.2.1 — 2026-09-29 KST
 
