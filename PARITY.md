@@ -200,7 +200,9 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `--remote-bin` where PATH is ambiguous; for Windows add
    `--remote-platform win32` and the `.cmd` path. Retain existing SSH host trust
    and authentication; a control socket is not new authorization. Account for
-   the size limits above and lack of multi-host aggregation.
+   the size limits above. In TS 0.3.0, repeat `--host` for ordered per-host
+   results; the single-host result stays flat. TS 0.2.1 and earlier lacked
+   multi-host aggregation.
 6. **Keep unsupported workflows on an explicit Python path.** Remote updates,
    MCP, wake, Antigravity and paired devices need their existing implementation
    until their issues are delivered. Doctor is available in 0.2.0; 0.1.0 lacked this command. Updating npm does not update Python, skills,
