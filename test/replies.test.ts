@@ -8,7 +8,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { reply } from '../dist/protocol.js';
 import os from 'node:os';
 import { syncBuiltinESMExports } from 'node:module';
@@ -368,6 +368,9 @@ test('doctor --check-return-route is an explicit bounded probe; forward success 
     assert.deepEqual(JSON.parse(out).returnRoute, { status: 'failed', transport: 'ssh', host: `bob@${name.replace(/^\[|\]$/g, '')}`, reason: 'return_host_is_receiver' }, name);
   }
   assert.equal(f.calls().slice(quiet).some(call => call.args.at(-1) === 'exit 0'), false);
+  // Policy: a private (RFC 1918) return host is an ordinary remote host, probed, not refused.
+  const privateHost = await f.invoke(['doctor', '--agent', 'claude', '--host', 'worker', '--check-return-route', '--reply-to', 'bob@10.0.0.5'], { FAKE_PROBE: 'ok' });
+  assert.deepEqual(privateHost.value.returnRoute, { status: 'verified', transport: 'ssh', host: 'bob@10.0.0.5', reason: 'ssh_command_succeeded', sshUser: 'bob', sshUserSource: 'explicit' });
   const missing = await f.invoke(['doctor', '--agent', 'claude', '--host', 'worker', '--check-return-route']);
   assert.deepEqual(missing.value.returnRoute, { status: 'failed', transport: 'ssh', host: null, reason: 'return_host_unavailable' });
   assert.equal(JSON.parse(f.calls().at(-1)!.input).args.includes('--return-route-host'), false);
@@ -402,4 +405,20 @@ test('return-host refusal fails closed; local normalization accepts only canonic
   assert.equal(namesThisMachine(own), true); assert.equal(isSelf(own), false);
   assert.deepEqual(await probeReturnRoute(own, undefined, true), { status: 'failed', transport: 'ssh', host: own, reason: 'return_host_is_receiver' });
   assert.deepEqual(await probeReturnRoute('bob@2130706433', undefined, true), { status: 'failed', transport: 'ssh', host: 'bob@2130706433', reason: 'return_host_is_receiver' });
+});
+
+test('an unusable login name (for example with a space) never qualifies or normalizes a route', posix, async t => {
+  const f = fixture(t); await inbox(t, f.path);
+  const mock = join(f.path, 'user.mjs');
+  writeFileSync(mock, "import os from 'node:os'; import { syncBuiltinESMExports } from 'node:module';\n" +
+    "os.userInfo = () => ({ username: 'Fixture User', uid: -1, gid: -1, shell: null, homedir: '/' }); syncBuiltinESMExports();\n");
+  const as = { CODEX_THREAD_ID: id, NODE_OPTIONS: `--import ${pathToFileURL(mock).href}` };
+  const base = ['send', '--to', 'fixture', '--message', 'x', '--dry-run'];
+  const remote = await f.invoke([...base, '--reply-to', 'remote-host'], as);
+  assert.deepEqual(remote.value.replyRoute, { uri: `session-peer://v1/reply?agent=codex&session=${id}&transport=ssh&host=remote-host`,
+    transport: 'ssh', status: 'unverified', reason: 'reverse_ssh_not_checked' });
+  // Without a usable local user nothing proves "this user on this machine", so even localhost stays SSH.
+  const self = await f.invoke([...base, '--reply-to', 'localhost'], as);
+  assert.equal(self.value.replyRoute.transport, 'ssh');
+  assert.deepEqual(f.calls(), []);
 });

@@ -338,9 +338,13 @@ Source after 0.2.1 (unreleased) adds sender context and generated routes:
   `2130706433` or `4294967296`), because resolvers disagree on those. It is
   refused
   (`invalid_return_route`), because the destination would read it as itself.
-  A name of the destination itself, for any user, fails as `return_host_is_receiver` and is
-  never reported as a verified local route. Likewise a remote send never
-  advertises a loopback reply host (`invalid_reply_host`). It is never run automatically, never retried, and forward
+  On the destination, a return host that is a known name of the destination
+  itself (for any user) or an unprovable numeric form fails as
+  `return_host_is_receiver` and is never reported as a verified local route.
+  "Known name" means only an exact match with the OS host name or the Tailscale
+  self names and addresses; other DNS or LAN aliases of a machine are not
+  detected. Likewise a remote send never advertises a loopback or non-canonical
+  numeric reply host (`invalid_reply_host`). It is never run automatically, never retried, and forward
   reachability never implies it. Like every `ssh` this CLI starts, the probe
   and its `ssh -G` user lookup use your trusted ssh configuration on the
   probing machine, including `ProxyCommand` and `Match exec` (see the trust
