@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-这是 0.2.1 详细指南。0.2.1 是 0.2.0 的可靠性与加固更新（[变更](../PARITY.md#021-reliability-and-hardening)）。上一次发布记录见 [0.2.0 公开发布证据](../VALIDATION.md#public-020--2026-09-28-kst)；下文 0.1.0 的说明用于旧版本对比。
+这是 0.3.0 详细指南。0.3.0 在 0.2.1 基础上新增多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[变更](../PARITY.md#030-remote-usability-and-maintenance)）。上一次发布记录见 [0.2.1 公开发布证据](../VALIDATION.md#public-021--2026-09-29-kst)；下文 0.1.0 的说明用于旧版本对比。
 
 ## 目录
 
@@ -21,7 +21,7 @@
 
 向正在运行的 **Claude Code 和 Codex 会话**发送消息，支持本机和跨机器 SSH。这是运行于 Node.js 的 TypeScript 客户端，不需要 Python。
 
-**这是 0.2.1 使用指南。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
+**这是 0.3.0 使用指南。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
 
 ## 功能与边界
 
@@ -61,11 +61,11 @@ macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x
 已验证的稳定版可在 Node 22.x 的 22.13 及以上或 24.x 上安装。Python CLI 也使用同一个命令名；若已有安装，请先检查 PATH。
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.1
+npm install --global --ignore-scripts session-peer@0.3.0
 session-peer --version
 ```
 
-预期输出：`session-peer 0.2.1 (typescript)`。
+预期输出：`session-peer 0.3.0 (typescript)`。
 
 1. 用 `session-peer list --agent claude --json` 查找目标并选择准确 PID。
 2. 用 `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` 验证，不提交。
@@ -84,7 +84,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 可选：全局安装前先检查 PATH 选择的现有命令
-npm install --global --ignore-scripts ./session-peer-0.2.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.0.tgz
 session-peer --version
 ```
 
@@ -94,7 +94,7 @@ session-peer --version
 
 安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer`，随后再次检查 PATH。
 
-在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.1.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` 卸载。
+在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.0.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` 卸载。
 
 ## 使用
 
@@ -114,13 +114,13 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-默认远程命令是 PATH 中的 `session-peer`。绝对路径 `--remote-bin` 也可选择使用受支持 Node 的包装器。握手检查 TypeScript 标记及精确版本，不同实现会被拒绝。SSH 使用 BatchMode 和 StrictHostKeyChecking，不自动接受新主机密钥、不安装远程运行时，也不会退回 Python。消息通过 JSON stdin 传输，不放进远程 shell 参数。正向访问不意味着反向访问已配置。0.2.1 之后的源码只把 Tailscale 用作路由提示，见[回复](#回复)。
+默认远程命令是 PATH 中的 `session-peer`。绝对路径 `--remote-bin` 也可选择使用受支持 Node 的包装器。握手检查 TypeScript 标记及精确版本，不同实现会被拒绝。SSH 使用 BatchMode 和 StrictHostKeyChecking，不自动接受新主机密钥、不安装远程运行时，也不会退回 Python。消息通过 JSON stdin 传输，不放进远程 shell 参数。正向访问不意味着反向访问已配置。自 0.3.0 起 Tailscale 只用作路由提示，见[回复](#回复)。
 
 对于 Windows SSH 目标，请指定 `--remote-platform win32`；若远端 PATH 中没有命令，再使用 `--remote-bin 'C:\absolute\path\session-peer.cmd'`。仅有一个 `--host` 时，可用 `--ssh-control-path /local/absolute/socket` 选择已认证的 OpenSSH 控制套接字；这不会跳过主机密钥验证或授予新登录。Windows 本机的 Codex home 使用完整 `C:\Users\...\.codex` 路径。已有 Python CLI 不会被自动删除或替换。
 
 ### 多主机与连接选项
 
-0.2.1 之后的源码（未发布）接受重复的 `--host` 和受限的 `--ssh-opt`：
+自 0.3.0 起（0.2.1 及更早版本没有）接受重复的 `--host` 和受限的 `--ssh-opt`：
 
 ```sh
 session-peer list --host alpha --host user@[2001:db8::1] \
@@ -144,7 +144,7 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 
 可将 `session-peer://v1/reply?...` URI 用作 `--to`。未知 / 重复字段、不安全主机、错误编码及与显式路由的冲突都会被拒绝。peer 元数据不是授权，Reply-To URI 也不会作为 shell 文本执行。收到的 Reply-To 只是供阅读的数据，不会自动观察或确认回复。
 
-0.2.1 之后的源码（未发布）新增发送者信息和自动生成的回复路由：
+自 0.3.0 起（0.2.1 及更早版本没有）新增发送者信息和自动生成的回复路由：
 
 - **发送者。** 在 Claude Code 中，`CLAUDE_CODE_MESSAGING_SOCKET` 必须恰好匹配一个已注册且存活的会话；该会话唯一且可打印的名称（否则用 PID）成为 `From: claude:NAME`。在 Codex 中，有效的 `CODEX_THREAD_ID`（或 `CODEX_SESSION_ID`）成为 `From: codex:UUID`。证据冲突、嵌套或无效时不确定发送者，此时也不生成回复路由。`--no-from` 只省略 From。
 - **自动 Reply-To。** 有发送者且未指定 `--no-reply-to` 时，本机发送附加 `transport=local` 的 URI；SSH 发送或指定 `--reply-to` 时附加 `transport=ssh` 的 URI，主机依次取 `--reply-to HOST`、`SESSION_PEER_REPLY_HOST`、`CC_PEER_REPLY_HOST`、本机的 tailnet 名称或地址。不含用户的主机会加上当前用户。找不到主机时不附加 SSH 路由。`--reply-address URI` 仍是显式的替代方式。`--reply-to`、`--reply-address` 和 `--no-reply-to` 互斥。所有 URI 都用与 `--to` 相同的解析器校验。
@@ -183,11 +183,12 @@ Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde618
 
 ## npm 版本
 
-0.2.0 已于 2026-09-28 KST 公开并验证。请参阅[公开记录](../VALIDATION.md#public-020--2026-09-28-kst)，
+0.2.1 已于 2026-09-29 KST、0.2.0 已于 2026-09-28 KST 公开并验证。请参阅
+[0.2.1 公开记录](../VALIDATION.md#public-021--2026-09-29-kst)（之后的版本各自追加带日期的记录），
 安装前核对准确版本与当前标签。
 
 ```sh
-npm view session-peer@0.2.0 version dist.integrity
+npm view session-peer@0.3.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -213,20 +214,20 @@ session-peer doctor --host user@host --json
 存活进程公布了 pipe，并不证明 pipe 存在或可以连接。`capabilities` 明确将
 wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检查也不会安装任何内容。
 参见[诊断边界](../PARITY.md#source-read-only-doctor--18--020)。SSH 两端需要相同的源码构建。
-### 更新检查与提示（源码，#22）
+### 更新检查与提示（0.3.0，#22）
 
 ```sh
 session-peer update --check --json
 session-peer update --check --channel preview --output-format text
 ```
 
-公开的 npm 0.2.1 不包含此命令。`update --check` 只请求一次 `session-peer` 的 npm
+此命令在 0.3.0 中加入，0.2.1 及更早版本没有。`update --check` 只请求一次 `session-peer` 的 npm
 dist-tag（3 秒超时，不重试），并报告 `current`、`latest`、`channel`（默认 `latest`，
 或 `preview`）、`source: "npm_registry"`、`status`（`update_available`、`up_to_date`、
 `ahead`）、`managedBy`、`updateCommand` 和 `guidance`。只有根据当前 CLI 路径能确切识别
 安装的管理方时才给出命令：其自身 `session-peer` 启动器指向本包的 npm 全局 prefix
 （默认、Homebrew、nvm、nvm-windows、fnm，例如
-`npm install --global --ignore-scripts session-peer@0.2.2`），清单中声明了
+`npm install --global --ignore-scripts session-peer@0.3.1`），清单中声明了
 `session-peer` 的 pnpm、Yarn、Bun 全局存储，Volta，或 npx 缓存。项目安装
 （`npm_project`、`pnpm_project`）、源码检出（`source`）以及其他情况（`unknown`）只返回
 `updateCommand: null` 和一句 `guidance`，因此不会给出可能修改无关当前目录的命令。它只报告
@@ -289,5 +290,5 @@ postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能�
 
 ## 可选 sp 简写
 
-可选的 `sp` 简写是面向 0.3.0 的源码功能，不包含在已发布的 npm 0.2.1 中。
+可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
 请参阅[显式启用、冲突与停用(英文)](shorthand.md)。

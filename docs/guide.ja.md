@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-0.2.1 の詳細ガイドです。0.2.1 は 0.2.0 の信頼性・堅牢性向上アップデートです（[変更点](../PARITY.md#021-reliability-and-hardening)）。前回の公開記録は [0.2.0 公開リリースの証拠](../VALIDATION.md#public-020--2026-09-28-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
+0.3.0 の詳細ガイドです。0.3.0 は 0.2.1 に複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加します（[変更点](../PARITY.md#030-remote-usability-and-maintenance)）。前回の公開記録は [0.2.1 公開リリースの証拠](../VALIDATION.md#public-021--2026-09-29-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
 ## 目次
 
@@ -21,7 +21,7 @@
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**0.2.1 の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**0.3.0 の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
@@ -62,11 +62,11 @@ macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**
 検証済みの安定版は、Node 22.x の 22.13 以上または 24.x でインストールできます。Python CLI も同じコマンド名を使うため、既存のインストールがあれば先に PATH を確認してください。
 
 ```sh
-npm install --global --ignore-scripts session-peer@0.2.1
+npm install --global --ignore-scripts session-peer@0.3.0
 session-peer --version
 ```
 
-期待値は `session-peer 0.2.1 (typescript)`。
+期待値は `session-peer 0.3.0 (typescript)`。
 
 1. `session-peer list --agent claude --json` で宛先を探し、正確な PID を選びます。
 2. `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` で提出せずに確認します。
@@ -85,7 +85,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 任意のグローバルインストール前に PATH の既存コマンドを確認
-npm install --global --ignore-scripts ./session-peer-0.2.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.0.tgz
 session-peer --version
 ```
 
@@ -95,7 +95,7 @@ session-peer --version
 
 インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
-Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.2.1.tgz` を実行し、`& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` で削除します。
+Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.0.tgz` を実行し、`& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` で削除します。
 
 ## 使い方
 
@@ -115,13 +115,13 @@ session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。片方向の接続成功は逆方向の接続を保証しません。0.2.1 以降のソースは Tailscale を経路のヒントとしてのみ使います。[返信](#返信)を参照してください。
+既定のリモートコマンドは PATH の `session-peer`。絶対パスの `--remote-bin` で対応 Node を使うラッパーも指定できます。TypeScript マーカーと正確なバージョンを確認し、異なる実装は拒否します。BatchMode / StrictHostKeyChecking を使い、新しいホスト鍵の自動受理、リモートランタイムのインストール、Python フォールバックはしません。本文はリモートシェル引数ではなく JSON stdin で渡します。片方向の接続成功は逆方向の接続を保証しません。0.3.0 以降、Tailscale は経路のヒントとしてのみ使います。[返信](#返信)を参照してください。
 
 Windows の SSH 宛先では `--remote-platform win32` を指定し、必要に応じて `--remote-bin 'C:\absolute\path\session-peer.cmd'` を使います。既に認証済みの OpenSSH 制御ソケットは、`--host` が 1 つだけのときに `--ssh-control-path /local/absolute/socket` で選択できます。ホスト鍵の確認や新しいログイン権限を回避しません。Windows ローカルの Codex home には完全な `C:\Users\...\.codex` パスを使います。既存の Python CLI は自動削除・置換しません。
 
 ### 複数ホストと接続オプション
 
-0.2.1 以降のソース（未公開）は、繰り返しの `--host` と制限付きの `--ssh-opt` を受け付けます。
+0.3.0 以降（0.2.1 以前にはありません）、繰り返しの `--host` と制限付きの `--ssh-opt` を受け付けます。
 
 ```sh
 session-peer list --host alpha --host user@[2001:db8::1] \
@@ -145,7 +145,7 @@ Python を使わずに宛先を準備する方法（バージョンごとの専�
 
 `session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。peer 情報は権限ではなく、Reply-To URI をシェルとして実行しません。受け取った Reply-To は読み手のためのデータであり、返信を自動で観測・確認することはありません。
 
-0.2.1 以降のソース（未公開）は送信者情報と自動の返信経路を追加します。
+0.3.0 以降（0.2.1 以前にはありません）、送信者情報と自動の返信経路を追加します。
 
 - **送信者。** Claude Code 内では、`CLAUDE_CODE_MESSAGING_SOCKET` が登録済みの生存セッションのちょうど 1 つと一致する必要があります。そのセッションの一意で表示可能な名前（そうでなければ PID）が `From: claude:NAME` になります。Codex 内では、有効な `CODEX_THREAD_ID`（または `CODEX_SESSION_ID`）が `From: codex:UUID` になります。証拠が矛盾・入れ子・不正な場合は送信者を決めず、その場合は返信経路も生成しません。`--no-from` は From だけを省きます。
 - **自動 Reply-To。** 送信者があり `--no-reply-to` がなければ、ローカル送信には `transport=local` の URI を付けます。SSH 送信または `--reply-to` 指定時は `transport=ssh` の URI を付け、ホストは `--reply-to HOST`、`SESSION_PEER_REPLY_HOST`、`CC_PEER_REPLY_HOST`、この端末の tailnet 名・アドレスの順に決めます。ユーザーのないホストには現在のユーザーを付けます。ホストが見つからなければ SSH 経路は付けません。`--reply-address URI` は従来どおり明示的な代替手段です。`--reply-to`、`--reply-address`、`--no-reply-to` は併用できません。すべての URI は `--to` と同じパーサーで検証します。
@@ -184,11 +184,11 @@ Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c
 
 ## npm リリース
 
-0.2.0 は 2026-09-28 KST に公開・検証されました。[公開記録](../VALIDATION.md#public-020--2026-09-28-kst)を
-参照し、導入前に正確なバージョンと現在のタグを確認してください。
+0.2.1 は 2026-09-29 KST、0.2.0 は 2026-09-28 KST に公開・検証されました。
+[0.2.1 公開記録](../VALIDATION.md#public-021--2026-09-29-kst)を参照し（以降のリリースはそれぞれ日付付きの記録を追加します）、導入前に正確なバージョンと現在のタグを確認してください。
 
 ```sh
-npm view session-peer@0.2.0 version dist.integrity
+npm view session-peer@0.3.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -216,21 +216,21 @@ pipe の広告を確認するだけで、pipe の存在や接続可能性は保�
 `capabilities` は wake/wait/ACK と消費確認を未対応と明示します。任意の TS スキル
 メタデータ検査もインストールを行いません。[診断の境界](../PARITY.md#source-read-only-doctor--18--020)
 を参照してください。SSH の両端には同じソースビルドが必要です。
-### 更新確認と通知（ソース、#22）
+### 更新確認と通知（0.3.0、#22）
 
 ```sh
 session-peer update --check --json
 session-peer update --check --channel preview --output-format text
 ```
 
-公開 npm 0.2.1 には含まれません。`update --check` は `session-peer` の npm dist-tag を
+0.3.0 で追加されたコマンドで、0.2.1 以前にはありません。`update --check` は `session-peer` の npm dist-tag を
 1 回だけ取得し（3 秒のタイムアウト、再試行なし）、`current`、`latest`、`channel`（既定は
 `latest`、または `preview`）、`source: "npm_registry"`、`status`（`update_available`、
 `up_to_date`、`ahead`）、`managedBy`、`updateCommand`、`guidance` を返します。コマンドは、
 実行中の CLI のパスからインストールの管理者を確実に特定できた場合にだけ示します。
 対象は、自身の `session-peer` ランチャーがこのパッケージを指す npm グローバル prefix
 （既定、Homebrew、nvm、nvm-windows、fnm。例：
-`npm install --global --ignore-scripts session-peer@0.2.2`）、マニフェストで
+`npm install --global --ignore-scripts session-peer@0.3.1`）、マニフェストで
 `session-peer` を宣言している pnpm・Yarn・Bun のグローバルストア、Volta、npx キャッシュ
 です。プロジェクトへのインストール（`npm_project`、`pnpm_project`）、ソースチェック
 アウト（`source`）、それ以外（`unknown`）では `updateCommand: null` と `guidance` の文だけを
@@ -306,5 +306,5 @@ npm `--ignore-scripts` は利用でき、postinstall は Skills CLI を呼び出
 
 ## 任意の sp 短縮名
 
-任意の `sp` 短縮名は 0.3.0 向けのソース機能で、公開 npm 0.2.1 には含まれません。
+任意の `sp` 短縮名は 0.3.0 以降に含まれ（0.2.1 以前にはありません）、自動では有効になりません。
 [明示的な有効化・衝突・解除(英語)](shorthand.md)を参照してください。

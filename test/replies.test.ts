@@ -141,7 +141,7 @@ if(args.at(-1)==='exit 0'){const mode=process.env.FAKE_PROBE;
   if(mode==='timeout'){console.error('ssh: connect to host origin port 22: Operation timed out SECRET-SENTINEL');process.exit(255);}
   console.error('SECRET-SENTINEL');process.exit(1);}
 if((process.env.FAKE_DOWN||'').split(',').includes(dest)){console.error('Connection refused');process.exit(255);}
-if(args.at(-1).endsWith('--version')){console.log('session-peer 0.2.1 (typescript)');process.exit(0);}
+if(args.at(-1).endsWith('--version')){console.log('session-peer 0.3.0 (typescript)');process.exit(0);}
 const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:{...process.env,SESSION_PEER_TAILSCALE:'off'}});
 process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   writeFileSync(join(path, 'tailscale'), `#!${process.execPath}
