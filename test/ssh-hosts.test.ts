@@ -35,6 +35,8 @@ if(list('FAKE_DOWN').includes(dest)){console.error('ssh: connect to host: Connec
 if(args.at(-1).endsWith('--version')){console.log('session-peer 0.3.0 (typescript)');process.exit(0);}
 if(list('FAKE_LOSS').includes(dest))process.exit(255);
 const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});
+if(list('FAKE_MALFORMED_TARGET').includes(dest)){const value=JSON.parse(r.stdout);value.target.agent={toString:null};r.stdout=JSON.stringify(value);}
+if(list('FAKE_LEGACY_TARGET').includes(dest)){const value=JSON.parse(r.stdout);delete value.target.agent;r.stdout=JSON.stringify(value);}
 process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'),
     CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', PATH: path + delimiter + process.env.PATH };
@@ -201,6 +203,43 @@ test('multi-host send: one attempt per destination, unknown classification never
   const dry = await f.invoke(['send', '--host', 'alpha', '--host', 'beta', '--to', String(process.pid), '--message', 'dry', '--dry-run']);
   assert.equal(dry.code, 0); assert.deepEqual(dry.value.map((item: { status: string }) => item.status), ['validated', 'validated']);
   assert.equal(messages.length, 2);
+});
+
+test('malformed send result stays unknown for that host without replacing another host outcome', posix, async t => {
+  const f = fixture(t), messages = await inbox(t, f.path);
+  const sent = await f.invoke(['send', '--to', String(process.pid), '--message', 'probe', '--no-from', '--no-reply-to',
+    '--host', 'good-fixture', '--host', 'bad-fixture'], { FAKE_MALFORMED_TARGET: 'bad-fixture' });
+  assert.equal(sent.code, 1);
+  assert.equal(sent.value[0].status, 'posted');
+  assert.equal(sent.value[0].submitted, true);
+  assert.equal(sent.value[1].status, 'unknown');
+  assert.equal(sent.value[1].submitted, null);
+  assert.equal(sent.value[1].retryAllowed, false);
+  assert.equal(f.calls().filter(call => kind(call) === 'request').length, 2);
+  assert.equal(messages.length, 2);
+});
+
+test('a malformed single-host send result is unknown and is not retried', posix, async t => {
+  const f = fixture(t);
+  await inbox(t, f.path);
+  const sent = await f.invoke(['send', '--to', String(process.pid), '--message', 'probe', '--no-from', '--no-reply-to',
+    '--host', 'bad-fixture'], { FAKE_MALFORMED_TARGET: 'bad-fixture' });
+  assert.equal(sent.code, 1);
+  assert.equal(sent.value.status, 'unknown');
+  assert.equal(sent.value.submitted, null);
+  assert.equal(sent.value.retryAllowed, false);
+  assert.equal(f.calls().filter(call => kind(call) === 'request').length, 1);
+});
+
+test('a valid Python-compatible send target may omit its agent field', posix, async t => {
+  const f = fixture(t);
+  await inbox(t, f.path);
+  const sent = await f.invoke(['send', '--to', String(process.pid), '--message', 'probe', '--no-from', '--no-reply-to',
+    '--host', 'legacy-fixture'], { FAKE_LEGACY_TARGET: 'legacy-fixture' });
+  assert.equal(sent.code, 0);
+  assert.equal(sent.value.status, 'posted');
+  assert.equal(sent.value.submitted, true);
+  assert.equal(f.calls().filter(call => kind(call) === 'request').length, 1);
 });
 
 test('allowlisted options follow the fixed hardening options on POSIX and Windows remote paths', posix, async t => {
