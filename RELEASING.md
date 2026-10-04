@@ -20,7 +20,7 @@ reviewed version, baseline and exact source approval.
 
 ## Completed 0.3.1 stable release procedure
 
-The reviewed 0.3.1 source candidate covered the [reliability fixes](PARITY.md#031-reliability-fixes),
+The reviewed 0.3.1 source candidate covered the [reliability fixes](PARITY.md#031-reliability-fixes).
 The steps below are history; the public outcome is recorded above. Previous
 stable 0.3.0 integrity was pinned:
 `sha512-mdtikUMrGmMrdVSvPXdJcZeouTeuixOTzGwFKPhN66ATZqTohu9HKbejgOwXJe0/zrO+nt9asCAzAEhiHWDYGA==`.
