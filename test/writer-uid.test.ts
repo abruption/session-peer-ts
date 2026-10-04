@@ -62,6 +62,16 @@ test('an unknown caller identity is refused even with a stable UID 0 owner', pos
   await assert.rejects(inspectWriter(home, id), /active_writer_unverified/);
 });
 
+test('unknown caller and owner identities cannot match through undefined equality', posix, async t => {
+  t.mock.method(posixProcess, 'getuid', () => undefined as unknown as number);
+  for (const owner of ['', 'u', 'u ']) {
+    // Keep the held lock, stable start and Codex command valid. Both UIDs
+    // decode to undefined, so equality alone cannot establish identity.
+    const home = await writer(t, owner);
+    await assert.rejects(inspectWriter(home, id), /active_writer_unverified/);
+  }
+});
+
 test('an ordinary matching UID still accepts a stable writer', posix, async t => {
   const home = await writer(t, 'u42');
   t.mock.method(posixProcess, 'getuid', () => 42);
