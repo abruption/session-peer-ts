@@ -161,6 +161,36 @@ test('growth after fstat reads at most 1 MiB plus one byte and closes the descri
   assert.equal(bytesRead, limit + 1); assert.equal(closes, 1);
 });
 
+test('growth after EOF is rejected by the final descriptor size check and closes it', t => {
+  const f = fixture(t); f.regular();
+  const read = fs.readSync, stat = fs.fstatSync, close = fs.closeSync;
+  const captured: Buffer[] = [];
+  let grew = false, postReadSize = 0, descriptor = -1, closes = 0;
+  t.mock.method(fs, 'readSync', (fd: number, buffer: Buffer, offset: number, length: number, position: number) => {
+    descriptor = fd;
+    const count = read(fd, buffer, offset, length, position);
+    if (count) captured.push(Buffer.from(buffer.subarray(offset, offset + count)));
+    else if (!grew) {
+      // The caller already has a complete valid JSON record and sees EOF, but
+      // the same inode grows beyond the limit before its final fstat.
+      fs.appendFileSync(f.file('1.json'), Buffer.alloc(limit + 1 - position, 0x20));
+      grew = true;
+    }
+    return count;
+  });
+  t.mock.method(fs, 'fstatSync', (fd: number) => {
+    const value = stat(fd); if (grew) postReadSize = value.size; return value;
+  });
+  t.mock.method(fs, 'closeSync', (fd: number) => {
+    if (fd === descriptor) closes++; return close(fd);
+  }); syncBuiltinESMExports();
+  assert.deepEqual(claude(true).sessions, []);
+  assert.equal(grew, true); assert.equal(postReadSize, limit + 1); assert.equal(closes, 1);
+  // The bytes alone would pass parsing and record validation without the final
+  // size check, so rejection cannot be attributed to invalid/truncated JSON.
+  assert.deepEqual(JSON.parse(Buffer.concat(captured).toString('utf8')), { pid: 1, name: 'healthy' });
+});
+
 test('parse and read failures skip metadata and close each descriptor', t => {
   const f = fixture(t); fs.writeFileSync(f.file('1.json'), '{invalid'); f.regular('2.json', { pid: 2 }); f.regular('3.json', { pid: 3 });
   const open = fs.openSync, read = fs.readSync, close = fs.closeSync;
