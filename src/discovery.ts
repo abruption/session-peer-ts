@@ -1,6 +1,6 @@
 // Read-only discovery: no inbox connections, writer selection, queue or DB writes.
 // Windows Claude metadata uses native process inspection.
-import { lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readlinkSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { parse as parseTOML } from 'smol-toml';
@@ -52,6 +52,29 @@ function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 }
+// Local Claude registry metadata is limited to 1 MiB per regular file. The
+// descriptor checks and POSIX nonblocking open also cover replacement by a FIFO
+// between lstat and open; this is not a deadline for network filesystem I/O.
+function claudeRecord(file: string): unknown {
+  const limit = 1024 * 1024, before = lstatSync(file);
+  if (!before.isFile() || before.size > limit) return undefined;
+  const flags = constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW);
+  const fd = openSync(file, flags);
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.size > limit || opened.dev !== before.dev || opened.ino !== before.ino) return undefined;
+    const bytes = Buffer.alloc(limit + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, length);
+      if (!count) break;
+      length += count;
+    }
+    // Read at most limit + 1 even if metadata grows after the descriptor check.
+    if (length > limit || fstatSync(fd).size > limit) return undefined;
+    return JSON.parse(bytes.subarray(0, length).toString('utf8'));
+  } finally { closeSync(fd); }
+}
 export function claude(all: boolean): Row {
   const directory = join(process.env.CLAUDE_CONFIG_DIR || process.env.ANTHROPIC_CONFIG_DIR || join(homedir(), '.claude'), 'sessions');
   let entries: string[];
@@ -65,7 +88,7 @@ export function claude(all: boolean): Row {
     if (!/^[0-9]+\.json$/.test(entry)) continue;
     let record: Row;
     try {
-      const value: unknown = JSON.parse(readFileSync(join(directory, entry), 'utf8'));
+      const value: unknown = claudeRecord(join(directory, entry));
       if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
       record = value as Row;
     } catch { continue; }
