@@ -1,7 +1,7 @@
 import { isIPv6 } from 'node:net';
 import { Refusal } from './discovery.js';
 import { uuid } from './writer.js';
-export const VERSION = '0.3.0';
+export const VERSION = '0.3.1';
 export const VERSION_LINE = `session-peer ${VERSION} (typescript)`;
 // Return the OpenSSH destination: [user@]name, or an IPv6 literal with any
 // brackets removed (`ssh` does not strip `[...]` outside ssh:// URIs). Zone IDs

@@ -2,7 +2,7 @@
 
 Updated 2026-10-03 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes **TS 0.3.0**: the 0.2.0 unified listing, safe home selection,
+This matrix describes **TS 0.3.1**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
 separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 [0.2.1 reliability and hardening](#021-reliability-and-hardening) changes, and the
@@ -118,7 +118,7 @@ failures run on Windows too. Error injection is not a real Windows ACL test.
 
 ### Bounded Claude registry reads — source patch #99
 
-Source patch for #99 (planned 0.3.1): Claude list/send/sender discovery skips
+0.3.1 patch for #99: Claude list/send/sender discovery skips
 non-regular, symlinked or larger-than-1-MiB registry records while retaining
 healthy records. Descriptor checks, POSIX nonblocking open and bounded reads
 cover FIFO replacement races. This is not a deadline for network-filesystem
@@ -301,7 +301,7 @@ Contracts: `test/codex-homes.test.ts`, `test/transport.test.ts` and
 
 ### UID-zero writer identity — source patch #100
 
-Source patch for #100 (planned 0.3.1): numeric UID 0 is a valid caller identity
+0.3.1 patch for #100: numeric UID 0 is a valid caller identity
 for writer verification. Unknown or mismatched owners still refuse, and all
 lock stability/start-time checks and Windows SID validation are retained.
 This patch is not in the immutable npm 0.3.0 archive.
@@ -441,6 +441,26 @@ command, transport or JSON field. Callers may notice the stricter refusals below
 | Envelope trimming (#59, #64) | Leading/trailing `\n` is trimmed by index scanning instead of `/^\n+\|\n+$/`, which was quadratic on long interior newline runs (CodeQL `js/polynomial-redos`). Trimming semantics are unchanged. |
 | Windows owner inspection (#65) | The compiling `Add-Type` owner inspection waits up to 20000 ms; the compile-free creation-time probe keeps 8000 ms. Timeouts still refuse. |
 
+## 0.3.1 reliability fixes
+
+0.3.1 source includes the following patch updates; publication is a separate
+approved release operation. The dated public 0.3.0 evidence remains historical.
+
+| Area | Patch contract |
+|---|---|
+| SSH results (#93, #97) | Malformed successful send responses affect only that host; other outcomes are preserved. Unnamed Claude PID targets accept `name:null`. Unknown outcomes are never retried automatically. |
+| Codex storage (#94) | Parse TOML root keys, including escaped keys, with TOML semantics. Nested `sqlite_home` is not a root override; malformed configuration is refused. An inactive opt-in does not bypass the root storage guard. |
+| Reply-To (#98) | Reject decoded Claude session values with reserved `codex:` or `session-peer:` prefixes; wire receivers reject unresolved nested URI transports before SSH or queue execution. |
+| Claude discovery (#99) | Read bounded regular registry files, skip unsafe/oversized entries and preserve healthy sessions. POSIX FIFO/nonblocking and descriptor race tests are platform-specific evidence. |
+| Writer identity (#100) | UID 0 is a valid verified identity; missing or malformed identity information remains refused. |
+| Documentation (#90) | Includes the migration wording correction absent from the immutable public 0.3.0 archive. |
+
+SSH still requires identical TS versions on both ends: 0.3.0 and 0.3.1 refuse
+each other at preflight. Coordinate endpoint upgrades. The 0.3.0 known
+limitations below remain: Windows-client jump routing, the Windows deployment
+cell and newer receipt/recovery rules, and update notice validation gaps are
+not resolved by this patch.
+
 ## 0.3.0 remote usability and maintenance
 
 0.3.0 (#20, #21, #22, #74, #78/#79, #87; design #23) adds remote and
@@ -478,7 +498,7 @@ endpoints refuse each other at preflight; upgrade them together.
 
 ## Sender context and return routes — #21 / 0.3.0
 
-Source patch for #98 (planned 0.3.1): a Claude Reply-To URI whose decoded
+0.3.1 patch for #98: a Claude Reply-To URI whose decoded
 `session` starts with reserved lowercase `codex:` or `session-peer:` is `invalid_reply_uri` before
 local selection or SSH dispatch. Ordinary Claude names and Codex UUID routes
 keep their existing contract; this patch is not in the immutable npm 0.3.0 archive.
