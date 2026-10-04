@@ -49,7 +49,10 @@ async function sample(path: string) {
   for (const token of listed.stdout.split(/[\0\n]/)) {
     const value = token.slice(1).trim();
     if (token[0] === 'p') { current = { pid: Number(value) }; owners.push(current); }
-    if (current && token[0] === 'u') current.uid = Number(value);
+    if (current && token[0] === 'u') {
+      const uid = /^\d+$/.test(value) ? Number(value) : NaN;
+      current.uid = Number.isSafeInteger(uid) ? uid : undefined;
+    }
     if (current && token[0] === 'c') current.command = value;
   }
   for (const owner of owners) {
@@ -70,7 +73,7 @@ export async function inspectWriter(home: string, id: string) {
   const ownId = process.platform === 'win32' ? inspectWindows('identity', String(process.pid))[0]?.uid : process.getuid?.();
   if (!before.valid || !after.valid || before.state !== after.state || before.fingerprint !== after.fingerprint ||
       before.owners.length !== 1 || after.owners.length !== 1 || JSON.stringify(before.owners) !== JSON.stringify(after.owners) ||
-      !owner?.start || !ownId || owner.uid !== ownId || !/^codex(?:\.exe|-|$)/i.test(owner.command ?? '')) {
+      !owner?.start || ownId === undefined || owner.uid !== ownId || !/^codex(?:\.exe|-|$)/i.test(owner.command ?? '')) {
     throw new Refusal('active_writer_unverified', 1);
   }
   return { activity: 'live_writer' as const, writerLock: 'held' as const, identity: JSON.stringify({ fingerprint: after.fingerprint, ...owner }) };
