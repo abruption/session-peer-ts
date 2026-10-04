@@ -7,6 +7,42 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.3.1 stable release procedure
+
+0.3.1 is a source candidate for the [reliability fixes](PARITY.md#031-reliability-fixes),
+not a claim of public publication. Previous stable 0.3.0 integrity is pinned:
+`sha512-mdtikUMrGmMrdVSvPXdJcZeouTeuixOTzGwFKPhN66ATZqTohu9HKbejgOwXJe0/zrO+nt9asCAzAEhiHWDYGA==`.
+The public attestation metadata URL is
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.0`.
+The script enforces the integrity, tags and registry origin of attestation URLs;
+provenance contents and full URLs require separate manual comparison with the
+dated public records. Preserve `preview=0.1.0-preview.1` and its pinned integrity.
+
+1. Merge the reviewed 0.3.1 preparation PR and require successful exact-main CI,
+   including Windows Node 22/24, CodeQL and the release gate.
+2. Confirm npm environment reviewers/main-only deployment policy, package
+   ownership/2FA and stage-only Trusted Publisher mapping. Inspect authenticated
+   `npm stage list session-peer`; stop on a conflicting stage.
+3. Require 0.3.1 absent, `latest=0.3.0` and `preview=0.1.0-preview.1`, and compare
+   the pinned integrity and public provenance records before approval.
+4. Obtain final approval naming the exact merged 40-character main SHA,
+   **0.3.1**, **stable-stage** and `latest` promotion to 0.3.1. Release preparation
+   does not authorize dispatch, and historical approvals cannot be replayed.
+5. Dispatch `publish.yml` with `mode=stable-stage`, `version=0.3.1`,
+   `source_sha=<approved main SHA>` and
+   `confirmation=session-peer@0.3.1 stable-stage`.
+6. Download the prepare job's `npm-release-<SHA>` artifact and apply the
+   documentation gate below before the separate protected npm environment approval.
+7. Record the stage ID and compare staged bytes with the retained artifact.
+   Separate final npm 2FA approval publishes 0.3.1 and promotes `latest`.
+8. On the exact source/artifact, run `release.mjs artifact` and `verify`, then
+   append dated public evidence to VALIDATION.md.
+
+SSH endpoints must use the same TS version. 0.3.0 and 0.3.1 refuse each other;
+coordinate upgrades. Preserve the known #20/#23 and Windows update-notice
+validation limitations documented in PARITY.md. Do not claim fleet upgrades,
+GitHub tags/releases or live-agent ACK from packaging or CI fixtures.
+
 ## Public release checkpoint — 0.3.0 (2026-10-03 KST)
 
 `session-peer@0.3.0` is public with `latest=0.3.0` and unchanged

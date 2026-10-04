@@ -167,20 +167,20 @@ test('SSH preflight reports allowlisted causes without leaking stderr or sending
 test('SSH request framing: no message in remote command; response loss never retries', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer 0.3.0 (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer 0.3.1 (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const result = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message', 'SECRET-SENTINEL', '--no-from'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(result.status, 'posted'); assert.equal(messages.length, 1);
   // Valid JSON mixed with banner/trailing output is not a verified response.
   for (const command of ['send', 'list']) for (const prefix of [true, false]) {
     const response = JSON.stringify({ schemaVersion: 1, command, host: 'fixture', ok: true, status: 'posted', submitted: true, consumptionConfirmed: false });
     const stdout = prefix ? 'untrusted banner\n' + response : response + '\ntrailing junk';
-    writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.3.0 (typescript)');else console.log(${JSON.stringify(stdout)});`, { mode: 0o700 });
+    writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.3.1 (typescript)');else console.log(${JSON.stringify(stdout)});`, { mode: 0o700 });
     const unverified = await invoke([command, '--host', 'fixture', ...(command === 'send' ? ['--to', 'fixture', '--message', 'not-provable'] : [])], { ...env, PATH: path + delimiter + env.PATH });
     assert.equal(unverified.status, command === 'send' ? 'unknown' : 'refused');
     assert.equal(unverified.submitted, command === 'send' ? null : false);
     assert.equal(unverified.retryAllowed, false);
   }
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.3.0 (typescript)');else process.exit(255);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.3.1 (typescript)');else process.exit(255);`, { mode: 0o700 });
   const lost = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'lost'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(lost.status, 'unknown'); assert.equal(lost.retryAllowed, false); assert.equal(messages.length, 1);
 });
@@ -324,7 +324,7 @@ test('a saved inactive home needs opt-in and still rejects relocated or unreadab
 test('SSH preflight accepts a verified version despite noisy stderr and propagates remote exit codes', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process');if(process.argv.at(-1).endsWith('--version')){console.error('curl: (7) Failed to connect: Connection refused');console.log('session-peer 0.3.0 (typescript)');process.exit(0);}const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:require('node:fs').readFileSync(0,'utf8'),encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process');if(process.argv.at(-1).endsWith('--version')){console.error('curl: (7) Failed to connect: Connection refused');console.log('session-peer 0.3.1 (typescript)');process.exit(0);}const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:require('node:fs').readFileSync(0,'utf8'),encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const remoteEnv = { ...env, PATH: path + delimiter + env.PATH };
   // #55 + #49/#51 over SSH: a flag-like body travels as --message=<text> and posts literally.
   const sent = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message=--dry-run', '--no-from'], remoteEnv);

@@ -31,13 +31,13 @@ SSH, so a destination needs only a usable Python and a POSIX shell. Its
 `install.sh --host` additionally pushes the program to
 `$HOME/.local/share/session-peer` and links `$HOME/.local/bin/session-peer`.
 
-The TypeScript client deliberately does not do that. In 0.2.1 and 0.3.0 the local client
+The TypeScript client deliberately does not do that. In 0.2.1 through 0.3.1 the local client
 runs `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10`
 and, before any message leaves the machine:
 
 1. runs `<remote-bin> --version` with no message (15 s timeout);
 2. requires stdout to equal exactly the client's own version line, for example
-   `session-peer 0.3.0 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
+   `session-peer 0.3.1 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
    otherwise refuses with a fixed code from `sshPreflightFailure` in `src/cli.ts`;
 3. sends a `schemaVersion: 1` JSON request on stdin to
    `<remote-bin> --stdio-request` and verifies the `schemaVersion: 1` response
@@ -209,7 +209,7 @@ A new, side-effect-free flag `<remote-bin> --capabilities` prints one JSON line
 and sends nothing:
 
 ```json
-{"schemaVersion":1,"implementation":"typescript","version":"0.3.0",
+{"schemaVersion":1,"implementation":"typescript","version":"0.3.1",
  "wire":{"min":1,"max":1},
  "capabilities":["list","doctor","send.claude","send.codex","codexHome.inactiveOptIn"],
  "runtime":{"node":"24.16.0","modules":"137","platform":"linux","arch":"x64"},

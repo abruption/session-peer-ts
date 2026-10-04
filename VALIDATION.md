@@ -1,10 +1,54 @@
-# Validation record — updated 2026-10-03 KST
+# Validation record — updated 2026-10-04 KST
 
-This dated record covers public 0.3.0, 0.2.1 and 0.2.0 verification, historical 0.1.0
+This dated record covers the 0.3.1 source candidate and public 0.3.0, 0.2.1 and 0.2.0 verification, historical 0.1.0
 public verification, candidate checks and live-agent observations. Older sections
 describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
+
+## 0.3.1 candidate checks — 2026-10-04 KST
+
+Source candidate on merged main `cb661ff4f323f637673d528f05992a2bb275fefc`
+after #103, #101, #96, #95 and #102. The local runtime and fixture checks below
+ran at checkpoint `71668d112929576d22a83b2dd269cfb98d3f567a`; later candidate
+changes only add this dated record. See the [patch contracts](PARITY.md#031-reliability-fixes).
+This section records preparation, not public 0.3.1 publication.
+
+- macOS arm64, Node 24.16.0/npm 11.15.0; `npm ci --ignore-scripts`, build,
+  `test:types` and `npm test` passed: 151 tests, 146 passed, 5 Windows-only
+  skipped, 0 failed. Python conformance used the pinned 1.0.2 reference above.
+  The full suite includes `test/transport.test.ts`; a Windows command is not
+  evidence that this POSIX transport suite ran on Windows.
+- The inactive storage fixture starts without a writer or lock holder. Its
+  valid saved-thread DB reports `activity=inactive`, `writerLock=absent` before
+  and after testing. Without opt-in it refuses before the storage guard; with
+  opt-in, dry-run validates without calling Codex and send queues exactly once.
+  Root bare and escaped `sqlite_home` settings and malformed configuration then
+  refuse without another queue call. Nested-only root/non-root doctor tests
+  use the normal diagnostic DB schema and do not authorize sending.
+- Reply-To tests cover nested URI/agent confusion with zero SSH/queue calls,
+  and normal Claude names/Codex routes. SSH fixtures cover unnamed Claude PID
+  targets and malformed per-host outcomes without retry. Registry tests include
+  POSIX FIFO/race/size handling and healthy rows; UID 0 is simulated through
+  controlled identity observations with a real held native lock, not a root login.
+- `test:package` passed the 51-file allowlist, reproducible packaging, clean
+  installation/removal and Bash/zsh shorthand contract/lifecycle. Repository
+  metadata, four-language docs/links and `git diff --check` passed. `npm audit`
+  reported 0 vulnerabilities. The exact runtime dependency `smol-toml@1.9.0`
+  is locked; it is installed as a dependency, not bundled into the allowlist.
+- `release.mjs pack` and `artifact` passed at the checkpoint, including identical
+  repeated pack bytes and isolated `--ignore-scripts` install/version/list/removal.
+  The final documentation-only candidate is repacked and compared with source
+  in the preparation PR; its local artifact is not a future merged-main artifact.
+- Registry preparation baseline: `latest=0.3.0`, `preview=0.1.0-preview.1`,
+  0.3.1 absent. The helper pins the public 0.3.0 integrity recorded below and
+  retains the preview pin. No dispatch, npm stage/promotion, tag or fleet change
+  follows from these checks.
+
+Windows evidence for the fixes is CI fixtures. Existing Windows-client jump,
+remote deployment and update-notice validation gaps remain. Live-agent delivery
+or ACK was not exercised by these fixture tests. Publication still requires the
+new exact merged SHA/version/mode approval and runbook gates in RELEASING.md.
 
 ## Public 0.3.0 — 2026-10-03 KST
 
