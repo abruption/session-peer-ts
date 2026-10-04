@@ -14,7 +14,7 @@ try {
   const metadata = JSON.parse(readFileSync('package.json', 'utf8'));
   assert.equal(metadata.private, false);
   assert.deepEqual(metadata.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'latest' });
-  assert.deepEqual(metadata.dependencies, { 'fs-ext-extra-prebuilt': '2.2.14' });
+  assert.deepEqual(metadata.dependencies, { 'fs-ext-extra-prebuilt': '2.2.14', 'smol-toml': '1.9.0' });
   for (const hook of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack']) {
     assert.equal(metadata.scripts[hook], undefined);
   }

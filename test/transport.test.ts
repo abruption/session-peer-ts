@@ -245,7 +245,80 @@ test('a configured Codex sqlite_home is refused before dry-run or queue', async 
     const refused = await invoke([...args, ...extra], env);
     assert.equal(refused.error, 'unsupported_codex_sqlite_home'); assert.equal(refused.submitted, false);
   }
+  writeFileSync(join(home, 'config.toml'), '"sqlite\\u005fhome" = "/relocated"\n');
+  for (const extra of [['--dry-run'], []]) {
+    const refused = await invoke([...args, '--allow-inactive-codex-home', ...extra], env);
+    assert.equal(refused.error, 'unsupported_codex_sqlite_home'); assert.equal(refused.submitted, false);
+  }
   assert.throws(() => readFileSync(count));
+});
+
+test('a saved inactive home needs opt-in and still rejects relocated or unreadable storage', async t => {
+  const { path, env } = setup(t), home = join(path, 'inactive-home'); database(home);
+  // No holder is started: distinguish an inactive saved thread from a missing DB.
+  const inactive = await inspectWriter(home, id);
+  assert.equal(inactive.activity, 'inactive'); assert.equal(inactive.writerLock, 'absent');
+  const queue = join(path, 'inactive-queue'), calls = join(path, 'inactive-calls');
+  writeFileSync(queue, `#!${process.execPath}\nconst fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(process.argv.slice(2))+'\\n');console.log('Queued message inactive-queue-96 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
+  const recorded = (): string[][] => {
+    try { return readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
+  };
+  const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue,
+    '--message', 'inactive fixture', '--no-from', '--no-reply-to'];
+  const config = join(home, 'config.toml');
+  const assertSelectedInactive = (value: any) => {
+    const resolution = value.codexHomeResolution;
+    assert.equal(resolution.status, 'explicit'); assert.equal(resolution.selected, home);
+    const candidate = resolution.candidates.find((item: any) => item.codexHome === home);
+    assert.ok(candidate); assert.equal(candidate.savedThread, true);
+    assert.equal(candidate.activity, 'inactive'); assert.equal(candidate.writerLock, 'absent');
+  };
+  writeFileSync(config, 'model = "fixture"\n');
+  for (const extra of [['--dry-run'], []]) {
+    const refused = await invoke([...args, ...extra], env);
+    assert.equal(refused.error, 'inactive_writer'); assert.equal(refused.status, 'refused');
+    assert.equal(refused.submitted, false);
+    assert.equal(refused.codexHomeResolution.reason, 'inactive_queue_requires_opt_in');
+    assert.equal(recorded().length, 0);
+  }
+  const dry = await invoke([...args, '--allow-inactive-codex-home', '--dry-run'], env);
+  assert.equal(dry.status, 'validated'); assert.equal(dry.submitted, false);
+  assert.equal(dry.codexHomeResolution.reason, 'explicit_inactive_opt_in'); assert.equal(recorded().length, 0);
+  assertSelectedInactive(dry);
+  const sent = await invoke([...args, '--allow-inactive-codex-home'], env);
+  assert.equal(sent.status, 'queued'); assert.equal(sent.submitted, true);
+  assert.equal(sent.codexHomeResolution.reason, 'explicit_inactive_opt_in');
+  assertSelectedInactive(sent);
+  assert.equal(sent.queueId, 'inactive-queue-96');
+  assert.deepEqual(recorded(), [['queue', '--thread', id, '--message=inactive fixture']]);
+  const baselineCalls = recorded().length;
+  for (const key of ['sqlite_home', String.raw`"sqlite\u005fhome"`, String.raw`"sqlite\U0000005fhome"`]) {
+    const text = `${key} = "/fixture/relocated"\n`; writeFileSync(config, text);
+    assert.equal(readFileSync(config, 'utf8'), text); // Keep the actual TOML escape bytes.
+    for (const extra of [['--dry-run'], []]) {
+      const refused = await invoke([...args, ...extra], env);
+      assert.equal(refused.error, 'inactive_writer', key); assert.equal(refused.code, 1);
+      assert.equal(refused.status, 'refused'); assert.equal(refused.submitted, false);
+      assert.equal(refused.codexHomeResolution.reason, 'inactive_queue_requires_opt_in');
+      assert.equal(recorded().length, baselineCalls);
+    }
+    for (const extra of [['--dry-run'], []]) {
+      const refused = await invoke([...args, '--allow-inactive-codex-home', ...extra], env);
+      assert.equal(refused.error, 'unsupported_codex_sqlite_home', key);
+      assert.equal(refused.code, 1); assert.equal(refused.status, 'refused'); assert.equal(refused.submitted, false);
+      assert.equal(refused.codexHomeResolution.reason, 'explicit_inactive_opt_in');
+      assertSelectedInactive(refused);
+      assert.equal(recorded().length, baselineCalls);
+    }
+  }
+  writeFileSync(config, 'sqlite_home = [\n');
+  for (const extra of [['--dry-run'], []]) {
+    const refused = await invoke([...args, '--allow-inactive-codex-home', ...extra], env);
+    assert.equal(refused.error, 'codex_config_unreadable'); assert.equal(refused.status, 'refused');
+    assert.equal(refused.submitted, false); assert.equal(recorded().length, baselineCalls);
+  }
+  assert.equal((await inspectWriter(home, id)).writerLock, 'absent');
 });
 
 test('SSH preflight accepts a verified version despite noisy stderr and propagates remote exit codes', async t => {
