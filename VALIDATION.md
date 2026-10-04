@@ -6,6 +6,47 @@ describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
 
+## Public 0.3.1 — 2026-10-04 KST
+
+`session-peer@0.3.1` was published at `2026-10-04T14:32:10.826Z`
+(23:32:10.826 KST). The public registry reports `latest=0.3.1` and unchanged
+`preview=0.1.0-preview.1`.
+
+- Published source: `6b48092a0e42992d2d970dd2ff5cf457f62d3ff2`, the #104 merge.
+  [Exact-main CI](https://github.com/abruption/session-peer-ts/actions/runs/37208760455)
+  and [CodeQL](https://github.com/abruption/session-peer-ts/actions/runs/37208760542)
+  passed. [Publication run](https://github.com/abruption/session-peer-ts/actions/runs/37209205194)
+  completed prepare/publish; GitHub records `abruption` approving environment `npm`.
+- Stage ID: `5d846a99-18a7-4ec0-873e-b1b05056fb42`. The authenticated stage
+  download, retained Actions artifact, exact-source local pack and public tarball
+  are byte-identical: 190,315 bytes, 51 files. All 16 packaged Markdown files were
+  compared byte for byte with the published source. The source tree equals the
+  reviewed preparation head; commit identity is the merged SHA above.
+- SHA-256: `ba8b85b03229bc99ca30d52251790d7e75b90551de924b99edce22570f7fa401`.
+- Registry integrity:
+  `sha512-iZq06dbm6NavHuPZYMIxAnzQN5ksqm66yufpppddVWUYkuaG5TJvktbUXTSX7v3BBFnuybEJekI0KSaDo3Xfbg==`.
+- Public publish/SLSA attestation subject digests match the package SHA-512.
+  Provenance binds the source SHA, repository, `.github/workflows/publish.yml`
+  and run `37209205194/attempts/1`. Public registry metadata names GitHub Actions
+  as Trusted Publisher and `abruption` as approver.
+- `release.mjs artifact` and `verify` passed from the exact publication source
+  and artifact on macOS arm64, Node 24.16.0/npm 11.15.0. Verification includes
+  npm signature/attestation audit and a fresh public `--ignore-scripts` install,
+  `session-peer 0.3.1 (typescript)`, empty isolated Claude listing and clean removal.
+  Independent public-key/DSSE checks also passed for the subject digests and
+  signatures; npm's audit provides the package signature/attestation trust validation.
+
+The 0.3.1 archive includes the reliability fixes and the migration wording
+correction missing from 0.3.0. It retains dated preparation/public-history
+records; this post-publication section is a later repository record, not a
+same-version tarball replacement. No restaging or republication was performed.
+
+SSH endpoints must use identical TS versions: 0.3.0 and 0.3.1 refuse each other
+at preflight. Existing #20/#23 and update-notice Windows validation gaps remain.
+Windows evidence is CI fixtures; the installation evidence above is local macOS.
+The 0.2.1 demo's actual ACK remains historical. No fleet upgrade or GitHub tag/
+Release creation is claimed. Draft #82 remains experimental and unmerged.
+
 ## 0.3.1 candidate checks — 2026-10-04 KST
 
 Source candidate on merged main `cb661ff4f323f637673d528f05992a2bb275fefc`

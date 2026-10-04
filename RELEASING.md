@@ -7,10 +7,22 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## 0.3.1 stable release procedure
+## Public release checkpoint — 0.3.1 (2026-10-04 KST)
 
-0.3.1 is a source candidate for the [reliability fixes](PARITY.md#031-reliability-fixes),
-not a claim of public publication. Previous stable 0.3.0 integrity is pinned:
+`session-peer@0.3.1` is public with `latest=0.3.1` and unchanged
+`preview=0.1.0-preview.1`; see the [dated verification](VALIDATION.md#public-031--2026-10-04-kst).
+Published source is `6b48092a0e42992d2d970dd2ff5cf457f62d3ff2` and publication
+run is `37209205194`. The completed procedure below is historical: do not replay
+its approval, stage 0.3.1 again or republish it. A later release needs a newly
+reviewed version, baseline and exact source approval.
+
+<a id="031-stable-release-procedure"></a>
+
+## Completed 0.3.1 stable release procedure
+
+The reviewed 0.3.1 source candidate covered the [reliability fixes](PARITY.md#031-reliability-fixes).
+The steps below are history; the public outcome is recorded above. Previous
+stable 0.3.0 integrity was pinned:
 `sha512-mdtikUMrGmMrdVSvPXdJcZeouTeuixOTzGwFKPhN66ATZqTohu9HKbejgOwXJe0/zrO+nt9asCAzAEhiHWDYGA==`.
 The public attestation metadata URL is
 `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.0`.

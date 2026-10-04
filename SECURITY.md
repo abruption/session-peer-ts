@@ -14,7 +14,7 @@ homes, SQLite DBs, transcripts, browser profiles or .env files. Rotate exposed
 secrets with their provider; deleting a comment does not revoke a secret.
 
 Review is manual and best-effort, with no response or fix deadline. The project is
-a published npm client, with 0.3.0 release evidence in [VALIDATION.md](VALIDATION.md#public-030--2026-10-03-kst).
+a published npm client, with 0.3.1 release evidence in [VALIDATION.md](VALIDATION.md#public-031--2026-10-04-kst).
 Reports on published versions and source commits are welcome; no maintenance
 window or backport promise exists. English and Korean reports are welcome. Disclosure
 is coordinated with the reporter; private reports are not automatically public.
