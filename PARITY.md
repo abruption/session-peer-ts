@@ -239,6 +239,12 @@ a release commitment. Recheck the exact packaged copy during release review.
 
 ## Source Codex home selection — #17 / 0.2.0
 
+Source patch for #99 (planned 0.3.1): Claude list/send/sender discovery skips
+non-regular, symlinked or larger-than-1-MiB registry records while retaining
+healthy records. Descriptor checks, POSIX nonblocking open and bounded reads
+cover FIFO replacement races. This is not a deadline for network-filesystem
+I/O; doctor retains its separately bounded metadata contract. The patch is not
+in the immutable npm 0.3.0 archive.
 
 This is 0.2.0 behavior; it does not change the immutable npm 0.1.0 archive. `send --to codex:UUID` selects only a unique stable live writer across
 bounded known homes. `--codex-home` pins the destination but still inventories

@@ -7,7 +7,10 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
+import { createServer } from 'node:net';
+import { once } from 'node:events';
 import { claude } from '../dist/discovery.js';
+import { sender } from '../dist/replies.js';
 
 const limit = 1024 * 1024;
 function fixture(t: TestContext) {
@@ -41,7 +44,7 @@ test('regular Claude records retain all/mismatch behavior while malformed entrie
   fs.mkdirSync(f.file('9.json'));
   const all = claude(true) as any;
   assert.deepEqual(all.sessions.map((row: any) => [row.pid, row.name, row.staleReason]),
-    [[1, 'healthy', undefined], [3, 'mismatch', 'record_pid_mismatch']]);
+    [[1, 'healthy', process.platform === 'win32' ? 'process_unverified' : undefined], [3, 'mismatch', 'record_pid_mismatch']]);
   assert.deepEqual(claude(false).sessions, []);
   assert.equal(all.discovery.claude.status, 'ok');
 });
@@ -75,6 +78,30 @@ test('FIFO without a writer cannot block CLI listing and healthy records survive
   const result = f.child();
   assert.equal(result.ok, true);
   assert.deepEqual(result.sessions.map((row: any) => row.name), ['healthy']);
+});
+
+test('abnormal registry files retain a reachable fixture for list, dry-run and sender discovery', { skip: process.platform === 'win32' }, async t => {
+  const f = fixture(t), socket = join(f.root, 's');
+  let connections = 0;
+  const server = createServer(connection => { connections++; connection.destroy(); });
+  server.listen(socket); await once(server, 'listening');
+  t.after(() => new Promise<void>((ok, fail) => server.close(error => error ? fail(error) : ok())));
+  f.regular(`${process.pid}.json`, { pid: process.pid, name: 'healthy-fixture', messagingSocketPath: socket });
+  const fifo = spawnSync('mkfifo', [f.file('2.json')], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(fifo.status, 0, fifo.stderr);
+  fs.writeFileSync(f.file('3.json'), ' '.repeat(limit + 1));
+  assert.deepEqual((claude(false).sessions as any[]).map(row => row.pid), [process.pid]);
+  process.env.CLAUDE_CODE_MESSAGING_SOCKET = socket;
+  assert.deepEqual(sender(), { agent: 'claude', id: 'healthy-fixture' });
+  const result = spawnSync(process.execPath, [resolve('dist/cli.js'), 'send', '--to', String(process.pid),
+    '--message', 'fixture', '--dry-run', '--no-from', '--no-reply-to', '--json'],
+  { env: process.env, encoding: 'utf8', timeout: 5000 });
+  assert.ifError(result.error); assert.equal(result.status, 0, result.stderr);
+  const value = JSON.parse(result.stdout);
+  assert.equal(value.status, 'validated'); assert.equal(value.submitted, false);
+  assert.equal(value.target.pid, process.pid);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(connections, 0);
 });
 
 test('FIFO replacement between lstat and open cannot block descriptor validation', { skip: process.platform === 'win32' }, t => {
