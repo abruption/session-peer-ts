@@ -35,6 +35,8 @@ if(list('FAKE_DOWN').includes(dest)){console.error('ssh: connect to host: Connec
 if(args.at(-1).endsWith('--version')){console.log('session-peer 0.3.0 (typescript)');process.exit(0);}
 if(list('FAKE_LOSS').includes(dest))process.exit(255);
 const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});
+if(list('FAKE_MALFORMED_TARGET').includes(dest)){const value=JSON.parse(r.stdout);value.target.agent={toString:null};r.stdout=JSON.stringify(value);}
+if(list('FAKE_LEGACY_TARGET').includes(dest)){const value=JSON.parse(r.stdout);delete value.target.agent;r.stdout=JSON.stringify(value);}
 process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'),
     CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', PATH: path + delimiter + process.env.PATH };
@@ -48,7 +50,7 @@ process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   }
   return { path, env, calls, invoke };
 }
-async function inbox(t: TestContext, path: string) {
+async function inbox(t: TestContext, path: string, name: string | null = 'fixture') {
   const messages: { message: { content: string } }[] = [];
   const socket = join(path, 'sock');
   const server = createServer(s => {
@@ -57,7 +59,7 @@ async function inbox(t: TestContext, path: string) {
   });
   server.listen(socket); await once(server, 'listening');
   t.after(() => new Promise<void>((ok, fail) => server.close(error => error ? fail(error) : ok())));
-  writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: 'fixture', messagingSocketPath: socket }));
+  writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name, messagingSocketPath: socket }));
   return messages;
 }
 const destination = (call: Call) => call.args[call.args.indexOf('--') + 1];
@@ -201,6 +203,85 @@ test('multi-host send: one attempt per destination, unknown classification never
   const dry = await f.invoke(['send', '--host', 'alpha', '--host', 'beta', '--to', String(process.pid), '--message', 'dry', '--dry-run']);
   assert.equal(dry.code, 0); assert.deepEqual(dry.value.map((item: { status: string }) => item.status), ['validated', 'validated']);
   assert.equal(messages.length, 2);
+});
+
+test('malformed send result stays unknown for that host without replacing another host outcome', posix, async t => {
+  const f = fixture(t), messages = await inbox(t, f.path);
+  const sent = await f.invoke(['send', '--to', String(process.pid), '--message', 'probe', '--no-from', '--no-reply-to',
+    '--host', 'good-fixture', '--host', 'bad-fixture'], { FAKE_MALFORMED_TARGET: 'bad-fixture' });
+  assert.equal(sent.code, 1);
+  assert.equal(sent.value[0].status, 'posted');
+  assert.equal(sent.value[0].submitted, true);
+  assert.equal(sent.value[1].status, 'unknown');
+  assert.equal(sent.value[1].submitted, null);
+  assert.equal(sent.value[1].retryAllowed, false);
+  assert.equal(f.calls().filter(call => kind(call) === 'request').length, 2);
+  assert.equal(messages.length, 2);
+});
+
+test('a malformed single-host send result is unknown and is not retried', posix, async t => {
+  const f = fixture(t);
+  await inbox(t, f.path);
+  const sent = await f.invoke(['send', '--to', String(process.pid), '--message', 'probe', '--no-from', '--no-reply-to',
+    '--host', 'bad-fixture'], { FAKE_MALFORMED_TARGET: 'bad-fixture' });
+  assert.equal(sent.code, 1);
+  assert.equal(sent.value.status, 'unknown');
+  assert.equal(sent.value.submitted, null);
+  assert.equal(sent.value.retryAllowed, false);
+  assert.equal(f.calls().filter(call => kind(call) === 'request').length, 1);
+});
+
+test('a valid Python-compatible send target may omit its agent field', posix, async t => {
+  const f = fixture(t);
+  await inbox(t, f.path);
+  const sent = await f.invoke(['send', '--to', String(process.pid), '--message', 'probe', '--no-from', '--no-reply-to',
+    '--host', 'legacy-fixture'], { FAKE_LEGACY_TARGET: 'legacy-fixture' });
+  assert.equal(sent.code, 0);
+  assert.equal(sent.value.status, 'posted');
+  assert.equal(sent.value.submitted, true);
+  assert.equal(f.calls().filter(call => kind(call) === 'request').length, 1);
+});
+
+test('unnamed Claude PID targets stay valid for remote dry-runs in JSON and text', posix, async t => {
+  const f = fixture(t);
+  await inbox(t, f.path, null);
+  const args = ['send', '--host', 'alpha', '--host', 'beta', '--to', String(process.pid), '--message', 'probe', '--dry-run'];
+
+  const json = await f.invoke(args);
+  assert.equal(json.code, 0);
+  assert.deepEqual(json.value.map((item: Record<string, unknown>) => ({
+    ok: item.ok, status: item.status, submitted: item.submitted,
+    targetName: (item.target as Record<string, unknown>).name,
+  })), [
+    { ok: true, status: 'validated', submitted: false, targetName: null },
+    { ok: true, status: 'validated', submitted: false, targetName: null },
+  ]);
+
+  const text = await f.invoke(args, {}, ['--output-format', 'text']);
+  assert.equal(text.code, 0);
+  assert.equal(text.stdout, `Host: alpha\nvalidated: claude:${process.pid}\nDry run: nothing submitted.\n\nHost: beta\nvalidated: claude:${process.pid}\nDry run: nothing submitted.\n`);
+  assert.deepEqual(f.calls().filter(call => kind(call) === 'request').map(destination), ['alpha', 'beta', 'alpha', 'beta']);
+});
+
+test('unnamed Claude PID sends preserve each successful host result without retries', posix, async t => {
+  const f = fixture(t), messages = await inbox(t, f.path, null);
+  const args = ['send', '--host', 'alpha', '--host', 'beta', '--to', String(process.pid), '--message', 'probe'];
+
+  const json = await f.invoke(args);
+  assert.equal(json.code, 0);
+  assert.deepEqual(json.value.map((item: Record<string, unknown>) => ({
+    ok: item.ok, status: item.status, submitted: item.submitted,
+    targetName: (item.target as Record<string, unknown>).name,
+  })), [
+    { ok: true, status: 'posted', submitted: true, targetName: null },
+    { ok: true, status: 'posted', submitted: true, targetName: null },
+  ]);
+
+  const text = await f.invoke(args, {}, ['--output-format', 'text']);
+  assert.equal(text.code, 0);
+  assert.equal(text.stdout, `Host: alpha\nposted: claude:${process.pid}\nSubmitted; consumption/ACK is not confirmed.\n\nHost: beta\nposted: claude:${process.pid}\nSubmitted; consumption/ACK is not confirmed.\n`);
+  assert.deepEqual(messages.map(m => m.message.content), ['probe', 'probe', 'probe', 'probe']);
+  assert.deepEqual(f.calls().filter(call => kind(call) === 'request').map(destination), ['alpha', 'beta', 'alpha', 'beta']);
 });
 
 test('allowlisted options follow the fixed hardening options on POSIX and Windows remote paths', posix, async t => {

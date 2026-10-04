@@ -1,8 +1,16 @@
 export type OutputFormat = 'json' | 'text';
 // Escape terminal controls plus bidi/zero-width format characters in
 // user-controlled names/paths; preserve other Unicode.
-const safe = (value: unknown): string => String(value ?? '').replace(/[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g,
-  char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+const safe = (value: unknown): string => {
+  let text: string;
+  try { text = String(value ?? ''); }
+  catch {
+    try { text = JSON.stringify(value) ?? '[unprintable]'; }
+    catch { text = '[unprintable]'; }
+  }
+  return text.replace(/[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g,
+    char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+};
 export function renderOutput(value: Record<string, unknown> | Record<string, unknown>[], format: OutputFormat): string {
   if (format === 'json') return JSON.stringify(value);
   if (Array.isArray(value)) return value.map(item => `Host: ${safe(item.host)}\n${renderOutput(item, format)}`).join('\n\n');

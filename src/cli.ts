@@ -7,7 +7,7 @@ import { lstatSync } from 'node:fs';
 import { listing, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send, CodexUnknownOutcome } from './send.js';
-import { HomeRefusal } from './writer.js';
+import { HomeRefusal, uuid } from './writer.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 import { CHANNELS, checkUpdate, noticeText, refreshCache, refuseSelfUpdate, REFRESH_ARG, updateNotice, UpdateRefusal } from './updates.js';
 import { jumpOptions, sshConfig, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
@@ -216,6 +216,18 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   if (command === 'send' && (value.consumptionConfirmed !== false ||
       (value.ok && (value.submitted !== !flags.has('--dry-run') || value.status !== expectedStatus)) ||
       (!value.ok && !((value.submitted === false && value.status === 'refused') || (value.submitted === null && value.status === 'unknown'))))) return uncertain();
+  if (command === 'send' && value.ok) {
+    const target = value.target as Record<string, unknown> | undefined;
+    const requestedTarget = values.get('--to') ?? '';
+    const requestedCodexThread = requestedTarget.startsWith('codex:') ? requestedTarget.slice(6) : undefined;
+    const validTarget = target && !Array.isArray(target) &&
+      (target.agent === undefined || target.agent === (requestedCodexThread ? 'codex' : 'claude')) &&
+      (requestedCodexThread
+        ? typeof target.id === 'string' && uuid(target.id) && target.id.toLowerCase() === requestedCodexThread.toLowerCase()
+        : Number.isSafeInteger(target.pid) && (target.pid as number) > 0 &&
+          (typeof target.name === 'string' || target.name === null));
+    if (!validTarget) return uncertain();
+  }
   // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
   delete value.clientUpdate;
   return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: done.code! };
