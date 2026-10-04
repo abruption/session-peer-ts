@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import { reply } from '../dist/protocol.js';
 import { replyUri } from '../dist/replies.js';
 
@@ -18,15 +19,15 @@ function uri(agent: string, session: string, transport = 'local') {
   return `session-peer://v1/reply?agent=${agent}&session=${encodeURIComponent(session)}&transport=${transport}${transport === 'ssh' ? '&host=fixture-host' : ''}`;
 }
 
-test('Claude reply routes refuse the reserved Codex prefix after decoding', () => {
-  for (const target of [`codex:${id}`, 'codex:not-a-uuid', 'codex:']) {
+test('Claude reply routes refuse reserved dispatch prefixes after decoding', () => {
+  for (const target of [`codex:${id}`, 'codex:not-a-uuid', 'codex:', uri('codex', id), 'session-peer:invalid']) {
     for (const transport of ['local', 'ssh']) {
       assert.throws(() => reply(uri('claude', target, transport)), /invalid_reply_uri/);
     }
     assert.throws(() => replyUri({ agent: 'claude', id: target }), /invalid_reply_uri/);
   }
   // URL decoding happens once; mixed case and encoded punctuation remain literal.
-  for (const name of ['worker', 'api worker', '한글', 'Codex:literal', 'codex%3Aliteral', 'worker+one']) {
+  for (const name of ['worker', 'api worker', '한글', 'Codex:literal', 'codex%3Aliteral', 'session-peer%3Aliteral', 'worker+one']) {
     assert.deepEqual(reply(uri('claude', name)), { to: name });
     assert.deepEqual(reply(replyUri({ agent: 'claude', id: name })), { to: name });
   }
@@ -51,9 +52,9 @@ process.stdout.write(result.stdout);process.exit(result.status);`, { mode: 0o700
   const env = { ...process.env, HOME: root, USERPROFILE: root, CLAUDE_CONFIG_DIR: join(root, '.claude'),
     CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '',
     SESSION_PEER_TAILSCALE: 'off', PATH: root + delimiter + process.env.PATH };
-  async function invoke(address: string) {
-    const child = spawn(process.execPath, [cli, 'send', '--to', address, '--message', 'fixture', '--no-from', '--no-reply-to', '--json'],
-      { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  async function execute(args: string[], input?: string) {
+    const child = spawn(process.execPath, [cli, ...args], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stdin.end(input);
     let stdout = '', stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
@@ -62,7 +63,9 @@ process.stdout.write(result.stdout);process.exit(result.status);`, { mode: 0o700
     assert.equal(signal, null, stderr);
     return { code, value: JSON.parse(stdout) };
   }
-  return { root, invoke, codexCalls: () => existsSync(codexLog) ? readFileSync(codexLog, 'utf8').length : 0,
+  const invoke = (address: string) => execute(['send', '--to', address, '--message', 'fixture', '--no-from', '--no-reply-to', '--json']);
+  const wire = (args: string[]) => execute(['--stdio-request'], JSON.stringify({ schemaVersion: 1, args }));
+  return { root, invoke, wire, codexCalls: () => existsSync(codexLog) ? readFileSync(codexLog, 'utf8').length : 0,
     sshCalls: () => existsSync(sshLog) ? readFileSync(sshLog, 'utf8').length : 0 };
 }
 
@@ -78,6 +81,41 @@ test('CLI rejects agent confusion before local Codex selection or any SSH dispat
     assert.equal(f.codexCalls(), 0);
     assert.equal(f.sshCalls(), 0);
   }
+});
+
+test('nested Reply-To URIs cannot change a declared Claude route after SSH forwarding', async t => {
+  const f = fixture(t);
+  const inner = uri('codex', id);
+  const nested = uri('claude', inner);
+  for (const session of [inner, nested, 'session-peer:invalid']) {
+    for (const transport of ['ssh', 'local']) {
+      const result = await f.invoke(uri('claude', session, transport));
+      assert.notEqual(result.code, 0);
+      assert.equal(result.value.error, 'invalid_reply_uri');
+      assert.equal(result.value.status, 'refused'); assert.equal(result.value.submitted, false);
+      assert.equal(result.value.retryAllowed, false);
+      assert.equal(f.sshCalls(), 0); assert.equal(f.codexCalls(), 0);
+    }
+  }
+});
+
+test('wire receivers refuse unresolved Reply-To URIs before a queue invocation', async t => {
+  const f = fixture(t), home = join(f.root, 'saved-home');
+  mkdirSync(home);
+  const db = new DatabaseSync(join(home, 'state_5.sqlite'));
+  try {
+    db.exec('CREATE TABLE threads(id TEXT)');
+    db.prepare('INSERT INTO threads VALUES (?)').run(id);
+  } finally { db.close(); }
+  const address = uri('codex', id) + '&codexHome=' + encodeURIComponent(home);
+  const args = ['send', '--to', address, '--codex-bin', join(f.root, 'codex'), '--allow-inactive-codex-home',
+    '--message', 'fixture', '--no-from', '--no-reply-to', '--json'];
+  // A saved inactive thread and callable fixture rule out a missing-thread refusal.
+  const result = await f.wire(args);
+  t.diagnostic(JSON.stringify({ error: result.value.error, queueCalls: f.codexCalls(), sshCalls: f.sshCalls() }));
+  assert.notEqual(result.code, 0); assert.equal(result.value.error, 'nested_transport_forbidden');
+  assert.equal(result.value.submitted, false); assert.equal(result.value.retryAllowed, false);
+  assert.equal(f.codexCalls(), 0); assert.equal(f.sshCalls(), 0);
 });
 
 test('declared Codex reply routes still reach local and POSIX fake SSH Codex selection', async t => {

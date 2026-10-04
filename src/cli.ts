@@ -289,7 +289,7 @@ try {
     format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
     if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
     if (wire && command === 'update') throw new Refusal('remote_update_unsupported');
-    if (wire && (options.hosts.length || options.ssh.args.length || options.jump || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path') ||
+    if (wire && (options.address || options.hosts.length || options.ssh.args.length || options.jump || options.values.has('--remote-bin') || options.values.has('--remote-platform') || options.values.has('--ssh-control-path') ||
       options.values.has('--reply-to') || options.flags.has('--check-return-route'))) throw new Refusal('nested_transport_forbidden');
     if (!wire && options.values.has('--return-route-host')) throw new Refusal('unsupported_option');
     // Tailscale status is queried at most once, and only when a route needs it.
