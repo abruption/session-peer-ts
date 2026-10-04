@@ -50,7 +50,7 @@ process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   }
   return { path, env, calls, invoke };
 }
-async function inbox(t: TestContext, path: string) {
+async function inbox(t: TestContext, path: string, name: string | null = 'fixture') {
   const messages: { message: { content: string } }[] = [];
   const socket = join(path, 'sock');
   const server = createServer(s => {
@@ -59,7 +59,7 @@ async function inbox(t: TestContext, path: string) {
   });
   server.listen(socket); await once(server, 'listening');
   t.after(() => new Promise<void>((ok, fail) => server.close(error => error ? fail(error) : ok())));
-  writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: 'fixture', messagingSocketPath: socket }));
+  writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name, messagingSocketPath: socket }));
   return messages;
 }
 const destination = (call: Call) => call.args[call.args.indexOf('--') + 1];
@@ -240,6 +240,48 @@ test('a valid Python-compatible send target may omit its agent field', posix, as
   assert.equal(sent.value.status, 'posted');
   assert.equal(sent.value.submitted, true);
   assert.equal(f.calls().filter(call => kind(call) === 'request').length, 1);
+});
+
+test('unnamed Claude PID targets stay valid for remote dry-runs in JSON and text', posix, async t => {
+  const f = fixture(t);
+  await inbox(t, f.path, null);
+  const args = ['send', '--host', 'alpha', '--host', 'beta', '--to', String(process.pid), '--message', 'probe', '--dry-run'];
+
+  const json = await f.invoke(args);
+  assert.equal(json.code, 0);
+  assert.deepEqual(json.value.map((item: Record<string, unknown>) => ({
+    ok: item.ok, status: item.status, submitted: item.submitted,
+    targetName: (item.target as Record<string, unknown>).name,
+  })), [
+    { ok: true, status: 'validated', submitted: false, targetName: null },
+    { ok: true, status: 'validated', submitted: false, targetName: null },
+  ]);
+
+  const text = await f.invoke(args, {}, ['--output-format', 'text']);
+  assert.equal(text.code, 0);
+  assert.equal(text.stdout, `Host: alpha\nvalidated: claude:${process.pid}\nDry run: nothing submitted.\n\nHost: beta\nvalidated: claude:${process.pid}\nDry run: nothing submitted.\n`);
+  assert.deepEqual(f.calls().filter(call => kind(call) === 'request').map(destination), ['alpha', 'beta', 'alpha', 'beta']);
+});
+
+test('unnamed Claude PID sends preserve each successful host result without retries', posix, async t => {
+  const f = fixture(t), messages = await inbox(t, f.path, null);
+  const args = ['send', '--host', 'alpha', '--host', 'beta', '--to', String(process.pid), '--message', 'probe'];
+
+  const json = await f.invoke(args);
+  assert.equal(json.code, 0);
+  assert.deepEqual(json.value.map((item: Record<string, unknown>) => ({
+    ok: item.ok, status: item.status, submitted: item.submitted,
+    targetName: (item.target as Record<string, unknown>).name,
+  })), [
+    { ok: true, status: 'posted', submitted: true, targetName: null },
+    { ok: true, status: 'posted', submitted: true, targetName: null },
+  ]);
+
+  const text = await f.invoke(args, {}, ['--output-format', 'text']);
+  assert.equal(text.code, 0);
+  assert.equal(text.stdout, `Host: alpha\nposted: claude:${process.pid}\nSubmitted; consumption/ACK is not confirmed.\n\nHost: beta\nposted: claude:${process.pid}\nSubmitted; consumption/ACK is not confirmed.\n`);
+  assert.deepEqual(messages.map(m => m.message.content), ['probe', 'probe', 'probe', 'probe']);
+  assert.deepEqual(f.calls().filter(call => kind(call) === 'request').map(destination), ['alpha', 'beta', 'alpha', 'beta']);
 });
 
 test('allowlisted options follow the fixed hardening options on POSIX and Windows remote paths', posix, async t => {

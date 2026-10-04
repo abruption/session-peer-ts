@@ -224,7 +224,8 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
       (target.agent === undefined || target.agent === (requestedCodexThread ? 'codex' : 'claude')) &&
       (requestedCodexThread
         ? typeof target.id === 'string' && uuid(target.id) && target.id.toLowerCase() === requestedCodexThread.toLowerCase()
-        : Number.isSafeInteger(target.pid) && (target.pid as number) > 0 && typeof target.name === 'string');
+        : Number.isSafeInteger(target.pid) && (target.pid as number) > 0 &&
+          (typeof target.name === 'string' || target.name === null));
     if (!validTarget) return uncertain();
   }
   // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
