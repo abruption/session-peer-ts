@@ -26,6 +26,9 @@ export function reply(value: string): { to: string; host?: string; home?: string
   const agent = fields.get('agent'), target = fields.get('session'), transport = fields.get('transport');
   if (!target || !['claude', 'codex'].includes(agent ?? '') || !['local', 'ssh'].includes(transport ?? '')) throw new Refusal('invalid_reply_uri');
   if (agent === 'codex' && !uuid(target)) throw new Refusal('invalid_reply_uri');
+  // `to` uses reserved prefixes for agent selection and Reply-To parsing.
+  // A forwarded value must not become Codex or another URI at the receiver.
+  if (agent === 'claude' && (target.startsWith('codex:') || target.startsWith('session-peer:'))) throw new Refusal('invalid_reply_uri');
   if (agent !== 'codex' && fields.has('codexHome')) throw new Refusal('invalid_reply_uri');
   // Match Python: a POSIX or Windows absolute path, never cwd- or ~-relative.
   if (fields.has('codexHome') && !/^(?:\/|[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+)/.test(fields.get('codexHome')!)) throw new Refusal('invalid_reply_uri');

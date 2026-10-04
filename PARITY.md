@@ -469,6 +469,13 @@ endpoints refuse each other at preflight; upgrade them together.
 
 ## Sender context and return routes — #21 / 0.3.0
 
+Source patch for #98 (planned 0.3.1): a Claude Reply-To URI whose decoded
+`session` starts with reserved lowercase `codex:` or `session-peer:` is `invalid_reply_uri` before
+local selection or SSH dispatch. Ordinary Claude names and Codex UUID routes
+keep their existing contract; this patch is not in the immutable npm 0.3.0 archive.
+Wire receivers require an already resolved target; an unresolved Reply-To URI
+in `--stdio-request` is `nested_transport_forbidden` before queue or SSH calls.
+
 [#21](https://github.com/abruption/session-peer-ts/issues/21) behavior added in
 0.3.0; 0.2.1 and earlier do not have it. Compared with Python
 1.0.2 `replies.py`/`diagnostics.py`:
