@@ -200,3 +200,30 @@ test('doctor reports a relocated Codex sqlite_home as unsupported instead of rea
   assert.equal(invalid.homes[0].status, 'unknown');
   assert.equal(invalid.homes[0].code, 'codex_config_unreadable');
 });
+
+test('doctor distinguishes nested sqlite_home keys from an escaped root override', async t => {
+  const f = fixture(t); f.db(); // Use doctor's full readable threads schema.
+  const file = join(f.home, 'config.toml');
+  const nested = 'model = "fixture"\n[profiles.p]\nsqlite_home = "/fixture/nested-only"\n';
+  const nestedEscaped = 'model = "fixture"\n[profiles.p]\n' + String.raw`"sqlite\u005fhome" = "/fixture/nested-only"` + '\n';
+  const dotted = 'model = "fixture"\nprofiles.p.sqlite_home = "/fixture/nested-only"\n';
+  for (const text of [nested, nestedEscaped, dotted]) {
+    writeFileSync(file, text);
+    const result = await diagnoseCodex(f.home, process.execPath) as any;
+    const selected = result.homes.find((home: any) => home.codexHome === f.home);
+    assert.ok(selected); assert.equal(selected.status, 'available'); assert.equal(selected.code, 'state_db_readable');
+    assert.equal(result.ready, true); assert.equal(result.tool.executed, false);
+    assert.equal(result.sendAuthorized, false);
+  }
+  // Root keys precede the table header; otherwise they would remain nested.
+  for (const key of [String.raw`"sqlite\u005fhome"`, String.raw`"sqlite\U0000005fhome"`]) {
+    const text = `${key} = "/fixture/root-relocated"\n${nested}`;
+    writeFileSync(file, text); assert.equal(readFileSync(file, 'utf8'), text);
+    const result = await diagnoseCodex(f.home, process.execPath) as any;
+    const selected = result.homes.find((home: any) => home.codexHome === f.home);
+    assert.ok(selected); assert.equal(selected.status, 'unsupported');
+    assert.equal(selected.code, 'unsupported_codex_sqlite_home');
+    assert.equal(result.ready, false); assert.equal(result.tool.executed, false);
+    assert.equal(result.sendAuthorized, false);
+  }
+});
