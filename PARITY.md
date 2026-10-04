@@ -239,6 +239,7 @@ a release commitment. Recheck the exact packaged copy during release review.
 
 ## Source Codex home selection — #17 / 0.2.0
 
+
 This is 0.2.0 behavior; it does not change the immutable npm 0.1.0 archive. `send --to codex:UUID` selects only a unique stable live writer across
 bounded known homes. `--codex-home` pins the destination but still inventories
 competitors. A unique live writer without a saved row yields
@@ -288,6 +289,13 @@ changing successful queue status. Failed native processes never expose an ID.
 
 Contracts: `test/codex-homes.test.ts`, `test/transport.test.ts` and
 `test/windows-contract.test.ts`. These are fixtures, not real recipient ACKs.
+
+### UID-zero writer identity — source patch #100
+
+Source patch for #100 (planned 0.3.1): numeric UID 0 is a valid caller identity
+for writer verification. Unknown or mismatched owners still refuse, and all
+lock stability/start-time checks and Windows SID validation are retained.
+This patch is not in the immutable npm 0.3.0 archive.
 
 ## Source read-only doctor — #18 / 0.2.0
 
