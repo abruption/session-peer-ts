@@ -116,6 +116,15 @@ are in [windows-contract.test.ts](https://github.com/abruption/session-peer-ts/b
 The Python oracle runs in POSIX CI; deterministic fixtures and injected filesystem
 failures run on Windows too. Error injection is not a real Windows ACL test.
 
+### Bounded Claude registry reads — source patch #99
+
+Source patch for #99 (planned 0.3.1): Claude list/send/sender discovery skips
+non-regular, symlinked or larger-than-1-MiB registry records while retaining
+healthy records. Descriptor checks, POSIX nonblocking open and bounded reads
+cover FIFO replacement races. This is not a deadline for network-filesystem
+I/O; doctor retains its separately bounded metadata contract. The patch is not
+in the immutable npm 0.3.0 archive.
+
 ## JSON result compatibility
 
 Do not parse human messages or assume an optional key exists. Python's
