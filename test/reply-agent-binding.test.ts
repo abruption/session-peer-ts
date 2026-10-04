@@ -80,9 +80,10 @@ test('CLI rejects agent confusion before local Codex selection or any SSH dispat
   }
 });
 
-test('declared Codex reply routes still reach local and fake SSH Codex selection', async t => {
+test('declared Codex reply routes still reach local and POSIX fake SSH Codex selection', async t => {
   const f = fixture(t);
-  for (const transport of ['local', 'ssh']) {
+  const transports = process.platform === 'win32' ? ['local'] : ['local', 'ssh'];
+  for (const transport of transports) {
     const result = await f.invoke(uri('codex', id, transport));
     assert.notEqual(result.code, 0);
     // The isolated homes have no saved thread; routing still selects Codex.
