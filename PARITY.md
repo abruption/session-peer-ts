@@ -228,9 +228,9 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
 single 0.4.0 milestone. Milestone assignment is not delivery or publication evidence.
 
 The upstream candidate is [Python Draft PR #261](https://github.com/abruption/session-peer/pull/261),
-commit `605061e7813431449f2d64e3b11de8f33689a99c`:
-[document](https://github.com/abruption/session-peer/blob/605061e7813431449f2d64e3b11de8f33689a99c/docs/contracts/handoff-v1.md)
-and [synthetic fixture](https://github.com/abruption/session-peer/blob/605061e7813431449f2d64e3b11de8f33689a99c/tests/fixtures/handoff-v1.json).
+commit `b369cef5bd7be433e28d515cce2f44d3bbf20f0b`:
+[document](https://github.com/abruption/session-peer/blob/b369cef5bd7be433e28d515cce2f44d3bbf20f0b/docs/contracts/handoff-v1.md)
+and [synthetic fixture](https://github.com/abruption/session-peer/blob/b369cef5bd7be433e28d515cce2f44d3bbf20f0b/tests/fixtures/handoff-v1.json).
 Exact copies are retained in `test/fixtures/handoff-v1.md` and
 `test/fixtures/handoff-v1.json`; `handoff-v1.pin.json` records their SHA-256 hashes,
 review status and separate runtime/design references. These test-only files are
@@ -263,28 +263,39 @@ but refuse before effect. Source-streamed SSH without a compatible receipt handl
 remains ACK-unsupported under this candidate. No transcript/body-returning observer
 or fallback after a possible submission is authorized.
 
-### Open joint-review gates
+### Amended candidate review and remaining gates
 
-The exact candidate has been reviewed and amendments requested; design freeze is
-withheld pending these normative clarifications and matching synthetic vectors:
+The amended exact candidate supersedes the first `605061` review snapshot. Its
+normative document and synthetic vectors now address the seven prior findings:
 
-1. Authenticate even read-only duplicate receipt queries against the original
-   capability hash and binding after expiry; returning an existing receipt must
-   not create a new receipt or admit a wrong-token replay.
-2. Atomically retain committed receipt classification and wait-order facts.
-   Separate recovery of a proven committed ACK from unclassified timing evidence;
-   define manual confirmation when original ordering cannot be proved.
-3. Define original-generation delayed receipts versus successor receipts. A null
-   generation cannot mint a capability or satisfy a required evidence channel.
-4. Scope secret non-disclosure to sender/collector outputs, own persistence and
-   diagnostics; native effect input may be retained by the intended receiver's
-   queue/history. Document token-possession assurance and no secret reflection.
-5. Define a missing/corrupt-ledger query result without inventing a mandatory
-   ledgerEpoch, auto-initializing history or filling legacy fields with false/null.
-6. Specify encoded object/delimiter/outer fanout byte limits and retain valid native
-   evidence when optional handoff data is malformed or oversized.
-7. Gate opt-in SSH result combinations by the originating request and validate
-   known native targets even on ok:false; reject forged or mismatched evidence.
+1. Duplicate receipt queries require original capability-hash authentication,
+   including the same-committed-receipt expiry exception; wrong tokens are denied.
+2. Receipt classification and wait-order facts commit atomically. Proven committed
+   ACKs survive clock restart; unprovable manual confirmation refuses without rewriting history.
+3. Receipt evidence binds the original generation. Null generation cannot mint
+   authority; copied original capability data is explicitly only token-possession assurance.
+4. Sender/collector outputs and own persistence exclude secrets, while intended
+   recipient native storage may retain effect-input authority outside CLI control.
+5. Missing/corrupt ledger or unknown ID returns a closed `handoffQuery` error,
+   without a fabricated epoch or native result. Known tombstones retain original context.
+6. Raw private input, compact public subtree and outer/fanout limits are defined
+   separately; lexical constraints stay inside the new schema and native facts are preserved.
+7. Explicit-wait wire exceptions require the original request and validated native
+   target/IDs/goal; returned metadata cannot opt a legacy request in or promote forged ACK.
+
+**Freeze is still withheld pending exact joint approval.** The final review must
+also settle stopped/interrupted wait operation tuples: the proposal specifies
+SIGINT exit 130, but the synthetic request-aware exception currently models exit 1
+and lacks explicit stopped/interruption examples. Deliberate stopping, interruption
+and successful status queries need distinct result rules while preserving native
+submission facts and making no new effect. This is a contract/fixture clarification,
+not permission to add runtime handlers.
+
+Python's exact-candidate documentation tests and CodeQL passed; its optional
+Control dependency audit and required release gate failed. That CI status is
+separate from this static design review. No bypass, dependency repair or claim of
+a fully passing upstream PR is made here. Runtime producer/collector/bootstrap,
+platform cleanup, metadata-only observation and live acceptance remain future gates.
 
 `handoff-contract.test.ts` checks exact pins, synthetic status and selected golden
 safety invariants. It does not implement or test a collector, native receipt,
