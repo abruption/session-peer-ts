@@ -218,6 +218,80 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    external Relay infrastructure or a remote host automatically. To return to
    Python, select its recorded path or uninstall only the npm-owned installation.
 
+## Handoff v1 design candidate — #69
+
+**Status: proposal v0.2; not frozen, implemented or shipped.** All four issues
+[#69](https://github.com/abruption/session-peer-ts/issues/69),
+[#70](https://github.com/abruption/session-peer-ts/issues/70),
+[#71](https://github.com/abruption/session-peer-ts/issues/71) and
+[#72](https://github.com/abruption/session-peer-ts/issues/72) remain in the
+single 0.4.0 milestone. Milestone assignment is not delivery or publication evidence.
+
+The upstream candidate is [Python Draft PR #261](https://github.com/abruption/session-peer/pull/261),
+commit `605061e7813431449f2d64e3b11de8f33689a99c`:
+[document](https://github.com/abruption/session-peer/blob/605061e7813431449f2d64e3b11de8f33689a99c/docs/contracts/handoff-v1.md)
+and [synthetic fixture](https://github.com/abruption/session-peer/blob/605061e7813431449f2d64e3b11de8f33689a99c/tests/fixtures/handoff-v1.json).
+Exact copies are retained in `test/fixtures/handoff-v1.md` and
+`test/fixtures/handoff-v1.json`; `handoff-v1.pin.json` records their SHA-256 hashes,
+review status and separate runtime/design references. These test-only files are
+excluded from the npm package; the existing 51-file package allowlist is unchanged.
+
+The design review uses published Python 1.0.3 at
+`0d252550ab40c26d1ac4a19193df6ca2f84d830b` as its compatibility baseline.
+Current TS runtime/conformance/referenceVersion markers still retain their existing
+1.0.2 comparison pin. This PR neither re-pins runtime parity to an unshipped Python
+feature release nor claims that Python and TS legacy outputs are identical.
+An approved design commit may pin the shared contract fixture; feature parity can
+move to a release only after that release actually implements the contract.
+
+### Proposed separation and TS implementation gates
+
+| Axis | Candidate meaning / TS boundary |
+| --- | --- |
+| Submission | Preserve native status, target, queueId, submitted and optional-field absence; an observer failure must not pass through a catch that erases known submission evidence. |
+| Observation | Opt-in, body-free metadata for an exact native message ID/home/original generation. Queue deletion or turn completion is not receipt ACK. |
+| Receipt ACK | Receipt-only capability or explicitly recorded operator attestation; never generic reply parsing, a new model prompt, wake or permission to act. |
+| Wait | Separate immutable wait operation/results; a late receipt can add current evidence without changing the original timeout result. |
+| Retry | Native local/SSH replay remains forbidden. Sender fences do not implement receiver dedup or a universal exactly-once guarantee. |
+| SSH | A fully validated, requested explicit-wait result may preserve queued/true with ok:false/exit1. Unrequested handoff data cannot enable this exception; target validation is still required. |
+
+The candidate adds a nested `handoff` object only in opted-in mode. Its proposed
+init/prepare/status/wait/confirm/ack commands, epoch IDs, private collector,
+30-second per-destination budget and 5-second cleanup reserve are **not current
+CLI capabilities**. Budgets 1–5 seconds are syntactically valid in the proposal
+but refuse before effect. Source-streamed SSH without a compatible receipt handler
+remains ACK-unsupported under this candidate. No transcript/body-returning observer
+or fallback after a possible submission is authorized.
+
+### Open joint-review gates
+
+The exact candidate has been reviewed and amendments requested; design freeze is
+withheld pending these normative clarifications and matching synthetic vectors:
+
+1. Authenticate even read-only duplicate receipt queries against the original
+   capability hash and binding after expiry; returning an existing receipt must
+   not create a new receipt or admit a wrong-token replay.
+2. Atomically retain committed receipt classification and wait-order facts.
+   Separate recovery of a proven committed ACK from unclassified timing evidence;
+   define manual confirmation when original ordering cannot be proved.
+3. Define original-generation delayed receipts versus successor receipts. A null
+   generation cannot mint a capability or satisfy a required evidence channel.
+4. Scope secret non-disclosure to sender/collector outputs, own persistence and
+   diagnostics; native effect input may be retained by the intended receiver's
+   queue/history. Document token-possession assurance and no secret reflection.
+5. Define a missing/corrupt-ledger query result without inventing a mandatory
+   ledgerEpoch, auto-initializing history or filling legacy fields with false/null.
+6. Specify encoded object/delimiter/outer fanout byte limits and retain valid native
+   evidence when optional handoff data is malformed or oversized.
+7. Gate opt-in SSH result combinations by the originating request and validate
+   known native targets even on ok:false; reject forged or mismatched evidence.
+
+`handoff-contract.test.ts` checks exact pins, synthetic status and selected golden
+safety invariants. It does not implement or test a collector, native receipt,
+crash recovery, monotonic clock continuity, app-server or live SSH. Upstream's
+separate test-only validator likewise supplies design/schema checks, not runtime
+acceptance evidence. No issue is closed and no implementation is enabled here.
+
 ## Evidence and ongoing maintenance
 
 | Evidence class | What it establishes | What it does not establish |

@@ -104,6 +104,8 @@ session-peer --version
 - [개발·기여 안내](CONTRIBUTING.md).
 - [릴리스 절차](RELEASING.md).
 
+- [0.4.0 handoff 계약 후보(미구현·미확정)](PARITY.md#handoff-v1-design-candidate--69).
+
 ## License
 
 [MIT 라이선스](LICENSE)를 따릅니다.

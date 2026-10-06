@@ -1,0 +1,30 @@
+{
+  "status": "candidate_not_frozen",
+  "proposalVersion": "0.2",
+  "pythonRepository": "abruption/session-peer",
+  "pythonDesignPR": 261,
+  "pythonDesignCommit": "605061e7813431449f2d64e3b11de8f33689a99c",
+  "pythonRuntimeVersion": "1.0.3",
+  "pythonRuntimeCommit": "0d252550ab40c26d1ac4a19193df6ca2f84d830b",
+  "document": {
+    "path": "handoff-v1.md",
+    "upstreamPath": "docs/contracts/handoff-v1.md",
+    "sha256": "e401979d6f8694ce096cdf6fde4c22fbfcf11e23667fa9183844aa085bf26f91"
+  },
+  "fixture": {
+    "path": "handoff-v1.json",
+    "upstreamPath": "tests/fixtures/handoff-v1.json",
+    "sha256": "7ed40eee8b03d6d1a06496661e733f8661641341fe9798006a8dd2fd551c81e6"
+  },
+  "runtimeImplemented": false,
+  "jointFreezeApproved": false,
+  "openReviewGates": [
+    "duplicate-receipt-authentication-after-capability-expiry",
+    "durable-receipt-classification-and-recovery-time-order",
+    "original-generation-delayed-receipt-vs-successor",
+    "native-input-secret-retention-and-output-boundary",
+    "missing-ledger-unknown-epoch-result-shape",
+    "frame-and-outer-response-byte-boundaries",
+    "request-gated-ssh-wait-result-and-native-target-validation"
+  ]
+}
