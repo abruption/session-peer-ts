@@ -19,6 +19,8 @@
   "runtimeImplemented": false,
   "jointFreezeApproved": false,
   "openReviewGates": [
+    "per-runtime-native-profile-and-optional-absence-wire-validation",
+    "post-submission-unsupported-wait-result-tuple",
     "interrupted-and-deliberate-stopped-wait-operation-tuples",
     "joint-exact-candidate-design-freeze-approval"
   ],

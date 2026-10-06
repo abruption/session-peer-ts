@@ -283,13 +283,22 @@ normative document and synthetic vectors now address the seven prior findings:
 7. Explicit-wait wire exceptions require the original request and validated native
    target/IDs/goal; returned metadata cannot opt a legacy request in or promote forged ACK.
 
-**Freeze is still withheld pending exact joint approval.** The final review must
-also settle stopped/interrupted wait operation tuples: the proposal specifies
-SIGINT exit 130, but the synthetic request-aware exception currently models exit 1
-and lacks explicit stopped/interruption examples. Deliberate stopping, interruption
-and successful status queries need distinct result rules while preserving native
-submission facts and making no new effect. This is a contract/fixture clarification,
-not permission to add runtime handlers.
+**Freeze is still withheld pending exact joint approval.** The document now states
+the seven prior rules, but the synthetic wire examples/guard need final alignment:
+
+- Use explicit per-runtime native profiles. A Codex target cannot use `posted`,
+  required consumption facts cannot be overwritten, and Python Claude optional
+  status/submitted absence differs from TS Claude. Native target/home checks must
+  match that profile rather than only compare a target dictionary.
+- Preserve a known successful submission when a required observation channel
+  becomes unsupported after effect. The corresponding exit-1 wait result must
+  be accepted only through the original explicit-wait request context.
+- Define stopped/interrupted wait operation tuples. The proposal specifies SIGINT
+  exit 130, but the synthetic exception currently models exit 1 and lacks explicit
+  stopped/interruption examples. A successful status query remains exit 0;
+  interruption cannot rewrite already terminal waits or create another effect.
+
+These are contract/fixture clarifications, not permission to add runtime handlers.
 
 Python's exact-candidate documentation tests and CodeQL passed; its optional
 Control dependency audit and required release gate failed. That CI status is
