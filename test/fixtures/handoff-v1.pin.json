@@ -3,28 +3,33 @@
   "proposalVersion": "0.2",
   "pythonRepository": "abruption/session-peer",
   "pythonDesignPR": 261,
-  "pythonDesignCommit": "605061e7813431449f2d64e3b11de8f33689a99c",
+  "pythonDesignCommit": "b369cef5bd7be433e28d515cce2f44d3bbf20f0b",
   "pythonRuntimeVersion": "1.0.3",
   "pythonRuntimeCommit": "0d252550ab40c26d1ac4a19193df6ca2f84d830b",
   "document": {
     "path": "handoff-v1.md",
     "upstreamPath": "docs/contracts/handoff-v1.md",
-    "sha256": "e401979d6f8694ce096cdf6fde4c22fbfcf11e23667fa9183844aa085bf26f91"
+    "sha256": "b3f1477c80cbc22d5b82c3acd498fa36c4be4d54d53cf46bf8fc764ccf6359b8"
   },
   "fixture": {
     "path": "handoff-v1.json",
     "upstreamPath": "tests/fixtures/handoff-v1.json",
-    "sha256": "7ed40eee8b03d6d1a06496661e733f8661641341fe9798006a8dd2fd551c81e6"
+    "sha256": "7bc88f449a5868b42d3424bdf0537d0068496a75ad22c6d8363dbdf189cb31a3"
   },
   "runtimeImplemented": false,
   "jointFreezeApproved": false,
   "openReviewGates": [
-    "duplicate-receipt-authentication-after-capability-expiry",
-    "durable-receipt-classification-and-recovery-time-order",
-    "original-generation-delayed-receipt-vs-successor",
-    "native-input-secret-retention-and-output-boundary",
-    "missing-ledger-unknown-epoch-result-shape",
-    "frame-and-outer-response-byte-boundaries",
+    "interrupted-and-deliberate-stopped-wait-operation-tuples",
+    "joint-exact-candidate-design-freeze-approval"
+  ],
+  "previousCandidateCommit": "605061e7813431449f2d64e3b11de8f33689a99c",
+  "reviewedAmendments": [
+    "duplicate-receipt-original-hash-authentication-after-expiry",
+    "atomic-classified-receipt-recovery-and-unprovable-order-refusal",
+    "immutable-original-generation-and-copied-token-assurance-limit",
+    "native-input-retention-and-controlled-secret-output-boundary",
+    "missing-context-handoffQuery-without-invented-epoch",
+    "subtree-raw-outer-and-fanout-frame-boundaries",
     "request-gated-ssh-wait-result-and-native-target-validation"
   ]
 }

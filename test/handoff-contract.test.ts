@@ -26,6 +26,12 @@ type Fixture = {
   provenance: { pythonRuntimeVersion: string; pythonRuntimeCommit: string; exampleKind: string };
   legacySnapshots: { name: string; result: Record<string, unknown>; mustRemainAbsent: string[]; noEffectProof?: boolean }[];
   accepted: Example[];
+  queryErrors: { name: string; exit: number; result: Record<string, unknown> & {
+    ok: boolean; reason: string; handoffQuery: { status: string; context: string; retry: { allowed: boolean; reason: string } };
+  } }[];
+  requestAwareWireCases: { name: string; optIn: boolean; explicitWait: boolean; exit: number; expected: {
+    wireAccepted: boolean; nativeEvidencePreserved: boolean; handoffValidated: boolean; ackPromoted: boolean; resubmit: boolean;
+  } }[];
 };
 const file = (path: string) => readFileSync(new URL(`./fixtures/${path}`, import.meta.url));
 const pin = JSON.parse(file('handoff-v1.pin.json').toString('utf8')) as Pin;
@@ -88,5 +94,41 @@ test('shared golden examples preserve submission, legacy absence and terminal wa
     assert.equal(value.result.handoff.retry.allowed, false);
     assert.equal(value.result.handoff.retry.reason, 'receiver_dedup_unavailable');
     assert.equal(value.result.handoff.nextActions.includes('resend_same_id'), false);
+  }
+});
+
+// Expected-contract assertions only; these do not execute a query or wire handler.
+test('amended missing-context examples never invent a ledger epoch or native snapshot', () => {
+  assert.equal(fixture.queryErrors.length, 3);
+  for (const value of fixture.queryErrors) {
+    assert.equal(value.exit, 1); assert.equal(value.result.ok, false);
+    assert.equal(value.result.reason, 'handoff_history_unavailable');
+    assert.equal(value.result.handoffQuery.status, 'unknown');
+    assert.ok(['ledger_missing', 'ledger_corrupt', 'id_unknown'].includes(value.result.handoffQuery.context));
+    assert.equal(value.result.handoffQuery.retry.allowed, false);
+    assert.equal(value.result.handoffQuery.retry.reason, 'history_unavailable');
+    for (const key of ['handoff', 'ledgerEpoch', 'status', 'submitted', 'consumptionConfirmed']) {
+      assert.equal(Object.hasOwn(value.result, key), false);
+    }
+    assert.equal(Object.hasOwn(value.result.handoffQuery, 'ledgerEpoch'), false);
+  }
+});
+
+test('amended declared wire cases require original opt-in and native-target evidence', () => {
+  assert.equal(fixture.requestAwareWireCases.length, 14);
+  for (const value of fixture.requestAwareWireCases) {
+    assert.equal(value.expected.resubmit, false);
+    if (!value.optIn) {
+      // A valid legacy success remains acceptable; unrequested metadata never
+      // enables a failed-wait tuple or authenticated handoff/ACK evidence.
+      if (value.exit !== 0) assert.equal(value.expected.wireAccepted, false);
+      assert.equal(value.expected.handoffValidated, false);
+      assert.equal(value.expected.ackPromoted, false);
+    }
+    if (value.name.includes('wrong_native_target')) {
+      assert.equal(value.expected.nativeEvidencePreserved, false);
+      assert.equal(value.expected.wireAccepted, false);
+      assert.equal(value.expected.ackPromoted, false);
+    }
   }
 });
