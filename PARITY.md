@@ -296,7 +296,8 @@ The final candidate now aligns the three remaining fixture/profile rules:
 
 The shared candidate has 39 synthetic request-aware wire vectors for positive,
 forged, wrong-target/home/agent/profile, unsupported and interruption cases.
-The TS review has no additional normative change proposed at this snapshot.
+The exact candidate has TS design-only approval after independent review; no
+additional normative change is requested for these reviewed findings.
 **Recorded joint design freeze is still pending:** the mirrored upstream files
 remain proposal v0.2, and `jointFreezeApproved` remains false. Design-only approval
 does not establish receipt/bootstrap/runtime acceptance or authorize a merge,
