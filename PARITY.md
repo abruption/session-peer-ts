@@ -228,9 +228,9 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
 single 0.4.0 milestone. Milestone assignment is not delivery or publication evidence.
 
 The upstream candidate is [Python Draft PR #261](https://github.com/abruption/session-peer/pull/261),
-commit `b369cef5bd7be433e28d515cce2f44d3bbf20f0b`:
-[document](https://github.com/abruption/session-peer/blob/b369cef5bd7be433e28d515cce2f44d3bbf20f0b/docs/contracts/handoff-v1.md)
-and [synthetic fixture](https://github.com/abruption/session-peer/blob/b369cef5bd7be433e28d515cce2f44d3bbf20f0b/tests/fixtures/handoff-v1.json).
+commit `99d8ec3855d57da34a6fa789f3a375820a8fbe85`:
+[document](https://github.com/abruption/session-peer/blob/99d8ec3855d57da34a6fa789f3a375820a8fbe85/docs/contracts/handoff-v1.md)
+and [synthetic fixture](https://github.com/abruption/session-peer/blob/99d8ec3855d57da34a6fa789f3a375820a8fbe85/tests/fixtures/handoff-v1.json).
 Exact copies are retained in `test/fixtures/handoff-v1.md` and
 `test/fixtures/handoff-v1.json`; `handoff-v1.pin.json` records their SHA-256 hashes,
 review status and separate runtime/design references. These test-only files are
@@ -283,22 +283,24 @@ normative document and synthetic vectors now address the seven prior findings:
 7. Explicit-wait wire exceptions require the original request and validated native
    target/IDs/goal; returned metadata cannot opt a legacy request in or promote forged ACK.
 
-**Freeze is still withheld pending exact joint approval.** The document now states
-the seven prior rules, but the synthetic wire examples/guard need final alignment:
+The final candidate now aligns the three remaining fixture/profile rules:
 
-- Use explicit per-runtime native profiles. A Codex target cannot use `posted`,
-  required consumption facts cannot be overwritten, and Python Claude optional
-  status/submitted absence differs from TS Claude. Native target/home checks must
-  match that profile rather than only compare a target dictionary.
-- Preserve a known successful submission when a required observation channel
-  becomes unsupported after effect. The corresponding exit-1 wait result must
-  be accepted only through the original explicit-wait request context.
-- Define stopped/interrupted wait operation tuples. The proposal specifies SIGINT
-  exit 130, but the synthetic exception currently models exit 1 and lacks explicit
-  stopped/interruption examples. A successful status query remains exit 0;
-  interruption cannot rewrite already terminal waits or create another effect.
+- Four original-request profiles preserve Python Claude's absent native fields,
+  TS Claude's nullable name/optional agent and Codex's queued/true/false result,
+  optional queue ID, native UUID normalization and canonical home/context.
+- A post-submission unsupported channel is a request-gated explicit-wait failure
+  at exit 1, preserving known submission and any injection evidence.
+- Interrupting a pending explicit wait records stopped/stopped_by_operator and
+  returns complete structured output with ok:false/exit130. A successful status
+  query of that record returns exit 0; terminal waits remain immutable.
 
-These are contract/fixture clarifications, not permission to add runtime handlers.
+The shared candidate has 39 synthetic request-aware wire vectors for positive,
+forged, wrong-target/home/agent/profile, unsupported and interruption cases.
+The TS review has no additional normative change proposed at this snapshot.
+**Recorded joint design freeze is still pending:** the mirrored upstream files
+remain proposal v0.2, and `jointFreezeApproved` remains false. Design-only approval
+does not establish receipt/bootstrap/runtime acceptance or authorize a merge,
+implementation, operational change or publication.
 
 Python's exact-candidate documentation tests and CodeQL passed; its optional
 Control dependency audit and required release gate failed. That CI status is
