@@ -100,7 +100,7 @@ session-peer --version
 - [开发与贡献](CONTRIBUTING.md).
 - [发布流程](RELEASING.md).
 
-- [0.4.0 handoff 契约候选（未实现、未冻结）](PARITY.md#handoff-v1-design-candidate--69).
+- [0.4.0 handoff 设计（联合确认、未实现）](PARITY.md#handoff-v1-design-candidate--69).
 
 ## License
 

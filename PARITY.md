@@ -220,7 +220,7 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
 
 ## Handoff v1 design candidate — #69
 
-**Status: proposal v0.2; not frozen, implemented or shipped.** All four issues
+**Status: jointly approved, frozen DESIGN v0.2; runtime unimplemented and unshipped.** All four issues
 [#69](https://github.com/abruption/session-peer-ts/issues/69),
 [#70](https://github.com/abruption/session-peer-ts/issues/70),
 [#71](https://github.com/abruption/session-peer-ts/issues/71) and
@@ -298,10 +298,17 @@ The shared candidate has 39 synthetic request-aware wire vectors for positive,
 forged, wrong-target/home/agent/profile, unsupported and interruption cases.
 The exact candidate has TS design-only approval after independent review; no
 additional normative change is requested for these reviewed findings.
-**Recorded joint design freeze is still pending:** the mirrored upstream files
-remain proposal v0.2, and `jointFreezeApproved` remains false. Design-only approval
-does not establish receipt/bootstrap/runtime acceptance or authorize a merge,
-implementation, operational change or publication.
+**Joint design freeze is recorded for the exact source/hash tuple above.**
+[Python acceptance record](https://github.com/abruption/session-peer/pull/261#issuecomment-6016310362)
+confirms both sides' design-only approval; TS acceptance was recorded at
+`63473fb80936b0085e08039997ac39f7158a58dd`. `handoff-v1.pin.json` now has
+`jointFreezeApproved:true`, `runtimeImplemented:false` and no open design-review
+gates. The byte-identical source document and synthetic fixture retain their
+historical proposal/draft labels; the external approval freezes DESIGN, not a
+shipped or implemented runtime protocol. No regeneration or runtime/reference
+repin occurred. Normative/schema/vector changes require a new exact joint review.
+Design-only approval does not establish receipt/bootstrap/runtime acceptance or
+authorize merge, implementation, live effects, operational changes or publication.
 
 Python's exact-candidate documentation tests and CodeQL passed; its optional
 Control dependency audit and required release gate failed. That CI status is

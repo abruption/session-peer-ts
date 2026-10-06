@@ -1,5 +1,5 @@
 {
-  "status": "candidate_not_frozen",
+  "status": "design_frozen_unimplemented",
   "proposalVersion": "0.2",
   "pythonRepository": "abruption/session-peer",
   "pythonDesignPR": 261,
@@ -17,10 +17,8 @@
     "sha256": "963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441"
   },
   "runtimeImplemented": false,
-  "jointFreezeApproved": false,
-  "openReviewGates": [
-    "recorded-joint-exact-candidate-design-freeze"
-  ],
+  "jointFreezeApproved": true,
+  "openReviewGates": [],
   "previousCandidateCommit": "b369cef5bd7be433e28d515cce2f44d3bbf20f0b",
   "reviewedAmendments": [
     "duplicate-receipt-original-hash-authentication-after-expiry",
@@ -42,6 +40,18 @@
     "fixtureSha256": "963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441",
     "scope": "normative_design_and_synthetic_fixture_only",
     "remainingNormativeFindings": [],
+    "runtimeImplementationApproved": false,
+    "mergeOrPublicationApproved": false
+  },
+  "jointDesignFreeze": {
+    "status": "approved_design_only",
+    "scope": "normative_design_and_synthetic_fixture_only",
+    "sourceCommit": "99d8ec3855d57da34a6fa789f3a375820a8fbe85",
+    "documentSha256": "46a953010c49214bd8f969412f26713384fbe09a0ba78ebf0fef75da40d0d889",
+    "fixtureSha256": "963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441",
+    "pythonAcceptanceRecord": "https://github.com/abruption/session-peer/pull/261#issuecomment-6016310362",
+    "tsAcceptanceCommit": "63473fb80936b0085e08039997ac39f7158a58dd",
+    "sourceBytesRegenerated": false,
     "runtimeImplementationApproved": false,
     "mergeOrPublicationApproved": false
   }

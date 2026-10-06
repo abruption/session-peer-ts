@@ -104,7 +104,7 @@ session-peer --version
 - [開発・貢献](CONTRIBUTING.md).
 - [リリース手順](RELEASING.md).
 
-- [0.4.0 handoff 契約候補（未実装・未確定）](PARITY.md#handoff-v1-design-candidate--69).
+- [0.4.0 handoff 設計（共同合意・未実装）](PARITY.md#handoff-v1-design-candidate--69).
 
 ## License
 

@@ -10,6 +10,10 @@ type Pin = {
   document: { path: string; upstreamPath: string; sha256: string };
   fixture: { path: string; upstreamPath: string; sha256: string };
   runtimeImplemented: boolean; jointFreezeApproved: boolean; openReviewGates: string[];
+  jointDesignFreeze: { status: string; scope: string; sourceCommit: string;
+    documentSha256: string; fixtureSha256: string; pythonAcceptanceRecord: string;
+    sourceBytesRegenerated: boolean; runtimeImplementationApproved: boolean; mergeOrPublicationApproved: boolean };
+
 };
 type Handoff = {
   schemaVersion: number; state: string; submission: { status: string };
@@ -58,15 +62,25 @@ test('handoff candidate document and fixture match one explicit upstream design 
   assert.equal(fixture.provenance.pythonRuntimeVersion, pin.pythonRuntimeVersion);
 });
 
-test('mirrored proposal remains explicitly synthetic, unimplemented and unfrozen', () => {
-  assert.equal(pin.status, 'candidate_not_frozen');
-  assert.equal(pin.jointFreezeApproved, false);
+test('joint design freeze preserves exact historical synthetic bytes and denies runtime authority', () => {
+  assert.equal(pin.status, 'design_frozen_unimplemented');
+  assert.equal(pin.jointFreezeApproved, true);
   assert.equal(pin.runtimeImplemented, false);
   assert.equal(fixture.schemaVersion, 1);
   assert.equal(fixture.proposalVersion, pin.proposalVersion);
   assert.equal(fixture.status, 'draft_unimplemented');
   assert.equal(fixture.provenance.exampleKind, 'synthetic_normalized_not_live');
-  assert.ok(pin.openReviewGates.length > 0);
+  assert.deepEqual(pin.openReviewGates, []);
+  assert.equal(pin.jointDesignFreeze.status, 'approved_design_only');
+  assert.equal(pin.jointDesignFreeze.scope, 'normative_design_and_synthetic_fixture_only');
+  assert.equal(pin.jointDesignFreeze.sourceCommit, pin.pythonDesignCommit);
+  assert.equal(pin.jointDesignFreeze.documentSha256, pin.document.sha256);
+  assert.equal(pin.jointDesignFreeze.fixtureSha256, pin.fixture.sha256);
+  assert.equal(pin.jointDesignFreeze.pythonAcceptanceRecord,
+    'https://github.com/abruption/session-peer/pull/261#issuecomment-6016310362');
+  assert.equal(pin.jointDesignFreeze.sourceBytesRegenerated, false);
+  assert.equal(pin.jointDesignFreeze.runtimeImplementationApproved, false);
+  assert.equal(pin.jointDesignFreeze.mergeOrPublicationApproved, false);
   const document = file(pin.document.path).toString('utf8');
   assert.match(document, /not a frozen protocol/);
   assert.match(document, /No native\/live evidence/);

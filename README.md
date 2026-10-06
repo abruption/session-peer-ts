@@ -104,7 +104,7 @@ does not install a skill. Review its pinned-source instructions in the guide.
 - [Development and contributions](CONTRIBUTING.md).
 - [Release process](RELEASING.md).
 
-- [0.4.0 handoff contract candidate (unimplemented, not frozen)](PARITY.md#handoff-v1-design-candidate--69).
+- [0.4.0 handoff design (jointly agreed, unimplemented)](PARITY.md#handoff-v1-design-candidate--69).
 
 ## License
 

@@ -6,7 +6,7 @@
 
 This guide covers 0.3.1 ([reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.0 release evidence](../VALIDATION.md#public-030--2026-10-03-kst) records the previous publication. References to 0.1.0 below describe the older release.
 
-[0.4.0 handoff contract candidate (unimplemented, not frozen)](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff design (jointly agreed, unimplemented)](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## Contents
 
