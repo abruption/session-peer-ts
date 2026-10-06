@@ -115,7 +115,7 @@ test('amended missing-context examples never invent a ledger epoch or native sna
 });
 
 test('amended declared wire cases require original opt-in and native-target evidence', () => {
-  assert.equal(fixture.requestAwareWireCases.length, 14);
+  assert.equal(fixture.requestAwareWireCases.length, 39);
   for (const value of fixture.requestAwareWireCases) {
     assert.equal(value.expected.resubmit, false);
     if (!value.optIn) {
@@ -130,5 +130,35 @@ test('amended declared wire cases require original opt-in and native-target evid
       assert.equal(value.expected.wireAccepted, false);
       assert.equal(value.expected.ackPromoted, false);
     }
+  }
+});
+
+// These are pinned example invariants, not executions of the proposed operations.
+test('final candidate distinguishes native profiles, unsupported waits and interruption results', () => {
+  const pythonClaude = example('python_claude_explicit_ack_timeout');
+  assert.equal(pythonClaude.exit, 1); assert.equal(pythonClaude.result.ok, false);
+  for (const key of ['status', 'submitted', 'consumptionConfirmed']) {
+    assert.equal(Object.hasOwn(pythonClaude.result, key), false);
+  }
+  assert.equal(pythonClaude.result.handoff.submission.status, 'submitted');
+  const typescriptClaude = example('typescript_claude_explicit_ack_timeout');
+  assert.equal(typescriptClaude.result.status, 'posted'); assert.equal(typescriptClaude.result.submitted, true);
+  assert.equal(typescriptClaude.result.consumptionConfirmed, false);
+  const unsupported = example('queued_post_submission_unsupported');
+  assert.equal(unsupported.exit, 1); assert.equal(unsupported.result.ok, false);
+  assert.equal(unsupported.result.status, 'queued'); assert.equal(unsupported.result.submitted, true);
+  assert.equal(unsupported.result.handoff.wait.status, 'unsupported');
+  const interrupted = example('queued_interrupted_pending_wait');
+  assert.equal(interrupted.exit, 130); assert.equal(interrupted.result.ok, false);
+  assert.equal(interrupted.result.status, 'queued'); assert.equal(interrupted.result.submitted, true);
+  assert.equal(interrupted.result.handoff.wait.status, 'stopped');
+  const query = example('stopped_status_query');
+  assert.equal(query.exit, 0); assert.equal(query.result.ok, true);
+  assert.equal(query.result.handoff.wait.status, 'stopped');
+  for (const name of ['codex_posted_is_invalid', 'codex_consumption_overwrite', 'wrong_codex_home',
+    'interrupted_wrong_exit_one', 'interrupted_wrong_exit_zero', 'interrupted_wrong_wait_reason']) {
+    const value = fixture.requestAwareWireCases.find(x => x.name === name);
+    assert.ok(value, `missing final design vector: ${name}`);
+    assert.equal(value.expected.wireAccepted, false); assert.equal(value.expected.resubmit, false);
   }
 });
