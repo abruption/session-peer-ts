@@ -55,7 +55,7 @@ provides general native ACK/wait, end-to-end deduplication or Side Session.
 Relay/MCP are outside this migration comparison.
 
 
-[0.4.0 handoff contract candidate (unimplemented, not frozen)](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff design (jointly agreed, unimplemented)](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## Contents
 

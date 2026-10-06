@@ -25,7 +25,7 @@
 [마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. Python 1.0.2 테스트 기준은 유지합니다. 비교 대상 공개 CLI 모두 일반 네이티브 ACK/wait, 종단 간 중복 방지, Side Session을 제공하지 않습니다. Relay/MCP는 이 비교 범위에서 제외합니다.
 
 
-[0.4.0 handoff 계약 후보(미구현·미확정)](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff 설계(공동 확정·미구현)](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 목차
 

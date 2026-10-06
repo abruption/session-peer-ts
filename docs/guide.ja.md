@@ -25,7 +25,7 @@
 [移行の詳細](../PARITY.md#ordinary-cli-migration-notes--117)と [Windows の検証記録](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)を参照してください。Python 1.0.2 のテスト基準は維持します。比較対象の公開 CLI はどちらも一般のネイティブ ACK/wait、エンドツーエンドの重複防止、Side Session を提供しません。Relay/MCP はこの比較の対象外です。
 
 
-[0.4.0 handoff 契約候補（未実装・未確定）](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff 設計（共同合意・未実装）](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 目次
 
