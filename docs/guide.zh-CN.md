@@ -25,6 +25,8 @@
 请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。Python 1.0.2 测试基准保持不变。对比的两个公开 CLI 都没有通用原生 ACK/wait、端到端去重或 Side Session 支持。Relay/MCP 不在此次迁移对比范围内。
 
 
+[0.4.0 handoff 契约候选（未实现、未冻结）](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## 目录
 
 - [功能与边界](#功能与边界)
