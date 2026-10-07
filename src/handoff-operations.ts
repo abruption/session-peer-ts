@@ -93,7 +93,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
     if (!fenced && original && handoff.state !== 'refused') {
       try { handoff = ledger.refusePrepared(handoff.correlationId, original); } catch { /* Keep the last verified facts; never retry. */ }
     }
-    const code = error instanceof BeforeEffectRefused ? 'evidence_unsupported' : error instanceof Refusal ? error.code : uncertain ? 'outcome_unknown' : 'handoff_operation_failed';
+    const code = error instanceof BeforeEffectRefused ? handoff.wait.reason ?? 'evidence_unsupported' : error instanceof Refusal ? error.code : uncertain ? 'outcome_unknown' : 'handoff_operation_failed';
     return finish({ ...snapshot, ok: false, error: code, status: uncertain ? 'unknown' : 'refused', submitted: uncertain ? null : false,
       consumptionConfirmed: false, retryAllowed: false }, error instanceof Refusal ? error.exitCode : 1);
   }

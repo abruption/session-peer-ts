@@ -161,17 +161,19 @@ export function parse(args: string[]): Options {
   }
   return { command, values, flags, hosts, ssh, ...(jump ? { jump } : {}), ...(address ? { address } : {}) };
 }
-async function input(limit = 4_100_000, preserveBOM = false): Promise<string> {
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  for await (const chunk of process.stdin) {
-    const part = Buffer.from(chunk); bytes += part.length;
-    if (bytes > limit) throw new Refusal('input_too_large');
-    chunks.push(part);
-  }
-  try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: preserveBOM }).decode(Buffer.concat(chunks)); }
-  catch { throw new Refusal('invalid_utf8'); }
+async function input(limit = 4_100_000, preserveBOM = false, timeoutMs?: number): Promise<string> {
+  const chunks: Buffer[] = []; let bytes = 0;
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => process.stdin.destroy(new Refusal('deadline_before_effect', 1)), Math.max(1,timeoutMs));
+  try {
+    for await (const chunk of process.stdin) {
+      const part = Buffer.from(chunk); bytes += part.length;
+      if (bytes > limit) throw new Refusal('input_too_large'); chunks.push(part);
+    }
+    try { return new TextDecoder('utf-8', {fatal:true,ignoreBOM:preserveBOM}).decode(Buffer.concat(chunks)); }
+    catch { throw new Refusal('invalid_utf8'); }
+  } finally { if(timer) clearTimeout(timer); }
 }
+
 const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 // Classify only the no-message version preflight. Never expose SSH stderr,
 // which can contain user paths or agent output.
@@ -338,7 +340,7 @@ try {
     let message: string | undefined, routing: Record<string, unknown> = {};
     if (command === 'send') {
       message = options.values.has('--message-file') ? privateMessage(options.values.get('--message-file')!) : options.values.get('--message');
-      if (message === undefined || message === '-') { if (wire) throw new Refusal('remote_message_required'); message = await input(); }
+      if (message === undefined || message === '-') { if (wire) throw new Refusal('remote_message_required'); message = await input(4_100_000, false, handoffBudget?.observationRemainingMs()); }
       checkMessage(message); rawMessage = message;
       const noFrom = options.flags.has('--no-from'), noReply = options.flags.has('--no-reply-to');
       if (options.address) {
