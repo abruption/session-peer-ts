@@ -724,7 +724,7 @@ gaps:
 
 The details and the deviations from this workflow are in
 [VALIDATION.md](../../VALIDATION.md#remote-deployment-workflow-posix-cell-23-f5--2026-10-02-kst).
-Rules added afterwards remain **unvalidated, on Linux too**:
+Rules added after that Linux run remain **unvalidated on Linux**:
 - the fresh-lock recovery of an unreceipted target;
 - receipts that copy the marker's `runId`;
 - `.receipts` trust checks;
