@@ -79,7 +79,7 @@ SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언�
 합니다.
 
 <a id="cli-usability-in-020"></a>
-### 0.2.0 CLI 사용성
+### 0.2.0 명령줄 인터페이스 사용성
 
 0.2.0에서는 `list --help`, `send --help`, `doctor --help`와 명시적인
 `--output-format text`를 사용할 수 있습니다. 출력 형식은 계속 지정해야 합니다.

@@ -33,9 +33,14 @@ for (const file of locales) {
     ...locales.map(name => `](${name})`)]) {
     assert.ok(content.includes(token), `${file}: missing contract token ${token}`);
   }
+  const topLevelHeadings = file === 'README.ko.md'
+    ? ['시연', '빠른 시작', '문서', '라이선스', '지원 및 보안']
+    : ['Demo', 'Quick Start', 'Docs', 'License', 'Support and security'];
+  const quickStartHeadings = file === 'README.ko.md' ? ['설치', '업데이트'] : ['Install', 'Update'];
   assert.deepEqual([...content.matchAll(/^## (.+)$/gm)].map(match => match[1]),
-    ['Demo', 'Quick Start', 'Docs', 'License', 'Support and security'], `${file}: entry-page structure`);
-  assert.deepEqual([...content.matchAll(/^### (.+)$/gm)].map(match => match[1]), ['Install', 'Update']);
+    topLevelHeadings, `${file}: entry-page structure`);
+  assert.deepEqual([...content.matchAll(/^### (.+)$/gm)].map(match => match[1]), quickStartHeadings,
+    `${file}: quick-start structure`);
 }
 for (const file of guides) {
   const content = read(file);
@@ -85,6 +90,6 @@ for (const path of ['package-lock.json', '.env.example', 'src/cli.ts', 'test/fix
   assert.ok(!ignored(path), `must not ignore ${path}`);
 }
 if (process.env.PR_TITLE) {
-  assert.match(process.env.PR_TITLE, /^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\([^)]+\))?!?: \S/);
+  assert.match(process.env.PR_TITLE, /^(feat|fix|docs|문서|chore|refactor|test|perf|ci|build|revert)(\([^)]+\))?!?: \S/);
 }
 console.log('Repository metadata, four README/guide contracts, links/anchors and ignore rules: OK');

@@ -23,7 +23,7 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 **문서·소스 기준 버전: 0.3.2(공개된 안정 버전).** 아래 버전 고정 npm 명령을 실행하기 전에 레지스트리나 버전 배지에서 해당 버전이 공개됐는지 확인하세요. 새 버전을 발행하기 전에는 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드 산출물과 SSH 양쪽 종단은 같은 검토 버전을 사용해야 합니다.
 
 <a id="demo"></a>
-## Demo
+## 시연
 
 ![TypeScript session-peer 0.2.1로 Codex에서 Claude Code에 보낸 실제 요청과 회신](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
@@ -45,7 +45,7 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract and 
 항상 `false`이며, 실제 회신은 수신 측 TUI(터미널 사용자 인터페이스)에서 직접 확인하세요.
 
 <a id="quick-start"></a>
-## Quick Start
+## 빠른 시작
 
 macOS, Linux, Windows와 **Node 22.x의 22.13 이상 또는 24.x**가 필요합니다.
 운영체제와 아키텍처(x64/arm64)에 맞는 네이티브 사전 빌드 의존성도 필요합니다.
@@ -57,7 +57,7 @@ TypeScript 클라이언트**를 사용해야 합니다. 운영체제별 요구�
 보내는 조건은 [통합 목록 설명](docs/guide.ko.md#unified-listing-in-020)을 참고하세요.
 
 <a id="install"></a>
-### Install
+### 설치
 
 [Python CLI](https://github.com/abruption/session-peer)도 별도로 구현·배포되지만,
 `session-peer`라는 같은 명령 이름을 사용합니다. 설치 전에 macOS/Linux에서는 `type -a session-peer`,
@@ -79,7 +79,7 @@ session-peer --version
 참고하세요.
 
 <a id="update"></a>
-### Update
+### 업데이트
 
 npm으로 설치한 클라이언트는 사용자가 직접 npm으로 업데이트합니다. 사용 가능한 배포 태그
 (dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 0.3.2로
@@ -115,7 +115,7 @@ session-peer --version
 <a id="에이전트-스킬-명시적-설치"></a>
 
 <a id="docs"></a>
-## Docs
+## 문서
 
 - [사용자 가이드](docs/guide.ko.md) — CLI 옵션, 탐색, Codex 홈, SSH, 회신, 여러 설치 방법과 스킬 설정.
 - [API 참조(영문)](docs/api.md).
@@ -125,12 +125,12 @@ session-peer --version
 - [릴리스 절차](RELEASING.md).
 
 <a id="license"></a>
-## License
+## 라이선스
 
 [MIT 라이선스](LICENSE)로 배포합니다.
 
 <a id="support-and-security"></a>
-## Support and security
+## 지원 및 보안
 
 사용법에 관한 질문과 재현 가능한 버그는 [이슈](https://github.com/abruption/session-peer-ts/issues)에
 등록해 주세요. 보안 취약점은 [비공개 신고](https://github.com/abruption/session-peer-ts/security/advisories/new)
