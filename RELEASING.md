@@ -7,7 +7,21 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## 0.3.2 release procedure
+## Public release checkpoint — 0.3.2 (2026-10-07 KST)
+
+Public `session-peer@0.3.2` was verified with `latest=0.3.2` and unchanged
+`preview=0.1.0-preview.1`; see [the dated record](VALIDATION.md#public-032--2026-10-07-kst).
+Publication source: `f335f07352c842f2f6ceb12bd2ca6274b52f69f7`; stage-only run
+`37571653938`; stage `2226865d-2dac-4d42-bd4e-2e1c998b9833`.
+The Actions/staged/public bytes matched, and integrity, source provenance,
+signature audit and isolated install/removal passed. This is not a GitHub
+Release/tag or fleet rollout record.
+
+The procedure below is historical for this completed publication. Do not
+replay its approvals, stage 0.3.2 again or republish that version. A later
+release needs a new baseline, exact source approval and validation.
+
+## Completed 0.3.2 release procedure
 
 The release preparation is based on reviewed main `488ddddac302ba2ad0841061dc8df9187ff6a983`; 0.4 feature branches are excluded. The required pre-staging baseline is **0.3.1**, with `latest=0.3.1` and `preview=0.1.0-preview.1`; these are preconditions, not a permanent statement of registry state. Check the registry and dated validation record for publication status. Previous stable integrity is pinned to:
 `sha512-iZq06dbm6NavHuPZYMIxAnzQN5ksqm66yufpppddVWUYkuaG5TJvktbUXTSX7v3BBFnuybEJekI0KSaDo3Xfbg==`.

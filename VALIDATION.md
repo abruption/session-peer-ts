@@ -1,5 +1,44 @@
 # Validation record — updated 2026-10-07 KST
 
+## Public 0.3.2 — 2026-10-07 KST
+
+`session-peer@0.3.2` was published at **2026-10-07 13:34:36 KST**
+(`2026-10-07T04:34:36.456Z`). Verified registry tags: `latest=0.3.2`,
+`preview=0.1.0-preview.1` unchanged. Publication source is
+`f335f07352c842f2f6ceb12bd2ca6274b52f69f7` (PR #112 after #111), with exact-main
+CLI run `37570782974` and CodeQL run `37570783335` both successful.
+
+Stage-only Trusted Publisher workflow [37571653938](https://github.com/abruption/session-peer-ts/actions/runs/37571653938)
+completed prepare and publish. The approved inputs were exact source above,
+version `0.3.2`, mode `stable-stage`; protected GitHub environment approval and
+separate npm 2FA approval followed. Stage ID:
+`2226865d-2dac-4d42-bd4e-2e1c998b9833`.
+
+- Retained Actions archive, downloaded staged tarball and public registry
+  tarball were byte-identical. SHA-256:
+  `a1ded0c99765f25d0570aa8a38e2ccf0c1c4760b3e25de2b1f20f56061b90540`.
+- Registry integrity:
+  `sha512-VNlzBqELXLFI8uCopfEdYrfweIacHeP6dMK32/4vwQJy8fUIKC64c5WCE3IwQVeCTKGMz9mXSxhzZnXmSGMuuA==`.
+- Public publish/SLSA attestation subject digests matched the tarball. SLSA
+  named the exact source above, `abruption/session-peer-ts`, `publish.yml` and
+  run `37571653938/attempts/1`.
+- `node scripts/release.mjs artifact` and `verify` passed against the retained
+  Actions artifact: allowlist/version/source/hash, registry integrity/tags,
+  attestation metadata, npm signature audit, fresh isolated installation and
+  removal. All 16 packaged Markdown files byte-matched publication source.
+- Authenticated stage listing and ownership were checked. Fresh Trusted
+  Publisher permission/package MFA settings reads requested reauthentication;
+  the operator instructed skipping those reads. No fresh settings confirmation
+  is claimed. The actual OIDC stage, protected environment review and separate
+  proof-of-presence publication are recorded above; no setting was changed.
+
+The Windows destination qualification below used published **0.3.1**, not
+0.3.2 live delivery. Runtime delta in 0.3.2 is VERSION only; no 0.4.0 drafts
+were included. #20 Windows-client jump and #23 remaining qualification/design
+follow-ups remain open. GitHub tag/Release and fleet upgrades are not claimed.
+The preparation checkpoints below describe their dated pre-publication state.
+
+
 ## 0.3.2 preparation checkpoint — 2026-10-07 KST
 
 This is an unpublished patch candidate based on main
