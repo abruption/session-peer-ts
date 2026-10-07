@@ -78,6 +78,7 @@ JSON에는 정제된 `codexHomeResolution`이 포함되며, 네이티브 응답�
 SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.3.2)을 설치해야
 합니다.
 
+<a id="020-cli-사용성"></a>
 <a id="cli-usability-in-020"></a>
 ### 0.2.0 명령줄 인터페이스 사용성
 

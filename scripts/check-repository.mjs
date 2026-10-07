@@ -50,6 +50,10 @@ for (const file of guides) {
     assert.ok(content.includes(token), `${file}: missing guide contract token ${token}`);
   }
 }
+for (const anchor of ['020-cli-사용성', 'cli-usability-in-020']) {
+  assert.ok(read('docs/guide.ko.md').includes(`<a id="${anchor}"></a>`),
+    `docs/guide.ko.md: missing stable CLI anchor ${anchor}`);
+}
 function anchors(content) {
   const ids = new Set([...content.matchAll(/<a id="([^"]+)"/g)].map(match => match[1]));
   const seen = new Map();
