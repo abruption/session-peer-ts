@@ -90,6 +90,6 @@ for (const path of ['package-lock.json', '.env.example', 'src/cli.ts', 'test/fix
   assert.ok(!ignored(path), `must not ignore ${path}`);
 }
 if (process.env.PR_TITLE) {
-  assert.match(process.env.PR_TITLE, /^(feat|fix|docs|문서|chore|refactor|test|perf|ci|build|revert)(\([^)]+\))?!?: \S/);
+  assert.match(process.env.PR_TITLE, /^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\([^)]+\))?!?: \S/);
 }
 console.log('Repository metadata, four README/guide contracts, links/anchors and ignore rules: OK');
