@@ -155,6 +155,64 @@ test('required channels and null generation refuse before durable effect, includ
   const best = f.ledger.prepare({ ...f.binding, generation: null }, { requestAck: true, observeDelivery: true });
   assert.equal(best.ack.status, 'unsupported'); assert.equal(best.observation.status, 'unsupported');
 });
+test('qualified internal delivery supports required waits while receipt flags cannot qualify ACK', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init();
+  const pending = f.ledger.prepare(f.binding, { waitFor: 'delivered', observationSupported: true, requestAck: true, budget: new HandoffBudget(6, f.clock) });
+  assert.equal(pending.wait.status, 'pending'); assert.equal(pending.observation.status, 'pending'); assert.equal(pending.ack.status, 'unsupported');
+  submit(f, pending);
+  const observed = f.ledger.recordObservation(pending.correlationId, { clientUserMessageId: pending.correlationId, injectionObserved: true, turn: { id: 'turn', status: 'completed' } }, f.binding);
+  assert.equal(observed.state, 'delivered'); assert.equal(observed.wait.status, 'satisfied'); assert.equal(observed.ack.status, 'unsupported');
+  const refused = f.ledger.prepare(f.binding, { waitFor: 'acknowledged', channels: { delivery: true, receipt: true } });
+  assert.equal(refused.wait.status, 'unsupported'); assert.equal(refused.state, 'refused');
+});
+test('observation requires qualified original generation, exact binding/message ID and known submission', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init();
+  const h = f.ledger.prepare(f.binding, { observeDelivery: true, channels: { delivery: true }, clientUserMessageId: 'original-user-message' });
+  const evidence = { clientUserMessageId: 'original-user-message', injectionObserved: true };
+  assert.throws(() => f.ledger.recordObservation(h.correlationId, evidence, f.binding), /handoff_observation_unverified/);
+  submit(f, h);
+  assert.throws(() => f.ledger.recordObservation(h.correlationId, { ...evidence, clientUserMessageId: 'different-user-message' }, f.binding), /handoff_observation_unverified/);
+  for (const binding of [{ ...f.binding, generation: 'successor' }, { ...f.binding, destination: 'different' }, { ...f.binding, payloadDigest: payloadDigest('different') }]) {
+    assert.throws(() => f.ledger.recordObservation(h.correlationId, evidence, binding), /handoff_binding_conflict/);
+  }
+  const observed = f.ledger.recordObservation(h.correlationId, evidence, f.binding);
+  assert.equal(observed.state, 'delivered'); assert.equal(observed.submission.status, 'submitted'); assert.equal(observed.observation.clientUserMessageId, evidence.clientUserMessageId);
+  assert.equal(f.ledger.recordObservation(h.correlationId, { ...evidence, injectionObserved: false }, f.binding).state, 'delivered');
+  assert.throws(() => f.ledger.commitEffect(h.correlationId, f.binding), /handoff_already_attempted/);
+  const unqualified = f.ledger.prepare(f.binding); submit(f, unqualified);
+  assert.throws(() => f.ledger.recordObservation(unqualified.correlationId, { clientUserMessageId: unqualified.correlationId, injectionObserved: true }, f.binding), /handoff_observation_unverified/);
+  const nullBinding = { ...f.binding, generation: null }, nullH = f.ledger.prepare(nullBinding, { observeDelivery: true, observationSupported: true });
+  f.ledger.commitEffect(nullH.correlationId, nullBinding); f.ledger.recordSubmission(nullH.correlationId, 'submitted');
+  assert.throws(() => f.ledger.recordObservation(nullH.correlationId, { clientUserMessageId: nullH.correlationId, injectionObserved: true }, nullBinding), /handoff_observation_unverified/);
+});
+test('delivery at cutoff preserves timed-out wait; repeated observation cannot change original turn', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding, { waitFor: 'delivered', observationSupported: true, budget: new HandoffBudget(6, f.clock) });
+  submit(f, h); f.advance(1000);
+  const evidence = { clientUserMessageId: h.correlationId, injectionObserved: true, turn: { id: 'turn', status: 'completed' as const } };
+  const observed = f.ledger.recordObservation(h.correlationId, evidence, f.binding);
+  assert.equal(observed.wait.status, 'timed_out_unknown'); assert.equal(observed.state, 'delivered');
+  assert.throws(() => f.ledger.recordObservation(h.correlationId, { ...evidence, turn: { id: 'successor-turn', status: 'completed' } }, f.binding), /handoff_turn_conflict/);
+  assert.throws(() => f.ledger.recordObservation(h.correlationId, { ...evidence, turn: { id: 'turn', status: 'running' } }, f.binding), /handoff_turn_conflict/);
+  const later = f.ledger.beginWait(h.correlationId, 'delivered', new HandoffBudget(6, f.clock)); assert.equal(later.wait.status, 'satisfied');
+});
+test('exact injection evidence survives observer restart without inventing old wait ordering or ACK', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding, { waitFor: 'delivered', observationSupported: true }); submit(f, h);
+  const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
+  const observed = restarted.recordObservation(h.correlationId, { clientUserMessageId: h.correlationId, injectionObserved: true }, f.binding);
+  assert.equal(observed.state, 'delivered'); assert.equal(observed.wait.status, 'failed'); assert.equal(observed.wait.reason, 'history_unavailable');
+  assert.equal(observed.ack.status, 'not_requested'); assert.equal(observed.observation.injectionObserved, true);
+});
+test('late final resolution refusal consumes only a valid bound prepared reservation and fences restart', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding, { waitFor: 'delivered', observationSupported: true });
+  assert.throws(() => f.ledger.refusePrepared(randomUUID(), f.binding), /handoff_id_unknown/);
+  assert.throws(() => f.ledger.refusePrepared(h.correlationId, { ...f.binding, generation: 'successor' }), /handoff_binding_conflict/);
+  assert.equal(handoff(f.ledger, h.correlationId).state, 'validated');
+  const refused = f.ledger.refusePrepared(h.correlationId, f.binding, 'evidence_failed');
+  assert.equal(refused.state, 'refused'); assert.equal(refused.submission.status, 'refused'); assert.equal(refused.wait.status, 'failed');
+  const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
+  assert.throws(() => restarted.commitEffect(h.correlationId, f.binding), /handoff_already_attempted/);
+  assert.throws(() => restarted.prepare(f.binding, { correlationId: h.correlationId }), /handoff_already_attempted/);
+});
 test('insufficient budget consumes a real send reservation but dry runs do not', posix, t => {
   const f = fixtureLedger(t); f.ledger.init();
   const h = f.ledger.prepare(f.binding, { waitFor: 'acknowledged', budget: new HandoffBudget(5, f.clock) });
@@ -216,6 +274,14 @@ test('restarted unused authority expires conservatively and never regenerates a 
   const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
   assert.throws(() => restarted.acceptReceipt(receipt(h, capability)), /receipt_authority_expired/);
   assert.throws(() => restarted.mintCapability(h.correlationId, bootstrap), /receipt_authority_unavailable/);
+  assert.equal(handoff(restarted, h.correlationId).ack.status, 'unsupported');
+});
+test('a new native effect owner cannot revive receipt authority minted before process restart', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
+  const capability = f.ledger.mintCapability(h.correlationId, bootstrap);
+  const restarted = new HandoffLedger(f.ledger.path, { clock: { monotonic: () => 0, utc: f.clock.utc } });
+  restarted.commitEffect(h.correlationId, f.binding); restarted.recordSubmission(h.correlationId, 'submitted');
+  assert.throws(() => restarted.acceptReceipt(receipt(h, capability)), /receipt_authority_expired/);
   assert.equal(handoff(restarted, h.correlationId).ack.status, 'unsupported');
 });
 test('expired unspent receipt authority never offers keep_waiting or accepts a new receipt', posix, t => {

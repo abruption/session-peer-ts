@@ -147,7 +147,9 @@ export function validateHandoff(value: unknown): Handoff {
   if (Object.hasOwn(wait, 'reason') && !member(wait.reason, ['insufficient_budget', 'deadline_before_effect', 'evidence_unsupported', 'evidence_failed', 'history_unavailable', 'stopped_by_operator', 'invalid_handoff'])) fail();
   if (wait.status === 'stopped' && wait.reason !== 'stopped_by_operator') fail();
   if (wait.status === 'satisfied' && (wait.for === 'delivered' ? !obs.injectionObserved : ack.status !== 'acknowledged')) fail();
-  if (row.nextActions.includes('keep_waiting') && (row.targetGeneration === null || wait.status === 'unsupported' || ack.status === 'unsupported' || !['submitted', 'unknown'].includes(sub.status as string))) fail();
+  if (row.nextActions.includes('keep_waiting') && (row.targetGeneration === null || wait.status === 'unsupported' ||
+      (wait.for === 'delivered' ? !['pending', 'observed'].includes(obs.status as string) : ack.status === 'unsupported') ||
+      !['submitted', 'unknown'].includes(sub.status as string))) fail();
   if (row.nextActions.includes('stop_waiting') && wait.status !== 'pending') fail();
   if (Buffer.byteLength(JSON.stringify(row), 'utf8') > HANDOFF_LIMITS.publicFrame) fail('handoff_frame_too_large');
   return structuredClone(row) as Handoff;
