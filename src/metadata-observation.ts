@@ -1,8 +1,7 @@
 // Opt-in, metadata-only observation for the exact qualified Codex store below.
 // No transcript, native client, warming, migration or receipt bootstrap is used.
 import childProcess, { type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { lstatSync, realpathSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const METADATA_SOURCE = Object.freeze({ version: '0.160.1',
@@ -20,8 +19,9 @@ export type MetadataReason = 'metadata_version_unsupported' | 'metadata_platform
 export type MetadataCapability = { supported: boolean; reason?: MetadataReason };
 export type MetadataObservation = MetadataCapability & { injectionObserved: boolean; clientUserMessageId?: string;
   turn?: { id: string; status: 'running' | 'completed' | 'failed' | 'interrupted' | 'unknown' } };
-type Stamp = { path: string; dev: number; ino: number };
-type ProbeRequest = { mode: 'capability' | 'observe'; database: string; threadId: string; clientUserMessageId?: string };
+type ProbeResult = MetadataObservation & { storageStamp?: string };
+type ProbeRequest = { mode: 'snapshot' | 'capability' | 'observe'; database: string; threadId: string;
+  clientUserMessageId?: string; expectedStorageStamp?: string };
 const reasons: readonly MetadataReason[] = ['metadata_version_unsupported', 'metadata_platform_unsupported',
   'metadata_scope_invalid', 'metadata_storage_untrusted', 'metadata_history_unavailable', 'metadata_schema_unsupported',
   'metadata_owner_changed', 'metadata_deadline', 'metadata_probe_failed', 'metadata_probe_stopped', 'metadata_ambiguous'];
@@ -34,34 +34,6 @@ function remaining(budget?: MetadataBudget): number {
   const value = budget?.observationRemainingMs() ?? 3000;
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
-function trusted(scope: MetadataScope): Stamp[] {
-  const uid = process.getuid?.();
-  if (uid === undefined || !isAbsolute(scope.home) || resolve(scope.home) !== scope.home ||
-      realpathSync(scope.home) !== scope.home) throw new Error();
-  const home = lstatSync(scope.home);
-  if (!home.isDirectory() || home.isSymbolicLink() || home.uid !== uid || (home.mode & 0o022)) throw new Error();
-  const database = join(scope.home, METADATA_SOURCE.database);
-  const stamps: Stamp[] = [];
-  for (const path of [database, database + '-wal', database + '-shm', database + '-journal']) {
-    let info;
-    try { info = lstatSync(path); } catch (error) {
-      if (path !== database && (error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw error;
-    }
-    if (!info.isFile() || info.isSymbolicLink() || info.uid !== uid || info.nlink !== 1 || (info.mode & 0o022)) throw new Error();
-    // A rollback journal can require recovery. Never let this reader recover it.
-    if (path.endsWith('-journal')) throw new Error();
-    stamps.push({ path, dev: info.dev, ino: info.ino });
-  }
-  // Read-only WAL access requires a pre-existing shared-memory sidecar. SQLite
-  // may participate in transient SHM reader locks; it cannot create sidecars here.
-  if (stamps.some(item => item.path.endsWith('-wal')) !== stamps.some(item => item.path.endsWith('-shm'))) throw new Error();
-  return stamps;
-}
-function sameFiles(before: Stamp[], after: Stamp[]): boolean {
-  return before.length === after.length && before.every((item, i) => item.path === after[i]?.path &&
-    item.dev === after[i]?.dev && item.ino === after[i]?.ino);
-}
 async function owner(scope: MetadataScope, verify: VerifyMetadataOwner, budget?: MetadataBudget): Promise<boolean> {
   const duration = Math.min(METADATA_SOURCE.childMs, remaining(budget));
   if (duration < 1) return false;
@@ -72,7 +44,7 @@ async function owner(scope: MetadataScope, verify: VerifyMetadataOwner, budget?:
   } catch { return false; }
   finally { if (timer) clearTimeout(timer); controller.abort(); }
 }
-function probe(request: ProbeRequest, budget?: MetadataBudget): Promise<MetadataObservation> {
+function probe(request: ProbeRequest, budget?: MetadataBudget): Promise<ProbeResult> {
   const duration = Math.min(METADATA_SOURCE.childMs, remaining(budget));
   if (duration < 1) return Promise.resolve(unsupported('metadata_deadline'));
   const extension = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
@@ -88,7 +60,7 @@ function probe(request: ProbeRequest, budget?: MetadataBudget): Promise<Metadata
     const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
     const handlers = new Map<NodeJS.Signals, () => void>();
     const reap = () => { if (child.pid) try { process.kill(-child.pid, 'SIGKILL'); } catch { /* Already gone. */ } };
-    const finish = (result: MetadataObservation) => {
+    const finish = (result: ProbeResult) => {
       if (finished) return; finished = true; clearTimeout(timer); if (grace) clearTimeout(grace);
       for (const signal of signals) process.removeListener(signal, handlers.get(signal)!);
       resolve(result);
@@ -115,12 +87,14 @@ function probe(request: ProbeRequest, budget?: MetadataBudget): Promise<Metadata
       if (stopped) { finish(unsupported(stopReason)); return; }
       if (code !== 0) { finish(unsupported('metadata_probe_failed')); return; }
       try {
-        const value = JSON.parse(output) as MetadataObservation;
+        const value = JSON.parse(output) as ProbeResult;
         if (!value || typeof value.supported !== 'boolean' || typeof value.injectionObserved !== 'boolean' ||
-            Object.keys(value).some(key => !['supported', 'injectionObserved', 'reason', 'clientUserMessageId', 'turn'].includes(key))) throw new Error();
+            Object.keys(value).some(key => !['supported', 'injectionObserved', 'reason', 'clientUserMessageId', 'turn', 'storageStamp'].includes(key))) throw new Error();
         if (!value.supported) {
-          if (value.injectionObserved || !reasons.includes(value.reason!) || value.clientUserMessageId !== undefined || value.turn !== undefined) throw new Error();
-        } else if (value.reason !== undefined) throw new Error();
+          if (value.injectionObserved || !reasons.includes(value.reason!) || value.clientUserMessageId !== undefined ||
+              value.turn !== undefined || value.storageStamp !== undefined) throw new Error();
+        } else if (value.reason !== undefined || !/^[a-f0-9]{64}$/.test(value.storageStamp ?? '') ||
+          (request.expectedStorageStamp !== undefined && value.storageStamp !== request.expectedStorageStamp)) throw new Error();
         if (value.injectionObserved) {
           if (value.clientUserMessageId !== request.clientUserMessageId || !safe(value.clientUserMessageId, 128) || !value.turn ||
               Object.keys(value.turn).some(key => !['id', 'status'].includes(key)) || !safe(value.turn.id, 128) ||
@@ -132,24 +106,28 @@ function probe(request: ProbeRequest, budget?: MetadataBudget): Promise<Metadata
     child.stdin.end(JSON.stringify(request));
   });
 }
-async function inspect(scope: MetadataScope, mode: ProbeRequest['mode'], budget: MetadataBudget | undefined,
+async function inspect(scope: MetadataScope, mode: 'capability' | 'observe', budget: MetadataBudget | undefined,
   verify: VerifyMetadataOwner, clientUserMessageId?: string): Promise<MetadataObservation> {
   if (!['darwin', 'linux'].includes(process.platform) || process.getuid?.() === undefined) return unsupported('metadata_platform_unsupported');
   if (!scope || !safe(scope.home, 2048) || !safe(scope.threadId, 128) || !uuid(scope.threadId) ||
       !safe(scope.generation, 256) || (mode === 'observe' && !safe(clientUserMessageId, 128))) return unsupported('metadata_scope_invalid');
   const original = Object.freeze({ home: scope.home, threadId: scope.threadId, generation: scope.generation });
   if (remaining(budget) < 1) return unsupported('metadata_deadline');
-  let before: Stamp[];
-  try { before = trusted(original); } catch { return unsupported('metadata_storage_untrusted'); }
+  // Filesystem calls can block on a disconnected volume. Every validation and
+  // inode comparison is performed inside a deadline-owned worker, never here.
+  const request = { database: join(original.home, METADATA_SOURCE.database), threadId: original.threadId.toLowerCase() };
+  const before = await probe({ ...request, mode: 'snapshot' }, budget);
+  if (!before.supported) return before;
   if (!(await owner(original, verify, budget))) return unsupported(remaining(budget) < 1 ? 'metadata_deadline' : 'metadata_owner_changed');
-  const result = await probe({ mode, database: join(original.home, METADATA_SOURCE.database),
-    threadId: original.threadId.toLowerCase(), ...(clientUserMessageId === undefined ? {} : { clientUserMessageId }) }, budget);
+  const result = await probe({ ...request, mode, expectedStorageStamp: before.storageStamp,
+    ...(clientUserMessageId === undefined ? {} : { clientUserMessageId }) }, budget);
   if (!result.supported) return result;
   if (!(await owner(original, verify, budget))) return unsupported(remaining(budget) < 1 ? 'metadata_deadline' : 'metadata_owner_changed');
-  try { if (!sameFiles(before, trusted(original))) return unsupported('metadata_storage_untrusted'); }
-  catch { return unsupported('metadata_storage_untrusted'); }
+  const after = await probe({ ...request, mode: 'snapshot', expectedStorageStamp: before.storageStamp }, budget);
+  if (!after.supported) return after;
   if (remaining(budget) < 1) return unsupported('metadata_deadline');
-  return result;
+  const { storageStamp: _privateStamp, ...publicResult } = result;
+  return publicResult;
 }
 export async function metadataCapability(scope: MetadataScope, version: string, budget: MetadataBudget | undefined,
   verifyOwner: VerifyMetadataOwner): Promise<MetadataCapability> {
