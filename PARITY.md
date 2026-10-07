@@ -1,8 +1,8 @@
 # Python compatibility and npm migration
 
-Updated 2026-10-03 KST. Python reference: **1.0.2**,
+Updated 2026-10-07 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes the **unpublished TS 0.3.2 source candidate**: the 0.2.0 unified listing, safe home selection,
+This matrix describes the **TS 0.3.2 source**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
 separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 [0.2.1 reliability and hardening](#021-reliability-and-hardening) changes, and the
@@ -726,6 +726,6 @@ original manager. This TS change does not implement additional Python features.
 Package fixtures cover name equivalence, collisions, an in-place version update
 and removal on every supported shell. They do not establish live delivery or ACK.
 
-## 0.3.2 release candidate
+## 0.3.2 release scope
 
-The candidate is prepared from the main line containing the published 0.3.1 fixes. Runtime behavior is unchanged apart from the version banner and exact-version SSH gate. Release tooling now pins public 0.3.1 and the existing preview integrity as the baseline for a separate 0.3.2 approval. Deployment and Windows qualification evidence is recorded in [VALIDATION.md](VALIDATION.md); this preparation does not claim that pending qualification gates passed. No 0.4 handoff/app-server/observation runtime is included.
+The 0.3.2 source is prepared from the main line containing the published 0.3.1 fixes. Runtime behavior is unchanged apart from the version banner and exact-version SSH gate. Release tooling now pins public 0.3.1 and the existing preview integrity as the baseline for a separate 0.3.2 approval. Deployment and Windows qualification evidence is recorded in [VALIDATION.md](VALIDATION.md); this preparation does not claim that pending qualification gates passed. No 0.4 handoff/app-server/observation runtime is included.
