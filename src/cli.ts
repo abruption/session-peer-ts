@@ -387,7 +387,7 @@ try {
       const settings = { to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') };
       const enabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
       if (wire && enabled) throw new Refusal('remote_handoff_unsupported', 1);
-      if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget }));
+      if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget, resultOverhead: Buffer.byteLength(JSON.stringify(routing)) + 1024 }));
       else result = await send(settings);
     }
     else if (command === 'update') result = options.flags.has('--check') ? await checkUpdate(options.values.get('--channel')) : refuseSelfUpdate(options.values.get('--channel'));
