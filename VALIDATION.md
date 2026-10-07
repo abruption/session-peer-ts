@@ -28,9 +28,13 @@ separate npm 2FA approval followed. Stage ID:
   removal. All 16 packaged Markdown files byte-matched publication source.
 - Authenticated stage listing and ownership were checked. Fresh Trusted
   Publisher permission/package MFA settings reads requested reauthentication;
-  the operator instructed skipping those reads. No fresh settings confirmation
-  is claimed. The actual OIDC stage, protected environment review and separate
-  proof-of-presence publication are recorded above; no setting was changed.
+  the operator instructed skipping those reads. This is a recorded exception
+  to the settings-read gate for the historical 0.3.2 release, not completion
+  of those reads. No fresh settings confirmation is claimed. Actual OIDC
+  staging, protected environment review and separate proof-of-presence
+  publication are execution evidence; they do not establish the skipped
+  permission or MFA policies. No setting was changed. Future releases require
+  their own policy checks and approvals.
 
 The Windows destination qualification below used published **0.3.1**, not
 0.3.2 live delivery. Runtime delta in 0.3.2 is VERSION only; no 0.4.0 drafts
@@ -131,9 +135,9 @@ runtime-identity enforcement remain outside this qualification. The earlier
 Linux run and its untested newer recovery rules remain historical evidence.
 
 
-This dated record covers the 0.3.2 preparation checkpoint; public 0.3.1,
-0.3.0, 0.2.1 and 0.2.0 verification; historical 0.1.0 public verification;
-earlier candidate checks and live-agent observations. Older sections
+This dated record covers public 0.3.2, 0.3.1, 0.3.0, 0.2.1 and 0.2.0
+verification; the historical 0.3.2 preparation checkpoint; historical 0.1.0
+public verification; earlier candidate checks and live-agent observations. Older sections
 describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
