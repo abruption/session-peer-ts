@@ -4,9 +4,9 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**소스 후보: 0.3.2, 미발행.** 아래 npm 명령은 현재 공개 버전 0.3.1을 설치합니다. 이 체크아웃의 빌드는 `session-peer 0.3.2 (typescript)`를 출력하며 SSH 양쪽에는 같은 검토된 소스 버전이 필요합니다. 후보는 공개된 0.3.1 신뢰성 수정과 릴리스·배포 검증 갱신을 포함하고 0.4 기능은 포함하지 않습니다. 발행에는 정확한 SHA를 지정한 별도 승인이 필요합니다.
+**문서·소스 버전: 0.3.2.** 아래 버전 지정 npm 명령을 사용하기 전에 npm 레지스트리 또는 버전 배지에서 0.3.2의 발행 여부를 확인하세요. 발행 전에는 검토된 소스 체크아웃이나 로컬 빌드 산출물을 사용합니다. 빌드와 SSH 양쪽에는 같은 검토된 버전이 필요합니다.
 
-0.3.1 상세 가이드입니다([신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0은 다중 호스트 SSH, 발신자 정보와 회신 경로, 업데이트 확인, 선택적 `sp` 단축 이름을 추가했습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). 이전 발행 기록은 [0.3.0 공개 릴리스 증거](../VALIDATION.md#public-030--2026-10-03-kst)에 있습니다. 아래 0.1.0 설명은 이전 버전과의 비교입니다.
+0.3.2 상세 가이드입니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0은 다중 호스트 SSH, 발신자 정보와 회신 경로, 업데이트 확인, 선택적 `sp` 단축 이름을 추가했습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). 이전 발행 기록은 [0.3.0 공개 릴리스 증거](../VALIDATION.md#public-030--2026-10-03-kst)에 있습니다. 아래 0.1.0 설명은 이전 버전과의 비교입니다.
 
 ## 목차
 
@@ -24,7 +24,7 @@
 실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
 TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
 
-**0.3.1 사용 안내입니다.** 패키지명은
+**0.3.2 사용 안내입니다.** 패키지명은
 `session-peer`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
 서비스를 제공하는 프로젝트가 아닙니다.
 
@@ -61,7 +61,7 @@ JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록�
 JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때만 `queueId`가 추가되며,
 둘 다 소비 확인은 아닙니다. [홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
 공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
-SSH 양쪽에는 같은 TypeScript 클라이언트 버전(0.3.1)이 필요합니다.
+SSH 양쪽에는 같은 TypeScript 클라이언트 버전(0.3.2)이 필요합니다.
 
 ### 0.2.0 CLI 사용성
 
@@ -92,12 +92,12 @@ Node 22.x의 22.13 이상 또는 24.x를 사용하고 설치할 정확한 버전
 Python CLI도 같은 명령어를 사용하므로 기존 설치본이 있다면 먼저 PATH를 확인하세요.
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.1
+npm view session-peer@0.3.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 
-예상 출력은 `session-peer 0.3.1 (typescript)`입니다.
+예상 출력은 `session-peer 0.3.2 (typescript)`입니다.
 
 1. `session-peer list --agent claude --json`으로 대상을 찾고 정확한 PID를 선택합니다.
 2. `session-peer send --to CLAUDE_PID --message '확인 후 회신해 주세요.' --dry-run --json`으로 제출 없이 검증합니다.
@@ -370,7 +370,7 @@ npm 자동 발행은 활성화하지 않았습니다. [MIT 라이선스](../LICE
 [0.2.1 공개 기록](../VALIDATION.md#public-021--2026-09-29-kst)을 참고하고(이후 릴리스는 각자의 날짜별 기록을 추가합니다) 설치 전 정확한 버전과 현재 태그를 확인하세요.
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
+npm view session-peer@0.3.2 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -414,7 +414,7 @@ dist-tag를 한 번 요청하고(3초 제한, 재시도 없음) `current`, `late
 `up_to_date`, `ahead`), `managedBy`, `updateCommand`, `guidance`를 보고합니다. 명령은
 실행 중인 CLI 경로로 설치 주체를 확실히 식별할 때만 제공합니다. 해당하는 경우는
 자체 `session-peer` 실행기가 이 패키지를 가리키는 npm 전역 prefix(기본, Homebrew, nvm,
-nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.1`),
+nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.2`),
 매니페스트에 `session-peer`가 선언된 pnpm·Yarn·Bun 전역 저장소, Volta, npx 캐시입니다.
 프로젝트 설치(`npm_project`, `pnpm_project`), 소스 체크아웃(`source`), 그 밖의
 경우(`unknown`)에는 `updateCommand: null`과 `guidance` 문장만 돌려주므로, 어떤 명령도

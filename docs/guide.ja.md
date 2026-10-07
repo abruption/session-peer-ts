@@ -4,9 +4,9 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**ソース候補: 0.3.2、未公開。** 以下の npm コマンドは現在の公開版 0.3.1 をインストールします。このチェックアウトのビルドは `session-peer 0.3.2 (typescript)` と表示し、SSH の両端に同じレビュー済みソース版が必要です。候補は公開済み 0.3.1 の信頼性修正とリリース・配備検証の更新を含み、0.4 の機能は含みません。公開には正確な SHA を指定した別途承認が必要です。
+**文書・ソースのバージョン: 0.3.2。** 以下のバージョン指定 npm コマンドを使う前に、npm レジストリまたはバージョンバッジで 0.3.2 が公開されているか確認してください。公開前はレビュー済みのソースチェックアウトまたはローカルビルド成果物を使います。ビルドと SSH の両端には同じレビュー済みバージョンが必要です。
 
-0.3.1 の詳細ガイドです（[信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。前回の公開記録は [0.3.0 公開リリースの証拠](../VALIDATION.md#public-030--2026-10-03-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
+0.3.2 の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。前回の公開記録は [0.3.0 公開リリースの証拠](../VALIDATION.md#public-030--2026-10-03-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
 ## 目次
 
@@ -23,7 +23,7 @@
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**0.3.1 の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**0.3.2 の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
@@ -40,7 +40,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。0.2.0 でも明示的なコマンド形式を利用できます。
 
-対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（0.3.1）が必要です。
+対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（0.3.2）が必要です。
 
 ### 0.2.0 CLI の使いやすさ
 
@@ -64,12 +64,12 @@ macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**
 Node 22.x の 22.13 以上または 24.x を使用し、インストールする正確なバージョンの公開状況を確認してください。Python CLI も同じコマンド名を使うため、既存のインストールがあれば先に PATH を確認してください。
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.1
+npm view session-peer@0.3.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 
-期待値は `session-peer 0.3.1 (typescript)`。
+期待値は `session-peer 0.3.2 (typescript)`。
 
 1. `session-peer list --agent claude --json` で宛先を探し、正確な PID を選びます。
 2. `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` で提出せずに確認します。
@@ -191,7 +191,7 @@ Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c
 [0.2.1 公開記録](../VALIDATION.md#public-021--2026-09-29-kst)を参照し（以降のリリースはそれぞれ日付付きの記録を追加します）、導入前に正確なバージョンと現在のタグを確認してください。
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
+npm view session-peer@0.3.2 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -233,7 +233,7 @@ session-peer update --check --channel preview --output-format text
 実行中の CLI のパスからインストールの管理者を確実に特定できた場合にだけ示します。
 対象は、自身の `session-peer` ランチャーがこのパッケージを指す npm グローバル prefix
 （既定、Homebrew、nvm、nvm-windows、fnm。例：
-`npm install --global --ignore-scripts session-peer@0.3.1`）、マニフェストで
+`npm install --global --ignore-scripts session-peer@0.3.2`）、マニフェストで
 `session-peer` を宣言している pnpm・Yarn・Bun のグローバルストア、Volta、npx キャッシュ
 です。プロジェクトへのインストール（`npm_project`、`pnpm_project`）、ソースチェック
 アウト（`source`）、それ以外（`unknown`）では `updateCommand: null` と `guidance` の文だけを

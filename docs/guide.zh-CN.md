@@ -4,9 +4,9 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**源码候选版本：0.3.2，尚未发布。** 以下 npm 命令安装当前公开版本 0.3.1。此检出版本构建后显示 `session-peer 0.3.2 (typescript)`；SSH 两端需要相同的已审核源码版本。候选版本包含已发布的 0.3.1 可靠性修复和发布、部署验证更新，不含 0.4 功能。发布仍需针对准确 SHA 的单独批准。
+**文档和源码版本：0.3.2。** 使用以下固定版本 npm 命令前，请通过 npm 注册表或版本徽章确认 0.3.2 是否已发布。发布前，请使用已审核的源码检出版本或本地构建产物。构建和 SSH 两端需要相同的已审核版本。
 
-这是 0.3.1 详细指南（[可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。上一次发布记录见 [0.3.0 公开发布证据](../VALIDATION.md#public-030--2026-10-03-kst)；下文 0.1.0 的说明用于旧版本对比。
+这是 0.3.2 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。上一次发布记录见 [0.3.0 公开发布证据](../VALIDATION.md#public-030--2026-10-03-kst)；下文 0.1.0 的说明用于旧版本对比。
 
 ## 目录
 
@@ -23,7 +23,7 @@
 
 向正在运行的 **Claude Code 和 Codex 会话**发送消息，支持本机和跨机器 SSH。这是运行于 Node.js 的 TypeScript 客户端，不需要 Python。
 
-**这是 0.3.1 使用指南。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
+**这是 0.3.2 使用指南。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
 
 ## 功能与边界
 
@@ -40,7 +40,7 @@
 
 构建后，`node dist/cli.js list --json` 合并列出 Claude/Codex，`list --agent codex --json` 查找已知 home。公开 npm **0.1.0** 仍要求显式 agent，以及 Codex 列表所需的 home；0.2.0 也支持显式命令格式。
 
-范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（0.3.1）。
+范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（0.3.2）。
 
 ### 0.2.0 CLI 易用性
 
@@ -63,12 +63,12 @@ macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x
 使用 Node 22.x 的 22.13 及以上或 24.x，并确认要安装的确切版本是否已发布。Python CLI 也使用同一个命令名；若已有安装，请先检查 PATH。
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.1
+npm view session-peer@0.3.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 
-预期输出：`session-peer 0.3.1 (typescript)`。
+预期输出：`session-peer 0.3.2 (typescript)`。
 
 1. 用 `session-peer list --agent claude --json` 查找目标并选择准确 PID。
 2. 用 `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` 验证，不提交。
@@ -191,7 +191,7 @@ Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde618
 安装前核对准确版本与当前标签。
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
+npm view session-peer@0.3.2 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -230,7 +230,7 @@ dist-tag（3 秒超时，不重试），并报告 `current`、`latest`、`channe
 `ahead`）、`managedBy`、`updateCommand` 和 `guidance`。只有根据当前 CLI 路径能确切识别
 安装的管理方时才给出命令：其自身 `session-peer` 启动器指向本包的 npm 全局 prefix
 （默认、Homebrew、nvm、nvm-windows、fnm，例如
-`npm install --global --ignore-scripts session-peer@0.3.1`），清单中声明了
+`npm install --global --ignore-scripts session-peer@0.3.2`），清单中声明了
 `session-peer` 的 pnpm、Yarn、Bun 全局存储，Volta，或 npx 缓存。项目安装
 （`npm_project`、`pnpm_project`）、源码检出（`source`）以及其他情况（`unknown`）只返回
 `updateCommand: null` 和一句 `guidance`，因此不会给出可能修改无关当前目录的命令。它只报告

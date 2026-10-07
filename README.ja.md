@@ -13,9 +13,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**ソース候補: 0.3.2、未公開。** 以下の npm コマンドは現在の公開版 0.3.1 をインストールします。このチェックアウトのビルドは `session-peer 0.3.2 (typescript)` と表示し、SSH の両端に同じレビュー済みソース版が必要です。候補は公開済み 0.3.1 の信頼性修正とリリース・配備検証の更新を含み、0.4 の機能は含みません。公開には正確な SHA を指定した別途承認が必要です。
-
-別途承認された公開が完了した後に限り `npm install --global --ignore-scripts session-peer@0.3.2` を使用します。それまでは公開版 0.3.1 またはレビュー済みのローカルソース成果物を使ってください。
+**文書・ソースのバージョン: 0.3.2。** 以下のバージョン指定 npm コマンドを使う前に、npm レジストリまたはバージョンバッジで 0.3.2 が公開されているか確認してください。公開前はレビュー済みのソースチェックアウトまたはローカルビルド成果物を使います。ビルドと SSH の両端には同じレビュー済みバージョンが必要です。
 
 **実行中の Claude Code・Codex セッションを見つけ、ローカルまたは SSH でメッセージを送信します。**
 Python 不要の Node.js クライアントです。パッケージ名とコマンド名は `session-peer` です。
@@ -55,12 +53,12 @@ SSH は既存の鍵・ホスト信頼設定と両端の**同じバージョン�
 別の管理ツールのファイルを `--force` で上書きしないでください。
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.1
+npm view session-peer@0.3.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 
-期待する出力: `session-peer 0.3.1 (typescript)`。分離インストール・ソースビルド・
+期待する出力: `session-peer 0.3.2 (typescript)`。分離インストール・ソースビルド・
 Windows・削除の手順は以下の詳細ガイドを参照してください。
 
 任意の `sp` 短縮名は 0.3.0 以降に含まれ（0.2.1 以前にはありません）、自動では有効になりません。
@@ -69,12 +67,12 @@ Windows・削除の手順は以下の詳細ガイドを参照してください�
 ### Update
 
 npm で導入したクライアントは npm で更新します。タグと対象バージョンを確認してから
-正確なバージョンを指定してください。以下は古い npm 版を 0.3.1 に更新する例です。
+正確なバージョンを指定してください。以下は古い npm 版を 0.3.2 に更新する例です。
 CLI は更新をインストールせず、`session-peer update --check` は確認のみ行います。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.1
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 
