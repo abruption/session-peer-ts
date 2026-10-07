@@ -17,6 +17,16 @@ Transport:
   known online peers use their MagicDNS name, known offline peers are refused.
   --no-update-notice                  Suppress the opt-in cached update notice
   -h, --help                         Show command help`;
+  if (command === 'handoff' || command === 'ack') return `Usage: session-peer handoff init|prepare|status|wait|confirm --json
+  init                               Initialize private POSIX sender ledger explicitly
+  prepare --to TARGET --message-file FILE  Reserve a fresh ID without submitting (FILE mode 0600)
+  status --correlation-id UUID        Inspect retained evidence; never submit again
+  wait --correlation-id UUID --wait-for delivered|acknowledged --wait-timeout SECONDS
+  confirm --receipt -                Read private operator-confirmation JSON from stdin
+  ack --receipt -                    Record a qualified private receipt; never prompt an agent
+SESSION_PEER_HANDOFF_HOME selects an absolute private ledger directory.
+Production automated receipt bootstrap and Windows ledger are unsupported.
+Missing history never authorizes retry. Secrets must never be passed through argv.`;
   if (command === 'list') return `Usage: session-peer list [options]
 List reachable Claude and saved Codex sessions. Listing is not send authorization.
   --agent claude|codex                Filter one agent (default: both)
@@ -47,6 +57,12 @@ Notices on other commands are opt-in: SESSION_PEER_UPDATE_NOTICE=1.`;
 TARGET: Claude name/PID, claude:NAME/PID, codex:UUID, or session-peer reply URI.
 Omit the body or use - for UTF-8 stdin. Only one body source is permitted.
 Unicode names use exact Unicode 14.0.0 default casefold; collisions require PID.
+  --correlation-id UUID               Use an already-prepared private handoff ID (opt-in)
+  --request-ack                      Add handoff metadata; automated ACK currently unsupported
+  --observe-delivery                 Request optional body-free observation (qualified routes only)
+  --wait-for delivered|acknowledged   Refuse before submission if required evidence is unsupported
+  --wait-timeout SECONDS             Total budget 1..60 (default 30, includes 5 s cleanup)
+  --message-file FILE                Private UTF-8 input file (POSIX mode 0600)
   --dry-run                          Validate without submission
   --codex-home HOME                   Explicit Codex home; otherwise select unique live writer
   --codex-bin PATH                    Native Codex executable
@@ -66,6 +82,7 @@ Usage: session-peer <command> [options]
   send                               Submit one guarded message
   doctor                             Inspect read-only metadata and capabilities
   update --check                     Check npm for a newer version (no self-update)
+  handoff / ack                      Opt-in private evidence operations (see handoff --help)
   --version                          Print exact runtime version
   --help, -h                         Show help; <command> --help for details
 ${common}

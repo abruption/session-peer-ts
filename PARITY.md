@@ -218,6 +218,110 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    external Relay infrastructure or a remote host automatically. To return to
    Python, select its recorded path or uninstall only the npm-owned installation.
 
+## Handoff v1 design candidate — #69
+
+**Status: jointly approved, frozen DESIGN v0.2; runtime unimplemented and unshipped.** All four issues
+[#69](https://github.com/abruption/session-peer-ts/issues/69),
+[#70](https://github.com/abruption/session-peer-ts/issues/70),
+[#71](https://github.com/abruption/session-peer-ts/issues/71) and
+[#72](https://github.com/abruption/session-peer-ts/issues/72) remain in the
+single 0.4.0 milestone. Milestone assignment is not delivery or publication evidence.
+
+The upstream candidate is [Python Draft PR #261](https://github.com/abruption/session-peer/pull/261),
+commit `99d8ec3855d57da34a6fa789f3a375820a8fbe85`:
+[document](https://github.com/abruption/session-peer/blob/99d8ec3855d57da34a6fa789f3a375820a8fbe85/docs/contracts/handoff-v1.md)
+and [synthetic fixture](https://github.com/abruption/session-peer/blob/99d8ec3855d57da34a6fa789f3a375820a8fbe85/tests/fixtures/handoff-v1.json).
+Exact copies are retained in `test/fixtures/handoff-v1.md` and
+`test/fixtures/handoff-v1.json`; `handoff-v1.pin.json` records their SHA-256 hashes,
+review status and separate runtime/design references. These test-only files are
+excluded from the npm package; the existing 51-file package allowlist is unchanged.
+
+The design review uses published Python 1.0.3 at
+`0d252550ab40c26d1ac4a19193df6ca2f84d830b` as its compatibility baseline.
+Current TS runtime/conformance/referenceVersion markers still retain their existing
+1.0.2 comparison pin. This PR neither re-pins runtime parity to an unshipped Python
+feature release nor claims that Python and TS legacy outputs are identical.
+An approved design commit may pin the shared contract fixture; feature parity can
+move to a release only after that release actually implements the contract.
+
+### Proposed separation and TS implementation gates
+
+| Axis | Candidate meaning / TS boundary |
+| --- | --- |
+| Submission | Preserve native status, target, queueId, submitted and optional-field absence; an observer failure must not pass through a catch that erases known submission evidence. |
+| Observation | Opt-in, body-free metadata for an exact native message ID/home/original generation. Queue deletion or turn completion is not receipt ACK. |
+| Receipt ACK | Receipt-only capability or explicitly recorded operator attestation; never generic reply parsing, a new model prompt, wake or permission to act. |
+| Wait | Separate immutable wait operation/results; a late receipt can add current evidence without changing the original timeout result. |
+| Retry | Native local/SSH replay remains forbidden. Sender fences do not implement receiver dedup or a universal exactly-once guarantee. |
+| SSH | A fully validated, requested explicit-wait result may preserve queued/true with ok:false/exit1. Unrequested handoff data cannot enable this exception; target validation is still required. |
+
+The candidate adds a nested `handoff` object only in opted-in mode. Its proposed
+init/prepare/status/wait/confirm/ack commands, epoch IDs, private collector,
+30-second per-destination budget and 5-second cleanup reserve are **not current
+CLI capabilities**. Budgets 1–5 seconds are syntactically valid in the proposal
+but refuse before effect. Source-streamed SSH without a compatible receipt handler
+remains ACK-unsupported under this candidate. No transcript/body-returning observer
+or fallback after a possible submission is authorized.
+
+### Amended candidate review and remaining gates
+
+The amended exact candidate supersedes the first `605061` review snapshot. Its
+normative document and synthetic vectors now address the seven prior findings:
+
+1. Duplicate receipt queries require original capability-hash authentication,
+   including the same-committed-receipt expiry exception; wrong tokens are denied.
+2. Receipt classification and wait-order facts commit atomically. Proven committed
+   ACKs survive clock restart; unprovable manual confirmation refuses without rewriting history.
+3. Receipt evidence binds the original generation. Null generation cannot mint
+   authority; copied original capability data is explicitly only token-possession assurance.
+4. Sender/collector outputs and own persistence exclude secrets, while intended
+   recipient native storage may retain effect-input authority outside CLI control.
+5. Missing/corrupt ledger or unknown ID returns a closed `handoffQuery` error,
+   without a fabricated epoch or native result. Known tombstones retain original context.
+6. Raw private input, compact public subtree and outer/fanout limits are defined
+   separately; lexical constraints stay inside the new schema and native facts are preserved.
+7. Explicit-wait wire exceptions require the original request and validated native
+   target/IDs/goal; returned metadata cannot opt a legacy request in or promote forged ACK.
+
+The final candidate now aligns the three remaining fixture/profile rules:
+
+- Four original-request profiles preserve Python Claude's absent native fields,
+  TS Claude's nullable name/optional agent and Codex's queued/true/false result,
+  optional queue ID, native UUID normalization and canonical home/context.
+- A post-submission unsupported channel is a request-gated explicit-wait failure
+  at exit 1, preserving known submission and any injection evidence.
+- Interrupting a pending explicit wait records stopped/stopped_by_operator and
+  returns complete structured output with ok:false/exit130. A successful status
+  query of that record returns exit 0; terminal waits remain immutable.
+
+The shared candidate has 39 synthetic request-aware wire vectors for positive,
+forged, wrong-target/home/agent/profile, unsupported and interruption cases.
+The exact candidate has TS design-only approval after independent review; no
+additional normative change is requested for these reviewed findings.
+**Joint design freeze is recorded for the exact source/hash tuple above.**
+[Python acceptance record](https://github.com/abruption/session-peer/pull/261#issuecomment-6016310362)
+confirms both sides' design-only approval; TS acceptance was recorded at
+`63473fb80936b0085e08039997ac39f7158a58dd`. `handoff-v1.pin.json` now has
+`jointFreezeApproved:true`, `runtimeImplemented:false` and no open design-review
+gates. The byte-identical source document and synthetic fixture retain their
+historical proposal/draft labels; the external approval freezes DESIGN, not a
+shipped or implemented runtime protocol. No regeneration or runtime/reference
+repin occurred. Normative/schema/vector changes require a new exact joint review.
+Design-only approval does not establish receipt/bootstrap/runtime acceptance or
+authorize merge, implementation, live effects, operational changes or publication.
+
+Python's exact-candidate documentation tests and CodeQL passed; its optional
+Control dependency audit and required release gate failed. That CI status is
+separate from this static design review. No bypass, dependency repair or claim of
+a fully passing upstream PR is made here. Runtime producer/collector/bootstrap,
+platform cleanup, metadata-only observation and live acceptance remain future gates.
+
+`handoff-contract.test.ts` checks exact pins, synthetic status and selected golden
+safety invariants. It does not implement or test a collector, native receipt,
+crash recovery, monotonic clock continuity, app-server or live SSH. Upstream's
+separate test-only validator likewise supplies design/schema checks, not runtime
+acceptance evidence. No issue is closed and no implementation is enabled here.
+
 ## Evidence and ongoing maintenance
 
 | Evidence class | What it establishes | What it does not establish |
@@ -725,3 +829,16 @@ Python/TS co-installation is excluded; replacing an implementation respects its
 original manager. This TS change does not implement additional Python features.
 Package fixtures cover name equivalence, collisions, an in-place version update
 and removal on every supported shell. They do not establish live delivery or ACK.
+
+
+## Unreleased handoff implementation — #70
+
+The frozen #69 design pin is unchanged. Source-only private POSIX ledger and
+strict protocol helpers now implement prepare, at-most-once sender fencing,
+status, bounded wait records and explicit receipt/operator-confirmation
+validation. [CLI details](docs/api.md#unreleased-opt-in-handoff-cli--040-work)
+separate current source support from the published 0.3.1 runtime. Automated ACK
+bootstrap, Windows private ACL support and original-sender SSH coordination are
+still implementation gates. Fixture passes are not live receipt/injection
+qualification. Default output and the historical Python runtime parity pin stay
+unchanged; no future Python runtime is claimed shipped.
