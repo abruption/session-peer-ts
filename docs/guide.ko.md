@@ -4,14 +4,15 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**문서·소스 버전: 0.3.2.** 아래 버전 지정 npm 명령을 사용하기 전에 npm 레지스트리 또는 버전 배지에서 0.3.2의 발행 여부를 확인하세요. 발행 전에는 검토된 소스 체크아웃이나 로컬 빌드 산출물을 사용합니다. 빌드와 SSH 양쪽에는 같은 검토된 버전이 필요합니다.
+**문서·소스 기준 버전: 0.3.2.** 0.3.2는 현재 공개된 안정 버전입니다([공개 릴리스·검증 기록](../VALIDATION.md#public-032--2026-10-07-kst)). 버전 고정 npm 명령을 실행하기 전에는 레지스트리나 버전 배지에서 지정한 버전의 공개 여부를 확인하세요. 새 버전을 발행하기 전에는 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드와 SSH 양쪽에는 같은 검토 버전을 사용해야 합니다.
 
-0.3.2 상세 가이드입니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0은 다중 호스트 SSH, 발신자 정보와 회신 경로, 업데이트 확인, 선택적 `sp` 단축 이름을 추가했습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). 이전 발행 기록은 [0.3.1 공개 릴리스 증거](../VALIDATION.md#public-031--2026-10-04-kst)에 있습니다. 아래 0.1.0 설명은 이전 버전과의 비교입니다.
+이 가이드는 0.3.2를 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
 
 ## 목차
 
 - [주요 기능과 범위](#주요-기능과-범위)
 - [요구사항](#요구사항)
+- [빠른 시작](#quick-start)
 - [설치](#설치)
 - [사용법](#사용법)
 - [성공의 의미](#성공의-의미)
@@ -21,93 +22,128 @@
 - [에이전트 스킬: 명시적 설치](#에이전트-스킬-명시적-설치)
 
 
-실행 중인 **Claude Code·Codex 세션에 로컬 또는 SSH로 메시지를 전달**하는
-TypeScript 클라이언트입니다. Python 없이 Node.js로 실행합니다.
+**Claude Code와 Codex에서 실행 중인 세션을 찾아 로컬 또는 SSH(보안 원격 접속)로 메시지를 전달**하는
+TypeScript 클라이언트입니다. Python을 설치하지 않아도 Node.js에서 실행됩니다.
 
-**0.3.2 사용 안내입니다.** 패키지명은
-`session-peer`, CLI 명령어는 **`session-peer`**입니다. Relay 서버나 호스팅
-서비스를 제공하는 프로젝트가 아닙니다.
+패키지와 명령줄 도구(CLI) 이름은 모두 **`session-peer`**입니다. 이 프로젝트는 Relay
+중계 서버나 호스팅 서비스를 제공하지 않습니다.
 
+<a id="what-it-does"></a>
 ## 주요 기능과 범위
 
-- 로컬 Claude/Codex 세션과 알려진 Codex 홈 탐색 (0.2.0 기능, 아래 참고)
-- `--dry-run`으로 대상을 검증한 뒤 네이티브 inbox 또는 queue에 메시지 1회 제출
-- 원격에 명시적으로 설치한 같은 버전의 클라이언트로 SSH 전송
-- 구조화된 Reply-To URI와 JSON 결과
-- 모호한 대상·확인할 수 없는 소유권은 거부하고, 불확실한 제출은 자동 재시도하지 않음
+- 로컬 Claude/Codex 세션과 알려진 Codex 홈(설정·세션 파일이 있는 디렉터리)을 탐색합니다(0.2.0 기능, 아래 참고).
+- `--dry-run`으로 대상을 검증한 뒤 애플리케이션의 기본 받은 메시지함(inbox)이나
+  대기열(queue)에 메시지를 한 번 제출합니다. Codex 전송에는 보통 고유하고 안정적으로
+  실행 중인 writer(메시지를 기록하는 프로세스)가 필요합니다.
+- 원격에 별도로 설치한 같은 버전의 클라이언트를 통해 SSH로 전송
+- 회신 경로를 나타내는 Reply-To URI(회신 주소)를 수신 대상으로 지정할 수 있고 JSON(구조화된 데이터 형식) 결과를 제공합니다.
+- 모호한 대상이나 소유권을 확인할 수 없는 경우 거부하며, 제출 여부가 불확실하면 자동
+  재시도하지 않습니다.
 
-Relay 전송, MCP, wake/resume, Antigravity, 자동 업데이트는 미지원입니다. 미지원 옵션은 명시적으로
-거부하며 범용 오케스트레이터를 지향하지 않습니다.
+Relay 전송, MCP(모델 컨텍스트 프로토콜), wake/resume(세션 깨우기·재개), Antigravity, 자동 업데이트는 지원하지
+않습니다. 지원하지 않는 명령은 명시적으로 실패합니다. 여러 에이전트 작업을 조정하는
+범용 오케스트레이터가 아닙니다.
 
-클라이언트 기능 계획은 [버전별 호환성 표와 npm 이주 가이드](../PARITY.md)에서 추적하며, 계획은 현재 지원을 뜻하지 않습니다. Relay 서버·호스팅 서비스 제공은 이 클라이언트의 범위 밖입니다.
+추가 기능 계획은 [버전별 호환성 표와 npm 마이그레이션 가이드](../PARITY.md)에서
+관리합니다. 계획된 기능은 현재 제공되는 기능이 아닙니다. Relay 서버나 호스팅 서비스도
+이 클라이언트의 범위에 포함되지 않습니다.
 
+<a id="unified-listing-in-020"></a>
 ### 0.2.0 통합 목록
 
-소스 빌드 후 `node dist/cli.js list --json`은 Claude/Codex를 함께 조회하고,
-`list --agent codex --json`은 알려진 홈을 조회합니다. 공개 npm **0.1.0**은 여전히
-에이전트와 Codex 목록용 홈을 명시해야 합니다. 0.2.0에서도 명시적 명령 형식을 쓸 수 있습니다.
+소스에서 빌드한 뒤 `node dist/cli.js list --json`을 실행하면 Claude와 Codex 세션을 함께
+조회하고, `list --agent codex --json`은 알려진 Codex 홈을 조회합니다. 공개 npm **0.1.0**은
+에이전트와 Codex 목록용 홈을 명시해야 합니다. 이 가이드의 설치 명령과 명시적인
+`list`/`send` 명령 형식은 이전 공개 버전인 0.1.0에서도 사용할 수 있습니다.
 
-탐색 범위는 기본 `~/.codex`, `CODEX_HOME`, macOS Orca의 바로 아래 계정 홈,
-JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`은 Codex 목록을 해당 홈에
-고정하고 다른 설정 오류를 우회하며, `--agent claude`는 Codex 탐색을 생략합니다.
-동일 홈의 별칭은 합치지만 다른 홈의 동일 UUID는 보존합니다. 전송에는 각 행의
-`codexHome`을 사용하세요. 선택적 홈 부재는 오류가 아니지만 명시된 홈의 부재·오류는
-성공한 행을 보존하면서 종료 코드 1을 반환합니다. 목록은 writer를 선택하거나 전송하지 않습니다.
+기본 탐색 대상은 `~/.codex`, `CODEX_HOME`, macOS Orca 계정의 바로 아래 홈,
+JSON 배열 `SESSION_PEER_CODEX_HOMES`입니다. `--codex-home`을 지정하면 Codex 목록을
+해당 홈에서만 조회하며, 관련 없는 홈의 목록 탐색 오류에는 영향을 받지 않습니다.
+`--agent claude`는
+Codex 탐색을 생략합니다. 같은 홈을 가리키는 별칭은 하나로 합치지만 서로 다른 홈의
+동일 UUID는 각각 보존합니다. 전송할 때는 각 결과의 `codexHome` 값을 사용하세요.
+선택적으로 탐색하는 홈이 없으면 오류가 아니지만, 명시한 홈이 없거나 유효하지 않으면
+조회에 성공한 행을 보존한 채 종료 코드 1을 반환합니다. 목록 조회는 메시지를 기록할
+프로세스(writer)를 선택하거나 메시지를 제출하지 않습니다.
 정렬·진단·`--all`·SSH는 [목록 계약](../PARITY.md#source-unified-listing-contract--16--020)을 참고하세요.
-0.2.0의 Codex 전송은 `--codex-home` 생략 시 유일하고 안정된 live writer 홈을
-선택합니다. 명시한 홈도 모든 알려진 경쟁 홈을 검사합니다. 비활성 큐는 저장된 스레드와
-모든 후보의 비활성 검증에 더해 `--codex-home HOME --allow-inactive-codex-home`이
-필요하며 wake/resume을 수행하지 않습니다. Dry-run은 제출하지 않습니다.
-JSON에는 정제된 `codexHomeResolution`과 네이티브 출력에 있을 때만 `queueId`가 추가되며,
-둘 다 소비 확인은 아닙니다. [홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
-공개 **0.1.0**은 여전히 명시적 live 홈이 필요하고 비활성 허용 옵션이 없습니다.
-SSH 양쪽에는 같은 TypeScript 클라이언트 버전(0.3.2)이 필요합니다.
+0.2.0 소스에서 Codex로 전송할 때 `--codex-home`을 생략하면, 실행 중이며 하나뿐인
+안정된 writer가 있는 홈을 선택합니다. 홈을 명시해도 알려진 다른 후보를 모두 검사합니다.
+비활성 세션에 메시지를 대기열로 보내려면 저장된 스레드, 모든 후보가 비활성이라는 확인,
+`--codex-home HOME --allow-inactive-codex-home` 옵션이 필요합니다. 이 동작은 세션을
+깨우거나 다시 시작하지 않습니다. `--dry-run`은 메시지를 제출하지 않습니다.
+JSON에는 정제된 `codexHomeResolution`이 포함되며, 네이티브 응답에 식별자가 있을 때만
+`queueId`도 포함됩니다. 둘 다 메시지를 읽거나 처리했음을 확인하지 않습니다.
+[홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
+공개 **0.1.0**은 여전히 실행 중인 홈을 명시해야 하며 비활성 세션 허용 옵션이 없습니다.
+SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.3.2)을 설치해야
+합니다.
 
+<a id="cli-usability-in-020"></a>
 ### 0.2.0 CLI 사용성
 
-0.2.0는 `list --help`, `send --help`, `doctor --help`, `--output-format text`를 제공합니다.
-출력 형식은 계속 명시해야 합니다: `--json` 또는 `--output-format json|text`.
-구문 오류는 JSON이며 유효한 text 요청의 실행 결과·오류는 텍스트입니다. SSH
-내부 전송은 항상 JSON입니다. `send --to TARGET "message" --json` 위치 인자를
-지원하며 `--message`/`-m`과 중복할 수 없습니다. 본문 생략 또는 `-`는 stdin,
-옵션처럼 시작하는 위치 본문 앞에는 `--`를 사용합니다. 빈 본문·공백 본문은
-발신자 머리말 추가 전에 거부합니다. Claude 이름은 Unicode 14.0.0 기본 full
-casefold로 정확히 비교하며 정규화·유사 검색을 하지 않습니다. 충돌 시 PID를
-지정하세요. 이미 발행된 0.1.0에는 이 소스 기능이 소급 적용되지 않습니다.
+0.2.0에서는 `list --help`, `send --help`, `doctor --help`와 명시적인
+`--output-format text`를 사용할 수 있습니다. 출력 형식은 계속 지정해야 합니다.
+`--json` 또는 `--output-format json|text`를 사용하세요. 구문 오류는 JSON으로,
+형식이 올바른 text 요청의 실행 결과와 오류는 텍스트로 출력합니다. SSH 요청은 내부에서
+항상 JSON으로 주고받습니다.
+
+`send --to TARGET "message" --json`처럼 메시지 본문을 위치 인자로 전달할 수 있습니다.
+이 방식과 `--message`/`-m`은 함께 쓸 수 없습니다. 본문을 생략하거나 `-`로 지정하면
+표준 입력(stdin)에서 읽습니다. 옵션처럼 보이는 본문 앞에는 `--`를 두세요. 비어 있거나
+공백뿐인 본문은 발신자 머리말을 붙이기 전에 거부합니다.
+
+Claude 이름은 Unicode 14.0.0의 기본 완전 대소문자 접기(full casefold)로 정확히 비교합니다.
+유니코드 정규화나 유사 이름 검색은 하지 않으므로 같은 이름이 겹치면 PID를 지정하세요.
+이 소스 기능은 이미 발행된 0.1.0 패키지에 소급 적용되지 않습니다.
 
 
+<a id="requirements"></a>
 ## 요구사항
 
-macOS/Linux/Windows native와 Node **22.x의 22.13 이상 또는 24.x**가 필요합니다. Node 26은
-미지원입니다. 네이티브 flock 의존성에 맞는 사전 빌드 바이너리(x64/arm64)가 필요하므로
-순수 JavaScript 패키지는 아닙니다. Codex 전송에는 `codex`가 필요하고 macOS/Linux에서는
-`lsof`, `ps`도 필요합니다. Windows는 네이티브 잠금과 Restart Manager로 소유자를 확인합니다. 저장된
-스레드의 유일하고 안정적인 live writer가 필요합니다. Claude는 접근 가능한 inbox가
-있는 실행 중 TUI가 필요합니다. SSH에는 OpenSSH, 기존 키·호스트 신뢰 설정과 원격의
-**동일 버전 클라이언트**가 필요합니다.
+macOS, Linux 또는 Windows와 **Node 22.x의 22.13 이상 또는 24.x**가 필요합니다.
+Node 26은 지원하지 않습니다. 순수 JavaScript 패키지가 아니므로 운영체제와
+아키텍처(x64/arm64)에 맞는 `flock`(프로세스 간 파일 잠금 기능) 네이티브 의존성의 사전 빌드 바이너리가 필요합니다.
+Codex로 전송하려면 `codex`가 있어야 하며, macOS/Linux에서는 `lsof`와 `ps`도 필요합니다.
+Windows에서는 운영체제 잠금과 Restart Manager(파일을 사용 중인 프로세스를 확인하는 기능)로 소유 프로세스를 확인합니다.
+Claude Code에는 받은 메시지함에 접근할 수 있는 실행 중 TUI(터미널 사용자
+인터페이스)가 필요합니다. SSH를 사용하려면 OpenSSH, 기존 키와 호스트 신뢰 설정, 그리고
+원격과 **같은 버전의 클라이언트**가 필요합니다.
 
-## 설치
+<a id="quick-start"></a>
+## 빠른 시작
 
-Node 22.x의 22.13 이상 또는 24.x를 사용하고 설치할 정확한 버전의 공개 여부를 확인하세요.
-Python CLI도 같은 명령어를 사용하므로 기존 설치본이 있다면 먼저 PATH를 확인하세요.
+Node 22.x의 22.13 이상 또는 24.x를 사용하세요. Python CLI도 같은 `session-peer`
+명령 이름을 쓰므로, 설치 전에 PATH(명령 검색 경로)에서 어떤 실행 파일을 찾는지
+확인하세요. 아래 명령은 사용자가 공개된 0.3.2를 npm으로 설치하는 예입니다.
+CLI 자체는 패키지를 설치하거나 업데이트하지 않습니다.
 
 ```sh
 npm view session-peer@0.3.2 version dist.integrity
 npm install --global --ignore-scripts session-peer@0.3.2
-session-peer --version
+session-peer --version  # session-peer 0.3.2 (typescript)
+session-peer list --agent claude --json
+session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-예상 출력은 `session-peer 0.3.2 (typescript)`입니다.
+예상 결과는 `session-peer 0.3.2 (typescript)`입니다.
 
-1. `session-peer list --agent claude --json`으로 대상을 찾고 정확한 PID를 선택합니다.
-2. `session-peer send --to CLAUDE_PID --message '확인 후 회신해 주세요.' --dry-run --json`으로 제출 없이 검증합니다.
-3. 실제 전달할 때 선택한 PID로 같은 명령에서 `--dry-run`을 제거해 한 번 실행합니다.
-4. ACK가 필요하면 메시지에 명시적인 회신을 요청하고 수신 TUI의 응답을 별도로 확인합니다. `posted` / `queued`는 제출만 뜻합니다.
+1. 세션을 조회하고 `CLAUDE_PID`를 대상으로 선택한 정확한 PID로 바꾸세요.
+2. `--dry-run`으로 검증합니다. 이 단계에서는 메시지를 제출하지 않습니다.
+3. 실제로 전달할 때는 같은 명령에서 `--dry-run`을 빼고 한 번 실행합니다.
+4. ACK(수신 확인 응답)가 중요하면 메시지에 명시적인 회신을 요청하고 수신 측 TUI에서
+   응답을 별도로 확인하세요. `posted` / `queued`는 제출 또는 큐 수락만 뜻하며, 메시지
+   소비나 ACK를 확인한 결과는 아닙니다. [성공의 의미](#성공의-의미)를 참고하세요.
 
+## 설치
+
+npm 설치 절차는 위의 [빠른 시작](#quick-start)을 참고하세요. 아래에서는 소스 빌드와
+기존 설치본을 확인하는 방법을 설명합니다.
+
+<a id="build-from-source"></a>
 ### 소스에서 빌드
 
-공개된 npm 패키지 대신 검토한 소스를 실행하려면 빌드하고 필요한 경우
-로컬 tarball을 설치합니다.
+공개된 npm 패키지 대신 검토한 소스를 실행하려면 직접 빌드하세요. 필요하다면 로컬에서
+만든 패키지 파일(tarball)도 설치할 수 있습니다.
 
 ```sh
 git clone https://github.com/abruption/session-peer-ts.git
@@ -116,22 +152,24 @@ npm ci --ignore-scripts
 npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
-# 선택 사항: PATH에서 사용할 구현을 명시적으로 선택한 뒤 전역 설치
+# Optional global install: first check which session-peer your PATH selects.
 npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
 session-peer --version
 ```
 
-설치 명령의 `./...tgz`는 로컬 산출물을 지정하므로 생략하지 마세요.
-나중 버전의 소스를 사용할 때는 체크아웃 버전을 먼저 확인하세요.
+0.3.2에서 예상되는 결과는 `session-peer 0.3.2 (typescript)`입니다. 로컬 빌드
+산출물을 선택하려면 `./...tgz` 경로를 그대로 두세요. 이후 버전에 이 명령을 사용할
+때는 먼저 체크아웃한 소스의 버전을 확인하세요.
 
+<a id="existing-installations"></a>
 ### 기존 설치본과 PATH
 
 다른 구현도 `session-peer`를 설치할 수 있습니다. 전후에 `type -a session-peer`와
 `command -v session-peer`로 확인하고 PATH에서 하나를 선택하거나
-`node /절대/경로/dist/cli.js`처럼 명시적으로 실행하세요. 다른 설치 관리자의 파일을
-`--force`로 덮어쓰지 마세요. Python 패키지·스킬·서비스는 자동 설치·삭제·설정하지
-않습니다. npm 설치본 제거는 `npm uninstall --global session-peer`로 하고 PATH를
-다시 확인하세요.
+`node /absolute/path/dist/cli.js`처럼 명시적으로 실행하세요. 다른 설치 관리자의 파일을
+`--force`로 덮어쓰지 마세요. 이 클라이언트는 Python 패키지·스킬·서비스를 자동으로
+설치·제거하거나 재설정하지 않습니다. npm 설치본은 사용자가
+`npm uninstall --global session-peer`로 직접 제거한 뒤 PATH를 다시 확인하세요.
 
 Windows PowerShell에서는 `Get-Command session-peer -All`로 기존 설치본을 확인하세요.
 Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 있습니다.
@@ -142,16 +180,17 @@ npm run build
 npm pack --ignore-scripts
 npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
-# 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
+# Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
 
+<a id="use"></a>
 ## 사용법
 
 ```sh
 session-peer list --agent claude --json
 session-peer list --agent codex --codex-home "$HOME/.codex" --json
-session-peer send --to CLAUDE_PID --message 'API 계약을 검토해 주세요.' --dry-run --json
-session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message 'API 계약을 검토해 주세요.' --dry-run --json
+session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
+session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message 'Please review the API contract.' --dry-run --json
 ```
 
 실제 전달할 때만 `--dry-run`을 제거합니다. `--message`를 생략하거나 `--message -`를
@@ -160,26 +199,30 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 Codex 전송에는 전체 UUID가 필요하며 홈은 위의 선택 규칙을 따릅니다. `--codex-bin`으로 실행 파일을 고를 수 있습니다. 출력에는
 `--json` 또는 `--output-format json|text`이 필요합니다.
 
+<a id="another-machine-over-ssh"></a>
 ### 다른 머신으로 SSH 전송
 
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
-  --to CLAUDE_PID --message 'API 계약을 검토해 주세요.' --dry-run --json
+  --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-원격 기본 명령은 PATH의 `session-peer`입니다. `--remote-bin` 절대 경로로 지원되는
-Node를 선택하는 래퍼를 지정할 수 있습니다. TypeScript 표시와 정확한 버전을 확인하므로
-다른 구현을 발견하면 거부합니다. BatchMode·StrictHostKeyChecking을 사용하며 새
-호스트 키 승인, 원격 런타임 설치, Python 대체 실행은 하지 않습니다. 메시지는 원격
-셸 인자가 아닌 JSON stdin 요청으로 전달합니다. 정방향 접속이 역방향 접속을 보장하지
-않습니다. 0.3.0부터 Tailscale은 경로 힌트로만 사용합니다. [회신](#회신)을 참고하세요.
+원격에서 기본으로 실행하는 명령은 PATH에 있는 `session-peer`입니다. `--remote-bin`에는
+지원되는 Node 실행 파일을 선택하는 래퍼의 절대 경로를 지정할 수 있습니다. 연결 과정에서
+TypeScript 구현 표시와 정확한 버전을 확인하고, 다른 구현이면 거부합니다. BatchMode
+(대화형 입력 없음)와 StrictHostKeyChecking(알려진 호스트 키만 허용)을 적용하며 새 호스트
+키를 승인하거나 원격 런타임을 설치하거나 Python으로 대체 실행하지 않습니다. 메시지는
+원격 셸 인자가 아니라 JSON 표준 입력(stdin) 요청으로 전달합니다. 이쪽에서 대상에 접속할
+수 있어도 대상에서 이쪽으로 회신할 수 있다는 뜻은 아닙니다. 0.3.0부터 Tailscale(기기 간 가상 사설망 서비스)은
+경로 선택에 참고하는 정보로만 사용합니다. [회신](#회신)을 참고하세요.
 
 Windows SSH 대상에는 `--remote-platform win32`를 명시하고, 원격 PATH에 없다면
-`--remote-bin 'C:\절대\경로\session-peer.cmd'`를 지정하세요. 이미 인증된 OpenSSH
-제어 소켓은 `--host`가 정확히 하나일 때 `--ssh-control-path /로컬/절대/소켓`으로 선택할 수 있습니다. 이는 호스트 키
+`--remote-bin 'C:\absolute\path\session-peer.cmd'`를 지정하세요. 이미 인증된 OpenSSH
+제어 소켓은 `--host`가 정확히 하나일 때 `--ssh-control-path /local/absolute/socket`으로 선택할 수 있습니다. 이 옵션은 호스트 키
 검증을 우회하거나 새 로그인을 허용하지 않습니다. Windows 로컬 Codex 홈은
 `C:\Users\...\.codex`처럼 전체 경로를 사용합니다. 기존 Python CLI는 자동 제거·교체하지 않습니다.
 
+<a id="several-hosts-and-connection-options"></a>
 ### 여러 호스트와 연결 옵션
 
 0.3.0부터(0.2.1 이하에는 없음) 반복 `--host`와 제한된 `--ssh-opt`를 받습니다.
@@ -201,14 +244,14 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 - 같은 대상을 두 번 지정하면 `duplicate_ssh_host`입니다. 이 검사는 대상 문자열(사용자,
   대소문자 무시 호스트 이름, 정규화한 IPv6)만 비교합니다. 같은 장비를 가리키는 서로 다른
   별칭이나 주소는 감지하지 않습니다.
-- `--ssh-jump USER@HOST[:PORT]`(한 번, POSIX 클라이언트)는 모든 `--host`의 모든 `ssh`
+- `--ssh-jump USER@HOST[:PORT]`(한 번만 지정, POSIX 클라이언트 전용)은 모든 `--host`의 모든 `ssh`
   호출을 점프 호스트 하나를 거쳐 보냅니다. 사용자는 필수이고, IPv6는 괄호가 필요하며
   (`hop@[2001:db8::1]:22`), `%`, `$`, 따옴표, 공백 등 셸 문자는 거부합니다
   (`invalid_ssh_jump`). `-J` 대신 CLI가 고정된 `ProxyCommand`를 만듭니다. 점프 구간의
   `ssh`는 `BatchMode=yes`, `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`,
   `ConnectTimeout=10`, `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`,
   `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes`,
-  `PermitLocalCommand=no`로 실행되고 `-W [대상]:포트`로 연결합니다. 바깥쪽 `ssh`에도
+  `PermitLocalCommand=no`로 실행되고 `-W [target]:port`로 연결합니다. 바깥쪽 `ssh`에도
   `ControlMaster=no`, `ControlPath=none`, `ProxyUseFdpass=no`를 지정하므로, 설정된 제어
   마스터가 점프 구간을 우회할 수 없습니다. `ProxyCommand`는 로그인 셸(`$SHELL`)로
   실행됩니다. sh, bash, zsh로 검증했으며 그 밖의 로그인 셸(예: fish, csh)은 검증하지
@@ -247,16 +290,20 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   `ProxyCommand`, `ProxyJump`, `Match exec` 등은 직접 실행하는 `ssh`와 똑같이 이 CLI가
   시작하는 모든 `ssh`에 적용됩니다.
 
-Python 없이 대상 머신을 준비하는 방법(버전별 전용 설치 디렉터리, 무결성 검증, 소유권·롤백
-규칙)과 패키지 버전과 분리된 프로토콜 호환성 계약에 대한 설계 제안은
-[원격 배포 ADR](design/remote-deployment.md)에 있습니다. 아직 구현되지 않았으며, 위의 동일 버전
-요구 사항은 그대로 적용됩니다.
+Python 없이 SSH 대상 머신을 준비하는 방법(버전별 전용 설치 디렉터리, 무결성 검증,
+소유권과 롤백 규칙)과 패키지 버전과 분리된 프로토콜 호환성 계약에 대한 설계 제안은
+[원격 배포 ADR](design/remote-deployment.md)(ADR: 아키텍처 결정 기록)에 있습니다.
+0.4는 아직 발행되지 않았습니다. 위 내용은 다음 버전을 위한 설계 제안으로 공개된
+0.3.2에는 포함되지 않았으며, 아직 구현되지 않았습니다.
+따라서 위에서 설명한 SSH 양쪽의 동일 버전 요구 사항은 그대로 적용됩니다.
 
+<a id="replies"></a>
 ### 회신
 
 `session-peer://v1/reply?...` URI를 `--to`로 사용할 수 있습니다. 알 수 없거나 중복된
-필드, 위험한 호스트, 잘못된 인코딩, 명시적 경로와의 충돌은 거부합니다. peer 정보는
-권한 근거가 아니며 Reply-To URI를 셸 명령으로 실행하지 않습니다. 받은 Reply-To는 읽는
+필드, 안전하지 않은 호스트, 잘못된 인코딩, 명시적 경로와의 충돌은 거부합니다.
+상대(peer)의 메타데이터는 권한의 근거가 아니며 Reply-To URI를 셸 명령으로 실행하지
+않습니다. 받은 Reply-To는 읽는
 사람을 위한 데이터일 뿐이고, 회신을 자동으로 관찰하거나 확인하지 않습니다.
 
 0.3.0부터(0.2.1 이하에는 없음) 발신자 정보와 자동 회신 경로를 추가합니다.
@@ -270,7 +317,7 @@ Python 없이 대상 머신을 준비하는 방법(버전별 전용 설치 디�
 - **자동 Reply-To.** 발신자가 있고 `--no-reply-to`가 없으면, 로컬 전송에는
   `transport=local` URI를 붙입니다. SSH 전송이나 `--reply-to`를 쓰면 `transport=ssh`
   URI를 붙이며, 호스트는 `--reply-to HOST`, `SESSION_PEER_REPLY_HOST`,
-  `CC_PEER_REPLY_HOST`, 이 장비의 tailnet 이름·주소 순으로 정합니다. 사용자가 없는
+  `CC_PEER_REPLY_HOST`, 이 장비의 tailnet(기기 간 가상 사설망) 이름·주소 순으로 정합니다. 사용자가 없는
   호스트에는 현재 사용자를 붙입니다. 호스트를 찾지 못하면 SSH 경로를 붙이지 않습니다.
   `--reply-address URI`는 기존처럼 명시적인 대안입니다. `--reply-to`,
   `--reply-address`, `--no-reply-to`는 함께 쓸 수 없습니다. 모든 URI는 `--to`와 같은
@@ -318,24 +365,27 @@ Python 없이 대상 머신을 준비하는 방법(버전별 전용 설치 디�
   `ssh -G` 사용자 확인은 점검하는 장비에서 신뢰하는 SSH 설정(`ProxyCommand`, `Match exec`
   포함)을 사용합니다(위의 신뢰 경계 참고). 명령줄 허용 목록은 그 파일에 적용되지 않습니다.
 
+<a id="what-success-means"></a>
 ## 성공의 의미
 
 | 결과 | 의미 |
 | --- | --- |
-| `validated`, `submitted:false` | dry-run 검증 통과. 전송하지 않음 |
-| `posted` / `queued` | inbox 쓰기 / queue 수락. **소비·ACK 확인 아님** |
-| `refused`, `submitted:false` | 제출 전에 거부 |
-| `unknown`, `submitted:null` | 제출됐을 수 있음. 자동 재전송 금지 |
+| `validated`, `submitted:false` | dry-run 검증 통과. 메시지를 제출하지 않음 |
+| `posted` / `queued` | 네이티브 받은 메시지함에 기록 / 큐 수락. **소비나 ACK를 확인한 상태가 아님** |
+| `refused`, `submitted:false` | 제출 전에 요청을 거부 |
+| `unknown`, `submitted:null` | 제출됐을 수도 있어 상태가 불확실함. 자동 재전송 금지 |
 
 제출 후 회신이 없거나 대상이 종료됐다는 사실만으로 소비나 실패를 확정할 수 없습니다. 자동 재전송하지 마세요.
 
-`consumptionConfirmed`는 항상 false입니다. 실제 ACK는 수신 TUI에서 별도로 확인하며
-queue 결과나 transcript 폴링으로 추정하지 않습니다. 종료 코드는 성공/오류/사용법에
-0/1/2를 사용합니다. 오류는 고정 코드로 반환하며 원문 stderr·메시지를 노출하지 않습니다.
-Codex는 실제 OS flock, 파일 식별자, 동일 사용자 소유 프로세스의 시작 시각을 여러 번
-검사하고 제출 직전에 다시 검증합니다. 잠금을 삭제하거나 소유 프로세스에 신호를 보내지
-않습니다. 탐색 결과의 이름·경로·ID는 공유 전에 익명화하세요.
+`consumptionConfirmed`는 항상 `false`입니다. 실제 ACK는 수신 측 TUI에서 별도로
+확인하며, 큐 결과나 대화 기록(transcript)을 반복 조회해 추정하지 않습니다. 종료 코드는
+성공/오류/사용법에
+0/1/2를 사용합니다. 오류는 고정 코드로 반환하며 원문 표준 오류(stderr)·메시지를 노출하지 않습니다.
+Codex는 커널의 flock, 파일 식별자, 같은 사용자가 소유한 프로세스의 시작 시각을 여러
+차례 확인한 뒤 큐에 넣기 직전에 다시 검증합니다. 잠금을 삭제하거나 소유 프로세스에
+신호를 보내지 않습니다. 탐색 결과에 포함된 이름·경로·ID는 공유 전에 가리세요.
 
+<a id="development-and-verification"></a>
 ## 개발·검증
 
 ```sh
@@ -347,44 +397,58 @@ npm run test:package
 npm audit
 ```
 
-Python은 개발용 호환성 기준(v1.0.2 커밋
+Python은 개발 시 TypeScript 구현과 동작이 일치하는지 대조하는 기준 구현(conformance oracle)입니다(v1.0.2 커밋
 `47c23713d0a2a3c11ebde6186afd8c43489b8b65`)일 뿐 런타임 의존성이 아닙니다. POSIX 계약 테스트에는
-C 컴파일러와 lsof도 필요합니다. CI는 세 OS에서 Node 22/24를 사용합니다.
+C 컴파일러와 lsof도 필요합니다. CI(지속적 통합)는 세 OS에서 Node 22/24를 사용합니다.
 macOS/Linux는 고정된 참조 기준으로 전체 계약·패키지 검사를 실행하고, Windows는
-x64에서 빌드·타입 검사, 네이티브 Claude inbox·점유/해제된 잠금, writer 소유권·제출 직전 경합,
-CLI 큐 결과, 격리된 가짜 SSH 대상의 실제 PowerShell/.cmd 프레이밍, 패키지 설치·네이티브 로드·삭제와 audit를 실행합니다.
-이는 fixture 검사이며 Windows에서 POSIX/Python 참조 스위트를 실행한다는 뜻은 아닙니다.
-Windows x64/Node 24 실기기 ACK는 별도의 일회성 증거입니다. 임시 SQLite·Unix inbox·실제 잠금 fixture와 [VALIDATION.md](../VALIDATION.md)의
-실제 TUI 증거는 구분합니다. fixture 통과는 ACK가 아닙니다. 패키지 내용·반복 빌드 해시·
+x64에서 빌드·타입 검사, 네이티브 Claude 받은 메시지함·잠금 점유/해제, writer 소유권·재검증
+경합, CLI 큐 결과, 격리된 가짜 엔드포인트를 통한 PowerShell/.cmd SSH 프레이밍,
+패키지 설치·네이티브 로드·삭제와 취약점 검사(audit)를 확인합니다. 이는 fixture(테스트용 고정 데이터·환경)
+검사이며 Windows에서 POSIX(유닉스 계열 운영체제 표준)/Python 참조 스위트를 실행한다는 뜻은 아닙니다.
+Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증거입니다. 임시 SQLite·Unix
+받은 메시지함·실제 잠금 fixture 검사와 [VALIDATION.md](../VALIDATION.md)의 실제 TUI 증거는
+구분합니다. fixture 통과는 ACK가 아닙니다. 패키지 내용·반복 빌드 해시·
 새 환경 설치·삭제도 검사합니다. 네이티브 의존성에는 설치 스크립트가 있지만 검증한 사전
-빌드 경로는 `--ignore-scripts`를 사용합니다. SQLite 읽기 전용 접근도 WAL 공유 메모리
-처리에 참여할 수 있으므로 스냅샷 읽기는 아닙니다.
+빌드 경로는 `--ignore-scripts`를 사용합니다. SQLite를 읽기 전용으로 열어도 WAL(미리 쓰기
+로그)의 공유 메모리 관리에 참여할 수 있으므로 스냅샷을 읽는 것은 아닙니다.
 
 [CONTRIBUTING.md](../CONTRIBUTING.md), [RELEASING.md](../RELEASING.md),
-[SECURITY.md](../SECURITY.md)를 참고하세요. 이후 릴리스 발행에는 별도 승인이 필요하며
-npm 자동 발행은 활성화하지 않았습니다. [MIT 라이선스](../LICENSE)입니다.
+[SECURITY.md](../SECURITY.md)를 참고하세요. 이후 릴리스 발행도 수동으로 진행하며 별도
+승인이 필요합니다. [MIT 라이선스](../LICENSE)를 따릅니다.
 
+<a id="package-release"></a>
 ## npm 릴리스
 
-0.2.1은 2026-09-29 KST, 0.2.0은 2026-09-28 KST에 공개·검증했습니다.
-[0.2.1 공개 기록](../VALIDATION.md#public-021--2026-09-29-kst)을 참고하고(이후 릴리스는 각자의 날짜별 기록을 추가합니다) 설치 전 정확한 버전과 현재 태그를 확인하세요.
+0.3.2는 2026-10-07 KST에, 0.3.1은 2026-10-04 KST에 공개·검증했습니다.
+[0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)과
+[0.3.1 공개 기록](../VALIDATION.md#public-031--2026-10-04-kst)을 참고하세요.
+이전 버전인 0.2.1과 0.2.0도 각각 2026-09-29 KST와 2026-09-28 KST에
+공개·검증했습니다. [0.2.1 공개 기록](../VALIDATION.md#public-021--2026-09-29-kst)과
+[0.2.0 공개 기록](../VALIDATION.md#public-020--2026-09-28-kst)에서 확인할 수 있습니다.
+설치 전에는 정확한 버전과 현재 npm 태그를 확인하세요.
 
 ```sh
 npm view session-peer@0.3.2 version dist.integrity
 npm view session-peer dist-tags
 ```
 
-0.1.0 tarball의 과거 문구 불일치와 검증은 [날짜별 기록](../VALIDATION.md#public-010--2026-09-27-kst)에 보존합니다.
-발행은 OIDC staging과 별도 2FA 승인을 거칩니다. Staging 성공은 공개 발행이 아닙니다.
+변경할 수 없는 0.1.0 아카이브에는 발행 전 README 문구가 남아 있습니다. 이 아카이브는
+기능을 버전별로 구분해 설명하며, 날짜별 발행 기록은
+[0.1.0 공개 기록](../VALIDATION.md#public-010--2026-09-27-kst)에 있습니다.
+릴리스 워크플로는 Trusted Publisher의 OpenID Connect(OIDC) 방식으로 사전 업로드(staging)를 진행하고,
+메인테이너의 별도 2단계 인증(2FA) 승인을 받습니다. 사전 업로드만으로는 공개 릴리스가 되지 않습니다.
 [RELEASING.md](../RELEASING.md)를 참고하세요.
 
+<a id="related-project"></a>
 ## 관련 프로젝트
 
-[Python session-peer](https://github.com/abruption/session-peer)는 독립적으로 유지·
-발행합니다. 선택 기능과 설치법(예: `pipx install session-peer`)은 해당 저장소에서
-안내합니다. 명령어가 같은 `session-peer`이므로 위 PATH 안내를 따르세요. 이 클라이언트는
-Python 설치에 의존하지 않으며 전체 기능·플래그 호환성을 주장하지 않습니다.
+Python 구현인 [session-peer](https://github.com/abruption/session-peer)는 별도로
+유지·배포합니다. 선택 기능과 설치법(예: `pipx install session-peer`)은 해당 저장소에서
+확인하세요. Python CLI와 이 TypeScript CLI는 서로 다른 구현이지만 명령 이름은 모두
+`session-peer`이므로, 위 PATH 안내에 따라 사용할 구현을 선택하세요. 이 클라이언트는
+Python 패키지에 의존하지 않으며 모든 기능과 플래그가 서로 호환된다고 보장하지 않습니다.
 
+<a id="read-only-diagnostics-in-020"></a>
 ### 0.2.0 읽기 전용 진단
 
 ```sh
@@ -394,13 +458,16 @@ session-peer doctor --host user@host --json
 ```
 
 공개 npm 0.1.0에는 없는 소스 기능입니다. 진단 성공(`ok:true`, 종료 코드 0)과
-에이전트 준비 상태(`ready`, 에이전트·홈별 결과)는 별개입니다. 정해진 메타데이터와
-실행 파일 경로만 검사하며 Codex 실행, inbox 연결, writer 잠금 획득, 메시지 제출을
-하지 않습니다. Windows inbox 준비 상태는 살아 있는 프로세스의 pipe 광고를 뜻하며
-pipe 존재나 연결 가능성을 보증하지 않습니다. `capabilities`는 wake/wait/ACK와 소비
+에이전트 준비 상태(`ready`, 에이전트·홈별 결과)는 별개입니다. 범위를 제한해 메타데이터와
+실행 파일 경로만 검사하며 Codex를 실행하거나 받은 메시지함에
+연결하거나 writer 잠금을 획득하거나 메시지를 제출하지 않습니다. Windows에서 받은
+메시지함이 준비됐다는 표시는 실행 중인 프로세스가 파이프(named pipe)를 알렸다는 뜻일
+뿐, 파이프가 실제로 존재하거나 연결을 받아들인다는 보장은 아닙니다. `capabilities`는
+wake/wait/ACK와 소비
 확인을 미지원으로 표시합니다. 선택적 TS 스킬 메타데이터 검사도 설치를 하지 않습니다.
-[진단 경계](../PARITY.md#source-read-only-doctor--18--020)를 참고하세요. SSH 양쪽에 같은
-TypeScript 클라이언트 버전이 필요합니다.
+[진단 경계](../PARITY.md#source-read-only-doctor--18--020)를 참고하세요. SSH를 사용할 때는
+양쪽에 같은 버전의 TypeScript 클라이언트를 설치해야 합니다.
+<a id="update-checks-and-notices-030-22"></a>
 ### 업데이트 확인과 알림 (0.3.0, #22)
 
 ```sh
@@ -409,16 +476,19 @@ session-peer update --check --channel preview --output-format text
 ```
 
 0.3.0에서 추가된 명령이며 0.2.1 이하에는 없습니다. `update --check`는 `session-peer`의 npm
-dist-tag를 한 번 요청하고(3초 제한, 재시도 없음) `current`, `latest`, `channel`(기본
-`latest`, 또는 `preview`), `source: "npm_registry"`, `status`(`update_available`,
-`up_to_date`, `ahead`), `managedBy`, `updateCommand`, `guidance`를 보고합니다. 명령은
-실행 중인 CLI 경로로 설치 주체를 확실히 식별할 때만 제공합니다. 해당하는 경우는
+배포 태그(dist-tag)를 한 번 요청합니다(제한 시간 3초, 재시도 없음). 응답에 `current`,
+`latest`, `channel`(기본 `latest`, 또는 `preview`), `source: "npm_registry"`,
+`status`(`update_available`,
+`up_to_date`, `ahead`), `managedBy`, `updateCommand`, `guidance`를 보고합니다.
+`updateCommand`는 실행 중인 CLI 경로로 설치 주체를 확인할 수 있을 때 사용자에게 안내합니다.
+해당하는 경우는
 자체 `session-peer` 실행기가 이 패키지를 가리키는 npm 전역 prefix(기본, Homebrew, nvm,
 nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.2`),
 매니페스트에 `session-peer`가 선언된 pnpm·Yarn·Bun 전역 저장소, Volta, npx 캐시입니다.
 프로젝트 설치(`npm_project`, `pnpm_project`), 소스 체크아웃(`source`), 그 밖의
-경우(`unknown`)에는 `updateCommand: null`과 `guidance` 문장만 돌려주므로, 어떤 명령도
-관련 없는 현재 디렉터리를 바꾸지 않습니다. npm 버전만 보고하며 Python `session-peer`
+경우(`unknown`)에는 `updateCommand: null`과 `guidance` 문장만 돌려주므로, 관련 없는 현재
+디렉터리를 변경하는 명령을 안내하지 않습니다. 업데이트는 사용자가 안내된 npm 명령을
+직접 실행해야 합니다. 이 기능은 npm 버전만 보고하며 Python `session-peer`
 릴리스는 별개의 버전 흐름이라 비교하지 않습니다. 레지스트리 실패는 종료 코드 1과
 `registry_timeout`, `registry_unreachable`, `registry_http_error`,
 `registry_response_invalid`, `dist_tag_missing` 중 하나로 보고하며 응답 본문은 출력하지
@@ -426,8 +496,8 @@ nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.2
 
 `--check` 없는 `update`는 아무것도 바꾸지 않습니다. `self_update_unsupported`(종료 코드
 2)로 거부하고 `managedBy`, `updateCommand`, `guidance`, `checkCommand`를 돌려줍니다.
-`update` 자체는 로컬 전용이라 `--host`를 거부하고 SSH wire 요청도 거부합니다. 원격
-호스트, Python 설치, 별도로 관리되는 `session-peer-ts` 스킬은 갱신하지 않습니다. 결과에는
+`update` 자체는 로컬 전용이라 `--host`를 거부하고 SSH를 통해 전달된 원격 요청도
+거부합니다. 원격 호스트, Python 설치, 별도로 관리되는 `session-peer-ts` 스킬은 갱신하지 않습니다. 결과에는
 로컬 TS 스킬 메타데이터(`skills`, `doctor`와 같은 계약)와 `skillsManagedBy: "separate"`가
 포함됩니다.
 
@@ -436,9 +506,10 @@ nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.2
 때문입니다. `SESSION_PEER_UPDATE_NOTICE=1`로 켜면, 24시간 이내의 캐시가 더 새로운 npm
 안정 버전을 가리킬 때 JSON 결과에 `clientUpdate` 객체를 추가하고 텍스트 출력에서는
 stderr에 한 줄을 씁니다. 캐시가 없거나 잘못됐거나 만료되면 분리된 갱신 프로세스를 하나
-시작하며 명령 결과와 종료 코드를 지연시키거나 바꾸지 않습니다. 갱신이 실패하면 1시간 뒤에
-다시 시도합니다. 캐시 쓰기는 단일 실행이며 실패 시 닫힌 쪽으로 동작합니다. 백그라운드 갱신이든
-명시적 확인이든 모든 쓰기는 `npm-update.lock`을 보유한 동안에만, 더 오래된 기록 위에만
+시작하며 명령 결과와 종료 코드를 지연시키거나 바꾸지 않습니다. 갱신에 실패하면 다음
+시도까지 1시간 동안 대기합니다. 캐시 쓰기는 한 번에 하나만 허용하며(single-flight), 안전을
+확인할 수 없으면 기록하지 않습니다(fail closed). 백그라운드 갱신이든 명시적 확인이든
+모든 쓰기는 `npm-update.lock`을 보유한 동안에만, 더 오래된 기록 위에만
 이뤄집니다. 자신이 만들지 않은 잠금을 인계받거나 지우는 일은 없습니다. 갱신이 비정상 종료하거나 I/O 오류로 잠금을
 해제하지 못해 잠금이 남으면 백그라운드 갱신은 멈추고 `update --check`는
 `cache: "skipped_stale_lock"`을 보고합니다. 실행 중인 session-peer 프로세스가 없을 때
@@ -464,9 +535,10 @@ stderr에 한 줄을 씁니다. 캐시가 없거나 잘못됐거나 만료되면
 HTTP, 자격 증명 불가). npm 설정과 `.npmrc`는 읽지 않습니다.
 [업데이트 경계](../PARITY.md#source-update-checks--22)를 참고하세요.
 
+<a id="agent-skill-explicit-installation"></a>
 ## 에이전트 스킬: 명시적 설치
 
-별도 `session-peer-ts` 스킬은 동반 PR에서 관리되며 새 npm 또는 스킬 태그 발행이 아닙니다. 공개된 0.1.0 기본 기능을 지원하고 TypeScript 구현 표시와 도움말로 개발 기능을 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
+별도 `session-peer-ts` 동반 스킬은 [동반 PR #14](https://github.com/abruption/session-peer-skill/pull/14)에서 추적합니다. 새 npm 패키지나 스킬 태그를 발행하는 작업은 아닙니다. 공개된 0.1.0 기본 기능을 지원하고, TypeScript 구현 표시를 감지하며, 개발 중인 기능을 사용하기 전에 도움말에서 지원 여부를 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
 
 [고정된 스킬 소스](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts)를 검토한 뒤 에이전트와 설치 범위를 선택하세요.
 아래 예시는 **Codex, 현재 프로젝트**를 선택합니다. 해당 프로젝트 디렉터리에서 실행하세요.
@@ -480,13 +552,14 @@ npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
 
-고정 버전 업데이트는 다른 정확한 커밋을 검토한 뒤 같은 에이전트·범위로 `add`를 반복합니다.
-목록을 캐시하는 에이전트는 다시 시작하세요. 런타임과 스킬은 독립적으로 관리됩니다.
-npm `--ignore-scripts`를 사용할 수 있고 postinstall은 Skills CLI를 호출하지 않습니다.
+고정 버전을 업데이트하려면 다른 정확한 커밋을 검토한 뒤 같은 에이전트와 범위로 `add`를 다시 실행합니다.
+스킬 목록을 캐시하는 에이전트는 다시 시작하세요. 런타임과 스킬은 별도로 관리합니다.
+npm `--ignore-scripts`로 설치해도 되며, 설치 후 Skills CLI를 호출하는 postinstall 스크립트는 없습니다.
 이 스킬 설치는 Python 스킬을 덮어쓰거나 런타임을 설치하지 않습니다.
 [호환성과 검증](../PARITY.md#source-ts-skill-guidance--25--020)을 참고하세요.
 
+<a id="optional-sp-shorthand"></a>
 ## 선택적 sp 단축 이름
 
 선택적 `sp` 단축 이름은 0.3.0 이상에 포함되며(0.2.1 이하에는 없음) 자동으로 켜지지 않습니다.
-[명시적 활성화·충돌·해제 안내(영문)](shorthand.md)를 참고하세요.
+[명시적 활성화와 이름 충돌 안내(영문)](shorthand.md)를 참고하세요.
