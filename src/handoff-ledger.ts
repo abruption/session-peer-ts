@@ -11,11 +11,14 @@ import { canonicalId, closed, fail, HANDOFF_LIMITS, HandoffBudget, parseStrictJs
 export type HandoffBinding = Readonly<{ agent: 'claude' | 'codex'; destination: string; target: string;
   home?: string; writerIdentity?: string; generation: string | null; payloadDigest: string }>;
 export type PrepareOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; waitFor?: WaitFor;
-  budget?: HandoffBudget; dryRun?: boolean; channels?: { delivery: boolean; receipt: boolean } };
+  budget?: HandoffBudget; dryRun?: boolean; channels?: { delivery: boolean; receipt?: boolean };
+  observationSupported?: boolean; clientUserMessageId?: string };
+export type HandoffObservation = { clientUserMessageId: string; injectionObserved: boolean; turn?: Handoff['observation']['turn'] };
 type StoredWait = { public: Handoff['wait']; clockId: string; cutoff: number };
 type RecordIntent = { binding: HandoffBinding; preparedUtc: number; clockId: string; preparedMono: number;
   phase: 'prepared' | 'attempted' | 'finished' | 'refused'; handoff: Handoff; waits: StoredWait[];
-  reserve: number; capabilityHash?: string; receiptId?: string; revoked?: boolean; expired?: boolean };
+  reserve: number; capabilityHash?: string; capabilityClockId?: string; receiptId?: string; revoked?: boolean; expired?: boolean;
+  deliverySupported?: boolean; clientUserMessageId?: string };
 type Ledger = { version: 1; epoch: string; quarantined: boolean; records: Record<string, RecordIntent> };
 export type HandoffQueryError = { schemaVersion: 1; correlationId: string; status: 'unknown';
   context: 'ledger_missing' | 'ledger_corrupt' | 'id_unknown'; retry: { allowed: false; reason: 'history_unavailable' } };
@@ -87,12 +90,16 @@ export class HandoffLedger {
       const records = data.records as Record<string, RecordIntent>;
       if (Object.keys(records).length > HANDOFF_LIMITS.intents) fail();
       for (const [id, item] of Object.entries(records)) {
-        closed(item, ['binding', 'preparedUtc', 'clockId', 'preparedMono', 'phase', 'handoff', 'waits', 'reserve'], ['capabilityHash', 'receiptId', 'revoked', 'expired']);
+        closed(item, ['binding', 'preparedUtc', 'clockId', 'preparedMono', 'phase', 'handoff', 'waits', 'reserve'], ['capabilityHash', 'capabilityClockId', 'receiptId', 'revoked', 'expired', 'deliverySupported', 'clientUserMessageId']);
         checkBinding(item.binding);
         if (!canonicalId(id) || !canonicalId(item.clockId) || !safeInteger(item.preparedUtc) || typeof item.preparedMono !== 'number' || item.preparedMono < 0 ||
             !['prepared', 'attempted', 'finished', 'refused'].includes(item.phase) || !Array.isArray(item.waits) || item.waits.length > HANDOFF_LIMITS.waits ||
             !safeInteger(item.reserve) || item.reserve > reserveBytes || (item.capabilityHash !== undefined && !/^[a-f0-9]{64}$/.test(item.capabilityHash)) ||
-            (item.receiptId !== undefined && !canonicalId(item.receiptId))) fail();
+            (item.capabilityClockId !== undefined && !canonicalId(item.capabilityClockId)) ||
+            (item.receiptId !== undefined && !canonicalId(item.receiptId)) ||
+            (item.deliverySupported !== undefined && typeof item.deliverySupported !== 'boolean') ||
+            (item.clientUserMessageId !== undefined && !safeId(item.clientUserMessageId)) ||
+            (item.deliverySupported && (!safeId(item.clientUserMessageId) || item.binding.generation === null))) fail();
         const h = validateHandoff(item.handoff);
         if (h.correlationId !== id || h.ledgerEpoch !== data.epoch || h.targetGeneration !== item.binding.generation) fail();
         for (const wait of item.waits) {
@@ -141,8 +148,11 @@ export class HandoffLedger {
       h.state = 'unknown'; h.submission = { status: 'unknown' }; h.observation = { status: 'not_requested', injectionObserved: false };
       h.ack = { status: 'unsupported' }; h.wait = { for: 'none', status: 'not_requested' }; h.nextActions = ['reconcile'];
     } else if (item.phase === 'attempted') { h.state = 'unknown'; h.submission = { status: 'unknown' }; h.nextActions = ['reconcile']; }
-    if ((item.clockId !== this.clockId || item.revoked || this.clock.monotonic() - item.preparedMono >= HANDOFF_LIMITS.capabilityMs) && h.ack.status === 'pending') {
+    if ((item.capabilityClockId !== this.clockId || item.revoked || this.clock.monotonic() - item.preparedMono >= HANDOFF_LIMITS.capabilityMs) && h.ack.status === 'pending') {
       h.ack = { status: 'unsupported' }; h.nextActions = ['reconcile'];
+    }
+    if (item.clockId !== this.clockId && h.observation.status === 'pending') {
+      h.observation = { status: 'unsupported', injectionObserved: false }; h.nextActions = ['reconcile'];
     }
     return validateHandoff(h);
   }
@@ -189,16 +199,24 @@ export class HandoffLedger {
   private configure(item: RecordIntent, options: PrepareOptions): void {
     const h = item.handoff, goal = options.waitFor ?? 'none';
     if (!['none', 'delivered', 'acknowledged'].includes(goal)) fail('invalid_wait_for', 2);
+    if (options.clientUserMessageId !== undefined && !safeId(options.clientUserMessageId)) fail('invalid_client_user_message_id', 2);
+    const clientId = options.clientUserMessageId ?? h.correlationId;
+    if (item.clientUserMessageId !== undefined && item.clientUserMessageId !== clientId) fail('handoff_binding_conflict');
     if (options.requestAck) h.ack.status = 'unsupported';
-    if (options.observeDelivery) h.observation.status = 'unsupported';
+    const delivery = (options.observationSupported === true || options.channels?.delivery === true) && item.binding.generation !== null;
+    if (options.observeDelivery || goal === 'delivered') {
+      item.deliverySupported = delivery; item.clientUserMessageId = clientId;
+      h.observation.status = delivery ? 'pending' : 'unsupported';
+    }
     if (goal !== 'none') {
       const budget = options.budget ?? new HandoffBudget(30, this.clock); this.addWait(item, goal, budget);
-      h.wait.status = 'unsupported'; h.wait.reason = 'evidence_unsupported';
+      if (goal === 'delivered' && delivery) h.wait.status = 'pending';
+      else { h.wait.status = 'unsupported'; h.wait.reason = 'evidence_unsupported'; }
       try { budget.beforeEffect(); } catch (error) {
         h.wait.status = 'failed'; h.wait.reason = (error as { code: WaitReason }).code;
       }
-      if (goal === 'acknowledged') h.ack.status = 'unsupported'; else h.observation.status = 'unsupported';
-      h.state = 'refused'; h.submission.status = 'refused'; item.phase = 'refused';
+      if (goal === 'acknowledged') h.ack.status = 'unsupported';
+      if (h.wait.status !== 'pending') { h.state = 'refused'; h.submission.status = 'refused'; item.phase = 'refused'; }
       item.waits.at(-1)!.public = structuredClone(h.wait);
     }
   }
@@ -211,11 +229,29 @@ export class HandoffLedger {
       if (!sameBinding(item.binding, binding)) fail('handoff_binding_conflict');
       if (item.phase !== 'prepared') fail('handoff_already_attempted');
       try { budget?.beforeEffect(); } catch (error) {
-        item.phase = 'refused'; item.handoff.state = 'refused'; item.handoff.submission.status = 'refused'; this.write(data); throw error;
+        this.refuse(item, (error as { code: WaitReason }).code); this.write(data); throw error;
       }
       item.phase = 'attempted'; item.clockId = this.clockId;
       item.handoff.state = 'unknown'; item.handoff.submission.status = 'unknown'; item.handoff.nextActions = ['reconcile'];
       this.write(data); return this.snapshot(item);
+    });
+  }
+  private refuse(item: RecordIntent, reason?: WaitReason): void {
+    item.phase = 'refused'; item.handoff.state = 'refused'; item.handoff.submission.status = 'refused'; item.handoff.nextActions = [];
+    if (item.handoff.observation.status === 'pending') item.handoff.observation = { status: 'failed', injectionObserved: false };
+    if (item.handoff.ack.status === 'pending') { item.handoff.ack = { status: 'unsupported' }; item.revoked = true; }
+    const wait = item.waits.at(-1);
+    if (wait?.public.status === 'pending') {
+      item.handoff.wait.status = 'failed'; item.handoff.wait.reason = reason ?? 'evidence_failed'; wait.public = structuredClone(item.handoff.wait);
+    }
+  }
+  refusePrepared(id: string, binding: HandoffBinding, reason?: WaitReason): Handoff {
+    binding = checkBinding(binding);
+    return this.lock(() => {
+      const data = this.read(), item = this.usable(data, id);
+      if (!sameBinding(item.binding, binding)) fail('handoff_binding_conflict');
+      if (item.phase !== 'prepared') fail('handoff_already_attempted');
+      this.refuse(item, reason); this.write(data); return this.snapshot(item);
     });
   }
   recordSubmission(id: string, status: 'submitted' | 'unknown' | 'refused'): Handoff {
@@ -224,7 +260,37 @@ export class HandoffLedger {
       if (item.phase !== 'attempted' || item.clockId !== this.clockId) fail('handoff_outcome_not_authorized');
       item.phase = 'finished'; item.handoff.submission.status = status;
       item.handoff.state = status; item.handoff.nextActions = ['reconcile'];
+      if (status === 'refused') this.refuse(item, 'evidence_failed');
       this.write(data); return this.snapshot(item);
+    });
+  }
+  recordObservation(id: string, observation: HandoffObservation, originalBinding: HandoffBinding): Handoff {
+    originalBinding = checkBinding(originalBinding);
+    closed(observation, ['clientUserMessageId', 'injectionObserved'], ['turn']);
+    if (!safeId(observation.clientUserMessageId) || typeof observation.injectionObserved !== 'boolean' ||
+        (!observation.injectionObserved && observation.turn !== undefined)) fail('invalid_handoff_observation');
+    return this.lock(() => {
+      const data = this.read(), item = this.usable(data, id), h = item.handoff;
+      if (!sameBinding(item.binding, originalBinding)) fail('handoff_binding_conflict');
+      if (!item.deliverySupported || item.binding.generation === null || item.clientUserMessageId !== observation.clientUserMessageId ||
+          item.phase !== 'finished' || h.submission.status !== 'submitted') fail('handoff_observation_unverified');
+      if (!observation.injectionObserved) return this.snapshot(item);
+      if (observation.turn !== undefined) {
+        closed(observation.turn, ['id', 'status']);
+        if (!safeId(observation.turn.id) || !['running', 'completed', 'failed', 'interrupted', 'unknown'].includes(observation.turn.status)) fail('invalid_handoff_observation');
+        const prior = h.observation.turn;
+        if (prior && (prior.id !== observation.turn.id || (['completed', 'failed', 'interrupted'].includes(prior.status) && prior.status !== observation.turn.status))) fail('handoff_turn_conflict');
+      }
+      h.observation = { status: 'observed', injectionObserved: true, clientUserMessageId: observation.clientUserMessageId,
+        ...(observation.turn ? { turn: structuredClone(observation.turn) } : h.observation.turn ? { turn: h.observation.turn } : {}) };
+      if (h.ack.status !== 'acknowledged') h.state = 'delivered';
+      const latest = item.waits.at(-1);
+      if (latest?.public.status === 'pending' && latest.public.for === 'delivered') {
+        if (latest.clockId !== this.clockId) { latest.public.status = 'failed'; latest.public.reason = 'history_unavailable'; }
+        else latest.public.status = this.clock.monotonic() < latest.cutoff ? 'satisfied' : 'timed_out_unknown';
+        h.wait = structuredClone(latest.public);
+      }
+      h.nextActions = ['reconcile']; this.write(data); return this.snapshot(item);
     });
   }
   private addWait(item: RecordIntent, goal: Exclude<WaitFor, 'none'>, budget: HandoffBudget): void {
@@ -240,7 +306,10 @@ export class HandoffLedger {
       h.nextActions = ['reconcile'];
       if ((goal === 'acknowledged' && h.ack.status === 'acknowledged') || (goal === 'delivered' && h.observation.injectionObserved)) h.wait.status = 'satisfied';
       else if (budget.seconds <= 5) { h.wait.status = 'failed'; h.wait.reason = 'insufficient_budget'; }
-      else if (goal === 'acknowledged' && item.capabilityHash && !item.revoked && item.clockId === this.clockId &&
+      else if (goal === 'delivered' && item.deliverySupported && item.binding.generation !== null && item.clockId === this.clockId && h.submission.status === 'submitted') {
+        h.nextActions = ['keep_waiting', 'reconcile', 'stop_waiting'];
+      }
+      else if (goal === 'acknowledged' && item.capabilityHash && !item.revoked && item.capabilityClockId === this.clockId &&
           this.clock.monotonic() - item.preparedMono < HANDOFF_LIMITS.capabilityMs && item.binding.generation !== null && h.submission.status === 'submitted') {
         h.ack.status = 'pending'; h.nextActions = ['keep_waiting', 'reconcile', 'stop_waiting'];
       } else { h.wait.status = 'unsupported'; h.wait.reason = 'evidence_unsupported'; }
@@ -295,6 +364,7 @@ export class HandoffLedger {
       if (item.phase !== 'prepared' || item.binding.generation === null || item.capabilityHash || item.clockId !== this.clockId ||
           this.clock.monotonic() - item.preparedMono >= HANDOFF_LIMITS.capabilityMs) fail('receipt_authority_unavailable');
       const capability = randomBytes(32).toString('base64url'); item.capabilityHash = payloadDigest(capability);
+      item.capabilityClockId = this.clockId;
       item.handoff.ack.status = 'pending'; item.clockId = this.clockId; this.write(data); return capability;
     });
   }
@@ -308,7 +378,7 @@ export class HandoffLedger {
           item.binding.generation !== proof.targetGeneration || item.handoff.submission.status !== 'submitted') fail('receipt_authentication_failed');
       if (item.receiptId) { if (item.receiptId !== proof.receiptId) fail('receipt_already_committed'); return this.snapshot(item); }
       if (item.handoff.ack.status === 'acknowledged') fail('receipt_already_committed');
-      if (item.clockId !== this.clockId || this.clock.monotonic() - item.preparedMono >= HANDOFF_LIMITS.capabilityMs) fail('receipt_authority_expired');
+      if (item.capabilityClockId !== this.clockId || this.clock.monotonic() - item.preparedMono >= HANDOFF_LIMITS.capabilityMs) fail('receipt_authority_expired');
       this.commitAck(item, 'token_possession'); item.receiptId = proof.receiptId;
       this.write(data); return this.snapshot(item);
     });
@@ -320,7 +390,7 @@ export class HandoffLedger {
       const data = this.read();
       for (const item of Object.values(data.records)) if (this.clock.utc() - item.preparedUtc >= HANDOFF_LIMITS.detailMs) {
         item.expired = true; item.phase = 'finished'; item.handoff = this.snapshot(item); item.waits = []; item.reserve = 0;
-        delete item.capabilityHash; delete item.receiptId;
+        delete item.capabilityHash; delete item.capabilityClockId; delete item.receiptId;
       }
       this.write(data);
     });
