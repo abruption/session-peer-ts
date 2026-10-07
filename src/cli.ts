@@ -251,6 +251,9 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   }
   // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
   delete value.clientUpdate;
+  // No SSH handoff mode is enabled here. Peer-supplied evidence cannot opt an
+  // ordinary request in or present an unsolicited acknowledged result.
+  delete value.handoff; delete value.handoffQuery; delete value.handoffWarning;
   return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: done.code! };
 }
 function failure(error: unknown, command: string, where: string): { value: Record<string, unknown>; exitCode: number } {
