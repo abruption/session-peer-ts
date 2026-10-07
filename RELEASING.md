@@ -7,9 +7,9 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
-## Unpublished 0.3.2 source candidate
+## 0.3.2 release procedure
 
-The release preparation is based on reviewed main `488ddddac302ba2ad0841061dc8df9187ff6a983`; 0.4 feature branches are excluded. The current public stable is **0.3.1**, with `latest=0.3.1` and unchanged `preview=0.1.0-preview.1`. This source candidate has not been published or staged. Previous stable integrity is pinned to:
+The release preparation is based on reviewed main `488ddddac302ba2ad0841061dc8df9187ff6a983`; 0.4 feature branches are excluded. The required pre-staging baseline is **0.3.1**, with `latest=0.3.1` and `preview=0.1.0-preview.1`; these are preconditions, not a permanent statement of registry state. Check the registry and dated validation record for publication status. Previous stable integrity is pinned to:
 `sha512-iZq06dbm6NavHuPZYMIxAnzQN5ksqm66yufpppddVWUYkuaG5TJvktbUXTSX7v3BBFnuybEJekI0KSaDo3Xfbg==`.
 Previous stable attestation metadata: `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.1`. Historical records below remain historical.
 
@@ -22,7 +22,7 @@ Previous stable attestation metadata: `https://registry.npmjs.org/-/npm/v1/attes
 
 ## Public release checkpoint — 0.3.1 (2026-10-04 KST)
 
-`session-peer@0.3.1` is public with `latest=0.3.1` and unchanged
+At this dated checkpoint, `session-peer@0.3.1` was public with `latest=0.3.1` and unchanged
 `preview=0.1.0-preview.1`; see the [dated verification](VALIDATION.md#public-031--2026-10-04-kst).
 Published source is `6b48092a0e42992d2d970dd2ff5cf457f62d3ff2` and publication
 run is `37209205194`. The completed procedure below is historical: do not replay
