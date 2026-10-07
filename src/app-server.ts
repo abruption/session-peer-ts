@@ -552,21 +552,35 @@ function releaseOwned(pid: number | undefined): void {
 function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Omit<MetadataOnlyTransport, 'qualification'> & { pid?: number } {
   if (process.platform === 'win32') throw new AppServerFault('unsupported_transport', false);
   const child = spawn(binary, args, { env, cwd, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
-  registerOwned(child.pid); child.once('spawn', () => registerOwned(child.pid));
+  let stderrBytes = 0, closed = false, stopped = false;
+  let lifetime: ReturnType<typeof setTimeout> | undefined;
+  const register = () => {
+    if (closed || stopped || child.exitCode !== null || child.signalCode !== null) return;
+    registerOwned(child.pid);
+  };
+  const stopOwned = () => {
+    if (stopped) return;
+    stopped = true; child.removeListener('spawn', register);
+    if (lifetime) clearTimeout(lifetime);
+    if (child.pid && ownedGroups.has(child.pid)) reapOwned(child.pid);
+    releaseOwned(child.pid);
+  };
+  register(); child.once('spawn', register);
+  // Release the lifetime/registry as soon as this child exits; late close calls
+  // must not reap a former PID again. Reap any remaining owned descendants now.
+  child.once('exit', stopOwned);
   child.stdout.on('error', () => {}); child.stdin.on('error', () => {});
-  let stderrBytes = 0, closed = false;
-  const kill = () => { if (child.pid) reapOwned(child.pid); };
   // Also bound a fixture transport whose caller fails before attaching a client.
-  const lifetime = setTimeout(() => { kill(); releaseOwned(child.pid); child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); }, APP_SERVER_LIMITS.lifetimeMs);
+  lifetime = setTimeout(() => { stopOwned(); child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); }, APP_SERVER_LIMITS.lifetimeMs);
   lifetime.unref();
   child.stderr.on('data', (bytes: Buffer) => {
     stderrBytes += bytes.length;
-    if (stderrBytes > APP_SERVER_LIMITS.receivedBytes) { kill(); child.stdout.destroy(new Error('traffic_limit')); }
+    if (stderrBytes > APP_SERVER_LIMITS.receivedBytes) { stopOwned(); child.stdout.destroy(new Error('traffic_limit')); }
   });
-  child.on('error', () => { child.stdout.destroy(new Error('connection_closed')); });
+  child.on('error', () => { stopOwned(); child.stdout.destroy(new Error('connection_closed')); });
   return { pid: child.pid, input: child.stdout, output: child.stdin,
     close: () => new Promise(resolve => {
-      if (closed) { resolve(); return; } closed = true; clearTimeout(lifetime); kill(); releaseOwned(child.pid);
+      if (closed) { resolve(); return; } closed = true; stopOwned();
       child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
       if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) { resolve(); return; }
       const timer = setTimeout(resolve, APP_SERVER_LIMITS.cleanupMs);

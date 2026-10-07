@@ -7,6 +7,9 @@ import { performance } from 'node:perf_hooks';
 import { mkdtempSync, realpathSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import childProcess from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { syncBuiltinESMExports } from 'node:module';
 import { APP_SERVER_EVIDENCE, APP_SERVER_LIMITS, AppServerFault, BoundedAppServerClient,
   appServerCapability, connectAppServer, parseMetadataEvent, spawnOwnedMetadataFixture, nativeQueueCapability,
   nativeQueueOnce, NATIVE_QUEUE_NOTIFICATION_OPTOUTS,
@@ -255,6 +258,52 @@ test('owned POSIX fixture processes are reaped on explicit close and queue deadl
     const pid = Number(readFileSync(pidFile, 'utf8'));
     assert.throws(() => process.kill(pid, 0), (error: any) => error.code === 'ESRCH');
   }
+});
+
+test('immediate close cannot re-register a former PID from a delayed spawn event or queued callback', {
+  skip: process.platform === 'win32',
+}, async t => {
+  const names = ['SIGINT', 'SIGTERM', 'SIGHUP', 'exit'] as const;
+  const listeners = (name: typeof names[number]): Array<(...args: any[]) => void> =>
+    name === 'exit' ? process.listeners('exit') : process.listeners(name);
+  const baseline = new Map(names.map(name => [name, listeners(name)]));
+  const fakePid = 2147480000; // No OS process is spawned or signalled.
+  const child = Object.assign(new EventEmitter(), { pid: fakePid, exitCode: null as number | null,
+    signalCode: null as NodeJS.Signals | null, stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough() });
+  const kills: Array<{ pid: number; signal: string | number | undefined }> = [];
+  t.mock.method(childProcess, 'spawn', () => child as any);
+  t.mock.method(process, 'kill', (pid: number, signal?: string | number) => {
+    kills.push({ pid, signal }); if (pid === -fakePid) child.exitCode = 0; return true;
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    // A negative-control failure must not leave fake ownership behind. Invoke
+    // only the newly installed owned handler while process.kill is still mocked.
+    for (const handler of process.listeners('SIGTERM')) {
+      if (!baseline.get('SIGTERM')!.includes(handler)) handler('SIGTERM');
+    }
+    t.mock.restoreAll(); syncBuiltinESMExports();
+    child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+  });
+  const transport = spawnOwnedMetadataFixture('unused-fixture-binary', [], {});
+  const queuedSpawnCallbacks = child.listeners('spawn');
+  const ownedExitCallbacks = process.listeners('exit').filter(handler => !baseline.get('exit')!.includes(handler));
+  assert.equal(queuedSpawnCallbacks.length, 1); assert.equal(ownedExitCallbacks.length, 1);
+  await transport.close();
+  const spawnListenersAfterClose = child.listenerCount('spawn');
+  // Pending child state may still look live when a previously queued callback
+  // arrives. The closed/stopped latch must win independently of exitCode.
+  child.exitCode = null;
+  await new Promise<void>(resolve => setImmediate(() => {
+    child.emit('spawn'); for (const callback of queuedSpawnCallbacks) callback(); resolve();
+  }));
+  const listenersAfterDelayedSpawn = new Map(names.map(name => [name, listeners(name)]));
+  // Even the captured former exit handler cannot reap a reused PID afterwards.
+  for (const callback of ownedExitCallbacks) callback(0);
+  child.emit('exit', 0); await transport.close();
+  assert.deepEqual(kills, [{ pid: -fakePid, signal: 'SIGKILL' }]);
+  assert.equal(spawnListenersAfterClose, 0);
+  for (const name of names) assert.deepEqual(listenersAfterDelayedSpawn.get(name), baseline.get(name), name);
 });
 
 test('closing an owned POSIX fixture also kills its owned process-group descendant', { skip: process.platform === 'win32' }, async t => {
