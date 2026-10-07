@@ -6,7 +6,7 @@
 
 **Documentation and source version: 0.3.2.** Before using the version-pinned npm commands below, confirm that 0.3.2 is available in the npm registry or version badge. Before publication, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints must use the same reviewed version.
 
-This guide covers 0.3.2 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.0 release evidence](../VALIDATION.md#public-030--2026-10-03-kst) records the previous publication. References to 0.1.0 below describe the older release.
+This guide covers 0.3.2 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records the previous publication. References to 0.1.0 below describe the older release.
 
 ## Contents
 

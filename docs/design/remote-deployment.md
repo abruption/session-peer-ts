@@ -31,13 +31,13 @@ SSH, so a destination needs only a usable Python and a POSIX shell. Its
 `install.sh --host` additionally pushes the program to
 `$HOME/.local/share/session-peer` and links `$HOME/.local/bin/session-peer`.
 
-The TypeScript client deliberately does not do that. In 0.2.1 through 0.3.1 the local client
+The TypeScript client deliberately does not do that. In 0.2.1 through 0.3.2 the local client
 runs `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10`
 and, before any message leaves the machine:
 
 1. runs `<remote-bin> --version` with no message (15 s timeout);
 2. requires stdout to equal exactly the client's own version line, for example
-   `session-peer 0.3.1 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
+   `session-peer 0.3.2 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
    otherwise refuses with a fixed code from `sshPreflightFailure` in `src/cli.ts`;
 3. sends a `schemaVersion: 1` JSON request on stdin to
    `<remote-bin> --stdio-request` and verifies the `schemaVersion: 1` response
@@ -797,15 +797,22 @@ the host nor the account was disposable. It does not qualify Windows-client
   was not exercised.
 - Linux arm64, Windows arm64 and macOS x64 native loads; glibc below 2.28 and
   musl (expected to fail).
-- Node 22 destinations under this workflow on Windows, arm64 or macOS (Linux
-  x86_64 Node 22.23.3 was exercised).
+- Complete Node 22 installation/recovery qualification on Windows, arm64 or
+  macOS. Windows x64 Node 22.23.3 direct-CLI/native-lock smoke passed; Linux
+  x86_64 Node 22.23.3 was exercised under the earlier dated workflow.
 - The compatibility contract and the proposed error codes: they are
   unimplemented.
 
-Because of these gaps, issue #23's last criterion ("validate the selected
-workflow with isolated POSIX and Windows destinations") is **not** met. The
-POSIX (Linux x86_64) cell of F5 is recorded. **The Windows cell is unmet.**
-Local stubs do not count toward either cell.
+F5 now has bounded real-destination evidence on Linux x86_64 and Windows
+10 x64. The 2026-10-07 Windows checkpoint passed the primary offline
+provisioning workflow and operator SSH checks with an administrator account,
+PowerShell 5.1 and Node 24.16.0, plus 31 native storage/recovery fixtures.
+Node 22 has direct-CLI/native-lock smoke evidence only. Issue #23's last
+criterion remains **partially validated**: current recovery rules have not
+been requalified on Linux, and the remaining account/runtime/architecture
+and concurrency cells are untested. Local stubs do not replace destination
+evidence. These results do not qualify a shipped deploy helper or
+Windows-client jump.
 
 ## Follow-ups
 
