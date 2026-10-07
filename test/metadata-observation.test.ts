@@ -1,6 +1,8 @@
 import { test, mock, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -169,4 +171,55 @@ test('deadline kills only the owned probe process group including its descendant
   for (let n = 0; n < 50 && pids.some(pid => { try { process.kill(pid, 0); return true; } catch { return false; } }); n++) await new Promise(resolve => setTimeout(resolve, 10));
   for (const pid of pids) assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
   assert.doesNotThrow(() => process.kill(process.pid, 0));
+});
+test('actual SQLite uses memory-only temp storage and materializes keys and bounded scalars only', posix, async t => {
+  const f = fixture(t), marker = join(f.home, 'sql-policy.json'), temp = join(f.home, 'sqlite-temp');
+  mkdirSync(temp, { mode: 0o700 });
+  f.item(1, clientId, 'PRIVATE_OVERSIZED_BODY_SENTINEL'.repeat(80000));
+  f.item(2, 'other-client');
+  f.db.prepare('UPDATE thread_items SET item_json=? WHERE item_id=?').run(JSON.stringify({ type: 'userMessage',
+    clientId: { content: 'PRIVATE_OBJECT_BODY_SENTINEL' } }), 'native-item-2');
+  f.item(3, 'x'.repeat(129));
+  const preload = `import sqlite from 'node:sqlite';import fs from 'node:fs';
+const prepare=sqlite.DatabaseSync.prototype.prepare;sqlite.DatabaseSync.prototype.prepare=function(sql){
+ if(sql.startsWith('WITH recent')) fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({
+  tempStore:prepare.call(this,'PRAGMA temp_store').get().temp_store,
+  recentProjection:sql.match(/WITH recent AS MATERIALIZED \\(\\s*SELECT ([\\s\\S]*?) FROM thread_items/)[1],sql
+ }));return prepare.call(this,sql);};`;
+  const realSpawn = childProcess.spawn;
+  mock.method(childProcess, 'spawn', (binary: string, args: readonly string[], options: any) => realSpawn(binary,
+    ['--import', 'data:text/javascript,' + encodeURIComponent(preload), ...args], { ...options, env: { ...options.env, SQLITE_TMPDIR: temp } }));
+  t.after(() => mock.restoreAll());
+  const result = await observe(f.scope);
+  assert.deepEqual(result, { supported: true, injectionObserved: false });
+  const policy = JSON.parse(readFileSync(marker, 'utf8'));
+  assert.equal(policy.tempStore, 2);
+  assert.equal(policy.recentProjection, 'rowid AS item_rowid');
+  assert.ok(policy.sql.includes("json_type(item_json,'$.clientId')='text'"));
+  assert.deepEqual(readdirSync(temp), []);
+  assert.equal(JSON.stringify(result).includes('PRIVATE_'), false);
+});
+test('blocking realpath/lstat validation remains in a killable worker and never blocks the supervisor', posix, async t => {
+  for (const method of ['realpathSync', 'lstatSync']) {
+    const f = fixture(t), marker = join(f.home, method + '-started'); let parentCalls = 0, ticks = 0;
+    const preload = `import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+fs.writeFileSync(${JSON.stringify(marker)},'ready');const original=fs.${method};const blocked=()=>{Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5000);throw new Error('PRIVATE_FS_SENTINEL');};blocked.native=original.native;fs.${method}=blocked;syncBuiltinESMExports();`;
+    const realSpawn = childProcess.spawn; let pid: number | undefined;
+    mock.method(childProcess, 'spawn', (binary: string, args: readonly string[], options: any) => {
+      const child = realSpawn(binary, ['--import', 'data:text/javascript,' + encodeURIComponent(preload), ...args], options);
+      pid = child.pid; return child;
+    });
+    mock.method(fs, method as 'realpathSync', () => { parentCalls++; throw new Error('supervisor synchronous filesystem validation'); });
+    syncBuiltinESMExports();
+    const timer = setInterval(() => { ticks++; }, 20), start = performance.now(), deadline = start + 400;
+    let result;
+    try { result = await observeMetadata({ ...f.scope, clientUserMessageId: clientId },
+      { observationRemainingMs: () => deadline - performance.now() }, owner); }
+    finally { clearInterval(timer); mock.restoreAll(); syncBuiltinESMExports(); }
+    assert.deepEqual(result, { supported: false, injectionObserved: false, reason: 'metadata_deadline' });
+    assert.equal(parentCalls, 0); assert.ok(ticks >= 3); assert.equal(existsSync(marker), true);
+    assert.ok(performance.now() - start < 1200);
+    for (let n = 0; n < 50; n++) { try { process.kill(pid!, 0); } catch { break; } await new Promise(resolve => setTimeout(resolve, 10)); }
+    assert.throws(() => process.kill(pid!, 0), { code: 'ESRCH' });
+  }
 });
