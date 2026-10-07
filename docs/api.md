@@ -71,3 +71,22 @@ secret is accepted in argv/URI/environment. Receipt ACK means receipt only, not
 ownership, completed work or permission to act. Operator confirmation is
 explicitly labeled and must match retained original context. No arbitrary
 message/transcript scan manufactures ACK. Ordinary generated Reply-To stays v1.
+
+
+## Unreleased bounded app-server mechanics — 0.4.0 work
+
+`dist/app-server.js` is an internal opt-in module, not a new public package
+export or a change to ordinary CLI submission. `nativeQueueOnce` requires an
+absolute executable, exact home/thread/original generation, bounded owner
+verifier and durable `beforeEffect` callback. Exact Codex 0.160.1/macOS arm64
+queue mechanics were tested in a network-denied synthetic home; other platform
+or version tuples fail before an effect. The caller owns proof of original
+writer/home and any resources used by its verifier.
+
+Only initialize, initialized and one thread/queue/add are used. Queue receipt
+returns IDs only. Body-returning observation APIs, transcript reading, resume,
+wake and new model turns are not implemented. The native process is an owned
+queue transport, not an inferred existing session owner. Possible write marks
+outcome uncertain even when the subsequent response is malformed. No automatic
+fallback follows a possible effect. Fixture-only metadata ports are not native
+observation qualification. See [source evidence](../PARITY.md#unreleased-bounded-app-server-foundation--71).

@@ -842,3 +842,27 @@ bootstrap, Windows private ACL support and original-sender SSH coordination are
 still implementation gates. Fixture passes are not live receipt/injection
 qualification. Default output and the historical Python runtime parity pin stay
 unchanged; no future Python runtime is claimed shipped.
+
+
+## Unreleased bounded app-server foundation — #71
+
+The opt-in internal client is qualified only for queue mechanics on Codex
+0.160.1 / macOS arm64, using an isolated network-denied synthetic home. One
+native queue/add, original client message ID persistence and no loaded/resumed
+thread were observed. This is not live delivery, general owner-route or receipt
+ACK qualification. Legacy Codex queue remains the default CLI path.
+
+The client bounds frames, RPCs, traffic, owner verification, monotonic deadlines
+and owned process-group cleanup. An authorized caller supplies a durable
+before-effect fence; at most one queue RPC follows it. After a possible write,
+disconnect, timeout, schema error or remote refusal never enables fallback or
+resend. initialize opts out all 83 notifications in the exact qualified native
+schema; queue/add's own input echo is validated but only IDs are returned.
+queue/list, history, full item/turn notifications, resume/start and model turns
+are excluded. The separate synthetic metadata protocol is explicitly fixture
+only. Other platforms/versions and native observation remain unsupported.
+
+Generated schema hashes and the fixed official source commit are recorded in
+`test/fixtures/app-server-schema-evidence.json`; tests use hermetic streams and
+owned Node children. These facts do not re-pin the shipped Python runtime parity
+reference or implement automatic ACK.
