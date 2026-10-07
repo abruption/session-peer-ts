@@ -74,3 +74,9 @@ test('positive native acceptance survives a subsequent durable-record I/O failur
   await assert.rejects(handoffSend({to:String(process.pid),message:'fixture body'}, {correlationId:h.correlationId,ledgerPath:join(f.path,'state','handoff')}), /handoff_already_attempted/); assert.equal(f.messages.length,1);
  } finally { mocked.mock.restore(); syncBuiltinESMExports(); if(oldDir===undefined) delete process.env.CLAUDE_CONFIG_DIR;else process.env.CLAUDE_CONFIG_DIR=oldDir; }
 });
+
+test('opt-in reserves bounded outer-result space before any native effect', {skip:process.platform==='win32'}, async t=>{
+ const f=await fixture(t);await f.invoke(['handoff','init']);
+ writeFileSync(join(f.path,'.claude/sessions',`${process.pid}.json`),JSON.stringify({pid:process.pid,name:'x'.repeat(1040000),messagingSocketPath:join(f.path,'sock')}));
+ const r=await f.invoke([...f.send,'--request-ack']);assert.equal(r.code,1);assert.equal(r.value.error,'handoff_result_too_large');assert.equal(r.value.submitted,false);assert.equal(f.messages.length,0);
+});

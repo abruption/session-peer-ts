@@ -4,13 +4,13 @@ import { homedir, hostname } from 'node:os';
 import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync } from 'node:fs';
 import { HandoffLedger, payloadDigest, type HandoffBinding } from './handoff-ledger.js';
-import { canonicalId, HandoffBudget, parseWaitTimeout, type Handoff, type WaitFor } from './handoff.js';
+import { canonicalId, HANDOFF_LIMITS, HandoffBudget, parseWaitTimeout, type Handoff, type WaitFor } from './handoff.js';
 import { checkMessage, send, type SendContext, type SendOptions } from './send.js';
 import { Refusal } from './discovery.js';
 import { UnknownOutcome } from './process.js';
 
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean;
-  waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget };
+  waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
 export type OperationResult = { value: Record<string, unknown>; exitCode: number };
 export function ledgerPath(): string {
   const path = process.env.SESSION_PEER_HANDOFF_HOME ?? join(homedir(), '.local', 'state', 'session-peer-ts', 'handoff');
@@ -59,6 +59,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
     const value = await send({ ...options, hooks: {
       resolved(context, native) {
         snapshot = native; original = binding(context, handoffOptions.payload ?? options.message);
+        if (Buffer.byteLength(JSON.stringify(native)) + HANDOFF_LIMITS.publicFrame + (handoffOptions.resultOverhead ?? 1024) > HANDOFF_LIMITS.outerFrame) throw new Refusal('handoff_result_too_large',1);
         // Account for the fixed correlation envelope before allocating an intent.
         checkMessage(correlationEnvelope(options.message, '00000000-0000-4000-8000-000000000000'), context.agent === 'codex');
         handoff = ledger.prepare(original, { correlationId: handoffOptions.correlationId,
