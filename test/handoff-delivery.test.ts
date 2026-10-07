@@ -24,13 +24,17 @@ async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  writeFileSync(join(bin,'lsof'),`#!${process.execPath}\nprocess.stdout.write(${JSON.stringify('p'+held.pid+'\0ccodex-fixture\0u'+process.getuid?.()+'\0')});`,{mode:0o700});
  writeFileSync(join(bin,'ps'),`#!${process.execPath}\nconsole.log('Fixture stable start');`,{mode:0o700});
  const log=join(root,'queue-log');writeFileSync(log,'');const codex=join(bin,'codex');
+ const initializeReady=join(root,'initialize-ready'),initializeRelease=join(root,'initialize-release');
  writeFileSync(codex,`#!${process.execPath}
 const fs=require('fs'),readline=require('readline'),path=require('path');
 if(process.argv[2]==='--version'){console.log('codex-cli '+${JSON.stringify(version)});process.exit(0);}
 if(process.argv[2]==='queue'){fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({method:'legacy'})+'\\n');console.log('Queued message legacy-1 for thread '+process.argv[4]+'.');process.exit(0);}
 const {DatabaseSync:Sql}=require('node:sqlite');globalThis.keptDatabases=[new Sql(path.join(process.env.CODEX_HOME,'state_5.sqlite'),{readOnly:true}),new Sql(path.join(process.env.CODEX_SQLITE_HOME,'queue_1.sqlite'))];
-readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line);if(r.method==='initialize')console.log(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'fixture'}}));else if(r.method==='thread/queue/add'){
+readline.createInterface({input:process.stdin}).on('line',async line=>{const r=JSON.parse(line);if(r.method==='initialize'){
+if(${JSON.stringify(mode)}==='concurrent-stop'){fs.writeFileSync(${JSON.stringify(initializeReady)},'ready');await new Promise(resolve=>{const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(initializeRelease)})){clearInterval(timer);resolve();}},10);});}
+console.log(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'fixture'}}));}else if(r.method==='thread/queue/add'){
 fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({method:r.method,clientId:r.params.clientUserMessageId})+'\\n');
+if(${JSON.stringify(mode)}==='concurrent-stop')return;
 if(${JSON.stringify(mode)}==='loss'){process.exit(0);return;}
 if(${JSON.stringify(mode)}==='inject'){const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(path.join(process.env.CODEX_HOME,'thread_history_1.sqlite'));db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(r.params.threadId,'turn-fixture','native-item-not-client-id',1,JSON.stringify({type:'userMessage',id:'native-item-not-client-id',clientId:r.params.clientUserMessageId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');db.close();}
 console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture',clientUserMessageId:r.params.clientUserMessageId,input:r.params.input}}}));
@@ -42,7 +46,8 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
  assert.equal((await invoke(['handoff','init'])).code,0);
  const calls=()=>readFileSync(log,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
  async function queued(){if(calls().length)return;await new Promise<void>((ok,fail)=>{const watcher=watch(root,()=>{if(calls().length){clearTimeout(timer);watcher.close();ok();}});const timer=setTimeout(()=>{watcher.close();fail(new Error('queue fixture not called'));},10000);if(calls().length){clearTimeout(timer);watcher.close();ok();}});}
- return{root,home,calls,args,invoke,start,queued};
+ async function initialized(){if(existsSync(initializeReady))return;await new Promise<void>((ok,fail)=>{const watcher=watch(root,()=>{if(existsSync(initializeReady)){clearTimeout(timer);watcher.close();ok();}});const timer=setTimeout(()=>{watcher.close();fail(new Error('initialize fixture not reached'));},10000);if(existsSync(initializeReady)){clearTimeout(timer);watcher.close();ok();}});}
+ return{root,home,calls,args,invoke,start,queued,initialized,releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
 test('qualified local opt-in waits for exact client ID injection, not completed turn/ACK',qualified,async t=>{
  const f=await fixture(t);const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,0,r.stdout);assert.equal(r.value.status,'queued');assert.equal(r.value.submitted,true);assert.equal(r.value.consumptionConfirmed,false);assert.equal(r.value.queueId,'queue-fixture');const h=validateHandoff(r.value.handoff);assert.equal(h.state,'delivered');assert.equal(h.wait.status,'satisfied');assert.equal(h.observation.clientUserMessageId,h.correlationId);assert.equal(h.observation.turn?.status,'completed');assert.equal(h.ack.status,'not_requested');assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');assert.equal(f.calls()[0].clientId,h.correlationId);assert.equal(r.stdout.includes('PRIVATE_BODY_SENTINEL'),false);
@@ -61,4 +66,23 @@ test('deadline without matching injection preserves native queued facts and immu
 });
 test('SIGINT stops an explicit wait without retracting or submitting again',qualified,async t=>{
  const f=await fixture(t,'none');const active=f.start([...f.args,'--wait-for','delivered']);await f.queued();active.child.kill('SIGINT');const r=await active.result;assert.equal(r.code,130,r.stdout);assert.equal(r.value.handoff.wait.status,'stopped');assert.equal(r.value.handoff.wait.reason,'stopped_by_operator');assert.equal(r.value.handoff.retry.allowed,false);assert.equal(f.calls().length,1);assert.notEqual(r.value.submitted,false);
+});
+test('concurrent wait before effect cannot hide the original pending operation from SIGINT',qualified,async t=>{
+ const f=await fixture(t,'concurrent-stop');
+ const active=f.start([...f.args,'--wait-for','delivered']);await f.initialized();
+ const wrapper=JSON.parse(readFileSync(join(f.root,'state','handoff','ledger.json'),'utf8'));
+ const id=Object.keys(wrapper.data.records)[0]!;
+ const original=await f.invoke(['handoff','status','--correlation-id',id]);const originalOperation=original.value.handoff.wait.operationId;
+ assert.equal(original.value.handoff.wait.status,'pending');
+ const newer=await f.invoke(['handoff','wait','--correlation-id',id,'--wait-for','acknowledged']);
+ assert.equal(newer.code,1);assert.equal(newer.value.handoff.wait.status,'unsupported');
+ assert.notEqual(newer.value.handoff.wait.operationId,originalOperation);
+ f.releaseInitialize();await f.queued();active.child.kill('SIGINT');const r=await active.result;
+ assert.equal(r.code,130,r.stdout);const h=validateHandoff(r.value.handoff);
+ assert.equal(h.wait.operationId,originalOperation);assert.equal(h.wait.status,'stopped');assert.equal(h.wait.reason,'stopped_by_operator');
+ assert.notEqual(r.value.submitted,false);assert.ok(r.value.submitted===null||r.value.submitted===true);
+ assert.equal(h.retry.allowed,false);assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');
+ const latest=await f.invoke(['handoff','status','--correlation-id',id]);
+ assert.deepEqual(latest.value.handoff.wait,newer.value.handoff.wait);
+ const duplicate=await f.invoke([...f.args,'--correlation-id',id]);assert.equal(duplicate.code,1);assert.equal(duplicate.value.error,'handoff_already_attempted');assert.equal(f.calls().length,1);
 });
