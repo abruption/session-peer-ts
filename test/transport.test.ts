@@ -359,3 +359,10 @@ test('opt-in handoff context stays bound to selected generation and rechecks sto
  }}), /unsupported_codex_sqlite_home/);
  assert.equal(effects,0);
 });
+
+test('ordinary SSH results cannot opt themselves into handoff or claim unsolicited ACK', async t=>{
+ const {path,env}=setup(t); const fake=join(path,'ssh'),log=join(path,'ssh-count');writeFileSync(log,'');
+ const h={schemaVersion:1,correlationId:id,ledgerEpoch:id,state:'acknowledged',submission:{status:'submitted'},observation:{status:'not_requested',injectionObserved:false},ack:{status:'acknowledged',assurance:'token_possession',receivedAtUtcMs:1,late:false},wait:{for:'none',status:'not_requested'},targetGeneration:'fixture',decisionOwner:'sender_operator',retry:{allowed:false,reason:'receiver_dedup_unavailable'},nextActions:['reconcile']};
+ writeFileSync(fake,`#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).includes('--version')){console.log('session-peer 0.3.1 (typescript)');process.exit(0);}let input='';process.stdin.on('data',p=>input+=p);process.stdin.on('end',()=>{require('node:fs').appendFileSync(${JSON.stringify(log)},'1');console.log(JSON.stringify({schemaVersion:1,command:'send',host:'fixture',ok:true,status:'posted',submitted:true,consumptionConfirmed:false,dryRun:false,target:{agent:'claude',pid:123,name:null},remoteMarker:'kept',handoff:${JSON.stringify(h)},handoffQuery:{status:'unknown'},handoffWarning:'fixture-only'}));});`,{mode:0o700});
+ const r=await invoke(['send','--host','fixture','--to','123','--message','fixture','--no-from','--no-reply-to'],{...env,PATH:path+delimiter+(env.PATH??'')});assert.equal(r.code,0);assert.equal(r.status,'posted');assert.equal(r.submitted,true);assert.equal(r.target.name,null);assert.equal(r.remoteMarker,'kept');assert.equal('handoff' in r,false);assert.equal('handoffQuery' in r,false);assert.equal('handoffWarning' in r,false);assert.equal(readFileSync(log,'utf8'),'1');
+});
