@@ -6,6 +6,8 @@
 
 这是 0.3.1 详细指南（[可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。上一次发布记录见 [0.3.0 公开发布证据](../VALIDATION.md#public-030--2026-10-03-kst)；下文 0.1.0 的说明用于旧版本对比。
 
+[0.4.0 handoff 设计（联合确认、未实现）](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## 目录
 
 - [功能与边界](#功能与边界)
@@ -293,3 +295,10 @@ postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能�
 
 可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
 请参阅[显式启用、冲突与停用(英文)](shorthand.md)。
+
+
+## Unreleased handoff
+
+开发中的 0.4.0 源码加入 opt-in private POSIX handoff ledger。已发布的 0.3.1 不含这些命令。所需证据通道 unsupported 时在提交前拒绝；best-effort 提交并不证明 ACK。自动 receipt bootstrap、Windows ledger 和 SSH handoff 尚不支持。
+
+[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)

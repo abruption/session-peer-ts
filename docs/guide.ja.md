@@ -6,6 +6,8 @@
 
 0.3.1 の詳細ガイドです（[信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。前回の公開記録は [0.3.0 公開リリースの証拠](../VALIDATION.md#public-030--2026-10-03-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
+[0.4.0 handoff 設計（共同合意・未実装）](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## 目次
 
 - [機能と範囲](#機能と範囲)
@@ -309,3 +311,10 @@ npm `--ignore-scripts` は利用でき、postinstall は Skills CLI を呼び出
 
 任意の `sp` 短縮名は 0.3.0 以降に含まれ（0.2.1 以前にはありません）、自動では有効になりません。
 [明示的な有効化・衝突・解除(英語)](shorthand.md)を参照してください。
+
+
+## Unreleased handoff
+
+開発中の 0.4.0 ソースには opt-in private POSIX handoff ledger が追加されます。公開 0.3.1 にこのコマンドはありません。必須の証拠が unsupported の場合は提出前に拒否し、best-effort の提出は ACK を証明しません。自動 receipt bootstrap、Windows ledger、SSH handoff は未対応です。
+
+[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
