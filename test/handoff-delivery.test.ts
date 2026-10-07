@@ -28,6 +28,7 @@ async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
 const fs=require('fs'),readline=require('readline'),path=require('path');
 if(process.argv[2]==='--version'){console.log('codex-cli '+${JSON.stringify(version)});process.exit(0);}
 if(process.argv[2]==='queue'){fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({method:'legacy'})+'\\n');console.log('Queued message legacy-1 for thread '+process.argv[4]+'.');process.exit(0);}
+const {DatabaseSync:Sql}=require('node:sqlite');globalThis.keptDatabases=[new Sql(path.join(process.env.CODEX_HOME,'state_5.sqlite'),{readOnly:true}),new Sql(path.join(process.env.CODEX_SQLITE_HOME,'queue_1.sqlite'))];
 readline.createInterface({input:process.stdin}).on('line',line=>{const r=JSON.parse(line);if(r.method==='initialize')console.log(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'fixture'}}));else if(r.method==='thread/queue/add'){
 fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({method:r.method,clientId:r.params.clientUserMessageId})+'\\n');
 if(${JSON.stringify(mode)}==='loss'){process.exit(0);return;}
