@@ -1,4 +1,91 @@
-# Validation record — updated 2026-10-04 KST
+# Validation record — updated 2026-10-07 KST
+
+## 0.3.2 preparation checkpoint — 2026-10-07 KST
+
+This is an unpublished patch candidate based on main
+`488ddddac302ba2ad0841061dc8df9187ff6a983`. The public stable version is
+0.3.1. The 0.4.0 handoff, app-server and observation drafts are not included.
+Runtime changes in this candidate are limited to the version marker; remote
+validation and deployment documentation do not enable Windows-client jump or
+a deploy helper.
+
+Local macOS arm64, Node 24.16.0 checks:
+
+- `npm test`: 151 tests, 146 passed, zero failed, five Windows-only skips;
+  the command also builds the source and checks test types. Conformance used
+  the existing Python 1.0.2 reference checkout at `47c2371`; no reference repin.
+- `npm run test:package`: reproducible package, fresh isolated installation,
+  native dependency loading, bash/zsh shorthand contract and A-to-B fixture
+  update/uninstall lifecycle passed.
+- `node scripts/check-repository.mjs`: metadata, four README/guide contracts,
+  links/anchors and ignore rules passed.
+
+These are candidate checks, not an exact-main Actions artifact or publication
+verification. Public npm staging and release approvals remain separate.
+
+## Windows SSH destination F5 — 2026-10-07 KST
+
+The dedicated-key SSH authentication, isolated installation and operator checks
+below used **published 0.3.1**, not a claimed 0.3.2 release. Destination:
+Windows 10 Pro x64 build 19045, PowerShell 5.1, Node 24.16.0 (ABI 137), bundled
+npm 11.13.0, administrator account. All installation, caches, test fixtures and
+child HOME/TEMP writes were confined to a newly created dedicated test prefix.
+The account/host was not disposable and was not a non-administrator test.
+Existing PATH, profiles, SSH server configuration and Python installation were
+preserved.
+
+Package SHA-256:
+`ba8b85b03229bc99ca30d52251790d7e75b90551de924b99edce22570f7fa401`.
+Registry integrity and all three dependency archives matched the lockfile at
+`6b48092a0e42992d2d970dd2ff5cf457f62d3ff2`.
+Operator-side signature audit verified four registry signatures and three
+attestations; the package SLSA subject digest, source SHA, repository and
+`publish.yml` matched. Upload bytes were checked again before offline install.
+
+- Offline installation used absolute Node/npm paths, separate empty user/global
+  npm configuration files, empty cache and `--ignore-scripts`; installed lock
+  integrities matched the pinned dependency set.
+- The self-locating `.cmd` wrapper returned the exact 0.3.1 banner in staging
+  and after `Directory.Move` activation. Native Windows file locking passed.
+- Operator CLI over SSH: doctor `ok:true`, `diagnosticCompleted:true`,
+  `ready:false`, exit 0; nonexistent-target send dry-run
+  `no_reachable_target`, `status:refused`, `submitted:false`, exit 1. Local
+  wrapper dry-run exit 2 is separate evidence. No actual agent message sent.
+- Operator checks preceded receipt publication and activation-lock release.
+
+The private Windows storage/recovery fixture matrix returned **31 passed,
+zero failed, three untested**. These are native storage and local-wrapper
+fixtures; only the primary install additionally has operator SSH evidence.
+
+| Exercised group | Result |
+|---|---|
+| Absent/empty/file/foreign classification; junction and foreign owner | Expected classifications/refusals |
+| Matching receipt reuse; missing receipt recovery under a fresh lock | Passed; original marker runId retained in recovery receipt |
+| Corrupt/mismatched/orphan receipt; unsafe receipt DACL/junction | Refused |
+| Inconsistent marker; modified manifest; existing target activation | Refused |
+| Lock contention; missing owner; wrong/unconfirmed owner; explicit override | Expected refusals and explicit-only recovery |
+| Ended-run break followed by fresh-lock reverify; existing receipt preservation | Passed |
+| Rollback without positive caller-unused evidence | Refused |
+| Confirmed rollback, failed-verification rollback, caller rollback | Passed |
+| Configured-install retention refusal; verified unused install+receipt removal | Passed |
+| Copied Node24 path changes identity; staging never treated as final install | Passed |
+
+The three untested matrix cells were F6 same-path runtime enforcement,
+non-admin/other architectures, and a complete Node-22 installation/recovery
+qualification. Node22 direct smoke below is separate. These fixtures do not
+prove adversarial races or a production deploy helper. Final cleanup was
+performed only after checking harness ownership and the saved fixture inventory.
+The test prefix was removed; cleanup reported the existing Python launcher
+unchanged. A separate post-cleanup SSH read verified prefix absence and the
+same launcher SHA-256. Dedicated SSH authorization remains separate from
+runtime installation; no private key or password is included in this record. An additional Node 22.23.3 x64 (ABI 127) direct-CLI banner and native-lock
+smoke passed against the same installed published package. The Node ZIP
+matched the HTTPS-served official SHASUMS256; no GPG-signature check was
+performed. This was not a second Node-22 installation/identity or recovery
+matrix. Windows-client jump, non-admin, other architectures and F6
+runtime-identity enforcement remain outside this qualification. The earlier
+Linux run and its untested newer recovery rules remain historical evidence.
+
 
 This dated record covers the 0.3.1 source candidate and public 0.3.0, 0.2.1 and 0.2.0 verification, historical 0.1.0
 public verification, candidate checks and live-agent observations. Older sections
