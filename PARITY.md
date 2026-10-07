@@ -1039,3 +1039,16 @@ automated ACK support in the TS implementation. Cross-runtime execution,
 receipt bootstrap, original generation and platform acceptance remain #69–72
 implementation gates. This design-identity record alone does not repin a runtime
 reference or establish runtime conformance.
+
+
+## Unreleased handoff implementation — #70
+
+The frozen #69 design pin is unchanged. Source-only private POSIX ledger and
+strict protocol helpers now implement prepare, at-most-once sender fencing,
+status, bounded wait records and explicit receipt/operator-confirmation
+validation. [CLI details](docs/api.md#unreleased-opt-in-handoff-cli--040-work)
+separate current source support from the published 0.3.1 runtime. Automated ACK
+bootstrap, Windows private ACL support and original-sender SSH coordination are
+still implementation gates. Fixture passes are not live receipt/injection
+qualification. Default output and the historical Python runtime parity pin stay
+unchanged; no future Python runtime is claimed shipped.
