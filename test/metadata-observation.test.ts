@@ -152,7 +152,10 @@ test('expired caller budget starts no process and aborts a hanging owner verifie
   const f = fixture(t); let calls = 0;
   assert.equal((await metadataCapability(f.scope, '0.160.1', { observationRemainingMs: () => 0 }, () => { calls++; return true; })).reason, 'metadata_deadline');
   assert.equal(calls, 0);
-  const deadline = performance.now() + 35; let aborted = false;
+  // Budget includes the separate snapshot worker's cold start. The verifier
+  // itself remains bounded by METADATA_SOURCE.childMs (1 s); a 35 ms total
+  // budget can correctly expire before the verifier is ever invoked on CI.
+  const deadline = performance.now() + 5000; let aborted = false;
   const result = await metadataCapability(f.scope, '0.160.1', { observationRemainingMs: () => deadline - performance.now() }, (_scope, signal) =>
     new Promise<boolean>(resolve => signal.addEventListener('abort', () => { aborted = true; resolve(false); }, { once: true })));
   assert.equal(result.supported, false); assert.equal(aborted, true);
