@@ -59,9 +59,23 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
   let handoff: Handoff | undefined, snapshot: Record<string, unknown> | undefined;
   let scope: MetadataScope | undefined, queueScope: AppServerScope | undefined, deliverySupported = false, stopped = false, operationId: string | undefined;
   let original: HandoffBinding | undefined, fenced = false, knownNative: Record<string, unknown> | undefined;
-  const ownWait = () => { if (handoff && operationId) handoff.wait = ledger.operationStatus(handoff.correlationId,operationId).wait; };
-  const stop = () => { stopped = true; if (handoff?.wait.status === 'pending') { try { handoff = ledger.recordWait(handoff.correlationId, 'stopped', 'stopped_by_operator', operationId); ownWait(); } catch { /* No fabricated terminal evidence after persistence failure. */ } } };
-  const authorize = () => { if (stopped) throw new Refusal('stopped_by_operator', 130); budget.beforeEffect(); handoff = ledger.commitEffect(handoff!.correlationId, original!, budget); fenced = true; };
+  const ownWait = () => {
+    if (handoff && operationId) {
+      const operation = ledger.operationStatus(handoff.correlationId, operationId);
+      // Keep independently known native facts, while projecting actions and the
+      // exact originating wait rather than the ledger's most recently added wait.
+      handoff = { ...handoff, wait: operation.wait, nextActions: operation.nextActions };
+    } else if (handoff) handoff = { ...handoff, wait: { for: 'none', status: 'not_requested' }, nextActions: ['reconcile'] };
+  };
+  const stop = () => {
+    stopped = true;
+    try {
+      ownWait();
+      if (handoff?.wait.status === 'pending') handoff = ledger.recordWait(handoff.correlationId, 'stopped', 'stopped_by_operator', operationId);
+      ownWait();
+    } catch { /* No fabricated terminal evidence after persistence failure. */ }
+  };
+  const authorize = () => { if (stopped) throw new Refusal('stopped_by_operator', 130); budget.beforeEffect(); handoff = ledger.commitEffect(handoff!.correlationId, original!, budget); fenced = true; ownWait(); };
   const verifyOwner = async (target: MetadataScope, signal?: AbortSignal) => {
     if (stopped || signal?.aborted || budget.observationRemainingMs() < 1) return false;
     const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
@@ -133,6 +147,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
     return finish(value, 0);
   } catch (error) {
     if (!handoff || !snapshot) throw error;
+    try { ownWait(); } catch { /* Preserve the last verified original operation. */ }
     if (knownNative) {
       // An I/O failure after positive native acceptance cannot erase that fact.
       handoff = { ...handoff, state: handoff.ack.status === 'acknowledged' ? 'acknowledged' : handoff.observation.injectionObserved ? 'delivered' : 'submitted', submission: { status: 'submitted' }, nextActions: ['reconcile'] };
@@ -146,14 +161,21 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
     const uncertain = error instanceof UnknownOutcome;
     if (fenced) {
       try { handoff = ledger.recordSubmission(handoff.correlationId, uncertain ? 'unknown' : 'refused'); ownWait(); }
-      catch { const state = ledger.status(handoff.correlationId); if ('handoff' in state) handoff = state.handoff; }
+      catch {
+        try {
+          const state = operationId ? { handoff: ledger.operationStatus(handoff.correlationId, operationId) } : ledger.status(handoff.correlationId);
+          if ('handoff' in state) handoff = state.handoff;
+          ownWait();
+        } catch { /* Keep the last verified original wait, never another operation's terminal outcome. */ }
+      }
     }
+    try { ownWait(); } catch { /* A latest-operation snapshot is never proof of this wait's terminal outcome. */ }
     if (handoffOptions.waitFor && handoff.wait.status === 'pending') {
       try { handoff = ledger.recordWait(handoff.correlationId, budget.observationRemainingMs() <= 0 ? 'timed_out_unknown' : 'failed', budget.observationRemainingMs() <= 0 ? undefined : 'evidence_failed', operationId); ownWait(); }
       catch { handoff.wait = {...handoff.wait,status:'failed',reason:'evidence_failed'}; }
     }
     if (!fenced && original && handoff.state !== 'refused') {
-      try { handoff = ledger.refusePrepared(handoff.correlationId, original); } catch { /* Keep the last verified facts; never retry. */ }
+      try { handoff = ledger.refusePrepared(handoff.correlationId, original); ownWait(); } catch { /* Keep the last verified facts; never retry. */ }
     }
     const code = error instanceof BeforeEffectRefused ? handoff.wait.reason ?? 'evidence_unsupported' : error instanceof Refusal ? error.code : uncertain ? 'outcome_unknown' : 'handoff_operation_failed';
     return finish({ ...snapshot, ok: false, error: code, status: uncertain ? 'unknown' : 'refused', submitted: uncertain ? null : false,
