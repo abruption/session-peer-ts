@@ -1,0 +1,58 @@
+{
+  "status": "design_frozen_unimplemented",
+  "proposalVersion": "0.2",
+  "pythonRepository": "abruption/session-peer",
+  "pythonDesignPR": 261,
+  "pythonDesignCommit": "99d8ec3855d57da34a6fa789f3a375820a8fbe85",
+  "pythonRuntimeVersion": "1.0.3",
+  "pythonRuntimeCommit": "0d252550ab40c26d1ac4a19193df6ca2f84d830b",
+  "document": {
+    "path": "handoff-v1.md",
+    "upstreamPath": "docs/contracts/handoff-v1.md",
+    "sha256": "46a953010c49214bd8f969412f26713384fbe09a0ba78ebf0fef75da40d0d889"
+  },
+  "fixture": {
+    "path": "handoff-v1.json",
+    "upstreamPath": "tests/fixtures/handoff-v1.json",
+    "sha256": "963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441"
+  },
+  "runtimeImplemented": false,
+  "jointFreezeApproved": true,
+  "openReviewGates": [],
+  "previousCandidateCommit": "b369cef5bd7be433e28d515cce2f44d3bbf20f0b",
+  "reviewedAmendments": [
+    "duplicate-receipt-original-hash-authentication-after-expiry",
+    "atomic-classified-receipt-recovery-and-unprovable-order-refusal",
+    "immutable-original-generation-and-copied-token-assurance-limit",
+    "native-input-retention-and-controlled-secret-output-boundary",
+    "missing-context-handoffQuery-without-invented-epoch",
+    "subtree-raw-outer-and-fanout-frame-boundaries",
+    "request-gated-ssh-wait-result-and-native-target-validation",
+    "original-request-per-runtime-native-profiles",
+    "post-submission-unsupported-wait-tuple",
+    "interruption-130-and-status-query-operation-tuples"
+  ],
+  "tsDesignReviewStatus": "approved_design_only",
+  "tsDesignApprovedAtUtc": "2026-10-06T12:28:28.864449+00:00",
+  "tsDesignApproval": {
+    "commit": "99d8ec3855d57da34a6fa789f3a375820a8fbe85",
+    "documentSha256": "46a953010c49214bd8f969412f26713384fbe09a0ba78ebf0fef75da40d0d889",
+    "fixtureSha256": "963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441",
+    "scope": "normative_design_and_synthetic_fixture_only",
+    "remainingNormativeFindings": [],
+    "runtimeImplementationApproved": false,
+    "mergeOrPublicationApproved": false
+  },
+  "jointDesignFreeze": {
+    "status": "approved_design_only",
+    "scope": "normative_design_and_synthetic_fixture_only",
+    "sourceCommit": "99d8ec3855d57da34a6fa789f3a375820a8fbe85",
+    "documentSha256": "46a953010c49214bd8f969412f26713384fbe09a0ba78ebf0fef75da40d0d889",
+    "fixtureSha256": "963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441",
+    "pythonAcceptanceRecord": "https://github.com/abruption/session-peer/pull/261#issuecomment-6016310362",
+    "tsAcceptanceCommit": "63473fb80936b0085e08039997ac39f7158a58dd",
+    "sourceBytesRegenerated": false,
+    "runtimeImplementationApproved": false,
+    "mergeOrPublicationApproved": false
+  }
+}

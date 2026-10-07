@@ -47,7 +47,12 @@ export function renderOutput(value: Record<string, unknown> | Record<string, unk
     lines.push(`Error: ${safe(value.error ?? 'operation_failed')}`);
     if (value.command === 'update' && value.error === 'self_update_unsupported')
       lines.push(value.updateCommand ? `This installation is managed by ${safe(value.managedBy)}. Upgrade with: ${safe(value.updateCommand)}` : safe(value.guidance));
-    if (value.command === 'send') lines.push(value.submitted === null ? 'Submission outcome unknown. Do not retry automatically.' : 'Nothing submitted.');
+    if (value.command === 'send') lines.push(value.submitted === true ? 'Submitted; the requested evidence goal was not established. Do not retry automatically.' : value.submitted === null ? 'Submission outcome unknown. Do not retry automatically.' : 'Nothing submitted.');
+  }
+  if (value.handoff && typeof value.handoff === 'object') {
+    const h = value.handoff as Record<string, unknown>;
+    lines.push(`Handoff: ${safe(h.correlationId)} (${safe(h.state)})`);
+    for (const key of ['observation', 'ack', 'wait']) lines.push(`${key}: ${safe(JSON.stringify(h[key]))}`);
   }
   return lines.join('\n');
 }

@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { probeLock, inspectWriter } from '../dist/writer.js';
+import { send } from '../dist/send.js';
 import { reply, envelope } from '../dist/protocol.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
@@ -346,4 +347,25 @@ test('Windows --remote-bin doubles every PowerShell single-quote variant', async
   assert.equal(result.error, 'ssh_preflight_failed');
   const decoded = Buffer.from(readFileSync(calls, 'utf8').trim().split(' ').at(-1)!, 'base64').toString('utf16le');
   assert.equal(decoded, "& 'C:\\a''\u2018\u2018\u2019\u2019\u201a\u201a\u201b\u201b;calc;#' --version");
+});
+
+test('opt-in handoff context stays bound to selected generation and rechecks storage before fencing', async t => {
+ const {path} = setup(t), home = join(path,'home'); database(home); await holder(t,path,home);
+ const owner = await inspectWriter(home,id); const crypto = await import('node:crypto'); const expected = crypto.createHash('sha256').update(owner.identity).digest('hex');
+ let effects = 0;
+ await assert.rejects(send({ to:`codex:${id}`,home,codexBin:process.execPath,message:'fixture',hooks:{
+   resolved(context) {assert.equal(context.generation,expected);writeFileSync(join(home,'config.toml'),'sqlite_home = "/fixture/relocated"');},
+   beforeEffect() {effects++;}
+ }}), /unsupported_codex_sqlite_home/);
+ assert.equal(effects,0);
+});
+
+test('ordinary SSH results cannot opt themselves into handoff or claim unsolicited ACK', async t=>{
+ const {path,env}=setup(t); const fake=join(path,'ssh'),log=join(path,'ssh-count-\'"\\\n\u2028\u2029');writeFileSync(log,'');
+ const h={schemaVersion:1,correlationId:id,ledgerEpoch:id,state:'acknowledged',submission:{status:'submitted'},observation:{status:'not_requested',injectionObserved:false},ack:{status:'acknowledged',assurance:'token_possession',receivedAtUtcMs:1,late:false},wait:{for:'none',status:'not_requested'},targetGeneration:'fixture',decisionOwner:'sender_operator',retry:{allowed:false,reason:'receiver_dedup_unavailable'},nextActions:['reconcile']};
+ // Fixture values are data, never part of the executable JavaScript source.
+ const config={log,handoff:{...h,targetGeneration:'\');throw new Error("fixture data executed");//\u2028\u2029'}};
+ writeFileSync(fake+'.json',JSON.stringify(config),{mode:0o600});
+ writeFileSync(fake,`#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).includes('--version')){console.log('session-peer 0.3.1 (typescript)');process.exit(0);}const fs=require('node:fs');const config=JSON.parse(fs.readFileSync(__filename+'.json','utf8'));let input='';process.stdin.on('data',p=>input+=p);process.stdin.on('end',()=>{fs.appendFileSync(config.log,'1');console.log(JSON.stringify({schemaVersion:1,command:'send',host:'fixture',ok:true,status:'posted',submitted:true,consumptionConfirmed:false,dryRun:false,target:{agent:'claude',pid:123,name:null},remoteMarker:'kept',handoff:config.handoff,handoffQuery:{status:'unknown'},handoffWarning:'fixture-only'}));});`,{mode:0o700});
+ const r=await invoke(['send','--host','fixture','--to','123','--message','fixture','--no-from','--no-reply-to'],{...env,PATH:path+delimiter+(env.PATH??'')});assert.equal(r.code,0);assert.equal(r.status,'posted');assert.equal(r.submitted,true);assert.equal(r.target.name,null);assert.equal(r.remoteMarker,'kept');assert.equal('handoff' in r,false);assert.equal('handoffQuery' in r,false);assert.equal('handoffWarning' in r,false);assert.equal(readFileSync(log,'utf8'),'1');
 });
