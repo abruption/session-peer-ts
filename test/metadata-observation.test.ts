@@ -161,10 +161,10 @@ test('expired caller budget starts no process and aborts a hanging owner verifie
   assert.equal(result.supported, false); assert.equal(aborted, true);
 });
 test('deadline kills only the owned probe process group including its descendant', posix, async t => {
-  const f = fixture(t), marker = join(f.home, 'owned-pids.json');
+  const f = fixture(t), marker = join(f.home, 'owned-pids-\'"\\\n\u2028\u2029.json');
   const realSpawn = childProcess.spawn;
   mock.method(childProcess, 'spawn', (binary: string, _args: readonly string[], options: any) => realSpawn(binary, ['-e',
-    `const cp=require('node:child_process');const fs=require('node:fs');const child=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify([process.pid,child.pid]));setInterval(()=>{},1000);`], options));
+    "const cp=require('node:child_process');const fs=require('node:fs');const child=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});fs.writeFileSync(process.argv[1],JSON.stringify([process.pid,child.pid]));setInterval(()=>{},1000);", marker], options));
   t.after(() => mock.restoreAll());
   const started = performance.now(), deadline = started + 500;
   const result = await observeMetadata({ ...f.scope, clientUserMessageId: clientId }, { observationRemainingMs: () => deadline - performance.now() }, owner);
