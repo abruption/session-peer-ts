@@ -4,11 +4,12 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { APP_SERVER_EVIDENCE, APP_SERVER_LIMITS, AppServerFault, BoundedAppServerClient,
-  appServerCapability, connectAppServer, parseMetadataEvent, spawnOwnedMetadataFixture,
+  appServerCapability, connectAppServer, parseMetadataEvent, spawnOwnedMetadataFixture, nativeQueueCapability,
+  nativeQueueOnce, NATIVE_QUEUE_NOTIFICATION_OPTOUTS,
   type AppServerScope, type MetadataOnlyTransport } from '../dist/app-server.js';
 
 const scope: AppServerScope = { codexHome: join(tmpdir(), 'fixture-home'), threadId: 'fixture-thread', generation: 'fixture-generation', ownerIdentity: 'fixture-owner' };
@@ -38,18 +39,27 @@ const injected = (changes: object = {}) => ({ kind: 'injected', scope, clientUse
 function fault(code: string, attempted: boolean) {
   return (error: unknown) => {
     assert.ok(error instanceof AppServerFault); assert.equal(error.code, code); assert.equal(error.attempted, attempted);
-    assert.equal(error.fallbackEligible, !attempted && code !== 'already_attempted'); return true;
+    assert.equal(error.fallbackEligible, !attempted && ['unsupported_transport', 'unsupported_version'].includes(code)); return true;
   };
 }
 
-test('production 0.160.1 is schema-inspected but no route opens or submits', async () => {
+test('production metadata observer remains unsupported without opening any endpoint', async () => {
   const context = { version: '0.160.1', platform: 'darwin-arm64', scope };
-  assert.deepEqual(appServerCapability(context), { supported: false, schema: 'version_qualified', route: 'route_unsupported', reason: 'metadata_only_owner_route_unvalidated', attempted: false });
+  assert.deepEqual(appServerCapability(context), { supported: false, schema: 'version_qualified', route: 'route_unsupported', reason: 'metadata_only_owner_route_unvalidated', attempted: false, queueSupported: true });
   let opens = 0;
   const result = await connectAppServer(context, async () => { opens++; throw new Error('must not open'); }, performance.now() + 1000);
   assert.equal(result.supported, false); assert.equal(opens, 0);
   for (const patch of [{ version: '0.160.2' }, { platform: 'linux-x64' }, { platform: 'win32-x64' }]) {
     assert.equal(appServerCapability({ ...context, ...patch }).schema, 'version_unqualified');
+  }
+});
+
+test('native queue capability qualifies exact mechanics only, never live delivery or observation', () => {
+  assert.deepEqual(nativeQueueCapability({ version: '0.160.1', platform: 'darwin-arm64', scope }), {
+    queueSupported: true, observationSupported: false, qualification: 'mechanics_from_isolated_fixture', reason: 'queue_only',
+  });
+  for (const patch of [{ version: '0.160.2' }, { platform: 'linux-x64' }, { platform: 'win32-x64' }]) {
+    assert.equal(nativeQueueCapability({ version: '0.160.1', platform: 'darwin-arm64', scope, ...patch }).queueSupported, false);
   }
 });
 
@@ -277,4 +287,97 @@ test('closing an owned POSIX fixture also kills its owned process-group descenda
   }
   for (let i = 0; i < 20 && running(pids.descendant); i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(running(pids.parent), false); assert.equal(running(pids.descendant), false);
+});
+
+function nativeFixture(t: TestContext, queueReply?: (r: any, reply: (v: unknown) => void) => void) {
+  const f = fixture(t, (r, reply) => {
+    if (r.method === 'initialize') reply({ id: r.id, result: { codexHome: scope.codexHome, platformFamily: 'unix', platformOs: 'macos', userAgent: 'fixture-native' } });
+    else if (r.method === 'initialized') return;
+    else if (queueReply) queueReply(r, reply);
+    else reply({ id: r.id, result: { queuedSubmission: { id: 'fixture-native-q', input: r.params.input, clientUserMessageId: r.params.clientUserMessageId } } });
+  });
+  async function connect(beforeEffect: () => Promise<void> = async () => {}, timeout = 1000) {
+    const client = await BoundedAppServerClient.connectNativeQueueFixture(scope, f.transport, performance.now() + timeout, async () => true, beforeEffect);
+    t.after(() => client.close()); return client;
+  }
+  return { ...f, connect };
+}
+
+test('native fixture opts out all 83 notifications before one queue RPC and validates only its own echo', async t => {
+  const f = nativeFixture(t); let guards = 0;
+  const client = await f.connect(async () => { guards++; assert.equal(f.requests.length, 2); });
+  assert.equal(NATIVE_QUEUE_NOTIFICATION_OPTOUTS.length, 83);
+  assert.equal(new Set(NATIVE_QUEUE_NOTIFICATION_OPTOUTS).size, 83);
+  assert.deepEqual(f.requests[0].params.capabilities.optOutNotificationMethods, NATIVE_QUEUE_NOTIFICATION_OPTOUTS);
+  const result = await client.queueOnce({ clientUserMessageId: id, message: 'PRIVATE-OWN-ECHO' });
+  assert.deepEqual(result, { queueId: 'fixture-native-q', clientUserMessageId: id }); assert.equal(guards, 1);
+  assert.equal(JSON.stringify(result).includes('PRIVATE'), false);
+  assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'initialized', 'thread/queue/add']);
+  await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'again' }), fault('already_attempted', true));
+});
+
+test('root effect-guard refusal cannot authorize any native queue or fallback', async t => {
+  const f = nativeFixture(t), client = await f.connect(async () => { throw new Error('PRIVATE-LEDGER-DETAIL'); });
+  await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'one' }), fault('effect_guard_failed', false));
+  assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'initialized']); assert.equal(f.closes(), 1);
+});
+
+test('root effect guard shares original deadline and cannot write after it', async t => {
+  const f = nativeFixture(t), client = await f.connect(() => new Promise(() => {}), 40);
+  await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'one' }), fault('deadline', false));
+  assert.equal(f.requests.length, 2); assert.equal(f.closes(), 1);
+});
+
+test('native own-input echo conflicts are post-attempt unknown, not observer evidence', async t => {
+  for (const patch of [{ clientUserMessageId: 'wrong' }, { input: [{ type: 'text', text: 'PRIVATE-UNEXPECTED' }] }, { input: [] }]) {
+    const f = nativeFixture(t, (r, reply) => reply({ id: r.id, result: { queuedSubmission: { id: 'q', input: r.params.input, clientUserMessageId: r.params.clientUserMessageId, ...patch } } }));
+    const client = await f.connect(); await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'one' }), fault('frame_invalid', true));
+    assert.equal(f.requests.length, 3); assert.equal(f.closes(), 1);
+  }
+});
+
+test('unrequested native notification after opt-out aborts without inspecting or returning its body', async t => {
+  const f = nativeFixture(t, (_r, reply) => reply({ method: 'item/started', params: { item: { content: 'PRIVATE-NATIVE-BODY' } } }));
+  const client = await f.connect(); await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'one' }), fault('unsupported_transport', true));
+  assert.equal(f.requests.length, 3); assert.equal(f.closes(), 1);
+});
+
+test('native negative RPC error codes retain attempted state and never expose stderr/message', async t => {
+  const f = nativeFixture(t, (r, reply) => reply({ id: r.id, error: { code: -32601, message: 'PRIVATE-RPC-ERROR', data: { body: 'PRIVATE' } } }));
+  const client = await f.connect(); const error = await client.queueOnce({ clientUserMessageId: id, message: 'one' }).catch(e => e);
+  fault('remote_refused', true)(error); assert.equal(String(error).includes('PRIVATE'), false);
+});
+
+test('nativeQueueOnce checks selected binary version and strips sqlite relocation before a guarded effect', {
+  skip: process.platform !== 'darwin' || process.arch !== 'arm64',
+}, async t => {
+  const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-native-queue-stub-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const log = join(root, 'metadata.jsonl'), binary = join(root, 'codex-fixture');
+  const original = { ...scope, codexHome: root, threadId: '01950000-0000-7000-8000-000000000071' };
+  const script = `#!${process.execPath}\n
+    const fs=require('node:fs'),log=${JSON.stringify(log)};
+    fs.appendFileSync(log,JSON.stringify({argv:process.argv.slice(2),pid:process.pid,home:process.env.CODEX_HOME,sqliteOverridePresent:!!process.env.CODEX_SQLITE_HOME})+'\\n');
+    if(process.argv.includes('--version')){console.log('codex-cli '+(process.env.FIXTURE_VERSION||'0.160.1'));process.exit(0);}
+    let buffer='';setInterval(()=>{},1000);process.stderr.write('PRIVATE-STDERR-NOT-RETURNED');
+    process.stdin.on('data',chunk=>{buffer+=chunk;let end;while((end=buffer.indexOf('\\n'))>=0){const r=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);
+      fs.appendFileSync(log,JSON.stringify({method:r.method,guardExists:fs.existsSync(${JSON.stringify(join(root, 'guard'))})})+'\\n');
+      if(r.method==='initialize')process.stdout.write(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'fixture'}})+'\\n');
+      if(r.method==='thread/queue/add')process.stdout.write(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'fixture-q',clientUserMessageId:r.params.clientUserMessageId,input:r.params.input}}})+'\\n');
+    }});`;
+  writeFileSync(binary, script, { mode: 0o700 });
+  let guards = 0;
+  const options = { binary, scope: original, message: 'PRIVATE-OWN-EFFECT', clientUserMessageId: id, deadlineMs: performance.now() + 2000,
+    verifyOwner: async (value: AppServerScope) => { assert.deepEqual(value, original); return true; },
+    beforeEffect: async () => { guards++; writeFileSync(join(root, 'guard'), 'committed'); },
+    env: { HOME: root, CODEX_HOME: 'must-be-replaced', CODEX_SQLITE_HOME: 'must-be-removed', PATH: process.env.PATH } };
+  assert.deepEqual(await nativeQueueOnce(options), { queueId: 'fixture-q', clientUserMessageId: id }); assert.equal(guards, 1);
+  const rows = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(rows.length, 5); assert.deepEqual(rows.filter(r => r.method).map(r => r.method), ['initialize', 'initialized', 'thread/queue/add']);
+  for (const row of rows.filter(r => r.pid)) { assert.equal(row.home, root); assert.equal(row.sqliteOverridePresent, false);
+    assert.throws(() => process.kill(row.pid, 0), (e: any) => e.code === 'ESRCH'); }
+  assert.equal(rows.at(-1).guardExists, true);
+  await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 1000,
+    env: { ...options.env, FIXTURE_VERSION: '0.160.2' } }), fault('unsupported_version', false));
+  assert.equal(guards, 1);
 });

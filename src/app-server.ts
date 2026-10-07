@@ -1,18 +1,22 @@
-// Bounded metadata-only client foundation. No native owner route is qualified.
+// Bounded queue-only mechanics and metadata-only client foundation.
+// No live owner/delivery observation route is qualified.
 // Official Codex 0.160.1 schema generated with an isolated HOME/CODEX_HOME:
 // https://learn.chatgpt.com/docs/app-server (schema is version-specific).
-// queue/add and queue/list return QueuedSubmission.input; item/started returns
-// ThreadItem.content; turn/completed returns Turn.items. Reading these APIs and
-// removing text afterwards would violate the metadata-only observation contract.
+// queue/list returns QueuedSubmission.input; item/started returns full content;
+// turn/completed returns Turn.items. These are not metadata-only observers.
+// queue/add echoes only its OWN submitted input and can be validated as an
+// effect receipt separately; it does not read other requests or thread history.
 // A fresh app-server process is never evidence that it owns an existing writer.
 import { spawn } from 'node:child_process';
 import { isAbsolute } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
+import { run } from './process.js';
 
 export const APP_SERVER_EVIDENCE = Object.freeze({
   version: '0.160.1', inspectedPlatform: 'darwin-arm64',
+  officialSourceCommit: 'd27764b82f7118f674371e6d6e76271d9d606edb',
   scope: 'generated_schema_only',
   queueAddParamsSha256: '60f25b7d3e3357c215bef9d2fe7047200f545e030dca9e00527ac0620cd0c88f',
   queueAddResponseSha256: 'c11b9772788427b19c9f9decf0765e2b41cbdead1aa9c3d39f42fdd70b339314',
@@ -30,15 +34,16 @@ export type AppServerScope = Readonly<{
 export type AppServerContext = Readonly<{ version: string; platform: string; scope: AppServerScope }>;
 export type AppServerCapability = {
   supported: false; schema: 'version_qualified' | 'version_unqualified'; route: 'route_unsupported';
-  reason: 'metadata_only_owner_route_unvalidated' | 'version_unqualified'; attempted: false;
+  reason: 'metadata_only_owner_route_unvalidated' | 'version_unqualified'; attempted: false; queueSupported: boolean;
 };
 export function appServerCapability(context: AppServerContext): AppServerCapability {
   const qualified = context.version === APP_SERVER_EVIDENCE.version && context.platform === APP_SERVER_EVIDENCE.inspectedPlatform;
   return { supported: false, schema: qualified ? 'version_qualified' : 'version_unqualified', route: 'route_unsupported',
-    reason: qualified ? 'metadata_only_owner_route_unvalidated' : 'version_unqualified', attempted: false };
+    reason: qualified ? 'metadata_only_owner_route_unvalidated' : 'version_unqualified', attempted: false, queueSupported: qualified };
 }
 // Hard production gate: do not spawn/connect a native endpoint even if a caller
-// supplies an owner tuple. No supported version/platform/transport is claimed.
+// supplies an owner tuple. Queue-only mechanics use the separate nativeQueueOnce
+// entry point; no metadata-only owner observation transport is claimed.
 export async function connectAppServer(context: AppServerContext,
   _open: () => Promise<MetadataOnlyTransport>, _deadlineMs: number): Promise<AppServerCapability> {
   return appServerCapability(context);
@@ -46,11 +51,11 @@ export async function connectAppServer(context: AppServerContext,
 
 export type AppServerFaultCode = 'invalid_scope' | 'invalid_input' | 'unsupported_transport' | 'deadline' |
   'owner_changed' | 'frame_invalid' | 'frame_limit' | 'traffic_limit' | 'notification_limit' | 'request_limit' |
-  'connection_closed' | 'write_failed' | 'remote_refused' | 'already_attempted';
+  'connection_closed' | 'write_failed' | 'remote_refused' | 'already_attempted' | 'unsupported_version' | 'effect_guard_failed';
 export class AppServerFault extends Error {
   readonly fallbackEligible: boolean;
   constructor(readonly code: AppServerFaultCode, readonly attempted: boolean) {
-    super(code); this.fallbackEligible = !attempted && code !== 'already_attempted';
+    super(code); this.fallbackEligible = !attempted && ['unsupported_transport', 'unsupported_version'].includes(code);
   }
 }
 // This contract is NOT an official Codex notification or queue response shape.
@@ -62,6 +67,45 @@ export type MetadataOnlyTransport = {
   input: Readable; output: Writable;
   close: () => Promise<void>;
 };
+type NativeQueueTransport = Omit<MetadataOnlyTransport, 'qualification'> & { qualification: 'native_queue_only_stdio' };
+type ClientTransport = MetadataOnlyTransport | NativeQueueTransport;
+export type NativeQueuePort = Pick<AppServerPort, 'queueOnce' | 'close'>;
+export type NativeQueueOptions = {
+  binary: string; scope: AppServerScope; message: string; clientUserMessageId: string; deadlineMs: number;
+  verifyOwner: (scope: AppServerScope) => Promise<boolean>; beforeEffect: () => Promise<void>; env?: NodeJS.ProcessEnv;
+};
+export function nativeQueueCapability(context: AppServerContext): {
+  queueSupported: boolean; observationSupported: false;
+  qualification: 'mechanics_from_isolated_fixture' | 'unsupported'; reason: 'queue_only' | 'version_unqualified';
+} {
+  const qualified = appServerCapability(context).queueSupported;
+  return { queueSupported: qualified, observationSupported: false,
+    qualification: qualified ? 'mechanics_from_isolated_fixture' : 'unsupported', reason: qualified ? 'queue_only' : 'version_unqualified' };
+}
+// All 83 methods from the experimental 0.160.1 ServerNotification schema are
+// suppressed before queue/add. A notification reaching us is a qualification
+// failure, not an invitation to inspect/filter its body or perform another RPC.
+export const NATIVE_QUEUE_NOTIFICATION_OPTOUTS = Object.freeze([
+  'account/gatewayOAuth/changed', 'account/login/completed', 'account/rateLimits/updated', 'account/updated', 'app/list/updated',
+  'autoApprovalReview/strictReviewRequired', 'command/exec/outputDelta', 'configWarning', 'deprecationNotice', 'error',
+  'externalAgentConfig/import/completed', 'externalAgentConfig/import/progress', 'fs/changed', 'fuzzyFileSearch/sessionCompleted',
+  'fuzzyFileSearch/sessionUpdated', 'guardianWarning', 'hook/completed', 'hook/started', 'item/agentMessage/delta',
+  'item/autoApprovalReview/completed', 'item/autoApprovalReview/started', 'item/commandExecution/outputDelta',
+  'item/commandExecution/terminalInteraction', 'item/completed', 'item/fileChange/outputDelta', 'item/fileChange/patchUpdated',
+  'item/mcpToolCall/progress', 'item/plan/delta', 'item/reasoning/summaryPartAdded', 'item/reasoning/summaryTextDelta',
+  'item/reasoning/textDelta', 'item/started', 'mcpServer/event/stream/notification', 'mcpServer/oauthLogin/completed',
+  'mcpServer/startupStatus/updated', 'model/rerouted', 'model/safetyBuffering/updated', 'model/verification',
+  'modelProvider/authRecoveryCompleted', 'modelProvider/authRecoveryStarted', 'process/exited', 'process/outputDelta',
+  'project/changed', 'remoteControl/status/changed', 'serverRequest/resolved', 'skills/changed', 'thread/archived',
+  'thread/attachment/updated', 'thread/closed', 'thread/compacted', 'thread/deleted', 'thread/environment/connected',
+  'thread/environment/disconnected', 'thread/goal/cleared', 'thread/goal/updated', 'thread/name/updated', 'thread/project/updated',
+  'thread/queue/changed', 'thread/realtime/closed', 'thread/realtime/error', 'thread/realtime/item/completed',
+  'thread/realtime/item/started', 'thread/realtime/item/transcript/delta', 'thread/realtime/itemAdded',
+  'thread/realtime/outputAudio/delta', 'thread/realtime/sdp', 'thread/realtime/started', 'thread/realtime/transcript/delta',
+  'thread/realtime/transcript/done', 'thread/reverted', 'thread/settings/updated', 'thread/started', 'thread/status/changed',
+  'thread/tokenUsage/updated', 'thread/unarchived', 'turn/completed', 'turn/diff/updated', 'turn/moderationMetadata',
+  'turn/plan/updated', 'turn/started', 'warning', 'windows/worldWritableWarning', 'windowsSandbox/setupCompleted',
+]);
 export type MetadataEvent =
   { kind: 'injected'; scope: AppServerScope; clientUserMessageId: string; itemId: string; turnId: string } |
   { kind: 'turn'; scope: AppServerScope; clientUserMessageId: string; turnId: string;
@@ -76,7 +120,7 @@ export interface AppServerPort {
   close(): Promise<void>;
 }
 type ObjectValue = Record<string, unknown>;
-function disposeTransport(transport: MetadataOnlyTransport): Promise<void> {
+function disposeTransport(transport: ClientTransport): Promise<void> {
   return new Promise(resolve => {
     const timer = setTimeout(resolve, APP_SERVER_LIMITS.cleanupMs);
     Promise.resolve().then(() => transport.close()).catch(() => {}).finally(() => { clearTimeout(timer); resolve(); });
@@ -162,8 +206,8 @@ function parseFrame(bytes: Buffer): unknown {
       }
     }
     for (const token of ['true', 'false', 'null']) if (text.startsWith(token, offset)) { offset += token.length; return; }
-    const token = /^[0-9]+/.exec(text.slice(offset))?.[0];
-    if (!token || (token.length > 1 && token[0] === '0') || !Number.isSafeInteger(Number(token))) throw new Error('invalid');
+    const token = /^-?(?:0|[1-9][0-9]*)/.exec(text.slice(offset))?.[0];
+    if (!token || !Number.isSafeInteger(Number(token))) throw new Error('invalid');
     offset += token.length;
   }
   value(0); whitespace(); if (offset !== text.length) throw new Error('invalid');
@@ -180,8 +224,9 @@ export class BoundedAppServerClient implements AppServerPort {
   private observed: MetadataObservation = { injectionObserved: false };
   private injectedItemId?: string;
   private fault?: AppServerFault; private closing?: Promise<void>; private readonly timer: ReturnType<typeof setTimeout>;
-  private constructor(readonly scope: AppServerScope, private readonly transport: MetadataOnlyTransport,
-    private readonly deadlineMs: number, private readonly verifyOwner: (scope: AppServerScope) => Promise<boolean>) {
+  private constructor(readonly scope: AppServerScope, private readonly transport: ClientTransport,
+    private readonly deadlineMs: number, private readonly verifyOwner: (scope: AppServerScope) => Promise<boolean>,
+    private readonly nativeQueue = false, private readonly beforeEffect: () => Promise<void> = async () => {}) {
     this.timer = setTimeout(() => this.fail('deadline'), Math.max(1, deadlineMs - performance.now()));
     transport.input.on('data', this.receive);
     transport.input.once('end', this.ended); transport.input.once('error', this.errored);
@@ -189,18 +234,45 @@ export class BoundedAppServerClient implements AppServerPort {
   }
   static async connectMetadataFixture(scope: AppServerScope, transport: MetadataOnlyTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>): Promise<BoundedAppServerClient> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, false);
+  }
+  // Hermetic test hook for the exact native RPC profile. It does not qualify a
+  // binary, platform or writer. Production callers use nativeQueueOnce instead.
+  static async connectNativeQueueFixture(scope: AppServerScope, transport: MetadataOnlyTransport, deadlineMs: number,
+    verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect);
+  }
+  static async connectNativeQueueWire(scope: AppServerScope, transport: NativeQueueTransport, deadlineMs: number,
+    verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect);
+  }
+  private static async connectWire(scope: AppServerScope, transport: ClientTransport, deadlineMs: number,
+    verifyOwner: (scope: AppServerScope) => Promise<boolean>, nativeQueue: boolean,
+    beforeEffect: () => Promise<void> = async () => {}): Promise<BoundedAppServerClient> {
     let original: AppServerScope;
     try { original = scopeValue(scope); } catch { await disposeTransport(transport); throw new AppServerFault('invalid_scope', false); }
-    if (transport.qualification !== 'hermetic_fixture_only') { await disposeTransport(transport); throw new AppServerFault('unsupported_transport', false); }
+    if (transport.qualification !== 'hermetic_fixture_only' && !(nativeQueue && transport.qualification === 'native_queue_only_stdio')) {
+      await disposeTransport(transport); throw new AppServerFault('unsupported_transport', false);
+    }
     const remaining = deadlineMs - performance.now();
     if (!Number.isFinite(remaining) || remaining <= 0 || remaining > APP_SERVER_LIMITS.lifetimeMs) {
       await disposeTransport(transport); throw new AppServerFault('deadline', false);
     }
-    const client = new BoundedAppServerClient(original, transport, deadlineMs, verifyOwner);
+    const client = new BoundedAppServerClient(original, transport, deadlineMs, verifyOwner, nativeQueue, beforeEffect);
     try {
       await client.owner();
-      const hello = object(await client.request('session-peer/metadata/initialize', { scope: original }), ['scope', 'metadataOnly']);
-      if (hello.metadataOnly !== true || !matches(scopeValue(hello.scope), original)) throw new AppServerFault('owner_changed', false);
+      if (nativeQueue) {
+        const hello = object(await client.request('initialize', {
+          clientInfo: { name: 'session-peer-native-queue', version: '1' },
+          capabilities: { experimentalApi: true, optOutNotificationMethods: [...NATIVE_QUEUE_NOTIFICATION_OPTOUTS] },
+        }), ['codexHome', 'platformFamily', 'platformOs', 'userAgent']);
+        if (hello.codexHome !== original.codexHome || hello.platformFamily !== 'unix' || hello.platformOs !== 'macos' ||
+            !safeId(hello.userAgent, 4096)) throw new AppServerFault('owner_changed', false);
+        client.notification('initialized');
+      } else {
+        const hello = object(await client.request('session-peer/metadata/initialize', { scope: original }), ['scope', 'metadataOnly']);
+        if (hello.metadataOnly !== true || !matches(scopeValue(hello.scope), original)) throw new AppServerFault('owner_changed', false);
+      }
       return client;
     } catch (error) { client.fail(error instanceof AppServerFault ? error.code : 'frame_invalid'); await client.close(); throw client.fault; }
   }
@@ -215,12 +287,12 @@ export class BoundedAppServerClient implements AppServerPort {
     const result = await this.bounded(this.verifyOwner(this.scope));
     this.check(); if (!result) { this.fail('owner_changed'); throw this.fault; }
   }
-  private bounded<T>(promise: Promise<T>): Promise<T> {
+  private bounded<T>(promise: Promise<T>, failureCode: AppServerFaultCode = 'owner_changed'): Promise<T> {
     return new Promise((resolve, reject) => {
       const wait = { reject };
       this.operations.add(wait);
       promise.then(value => { this.operations.delete(wait); resolve(value); }, () => {
-        this.operations.delete(wait); this.fail('owner_changed'); reject(this.fault);
+        this.operations.delete(wait); this.fail(failureCode); reject(this.fault);
       });
     });
   }
@@ -248,6 +320,7 @@ export class BoundedAppServerClient implements AppServerPort {
   };
   private frame(value: unknown): void {
     if (value && typeof value === 'object' && Object.hasOwn(value, 'method')) {
+      if (this.nativeQueue) throw new AppServerFault('unsupported_transport', this.attempted);
       const event = object(value, ['method', 'params']);
       if (event.method !== 'session-peer/metadata/event') throw new Error('invalid');
       if (++this.notifications > APP_SERVER_LIMITS.notifications) { this.fail('notification_limit'); return; }
@@ -267,20 +340,32 @@ export class BoundedAppServerClient implements AppServerPort {
       this.observers.clear(); return;
     }
     const response = object(value, Object.hasOwn(value as object, 'error') ? ['id', 'error'] : ['id', 'result']);
-    if (typeof response.id !== 'number' || !Number.isSafeInteger(response.id)) throw new Error('invalid');
+    if (typeof response.id !== 'number' || !Number.isSafeInteger(response.id) || response.id < 1) throw new Error('invalid');
     const pending = this.pending.get(response.id); if (!pending) throw new Error('invalid');
     if (Object.hasOwn(response, 'error')) {
-      const error = object(response.error, ['code']);
-      if (!['unsupported', 'refused', 'failed'].includes(String(error.code))) throw new Error('invalid');
+      if (!this.nativeQueue) {
+        const error = object(response.error, ['code']);
+        if (!['unsupported', 'refused', 'failed'].includes(String(error.code))) throw new Error('invalid');
+      } // Native RPC error text/data may be sensitive and is never exposed.
       this.pending.delete(response.id); pending.reject(new AppServerFault('remote_refused', this.attempted));
     } else { this.pending.delete(response.id); pending.resolve(response.result); }
   }
-  private request(method: string, params: ObjectValue, effect = false): Promise<unknown> {
+  private notification(method: string): void {
+    this.check(); const bytes = Buffer.from(JSON.stringify({ method }) + '\n'); this.sent += bytes.length;
+    if (this.sent > APP_SERVER_LIMITS.sentBytes) { this.fail('frame_limit'); throw this.fault; }
+    try { this.transport.output.write(bytes, error => { if (error) this.fail('write_failed'); }); }
+    catch { this.fail('write_failed'); throw this.fault; }
+  }
+  private async request(method: string, params: ObjectValue, effect = false): Promise<unknown> {
     this.check();
     if (++this.requests > APP_SERVER_LIMITS.requests) { this.fail('request_limit'); return Promise.reject(this.fault); }
     const id = this.requests, bytes = Buffer.from(JSON.stringify({ id, method, params }) + '\n');
     this.sent += bytes.length;
     if (bytes.length > APP_SERVER_LIMITS.frameBytes || this.sent > APP_SERVER_LIMITS.sentBytes) { this.fail('frame_limit'); return Promise.reject(this.fault); }
+    if (effect) {
+      try { await this.bounded(this.beforeEffect(), 'effect_guard_failed'); } catch { this.fail('effect_guard_failed'); throw this.fault; }
+      this.check();
+    }
     return new Promise((resolve, reject) => {
       if (effect) this.attempted = true; // Before write, after local frame/budget validation.
       this.pending.set(id, { resolve, reject });
@@ -298,6 +383,18 @@ export class BoundedAppServerClient implements AppServerPort {
     try {
       await this.owner(); this.check();
       this.clientId = input.clientUserMessageId;
+      if (this.nativeQueue) {
+        const result = object(await this.request('thread/queue/add', {
+          threadId: this.scope.threadId, clientUserMessageId: input.clientUserMessageId,
+          input: [{ type: 'text', text: input.message, text_elements: [] }],
+        }, true), ['queuedSubmission']);
+        const queued = object(result.queuedSubmission, ['id', 'input', 'clientUserMessageId']);
+        if (!safeId(queued.id) || queued.clientUserMessageId !== input.clientUserMessageId || !Array.isArray(queued.input) || queued.input.length !== 1) throw new Error('invalid');
+        const ownInput = object(queued.input[0], Object.hasOwn(queued.input[0], 'text_elements') ? ['type', 'text', 'text_elements'] : ['type', 'text']);
+        if (ownInput.type !== 'text' || ownInput.text !== input.message || (Object.hasOwn(ownInput, 'text_elements') &&
+            (!Array.isArray(ownInput.text_elements) || ownInput.text_elements.length))) throw new Error('invalid');
+        return { queueId: queued.id, clientUserMessageId: input.clientUserMessageId };
+      }
       const result = object(await this.request('session-peer/metadata/queue', {
         scope: this.scope, clientUserMessageId: input.clientUserMessageId, input: [{ type: 'text', text: input.message }],
       }, true), ['scope', 'queueId', 'clientUserMessageId']);
@@ -308,6 +405,7 @@ export class BoundedAppServerClient implements AppServerPort {
   private snapshot(): MetadataObservation { return { ...this.observed, ...(this.observed.turn ? { turn: { ...this.observed.turn } } : {}) }; }
   async observe(clientUserMessageId: string): Promise<MetadataObservation> {
     this.check();
+    if (this.nativeQueue) throw new AppServerFault('unsupported_transport', this.attempted);
     if (!safeId(clientUserMessageId) || clientUserMessageId !== this.clientId || !this.attempted) throw new AppServerFault('invalid_input', this.attempted);
     if (++this.observations > APP_SERVER_LIMITS.observations) { this.fail('request_limit'); throw this.fault; }
     if (this.observed.injectionObserved) return this.snapshot();
@@ -339,30 +437,95 @@ export class BoundedAppServerClient implements AppServerPort {
   }
 }
 
-// Only hermetic tests call this helper. Production capability preflight never
-// reaches it. POSIX detached groups clean owned descendants; Windows cleanup
-// qualification is absent, so this process helper refuses there before spawn.
-export function spawnOwnedMetadataFixture(binary: string, args: string[], env: NodeJS.ProcessEnv): MetadataOnlyTransport {
+async function beforeDeadline<T>(deadlineMs: number, operation: () => Promise<T>, code: AppServerFaultCode): Promise<T> {
+  const remaining = deadlineMs - performance.now();
+  if (!Number.isFinite(remaining) || remaining <= 0 || remaining > APP_SERVER_LIMITS.lifetimeMs) throw new AppServerFault('deadline', false);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new AppServerFault('deadline', false)), remaining);
+    Promise.resolve().then(operation).then(value => { clearTimeout(timer); resolve(value); }, () => {
+      clearTimeout(timer); reject(new AppServerFault(code, false));
+    });
+  });
+}
+// Queue mechanics were verified only for the exact installed version/platform
+// in a network-denied synthetic home. This is not a live delivery/ACK claim.
+// Root integration owns generation, canonical home, storage and writer guards.
+// This function never invokes thread start/resume/read/list or a model turn.
+export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ queueId: string; clientUserMessageId: string }> {
+  const platform = `${process.platform}-${process.arch}`;
+  if (platform !== APP_SERVER_EVIDENCE.inspectedPlatform) throw new AppServerFault('unsupported_transport', false);
+  let original: AppServerScope;
+  try { original = scopeValue(options.scope); } catch { throw new AppServerFault('invalid_scope', false); }
+  if (!isAbsolute(options.binary) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(original.threadId)) throw new AppServerFault('invalid_input', false);
+  const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env), CODEX_HOME: original.codexHome };
+  delete env.CODEX_SQLITE_HOME;
+  if (!await beforeDeadline(options.deadlineMs, () => options.verifyOwner(original), 'owner_changed')) throw new AppServerFault('owner_changed', false);
+  const version = await run(options.binary, ['--version'], {
+    env, timeout: Math.max(1, options.deadlineMs - performance.now()), limit: 4096,
+  });
+  if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  if (version.interrupted || version.code !== 0 || version.stdout.trim() !== `codex-cli ${APP_SERVER_EVIDENCE.version}`) {
+    throw new AppServerFault('unsupported_version', false);
+  }
+  const transport: NativeQueueTransport = { qualification: 'native_queue_only_stdio',
+    ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false'], env, original.codexHome) };
+  let client: NativeQueuePort | undefined;
+  try {
+    client = await BoundedAppServerClient.connectNativeQueueWire(original, transport, options.deadlineMs, options.verifyOwner, options.beforeEffect);
+    return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
+  } finally { if (client) await client.close(); else await disposeTransport(transport); }
+}
+
+const ownedGroups = new Set<number>();
+const terminationSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+function reapOwned(pid: number): void { try { process.kill(-pid, 'SIGKILL'); } catch { /* Already gone. */ } }
+function processExit(): void { for (const pid of ownedGroups) reapOwned(pid); }
+function terminateOwned(signal: NodeJS.Signals): void {
+  processExit(); ownedGroups.clear();
+  for (const name of terminationSignals) process.removeListener(name, terminateOwned);
+  process.removeListener('exit', processExit); process.kill(process.pid, signal);
+}
+function registerOwned(pid: number | undefined): void {
+  if (!pid || ownedGroups.has(pid)) return;
+  if (!ownedGroups.size) {
+    for (const name of terminationSignals) process.on(name, terminateOwned);
+    process.on('exit', processExit);
+  }
+  ownedGroups.add(pid);
+}
+function releaseOwned(pid: number | undefined): void {
+  if (!pid || !ownedGroups.delete(pid) || ownedGroups.size) return;
+  for (const name of terminationSignals) process.removeListener(name, terminateOwned);
+  process.removeListener('exit', processExit);
+}
+// POSIX groups reap owned descendants. Only darwin-arm64 has native queue
+// mechanics qualification; Windows resource cleanup remains unqualified.
+function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Omit<MetadataOnlyTransport, 'qualification'> {
   if (process.platform === 'win32') throw new AppServerFault('unsupported_transport', false);
-  const child = spawn(binary, args, { env, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(binary, args, { env, cwd, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  registerOwned(child.pid); child.once('spawn', () => registerOwned(child.pid));
   child.stdout.on('error', () => {}); child.stdin.on('error', () => {});
   let stderrBytes = 0, closed = false;
-  const kill = () => { if (child.pid) try { process.kill(-child.pid, 'SIGKILL'); } catch { /* Already gone. */ } };
+  const kill = () => { if (child.pid) reapOwned(child.pid); };
   // Also bound a fixture transport whose caller fails before attaching a client.
-  const lifetime = setTimeout(() => { kill(); child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); }, APP_SERVER_LIMITS.lifetimeMs);
+  const lifetime = setTimeout(() => { kill(); releaseOwned(child.pid); child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); }, APP_SERVER_LIMITS.lifetimeMs);
   lifetime.unref();
   child.stderr.on('data', (bytes: Buffer) => {
     stderrBytes += bytes.length;
     if (stderrBytes > APP_SERVER_LIMITS.receivedBytes) { kill(); child.stdout.destroy(new Error('traffic_limit')); }
   });
   child.on('error', () => { child.stdout.destroy(new Error('connection_closed')); });
-  return { qualification: 'hermetic_fixture_only', input: child.stdout, output: child.stdin,
+  return { input: child.stdout, output: child.stdin,
     close: () => new Promise(resolve => {
-      if (closed) { resolve(); return; } closed = true; clearTimeout(lifetime); kill();
+      if (closed) { resolve(); return; } closed = true; clearTimeout(lifetime); kill(); releaseOwned(child.pid);
       child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
       if (child.exitCode !== null || child.signalCode !== null || child.pid === undefined) { resolve(); return; }
       const timer = setTimeout(resolve, APP_SERVER_LIMITS.cleanupMs);
       child.once('exit', () => { clearTimeout(timer); resolve(); });
     }),
   };
+}
+// Test-only metadata protocol transport; never inferred from a Codex process.
+export function spawnOwnedMetadataFixture(binary: string, args: string[], env: NodeJS.ProcessEnv): MetadataOnlyTransport {
+  return { qualification: 'hermetic_fixture_only', ...spawnOwnedStdio(binary, args, env) };
 }
