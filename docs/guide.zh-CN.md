@@ -8,6 +8,8 @@
 
 这是 0.3.2 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。上一次发布记录见 [0.3.1 公开发布证据](../VALIDATION.md#public-031--2026-10-04-kst)；下文 0.1.0 的说明用于旧版本对比。
 
+[0.4.0 handoff 设计（联合确认、未实现）](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## 目录
 
 - [功能与边界](#功能与边界)

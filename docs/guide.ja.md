@@ -8,6 +8,8 @@
 
 0.3.2 の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。前回の公開記録は [0.3.1 公開リリースの証拠](../VALIDATION.md#public-031--2026-10-04-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
+[0.4.0 handoff 設計（共同合意・未実装）](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## 目次
 
 - [機能と範囲](#機能と範囲)
