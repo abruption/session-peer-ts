@@ -10,6 +10,7 @@ import { nativeQueueCapability, nativeQueueOnce, AppServerFault, type AppServerS
 import { metadataCapability, observeMetadata, type MetadataScope } from './metadata-observation.js';
 import { checkMessage, queueId, send, type SendContext, type SendOptions } from './send.js';
 import { Refusal } from './discovery.js';
+import { HomeRefusal } from './writer.js';
 import { executable, run, UnknownOutcome } from './process.js';
 
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean;
@@ -156,7 +157,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
     }
     const code = error instanceof BeforeEffectRefused ? handoff.wait.reason ?? 'evidence_unsupported' : error instanceof Refusal ? error.code : uncertain ? 'outcome_unknown' : 'handoff_operation_failed';
     return finish({ ...snapshot, ok: false, error: code, status: uncertain ? 'unknown' : 'refused', submitted: uncertain ? null : false,
-      consumptionConfirmed: false, retryAllowed: false }, handoffOptions.waitFor && handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator' ? 130 : error instanceof Refusal && error.exitCode !== 130 ? error.exitCode : 1);
+      consumptionConfirmed: false, retryAllowed: false, ...(error instanceof HomeRefusal ? {codexHomeResolution:error.codexHomeResolution} : {}) }, handoffOptions.waitFor && handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator' ? 130 : error instanceof Refusal && error.exitCode !== 130 ? error.exitCode : 1);
   } finally { process.removeListener('SIGINT',stop); }
 }
 
