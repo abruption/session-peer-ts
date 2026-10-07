@@ -235,6 +235,8 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   const { value } = verified;
   // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
   delete value.clientUpdate;
+  // Ordinary SSH responses cannot opt into peer-supplied handoff evidence.
+  delete value.handoff; delete value.handoffQuery; delete value.handoffWarning;
   return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: verified.exitCode };
 }
 function failure(error: unknown, command: string, where: string): { value: Record<string, unknown>; exitCode: number } {
