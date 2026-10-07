@@ -18,8 +18,8 @@ async function fixture(t: TestContext) {
   writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: null, messagingSocketPath: socket }));
   const file = join(path, 'message'); writeFileSync(file, 'fixture body', { mode: 0o600 });
   const env = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_UPDATE_NOTICE: '', SESSION_PEER_HANDOFF_HOME: join(path, 'state', 'handoff') };
-  async function invoke(args: string[], input = '') { const child = spawn(process.execPath, [cli, ...args, '--json'], { env }); let stdout = ''; child.stdout.on('data', c => stdout += c); child.stderr.resume(); child.stdin.end(input); const timer = setTimeout(() => child.kill('SIGKILL'), 10000); const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null); return { code, value: JSON.parse(stdout) }; }
-  return { path, messages, file, invoke, send: ['send', '--to', String(process.pid), '--message-file', file, '--no-from', '--no-reply-to'] };
+  async function invoke(args: string[], input = '', closeInput = true, timeout = 10000) { const child = spawn(process.execPath, [cli, ...args, '--json'], { env }); let stdout = ''; child.stdout.on('data', c => stdout += c); child.stderr.resume(); if (closeInput) child.stdin.end(input); else child.stdin.write(input); const timer = setTimeout(() => child.kill('SIGKILL'), timeout); const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null); return { code, value: JSON.parse(stdout) }; }
+  return { path, env, messages, file, invoke, send: ['send', '--to', String(process.pid), '--message-file', file, '--no-from', '--no-reply-to'] };
 }
 test('opt-out untouched; explicit init/prepare/status/dry-run/single effect fence', { skip: process.platform === 'win32' }, async t => {
  const f = await fixture(t);
@@ -79,4 +79,26 @@ test('opt-in reserves bounded outer-result space before any native effect', {ski
  const f=await fixture(t);await f.invoke(['handoff','init']);
  writeFileSync(join(f.path,'.claude/sessions',`${process.pid}.json`),JSON.stringify({pid:process.pid,name:'x'.repeat(1040000),messagingSocketPath:join(f.path,'sock')}));
  const r=await f.invoke([...f.send,'--request-ack']);assert.equal(r.code,1);assert.equal(r.value.error,'handoff_result_too_large');assert.equal(r.value.submitted,false);assert.equal(f.messages.length,0);
+});
+
+
+test('message-file dash is literal with stdin open, while --message dash keeps stdin semantics', {skip:process.platform==='win32'}, async t=>{
+ const f=await fixture(t);writeFileSync(f.file,'-');
+ const file=await f.invoke(f.send,'different stdin body',false);
+ assert.equal(file.code,0);assert.equal(file.value.status,'posted');assert.equal(file.value.chars,1);
+ assert.equal(f.messages.length,1);assert.equal(JSON.parse(f.messages[0]!).message.content,'-');
+ await f.invoke(['handoff','init']);
+ const opted=await f.invoke([...f.send,'--request-ack'],'different stdin body',false);
+ assert.equal(opted.code,0);assert.equal(opted.value.submitted,true);assert.equal(f.messages.length,2);
+ assert.equal(JSON.parse(f.messages[1]!).message.content,'-\n\n---\nHandoff: '+JSON.stringify({schemaVersion:1,correlationId:opted.value.handoff.correlationId}));
+ const stdin=await f.invoke(['send','--to',String(process.pid),'--message','-','--no-from','--no-reply-to'],'chosen stdin body');
+ assert.equal(stdin.code,0);assert.equal(JSON.parse(f.messages[2]!).message.content,'chosen stdin body');
+ // SSH transports carry the already selected literal body in their JSON frame;
+ // a wire receiver must not interpret that body as a second stdin selector.
+ const receiver=spawn(process.execPath,[cli,'--stdio-request'],{env:f.env});let stdout='';receiver.stdout.on('data',c=>stdout+=c);receiver.stderr.resume();
+ const timer=setTimeout(()=>receiver.kill('SIGKILL'),10000);
+ receiver.stdin.end(JSON.stringify({schemaVersion:1,args:['send','--to',String(process.pid),'--message=-','--no-from','--no-reply-to','--json']}));
+ const [code,signal]=await once(receiver,'close');clearTimeout(timer);assert.equal(signal,null);assert.equal(code,0,stdout);
+ assert.equal(JSON.parse(f.messages[3]!).message.content,'-');
+
 });

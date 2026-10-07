@@ -342,8 +342,17 @@ try {
     let rawMessage: string | undefined;
     let message: string | undefined, routing: Record<string, unknown> = {};
     if (command === 'send') {
-      message = options.values.has('--message-file') ? privateMessage(options.values.get('--message-file')!) : options.values.get('--message');
-      if (message === undefined || message === '-') { if (wire) throw new Refusal('remote_message_required'); message = await input(4_100_000, false, handoffBudget?.observationRemainingMs()); }
+      if (options.values.has('--message-file')) {
+        // File contents are literal, including a single dash. Only the local
+        // command-line message source uses '-' as the stdin selector.
+        message = privateMessage(options.values.get('--message-file')!);
+      } else {
+        message = options.values.get('--message');
+        if (message === undefined || (!wire && message === '-')) {
+          if (wire) throw new Refusal('remote_message_required');
+          message = await input(4_100_000, false, handoffBudget?.observationRemainingMs());
+        }
+      }
       checkMessage(message); rawMessage = message;
       const noFrom = options.flags.has('--no-from'), noReply = options.flags.has('--no-reply-to');
       if (options.address) {
