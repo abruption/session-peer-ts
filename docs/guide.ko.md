@@ -490,3 +490,10 @@ npm `--ignore-scripts`를 사용할 수 있고 postinstall은 Skills CLI를 호�
 
 선택적 `sp` 단축 이름은 0.3.0 이상에 포함되며(0.2.1 이하에는 없음) 자동으로 켜지지 않습니다.
 [명시적 활성화·충돌·해제 안내(영문)](shorthand.md)를 참고하세요.
+
+
+## Unreleased handoff
+
+개발 중인 0.4.0 소스에는 opt-in private POSIX handoff ledger가 추가됩니다. 공개 0.3.1에는 이 명령이 없습니다. 필수 증거 채널이 unsupported이면 제출 전에 거절하며, best-effort 제출은 ACK를 증명하지 않습니다. 자동 receipt bootstrap, Windows ledger 및 SSH handoff는 아직 미지원입니다.
+
+[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)

@@ -555,3 +555,10 @@ install a runtime. See [compatibility and validation](../PARITY.md#source-ts-ski
 
 Optional `sp` shorthand ships with 0.3.0 and later (not 0.2.1 or earlier) and is
 never enabled automatically. See [explicit activation and collisions](shorthand.md).
+
+
+## Unreleased handoff
+
+Unreleased 0.4.0 source adds an opt-in private POSIX handoff ledger. Published 0.3.1 has no handoff commands. Required unsupported evidence refuses before submission; best-effort unsupported evidence never proves ACK. Automated receipt bootstrap, Windows ledger and SSH handoff remain unsupported.
+
+[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)

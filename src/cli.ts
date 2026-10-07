@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { handoffCommand, handoffSend, privateMessage } from './handoff-operations.js';
+import { canonicalId, HandoffBudget, parseWaitTimeout } from './handoff.js';
 import { doctor } from './diagnostics.js';
 import { help } from './help.js';
 import { renderOutput, type OutputFormat } from './output.js';
@@ -15,8 +17,8 @@ import { configuredHost, detectedHost, isSelf, probeReturnRoute, unsafeReturnHos
 
 type Options = { command: 'list' | 'send' | 'doctor' | 'update'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions; jump?: SshJump;
   address?: { uri: string; transport: 'local' | 'ssh'; implicit: boolean } };
-const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home', '--check-return-route', '--check'];
-const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt', '--ssh-jump', '--reply-to', '--return-route-host', '--channel'];
+const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home', '--check-return-route', '--check', '--request-ack', '--observe-delivery'];
+const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt', '--ssh-jump', '--reply-to', '--return-route-host', '--channel', '--correlation-id', '--wait-for', '--wait-timeout', '--message-file'];
 // Repeated in order; every other value option is single.
 const REPEATED = ['--host', '--ssh-opt'];
 // Requested destinations, so a command-wide refusal can be attributed to each.
@@ -67,6 +69,20 @@ export function parse(args: string[]): Options {
   if (values.has('--output-format') && !['json', 'text'].includes(values.get('--output-format')!)) throw new Refusal('unsupported_output_format');
   if (flags.has('--json') && values.get('--output-format') === 'text') throw new Refusal('conflicting_output_options');
   if (!flags.has('--json') && !values.has('--output-format')) throw new Refusal('json_output_required');
+  const handoff = flags.has('--request-ack') || flags.has('--observe-delivery') || values.has('--correlation-id') || values.has('--wait-for') || values.has('--wait-timeout');
+  if (handoff) {
+    if (command !== 'send') throw new Refusal('inapplicable_option');
+    if (values.has('--correlation-id') && !canonicalId(values.get('--correlation-id'))) throw new Refusal('invalid_correlation_id');
+    if (values.has('--wait-for') && !['delivered', 'acknowledged'].includes(values.get('--wait-for')!)) throw new Refusal('invalid_wait_for');
+    if (values.has('--wait-timeout')) {
+      parseWaitTimeout(values.get('--wait-timeout')!);
+      if (!values.has('--correlation-id') && !values.has('--wait-for') && !flags.has('--request-ack') && !flags.has('--observe-delivery')) throw new Refusal('inapplicable_wait_timeout');
+    }
+    if (flags.has('--dry-run') && (flags.has('--request-ack') || flags.has('--observe-delivery') || values.has('--wait-for'))) throw new Refusal('incompatible_handoff_dry_run');
+    // The original-sender ledger/receipt route is not yet qualified over SSH.
+    if (hosts.length) throw new Refusal('remote_handoff_unsupported', 1);
+  }
+  if (values.has('--message-file') && (command !== 'send' || values.has('--message'))) throw new Refusal('conflicting_message_sources');
   if (command === 'update') {
     if (values.has('--channel') && !CHANNELS.includes(values.get('--channel')!)) throw new Refusal('unsupported_update_channel');
     // Local client only: remote hosts and other installations update through their own managers.
@@ -101,6 +117,9 @@ export function parse(args: string[]): Options {
       values.set('--to', route.to);
     }
   }
+  // Reply-To URI parsing can introduce an SSH destination after the early
+  // flag check. Never let that route bypass the original sender's ledger.
+  if (handoff && hosts.length) throw new Refusal('remote_handoff_unsupported', 1);
   if (command === 'send' && flags.has('--allow-inactive-codex-home')) {
     if (!values.get('--to')!.startsWith('codex:')) throw new Refusal('inapplicable_option');
     if (!values.get('--codex-home')) throw new Refusal('inactive_opt_in_requires_explicit_home');
@@ -142,15 +161,15 @@ export function parse(args: string[]): Options {
   }
   return { command, values, flags, hosts, ssh, ...(jump ? { jump } : {}), ...(address ? { address } : {}) };
 }
-async function input(): Promise<string> {
+async function input(limit = 4_100_000, preserveBOM = false): Promise<string> {
   const chunks: Buffer[] = [];
   let bytes = 0;
   for await (const chunk of process.stdin) {
     const part = Buffer.from(chunk); bytes += part.length;
-    if (bytes > 4_100_000) throw new Refusal('input_too_large');
+    if (bytes > limit) throw new Refusal('input_too_large');
     chunks.push(part);
   }
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)); }
+  try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: preserveBOM }).decode(Buffer.concat(chunks)); }
   catch { throw new Refusal('invalid_utf8'); }
 }
 const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
@@ -286,7 +305,13 @@ try {
   if (args.length === 1 && args[0] === REFRESH_ARG) await refreshCache();
   else if (args.length === 1 && args[0] === '--version') console.log(VERSION_LINE);
   else if ((args.length === 1 && ['--help', '-h'].includes(args[0]!)) ||
-    (args.length === 2 && ['list', 'send', 'doctor', 'update'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
+    (args.length === 2 && ['list', 'send', 'doctor', 'update', 'handoff', 'ack'].includes(args[0]!) && ['--help', '-h'].includes(args[1]!))) console.log(help(args.length === 2 ? args[0] : undefined));
+  else if (args[0] === 'handoff' || args[0] === 'ack') {
+    command = args[0];
+    const operation = await handoffCommand(args, limit => input(limit, true));
+    console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: operation.exitCode === 0, ...operation.value }));
+    process.exitCode = operation.exitCode;
+  }
   else {
     wire = args.length === 1 && args[0] === '--stdio-request';
     if (wire) {
@@ -298,6 +323,8 @@ try {
     }
     command = ['list', 'send', 'doctor', 'update'].includes(args[0] ?? '') ? args[0]! : 'unknown';
     const options = parse(args);
+    const handoffEnabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
+    const handoffBudget = handoffEnabled ? new HandoffBudget(parseWaitTimeout(options.values.get('--wait-timeout') ?? '30')) : undefined;
     format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
     if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
     if (wire && command === 'update') throw new Refusal('remote_update_unsupported');
@@ -307,11 +334,12 @@ try {
     // Tailscale status is queried at most once, and only when a route needs it.
     let status: Tailnet | undefined, queried = false;
     const tailnetStatus = async () => { if (!queried) { queried = true; status = await tailnet(); } return status; };
+    let rawMessage: string | undefined;
     let message: string | undefined, routing: Record<string, unknown> = {};
     if (command === 'send') {
-      message = options.values.get('--message');
+      message = options.values.has('--message-file') ? privateMessage(options.values.get('--message-file')!) : options.values.get('--message');
       if (message === undefined || message === '-') { if (wire) throw new Refusal('remote_message_required'); message = await input(); }
-      checkMessage(message);
+      checkMessage(message); rawMessage = message;
       const noFrom = options.flags.has('--no-from'), noReply = options.flags.has('--no-reply-to');
       if (options.address) {
         const resolution: Record<string, unknown> = { uri: options.address.uri, transport: options.address.transport };
@@ -353,7 +381,13 @@ try {
     let result: Record<string, unknown> = {}, exitCode: number | undefined, results: Record<string, unknown>[] | undefined;
     // Propagate the verified remote exit code so SSH and local refusals match.
     if (options.hosts.length) ({ value: results, exitCode } = await remotes(options, await tailnetStatus(), message, returnTo));
-    else if (command === 'send') result = await send({ to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') });
+    else if (command === 'send') {
+      const settings = { to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') };
+      const enabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
+      if (wire && enabled) throw new Refusal('remote_handoff_unsupported', 1);
+      if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget }));
+      else result = await send(settings);
+    }
     else if (command === 'update') result = options.flags.has('--check') ? await checkUpdate(options.values.get('--channel')) : refuseSelfUpdate(options.values.get('--channel'));
     else if (command === 'doctor') {
       result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
@@ -378,7 +412,13 @@ try {
   }
 } catch (error) {
   // A command-wide refusal before dispatch applies to every requested host.
+  if (command === 'handoff' || command === 'ack') {
+    const failureCode = error instanceof Refusal ? error.code : 'handoff_operation_failed';
+    console.log(JSON.stringify({ schemaVersion: 1, host: hostname(), command, ok: false, error: failureCode }));
+    process.exitCode = error instanceof Refusal ? error.exitCode : 1;
+  } else {
   const { value, exitCode } = failure(error, command, hostname());
   console.log(renderOutput(!wire && requested.length > 1 ? requested.map(item => ({ ...value, host: item })) : value, format));
   process.exitCode = exitCode;
+  }
 }

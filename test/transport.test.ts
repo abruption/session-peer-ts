@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { probeLock, inspectWriter } from '../dist/writer.js';
+import { send } from '../dist/send.js';
 import { reply, envelope } from '../dist/protocol.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
@@ -346,4 +347,15 @@ test('Windows --remote-bin doubles every PowerShell single-quote variant', async
   assert.equal(result.error, 'ssh_preflight_failed');
   const decoded = Buffer.from(readFileSync(calls, 'utf8').trim().split(' ').at(-1)!, 'base64').toString('utf16le');
   assert.equal(decoded, "& 'C:\\a''\u2018\u2018\u2019\u2019\u201a\u201a\u201b\u201b;calc;#' --version");
+});
+
+test('opt-in handoff context stays bound to selected generation and rechecks storage before fencing', async t => {
+ const {path} = setup(t), home = join(path,'home'); database(home); await holder(t,path,home);
+ const owner = await inspectWriter(home,id); const crypto = await import('node:crypto'); const expected = crypto.createHash('sha256').update(owner.identity).digest('hex');
+ let effects = 0;
+ await assert.rejects(send({ to:`codex:${id}`,home,codexBin:process.execPath,message:'fixture',hooks:{
+   resolved(context) {assert.equal(context.generation,expected);writeFileSync(join(home,'config.toml'),'sqlite_home = "/fixture/relocated"');},
+   beforeEffect() {effects++;}
+ }}), /unsupported_codex_sqlite_home/);
+ assert.equal(effects,0);
 });

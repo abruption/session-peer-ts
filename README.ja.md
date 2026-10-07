@@ -106,6 +106,8 @@ session-peer --version
 
 - [0.4.0 handoff 設計（共同合意・未実装）](PARITY.md#handoff-v1-design-candidate--69).
 
+- [開発中の private handoff CLI と制限](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
+
 ## License
 
 [MIT ライセンス](LICENSE)で公開しています。

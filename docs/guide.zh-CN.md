@@ -295,3 +295,10 @@ postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能�
 
 可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
 请参阅[显式启用、冲突与停用(英文)](shorthand.md)。
+
+
+## Unreleased handoff
+
+开发中的 0.4.0 源码加入 opt-in private POSIX handoff ledger。已发布的 0.3.1 不含这些命令。所需证据通道 unsupported 时在提交前拒绝；best-effort 提交并不证明 ACK。自动 receipt bootstrap、Windows ledger 和 SSH handoff 尚不支持。
+
+[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)

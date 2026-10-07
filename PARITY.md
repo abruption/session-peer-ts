@@ -829,3 +829,16 @@ Python/TS co-installation is excluded; replacing an implementation respects its
 original manager. This TS change does not implement additional Python features.
 Package fixtures cover name equivalence, collisions, an in-place version update
 and removal on every supported shell. They do not establish live delivery or ACK.
+
+
+## Unreleased handoff implementation — #70
+
+The frozen #69 design pin is unchanged. Source-only private POSIX ledger and
+strict protocol helpers now implement prepare, at-most-once sender fencing,
+status, bounded wait records and explicit receipt/operator-confirmation
+validation. [CLI details](docs/api.md#unreleased-opt-in-handoff-cli--040-work)
+separate current source support from the published 0.3.1 runtime. Automated ACK
+bootstrap, Windows private ACL support and original-sender SSH coordination are
+still implementation gates. Fixture passes are not live receipt/injection
+qualification. Default output and the historical Python runtime parity pin stay
+unchanged; no future Python runtime is claimed shipped.
