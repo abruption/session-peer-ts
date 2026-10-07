@@ -13,6 +13,8 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
+**문서·소스 버전: 0.3.2.** 아래 버전 지정 npm 명령을 사용하기 전에 npm 레지스트리 또는 버전 배지에서 0.3.2의 발행 여부를 확인하세요. 발행 전에는 검토된 소스 체크아웃이나 로컬 빌드 산출물을 사용합니다. 빌드와 SSH 양쪽에는 같은 검토된 버전이 필요합니다.
+
 **실행 중인 Claude Code·Codex 세션을 찾고 로컬 또는 SSH로 메시지를 전달합니다.**
 Python 없이 Node.js로 실행하는 클라이언트입니다. 패키지와 명령 이름은 `session-peer`입니다.
 
@@ -51,12 +53,12 @@ SSH에는 기존 키·호스트 신뢰 설정과 양쪽의 **동일 버전 TypeS
 다른 설치 관리자의 파일을 `--force`로 덮어쓰지 마세요.
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.1
+npm view session-peer@0.3.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 
-예상 출력: `session-peer 0.3.1 (typescript)`. 격리 설치·소스 빌드·Windows·제거
+예상 출력: `session-peer 0.3.2 (typescript)`. 격리 설치·소스 빌드·Windows·제거
 방법은 아래 상세 가이드에서 확인할 수 있습니다.
 
 선택적 `sp` 단축 이름은 0.3.0 이상에 포함되며(0.2.1 이하에는 없음) 자동으로 켜지지 않습니다.
@@ -65,12 +67,12 @@ session-peer --version
 ### Update
 
 npm으로 설치한 클라이언트는 npm으로 갱신합니다. 태그와 대상 버전을 검토한 뒤
-정확한 버전을 설치하세요. 아래 예시는 이전 npm 설치본을 0.3.1로 갱신합니다.
+정확한 버전을 설치하세요. 아래 예시는 이전 npm 설치본을 0.3.2로 갱신합니다.
 CLI는 업데이트를 설치하지 않으며 `session-peer update --check`는 확인만 합니다.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.1
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 

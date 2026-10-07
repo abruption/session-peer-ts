@@ -13,6 +13,8 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
+**文档和源码版本：0.3.2。** 使用以下固定版本 npm 命令前，请通过 npm 注册表或版本徽章确认 0.3.2 是否已发布。发布前，请使用已审核的源码检出版本或本地构建产物。构建和 SSH 两端需要相同的已审核版本。
+
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
 
@@ -49,12 +51,12 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 覆盖其他安装管理器的文件。
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.1
+npm view session-peer@0.3.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 
-预期输出：`session-peer 0.3.1 (typescript)`。隔离安装、源码构建、Windows 和
+预期输出：`session-peer 0.3.2 (typescript)`。隔离安装、源码构建、Windows 和
 卸载步骤见下方详细指南。
 
 可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
@@ -63,11 +65,11 @@ session-peer --version
 ### Update
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
-下面示例将旧 npm 安装更新至 0.3.1。CLI 不会安装更新，`session-peer update --check` 只做检查。
+下面示例将旧 npm 安装更新至 0.3.2。CLI 不会安装更新，`session-peer update --check` 只做检查。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.1
+npm install --global --ignore-scripts session-peer@0.3.2
 session-peer --version
 ```
 

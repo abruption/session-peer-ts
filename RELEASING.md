@@ -7,9 +7,22 @@ remain independent. The npm Trusted Publisher for `abruption/session-peer-ts`,
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.3.2 release procedure
+
+The release preparation is based on reviewed main `488ddddac302ba2ad0841061dc8df9187ff6a983`; 0.4 feature branches are excluded. The required pre-staging baseline is **0.3.1**, with `latest=0.3.1` and `preview=0.1.0-preview.1`; these are preconditions, not a permanent statement of registry state. Check the registry and dated validation record for publication status. Previous stable integrity is pinned to:
+`sha512-iZq06dbm6NavHuPZYMIxAnzQN5ksqm66yufpppddVWUYkuaG5TJvktbUXTSX7v3BBFnuybEJekI0KSaDo3Xfbg==`.
+Previous stable attestation metadata: `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.1`. Historical records below remain historical.
+
+1. Review and merge the 0.3.2 preparation PR, then require successful CI and release gate for the exact merged main SHA, including Windows Node 22/24. Check the current deployment qualification evidence in VALIDATION.md; pending F5 evidence is not a pass.
+2. Recheck package ownership/2FA, the npm environment reviewer/main-only policy, stage-only Trusted Publisher mapping, and authenticated pending stages. Require 0.3.2 absent, `latest=0.3.1`, unchanged preview tag/integrity and the pinned public 0.3.1 integrity/provenance.
+3. Obtain separate approval naming the exact merged 40-character main SHA, **0.3.2**, **stable-stage**, and promotion of `latest` to 0.3.2. Preparation approval and previous release approvals do not authorize staging or publication.
+4. Only after that approval, dispatch publish.yml with `mode=stable-stage`, `version=0.3.2`, `source_sha=<approved main SHA>` and `confirmation=session-peer@0.3.2 stable-stage`. Review the staged artifact and complete separate npm 2FA approval before publication.
+
+0.3.1 and 0.3.2 refuse each other's SSH version preflight. Upgrade both endpoints together only after the chosen source or publication is approved; never retry an unknown send outcome.
+
 ## Public release checkpoint — 0.3.1 (2026-10-04 KST)
 
-`session-peer@0.3.1` is public with `latest=0.3.1` and unchanged
+At this dated checkpoint, `session-peer@0.3.1` was public with `latest=0.3.1` and unchanged
 `preview=0.1.0-preview.1`; see the [dated verification](VALIDATION.md#public-031--2026-10-04-kst).
 Published source is `6b48092a0e42992d2d970dd2ff5cf457f62d3ff2` and publication
 run is `37209205194`. The completed procedure below is historical: do not replay

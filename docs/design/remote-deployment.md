@@ -445,10 +445,14 @@ PATH entry, a shell profile or a service.
    Record other implementations, but never modify them.
 3. **Upload** the tarballs into a new `<root>/<version>-<id16>.staging-<random>`
    directory, created exclusively (`mkdir` that fails if the path exists, mode
-   `0700`). Recompute SHA-256 remotely (`sha256sum`/`shasum -a 256`, or
+   `0700` on POSIX, the private DACL above on Windows). Windows creation
+   must fail on an existing path (for example, `CreateDirectoryW` with
+   `ERROR_ALREADY_EXISTS` treated as refusal); `.NET Directory.CreateDirectory`
+   alone is not exclusive. Apply the same rule to the activation lock.
+   Recompute SHA-256 remotely (`sha256sum`/`shasum -a 256`, or
    `Get-FileHash -Algorithm SHA256`). Stop on mismatch.
 4. **Install offline:**
-   `<node> <npm-cli.js> install --prefix <staging> --offline --ignore-scripts --no-audit --no-fund <three tarballs>`
+   `<node> <npm-cli.js> install --prefix <staging> --offline --ignore-scripts --no-audit --no-fund <package tarball and every dependency tarball pinned by the exact release lockfile>`
    with an empty, staging-local cache. Run it with `PATH` set to
    `dirname(<node>)` followed by the system directories, so that any child
    resolving `node` gets the identity Node. `--ignore-scripts` means no package
@@ -720,7 +724,7 @@ gaps:
 
 The details and the deviations from this workflow are in
 [VALIDATION.md](../../VALIDATION.md#remote-deployment-workflow-posix-cell-23-f5--2026-10-02-kst).
-Rules added afterwards remain **unvalidated, on Linux too**:
+Rules added after that Linux run remain **unvalidated on Linux**:
 - the fresh-lock recovery of an unreceipted target;
 - receipts that copy the marker's `runId`;
 - `.receipts` trust checks;
@@ -757,22 +761,36 @@ proposed identity launcher (F6) exists.
   destination with Node 24.16.0 passed real SSH version negotiation. These
   were manual 0.1.x-era runs, not this workflow end to end.
 
+### Windows destination checkpoint — 2026-10-07
+
+A user-authorized Windows 10 x64 destination was exercised with published
+0.3.1, Node 24.16.0 and PowerShell 5.1 under an administrator account, in a
+new dedicated test prefix. Offline installation, self-locating wrapper,
+native lock, activation and operator SSH doctor/nonexistent-target dry-run
+checks passed. Operator checks preceded receipt publication and lock release.
+See [the dated evidence and limits](../../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst).
+This was a private operator test harness, not a shipped deploy helper; neither
+the host nor the account was disposable. It does not qualify Windows-client
+`--ssh-jump`.
+
 ### Not validated
 
-- The full workflow against a real **Windows** SSH destination. The Linux
-  x86_64/glibc cell was run once (see above); other POSIX cells were not.
-- Windows: upload and hashing (`Get-FileHash`), `[System.IO.Directory]::Move`
-  no-replace behavior, the self-locating `.cmd` wrapper (`%~dp0`), reparse
-  point and DACL checks, and the `%LOCALAPPDATA%` layout.
+- Other Windows account/runtime/architecture combinations and other POSIX
+  destinations. The historical Linux x86_64/glibc cell was run once; the
+  Windows checkpoint above has its own dated scope and remaining cells.
 - POSIX root trust checks, `rename(2)` and `libc` detection on anything other
   than the one Debian x86_64 glibc destination.
 - Exercised once on the Linux x86_64 host only (with a test harness, not F6),
-  and not on Windows: failed-activation rollback, marker- and receipt-guarded
+  under its dated rules: failed-activation rollback, marker- and receipt-guarded
   retention, lock contention, explicit break-lock with and without a receipt,
-  an unowned lock, and the per-file manifest.
-- Not exercised anywhere: the explicit recovery of an unreceipted target under
-  a fresh lock, corrupt, mismatched or orphan receipt handling, `.receipts`
-  trust checks, and the operator override for unconfirmable lock owners. The
+  an unowned lock, and the per-file manifest. Selected corresponding Windows
+  fixture cases passed at the 2026-10-07 checkpoint; the result table in
+  VALIDATION.md distinguishes native/local fixtures from operator SSH.
+- Not exercised on Linux under the current rules: explicit recovery of an
+  unreceipted target under a fresh lock, corrupt/mismatched/orphan receipt
+  handling, `.receipts` trust checks and operator override for unconfirmable
+  lock owners. Those Windows fixture cells passed at the dated checkpoint.
+  General concurrent/adversarial race qualification remains open. The
   identity launcher was only compared logically (Linux) and prototyped
   (macOS).
 - The POSIX empty-directory race window. It is documented as unguaranteed and

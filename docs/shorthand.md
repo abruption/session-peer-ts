@@ -1,5 +1,7 @@
 # Optional `sp` shorthand
 
+This reference describes source/package version 0.3.2. Check registry availability before using a version-pinned npm installation; before publication use a reviewed source artifact. The shorthand forwards to the explicitly selected CLI and does not install or upgrade it.
+
 [README](../README.md) · [User guide](guide.md)
 
 This feature ships with 0.3.0 and later ([#74](https://github.com/abruption/session-peer-ts/issues/74)).

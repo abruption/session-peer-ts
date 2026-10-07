@@ -4,7 +4,9 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-This guide covers 0.3.1 ([reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.0 release evidence](../VALIDATION.md#public-030--2026-10-03-kst) records the previous publication. References to 0.1.0 below describe the older release.
+**Documentation and source version: 0.3.2.** Before using the version-pinned npm commands below, confirm that 0.3.2 is available in the npm registry or version badge. Before publication, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints must use the same reviewed version.
+
+This guide covers 0.3.2 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.0 release evidence](../VALIDATION.md#public-030--2026-10-03-kst) records the previous publication. References to 0.1.0 below describe the older release.
 
 ## Contents
 
@@ -24,7 +26,7 @@ This guide covers 0.3.1 ([reliability fixes](../PARITY.md#031-reliability-fixes)
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-This guide describes **0.3.1**. The npm package and CLI command are both **`session-peer`**. This
+This guide describes **0.3.2**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -33,9 +35,9 @@ Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.1
-session-peer --version  # session-peer 0.3.1 (typescript)
+npm view session-peer@0.3.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.2
+session-peer --version  # session-peer 0.3.2 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -102,7 +104,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, both ends need the same TypeScript client version (0.3.1).
+On SSH, both ends need the same TypeScript client version (0.3.2).
 
 ## Requirements
 
@@ -126,11 +128,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.3.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
 session-peer --version
 ```
 
-Expected: `session-peer 0.3.1 (typescript)`. Keep the `./...tgz` path to
+Expected for version 0.3.2: `session-peer 0.3.2 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -150,7 +152,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.1.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -417,7 +419,7 @@ Later releases add their own dated records. Check the exact version and current
 tags before installing:
 
 ```sh
-npm view session-peer@0.3.1 version dist.integrity
+npm view session-peer@0.3.2 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -469,7 +471,7 @@ and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 installation's owner is positively identified from the running CLI's path:
 an npm global prefix whose own `session-peer` launcher points at this package
 (default, Homebrew, nvm, nvm-windows and fnm prefixes), for example
-`npm install --global --ignore-scripts session-peer@0.3.1`; a pnpm, Yarn or Bun
+`npm install --global --ignore-scripts session-peer@0.3.2`; a pnpm, Yarn or Bun
 global store whose manifest declares `session-peer`; Volta; or the npx cache.
 Project installs (`npm_project`, `pnpm_project`), source checkouts (`source`)
 and anything else (`unknown`) get `updateCommand: null` and a `guidance`
