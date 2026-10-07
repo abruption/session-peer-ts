@@ -4,7 +4,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { APP_SERVER_EVIDENCE, APP_SERVER_LIMITS, AppServerFault, BoundedAppServerClient,
@@ -348,17 +348,24 @@ test('native negative RPC error codes retain attempted state and never expose st
   fault('remote_refused', true)(error); assert.equal(String(error).includes('PRIVATE'), false);
 });
 
-test('nativeQueueOnce checks selected binary version and strips sqlite relocation before a guarded effect', {
+test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected binary before a guarded effect', {
   skip: process.platform !== 'darwin' || process.arch !== 'arm64',
 }, async t => {
-  const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-native-queue-stub-'));
+  const root = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-native-queue-stub-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const log = join(root, 'metadata.jsonl'), binary = join(root, 'codex-fixture');
-  const original = { ...scope, codexHome: root, threadId: '01950000-0000-7000-8000-000000000071' };
+  const selected = join(root, 'selected "quoted" \\home'), other = join(root, 'other');
+  mkdirSync(selected, { mode: 0o700 }); mkdirSync(other, { mode: 0o700 });
+  const original = { ...scope, codexHome: selected, threadId: '01950000-0000-7000-8000-000000000071' };
   const script = `#!${process.execPath}\n
     const fs=require('node:fs'),log=${JSON.stringify(log)};
-    fs.appendFileSync(log,JSON.stringify({argv:process.argv.slice(2),pid:process.pid,home:process.env.CODEX_HOME,sqliteOverridePresent:!!process.env.CODEX_SQLITE_HOME})+'\\n');
+    fs.appendFileSync(log,JSON.stringify({argv:process.argv.slice(2),pid:process.pid,home:process.env.CODEX_HOME,sqliteHome:process.env.CODEX_SQLITE_HOME})+'\\n');
     if(process.argv.includes('--version')){console.log('codex-cli '+(process.env.FIXTURE_VERSION||'0.160.1'));process.exit(0);}
+    // Synthetic descriptors model the service's already resolved SQLite home;
+    // the negative case represents an exact policy overriding CLI/env pins.
+    const storage=process.env.FIXTURE_STORAGE_HOME||process.env.CODEX_SQLITE_HOME;
+    fs.openSync(require('node:path').join(storage,'state_5.sqlite'),'w+');
+    fs.openSync(require('node:path').join(storage,'queue_1.sqlite'),'w+');
     let buffer='';setInterval(()=>{},1000);process.stderr.write('PRIVATE-STDERR-NOT-RETURNED');
     process.stdin.on('data',chunk=>{buffer+=chunk;let end;while((end=buffer.indexOf('\\n'))>=0){const r=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);
       fs.appendFileSync(log,JSON.stringify({method:r.method,guardExists:fs.existsSync(${JSON.stringify(join(root, 'guard'))})})+'\\n');
@@ -370,14 +377,21 @@ test('nativeQueueOnce checks selected binary version and strips sqlite relocatio
   const options = { binary, scope: original, message: 'PRIVATE-OWN-EFFECT', clientUserMessageId: id, deadlineMs: performance.now() + 2000,
     verifyOwner: async (value: AppServerScope) => { assert.deepEqual(value, original); return true; },
     beforeEffect: async () => { guards++; writeFileSync(join(root, 'guard'), 'committed'); },
-    env: { HOME: root, CODEX_HOME: 'must-be-replaced', CODEX_SQLITE_HOME: 'must-be-removed', PATH: process.env.PATH } };
+    env: { HOME: root, CODEX_HOME: 'must-be-replaced', CODEX_SQLITE_HOME: 'must-be-replaced', PATH: process.env.PATH } };
   assert.deepEqual(await nativeQueueOnce(options), { queueId: 'fixture-q', clientUserMessageId: id }); assert.equal(guards, 1);
   const rows = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
   assert.equal(rows.length, 5); assert.deepEqual(rows.filter(r => r.method).map(r => r.method), ['initialize', 'initialized', 'thread/queue/add']);
-  for (const row of rows.filter(r => r.pid)) { assert.equal(row.home, root); assert.equal(row.sqliteOverridePresent, false);
+  for (const row of rows.filter(r => r.pid)) { assert.equal(row.home, selected); assert.equal(row.sqliteHome, selected);
     assert.throws(() => process.kill(row.pid, 0), (e: any) => e.code === 'ESRCH'); }
+  assert.deepEqual(rows[1].argv.slice(-2), ['-c', `sqlite_home=${JSON.stringify(selected)}`]);
   assert.equal(rows.at(-1).guardExists, true);
   await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 1000,
     env: { ...options.env, FIXTURE_VERSION: '0.160.2' } }), fault('unsupported_version', false));
   assert.equal(guards, 1);
+  await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+    env: { ...options.env, FIXTURE_STORAGE_HOME: other } }), fault('storage_binding_unverified', false));
+  assert.equal(guards, 1);
+  const allRows = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(allRows.filter(r => r.method === 'thread/queue/add').length, 1);
+  for (const row of allRows.filter(r => r.pid)) assert.throws(() => process.kill(row.pid, 0), (e: any) => e.code === 'ESRCH');
 });

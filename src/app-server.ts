@@ -8,7 +8,7 @@
 // effect receipt separately; it does not read other requests or thread history.
 // A fresh app-server process is never evidence that it owns an existing writer.
 import { spawn } from 'node:child_process';
-import { isAbsolute } from 'node:path';
+import { basename, isAbsolute, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
@@ -51,7 +51,8 @@ export async function connectAppServer(context: AppServerContext,
 
 export type AppServerFaultCode = 'invalid_scope' | 'invalid_input' | 'unsupported_transport' | 'deadline' |
   'owner_changed' | 'frame_invalid' | 'frame_limit' | 'traffic_limit' | 'notification_limit' | 'request_limit' |
-  'connection_closed' | 'write_failed' | 'remote_refused' | 'already_attempted' | 'unsupported_version' | 'effect_guard_failed';
+  'connection_closed' | 'write_failed' | 'remote_refused' | 'already_attempted' | 'unsupported_version' | 'effect_guard_failed' |
+  'storage_binding_unverified';
 export class AppServerFault extends Error {
   readonly fallbackEligible: boolean;
   constructor(readonly code: AppServerFaultCode, readonly attempted: boolean) {
@@ -67,7 +68,7 @@ export type MetadataOnlyTransport = {
   input: Readable; output: Writable;
   close: () => Promise<void>;
 };
-type NativeQueueTransport = Omit<MetadataOnlyTransport, 'qualification'> & { qualification: 'native_queue_only_stdio' };
+type NativeQueueTransport = Omit<MetadataOnlyTransport, 'qualification'> & { qualification: 'native_queue_only_stdio'; pid?: number };
 type ClientTransport = MetadataOnlyTransport | NativeQueueTransport;
 export type NativeQueuePort = Pick<AppServerPort, 'queueOnce' | 'close'>;
 export type NativeQueueOptions = {
@@ -447,6 +448,49 @@ async function beforeDeadline<T>(deadlineMs: number, operation: () => Promise<T>
     });
   });
 }
+async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, deadlineMs: number): Promise<void> {
+  if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
+  // Only the owned app-server PID is queried, never a session inventory/PID scan.
+  // An exact managed requirement can override both env and CLI sqlite_home.
+  // initialize.codexHome does not attest to effective SQLite storage; require
+  // actual opened state/queue paths before authorizing the root effect guard.
+  const result = await run('/usr/sbin/lsof', ['-a', '-p', String(pid), '-F0n'], {
+    timeout: Math.max(1, deadlineMs - performance.now()), limit: 65536,
+    env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LC_ALL: 'C', LANG: 'C' },
+  });
+  if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
+  if (result.code !== 0 || result.interrupted) throw new AppServerFault('storage_binding_unverified', false);
+  const required = ['state_5.sqlite', 'queue_1.sqlite'];
+  const names = result.stdout.split('\0').filter(field => field.startsWith('n')).map(field => field.slice(1))
+    .filter(name => required.some(file => [file, file + '-wal', file + '-shm'].includes(basename(name))))
+    .map(lsofFilename);
+  for (const file of required) {
+    const expected = join(home, file);
+    if (!names.includes(expected) || names.some(name =>
+      (basename(name) === file || basename(name) === file + '-wal' || basename(name) === file + '-shm') &&
+      ![expected, expected + '-wal', expected + '-shm'].includes(name))) throw new AppServerFault('storage_binding_unverified', false);
+  }
+}
+// lsof field output escapes backslashes and non-ASCII bytes even with NUL field
+// delimiters. Decode the protected system tool's filename representation, then
+// compare exact canonical paths; never accept a prefix/substring match.
+function lsofFilename(raw: string): string {
+  const bytes: number[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] !== '\\') {
+      const char = String.fromCodePoint(raw.codePointAt(i)!);
+      bytes.push(...Buffer.from(char)); i += char.length - 1; continue;
+    }
+    const next = raw[++i];
+    if (next === '\\') { bytes.push(92); continue; }
+    if (next === 'x' && /^[0-9a-f]{2}$/i.test(raw.slice(i + 1, i + 3))) {
+      bytes.push(parseInt(raw.slice(i + 1, i + 3), 16)); i += 2; continue;
+    }
+    throw new AppServerFault('storage_binding_unverified', false);
+  }
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(bytes)); }
+  catch { throw new AppServerFault('storage_binding_unverified', false); }
+}
 // Queue mechanics were verified only for the exact installed version/platform
 // in a network-denied synthetic home. This is not a live delivery/ACK claim.
 // Root integration owns generation, canonical home, storage and writer guards.
@@ -457,8 +501,11 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
   let original: AppServerScope;
   try { original = scopeValue(options.scope); } catch { throw new AppServerFault('invalid_scope', false); }
   if (!isAbsolute(options.binary) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(original.threadId)) throw new AppServerFault('invalid_input', false);
-  const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env), CODEX_HOME: original.codexHome };
-  delete env.CODEX_SQLITE_HOME;
+  // In 0.160.1 config.sqlite_home precedes CODEX_SQLITE_HOME. Pin BOTH env and
+  // a quoted CLI value so an ordinary config A->B->A load cannot redirect us.
+  // Managed policy can still supersede the CLI pin, hence the FD-path check.
+  const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env), CODEX_HOME: original.codexHome,
+    CODEX_SQLITE_HOME: original.codexHome };
   if (!await beforeDeadline(options.deadlineMs, () => options.verifyOwner(original), 'owner_changed')) throw new AppServerFault('owner_changed', false);
   const version = await run(options.binary, ['--version'], {
     env, timeout: Math.max(1, options.deadlineMs - performance.now()), limit: 4096,
@@ -468,10 +515,12 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
     throw new AppServerFault('unsupported_version', false);
   }
   const transport: NativeQueueTransport = { qualification: 'native_queue_only_stdio',
-    ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false'], env, original.codexHome) };
+    ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false',
+      '-c', `sqlite_home=${JSON.stringify(original.codexHome)}`], env, original.codexHome) };
   let client: NativeQueuePort | undefined;
   try {
     client = await BoundedAppServerClient.connectNativeQueueWire(original, transport, options.deadlineMs, options.verifyOwner, options.beforeEffect);
+    await verifyOwnedSqliteBinding(transport.pid, original.codexHome, options.deadlineMs);
     return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
   } finally { if (client) await client.close(); else await disposeTransport(transport); }
 }
@@ -500,7 +549,7 @@ function releaseOwned(pid: number | undefined): void {
 }
 // POSIX groups reap owned descendants. Only darwin-arm64 has native queue
 // mechanics qualification; Windows resource cleanup remains unqualified.
-function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Omit<MetadataOnlyTransport, 'qualification'> {
+function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Omit<MetadataOnlyTransport, 'qualification'> & { pid?: number } {
   if (process.platform === 'win32') throw new AppServerFault('unsupported_transport', false);
   const child = spawn(binary, args, { env, cwd, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   registerOwned(child.pid); child.once('spawn', () => registerOwned(child.pid));
@@ -515,7 +564,7 @@ function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv,
     if (stderrBytes > APP_SERVER_LIMITS.receivedBytes) { kill(); child.stdout.destroy(new Error('traffic_limit')); }
   });
   child.on('error', () => { child.stdout.destroy(new Error('connection_closed')); });
-  return { input: child.stdout, output: child.stdin,
+  return { pid: child.pid, input: child.stdout, output: child.stdin,
     close: () => new Promise(resolve => {
       if (closed) { resolve(); return; } closed = true; clearTimeout(lifetime); kill(); releaseOwned(child.pid);
       child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
