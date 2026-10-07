@@ -47,7 +47,10 @@ attestations; the package SLSA subject digest, source SHA, repository and
   integrities matched the pinned dependency set.
 - The self-locating `.cmd` wrapper returned the exact 0.3.1 banner in staging
   and after `Directory.Move` activation. Native Windows file locking passed.
-- Operator CLI over SSH: doctor `ok:true`, `diagnosticCompleted:true`,
+- Operator CLI over SSH used `--host`, `--remote-platform win32` and an
+  explicit `--remote-bin` pointing to the isolated wrapper. Both commands
+  passed the same-version `--version` preflight before `--stdio-request`.
+  Doctor returned `ok:true`, `diagnosticCompleted:true`,
   `ready:false`, exit 0; nonexistent-target send dry-run
   `no_reachable_target`, `status:refused`, `submitted:false`, exit 1. Local
   wrapper dry-run exit 2 is separate evidence. No actual agent message sent.
@@ -78,7 +81,9 @@ performed only after checking harness ownership and the saved fixture inventory.
 The test prefix was removed; cleanup reported the existing Python launcher
 unchanged. A separate post-cleanup SSH read verified prefix absence and the
 same launcher SHA-256. Dedicated SSH authorization remains separate from
-runtime installation; no private key or password is included in this record. An additional Node 22.23.3 x64 (ABI 127) direct-CLI banner and native-lock
+runtime installation; no private key or password is included in this record.
+
+An additional Node 22.23.3 x64 (ABI 127) direct-CLI banner and native-lock
 smoke passed against the same installed published package. The Node ZIP
 matched the HTTPS-served official SHASUMS256; no GPG-signature check was
 performed. This was not a second Node-22 installation/identity or recovery
@@ -87,8 +92,9 @@ runtime-identity enforcement remain outside this qualification. The earlier
 Linux run and its untested newer recovery rules remain historical evidence.
 
 
-This dated record covers the 0.3.1 source candidate and public 0.3.0, 0.2.1 and 0.2.0 verification, historical 0.1.0
-public verification, candidate checks and live-agent observations. Older sections
+This dated record covers the 0.3.2 preparation checkpoint; public 0.3.1,
+0.3.0, 0.2.1 and 0.2.0 verification; historical 0.1.0 public verification;
+earlier candidate checks and live-agent observations. Older sections
 describe their stated checkpoint rather than current feature availability.
 It does not claim complete Python parity.
 Python reference: v1.0.2, commit `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.

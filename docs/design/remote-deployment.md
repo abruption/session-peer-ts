@@ -804,15 +804,16 @@ the host nor the account was disposable. It does not qualify Windows-client
   unimplemented.
 
 F5 now has bounded real-destination evidence on Linux x86_64 and Windows
-10 x64. The 2026-10-07 Windows checkpoint passed the primary offline
-provisioning workflow and operator SSH checks with an administrator account,
-PowerShell 5.1 and Node 24.16.0, plus 31 native storage/recovery fixtures.
-Node 22 has direct-CLI/native-lock smoke evidence only. Issue #23's last
-criterion remains **partially validated**: current recovery rules have not
-been requalified on Linux, and the remaining account/runtime/architecture
-and concurrency cells are untested. Local stubs do not replace destination
-evidence. These results do not qualify a shipped deploy helper or
-Windows-client jump.
+10 x64. The 2026-10-07 Windows checkpoint used **published 0.3.1** with an
+administrator account, PowerShell 5.1 and Node 24.16.0. The primary offline
+provisioning workflow and operator SSH checks (doctor and refused dry-run;
+no message delivery) passed, plus 31 native storage/local-wrapper fixtures
+whose SSH evidence is limited to the primary install. **On Windows**, Node
+22 has direct-CLI/native-lock smoke evidence only. Issue #23's last criterion
+remains **partially validated**: current recovery rules have not been
+requalified on Linux, and the other cells listed under "Not validated" above
+remain untested. Local stubs do not replace destination evidence. These
+results do not qualify a shipped deploy helper or Windows-client jump.
 
 ## Follow-ups
 
