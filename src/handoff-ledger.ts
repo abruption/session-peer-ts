@@ -215,6 +215,21 @@ export class HandoffLedger {
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') context = 'ledger_missing'; }
     return { reason: 'handoff_history_unavailable', handoffQuery: { schemaVersion: 1, correlationId: id, status: 'unknown', context, retry: { allowed: false, reason: 'history_unavailable' } } };
   }
+  private selectWait(item: RecordIntent, operationId?: string): StoredWait {
+    if (operationId !== undefined && !canonicalId(operationId)) fail('invalid_wait_operation_id', 2);
+    const wait = operationId === undefined ? item.waits.at(-1) : item.waits.find(value => value.public.operationId === operationId);
+    if (!wait) fail('handoff_wait_unknown');
+    return wait;
+  }
+  private operationSnapshot(item: RecordIntent, wait: StoredWait): Handoff {
+    const h = this.snapshot(item); h.wait = structuredClone(wait.public);
+    // Actions from the latest wait cannot be projected onto a different operation.
+    h.nextActions = ['reconcile']; return validateHandoff(h);
+  }
+  operationStatus(id: string, operationId: string): Handoff {
+    const data = this.read(), item = this.usable(data, id);
+    return this.operationSnapshot(item, this.selectWait(item, operationId));
+  }
   prepare(binding: HandoffBinding, options: PrepareOptions = {}): Handoff {
     binding = checkBinding(binding);
     if (options.dryRun && (options.requestAck || options.observeDelivery || (options.waitFor && options.waitFor !== 'none'))) fail('incompatible_handoff_dry_run', 2);
@@ -345,6 +360,19 @@ export class HandoffLedger {
       h.nextActions = ['reconcile']; this.write(data); return this.snapshot(item);
     });
   }
+  recordObservationFailure(id: string, originalBinding: HandoffBinding, status: 'unsupported' | 'failed', operationId?: string): Handoff {
+    originalBinding = checkBinding(originalBinding);
+    if (!['unsupported','failed'].includes(status)) fail('invalid_handoff_observation');
+    return this.lock(() => {
+      const data = this.read(), item = this.usable(data,id), h = item.handoff;
+      if (!sameBinding(item.binding,originalBinding) || !item.deliverySupported || h.submission.status !== 'submitted') fail('handoff_observation_unqualified');
+      const wait = operationId !== undefined ? this.selectWait(item, operationId) : item.waits.at(-1);
+      if (!h.observation.injectionObserved) h.observation = {status,injectionObserved:false};
+      if(wait?.public.status === 'pending') { wait.public.status = status; wait.public.reason = status === 'unsupported' ? 'evidence_unsupported' : 'evidence_failed'; }
+      if(item.waits.length) h.wait=structuredClone(item.waits.at(-1)!.public);
+      h.nextActions=['reconcile']; this.write(data); return operationId !== undefined ? this.operationSnapshot(item,wait!) : this.snapshot(item);
+    });
+  }
   private addWait(item: RecordIntent, goal: Exclude<WaitFor, 'none'>, budget: HandoffBudget): void {
     if (item.waits.length >= HANDOFF_LIMITS.waits) fail('handoff_wait_quota');
     item.handoff.wait = { for: goal, status: 'pending', operationId: randomUUID(), deadlineAtUtcMs: budget.deadlineAtUtcMs };
@@ -369,32 +397,17 @@ export class HandoffLedger {
       this.write(data); return this.snapshot(item);
     });
   }
-  private selectWait(item: RecordIntent, operationId?: string): StoredWait {
-    if (operationId !== undefined && !canonicalId(operationId)) fail('invalid_wait_operation_id', 2);
-    const wait = operationId === undefined ? item.waits.at(-1) : item.waits.find(value => value.public.operationId === operationId);
-    if (!wait) fail('handoff_wait_unknown');
-    return wait;
-  }
-  private operationSnapshot(item: RecordIntent, wait: StoredWait): Handoff {
-    const h = this.snapshot(item); h.wait = structuredClone(wait.public);
-    // Actions of the newest operation cannot authorize an older operation.
-    h.nextActions = ['reconcile']; return validateHandoff(h);
-  }
-  operationStatus(id: string, operationId: string): Handoff {
-    const data = this.read(), item = this.usable(data, id);
-    return this.operationSnapshot(item, this.selectWait(item, operationId));
-  }
   recordWait(id: string, status: Exclude<WaitStatus, 'pending' | 'not_requested'>, reason?: WaitReason, operationId?: string): Handoff {
     return this.lock(() => {
-      const data = this.read(), item = this.usable(data, id), wait = this.selectWait(item, operationId);
+      const data = this.read(), item = this.usable(data, id), wait = this.selectWait(item,operationId);
       if (wait.public.status !== 'pending') fail('handoff_wait_terminal');
       if (status === 'timed_out_unknown' && (wait.clockId !== this.clockId || this.clock.monotonic() < wait.cutoff)) fail('receipt_order_unprovable');
       wait.public.status = status; if (reason) wait.public.reason = reason;
       if (status === 'timed_out_unknown' && !item.handoff.observation.injectionObserved && item.handoff.ack.status !== 'acknowledged') item.handoff.state = 'timed_out_unknown';
       item.handoff.nextActions = ['reconcile'];
       item.handoff.wait = structuredClone(item.waits.at(-1)!.public);
-      validateHandoff({ ...item.handoff, wait: wait.public });
-      this.write(data); return operationId !== undefined ? this.operationSnapshot(item, wait) : this.snapshot(item);
+      validateHandoff({...item.handoff,wait:wait.public});
+      this.write(data); return operationId !== undefined ? this.operationSnapshot(item,wait) : this.snapshot(item);
     });
   }
   private commitAck(item: RecordIntent, assurance: 'operator_confirmed' | 'token_possession'): void {
