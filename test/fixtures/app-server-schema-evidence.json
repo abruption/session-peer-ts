@@ -1,0 +1,60 @@
+{
+  "version": "0.160.1",
+  "platform": "darwin-arm64",
+  "qualification": "generated_schema_only",
+  "command": "codex app-server generate-json-schema --experimental --out <isolated temporary directory>",
+  "officialDocs": "https://learn.chatgpt.com/docs/app-server",
+  "productionRouteQualified": false,
+  "liveExperimentPerformed": false,
+  "methods": {
+    "queueAdd": {
+      "schemaPath": "v2/ThreadQueueAddResponse.json",
+      "responseSha256": "c11b9772788427b19c9f9decf0765e2b41cbdead1aa9c3d39f42fdd70b339314",
+      "bodyPath": [
+        "queuedSubmission",
+        "input"
+      ],
+      "paramsSha256": "60f25b7d3e3357c215bef9d2fe7047200f545e030dca9e00527ac0620cd0c88f"
+    },
+    "queueList": {
+      "schemaPath": "v2/ThreadQueueListResponse.json",
+      "responseSha256": "be4e0bfa6fc776101f96582543605d2eff6186309a08903203512b99c5005926",
+      "bodyPath": [
+        "data",
+        "input"
+      ]
+    },
+    "itemStarted": {
+      "schemaPath": "v2/ItemStartedNotification.json",
+      "responseSha256": "7574788d2a352747f50d44be3ef649011cb8de8069da4c655faff14d0aee32c4",
+      "bodyPath": [
+        "item",
+        "content"
+      ]
+    },
+    "turnCompleted": {
+      "schemaPath": "v2/TurnCompletedNotification.json",
+      "responseSha256": "016870158603b0f84bd9f8f65f927161c9fd5128e5ec632087616462dc44e085",
+      "bodyPath": [
+        "turn",
+        "items"
+      ]
+    }
+  },
+  "reason": "Queue/list and injection/turn observation APIs return bodies. Queue/add echoes its own effect input, so a separately verified queue-only route is a candidate, not yet qualified. No metadata-only owner observation route is qualified. Fixture RPC methods session-peer/metadata/* are not native Codex methods.",
+  "officialSourceCommit": "d27764b82f7118f674371e6d6e76271d9d606edb",
+  "queueOnlyCandidate": {
+    "qualified": false,
+    "ownEffectInputEchoOnly": true,
+    "savedThreadReadIncludesHistory": false,
+    "threadStartOrResumeInQueueAdd": false,
+    "notificationOptOutBeforeTransport": true,
+    "nativeFixturePending": true,
+    "sources": {
+      "codex-rs/app-server/src/request_processors/thread_queue_processor.rs": "c5b6119ad7a5416b4b7b850e15a1f6c0024207975ff8dfa374578cae178698a4",
+      "codex-rs/ext/queue/src/service.rs": "110253b6c2b74de1ad8610b347ac331479d4f09873a1c8f9793a6921438d6ae1",
+      "codex-rs/app-server/src/request_processors/initialize_processor.rs": "4535560b07ab10d1538acd461560a55c1bdf0c9b4049e72775d6b770421f117f",
+      "codex-rs/app-server/src/transport.rs": "5e88d3210a738216a1c8e1dd678a947a8991a486b729685e4089a6a36aa769c8"
+    }
+  }
+}
