@@ -33,9 +33,14 @@ for (const file of locales) {
     ...locales.map(name => `](${name})`)]) {
     assert.ok(content.includes(token), `${file}: missing contract token ${token}`);
   }
+  const topLevelHeadings = file === 'README.ko.md'
+    ? ['시연', '빠른 시작', '문서', '라이선스', '지원 및 보안']
+    : ['Demo', 'Quick Start', 'Docs', 'License', 'Support and security'];
+  const quickStartHeadings = file === 'README.ko.md' ? ['설치', '업데이트'] : ['Install', 'Update'];
   assert.deepEqual([...content.matchAll(/^## (.+)$/gm)].map(match => match[1]),
-    ['Demo', 'Quick Start', 'Docs', 'License', 'Support and security'], `${file}: entry-page structure`);
-  assert.deepEqual([...content.matchAll(/^### (.+)$/gm)].map(match => match[1]), ['Install', 'Update']);
+    topLevelHeadings, `${file}: entry-page structure`);
+  assert.deepEqual([...content.matchAll(/^### (.+)$/gm)].map(match => match[1]), quickStartHeadings,
+    `${file}: quick-start structure`);
 }
 for (const file of guides) {
   const content = read(file);
@@ -44,6 +49,10 @@ for (const file of guides) {
     'consumptionConfirmed', 'submitted:null', '](../PARITY.md)', '](../VALIDATION.md)']) {
     assert.ok(content.includes(token), `${file}: missing guide contract token ${token}`);
   }
+}
+for (const anchor of ['020-cli-사용성', 'cli-usability-in-020']) {
+  assert.ok(read('docs/guide.ko.md').includes(`<a id="${anchor}"></a>`),
+    `docs/guide.ko.md: missing stable CLI anchor ${anchor}`);
 }
 function anchors(content) {
   const ids = new Set([...content.matchAll(/<a id="([^"]+)"/g)].map(match => match[1]));
