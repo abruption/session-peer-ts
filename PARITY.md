@@ -866,3 +866,11 @@ Generated schema hashes and the fixed official source commit are recorded in
 `test/fixtures/app-server-schema-evidence.json`; tests use hermetic streams and
 owned Node children. These facts do not re-pin the shipped Python runtime parity
 reference or implement automatic ACK.
+
+
+Storage binding is checked on the owned queue transport before its effect:
+env/CLI pins plus exact opened state/queue paths. Managed-policy redirection or
+missing direct-native PID proof refuses with zero queue RPC. An additional
+network-denied initialization-only fixture verified config/CLI/env precedence
+with zero queued rows and no model/thread effect. Bootstrap policy files are
+not promised unchanged by the native tool; no managed requirement is bypassed.

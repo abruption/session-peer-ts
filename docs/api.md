@@ -90,3 +90,14 @@ queue transport, not an inferred existing session owner. Possible write marks
 outcome uncertain even when the subsequent response is malformed. No automatic
 fallback follows a possible effect. Fixture-only metadata ports are not native
 observation qualification. See [source evidence](../PARITY.md#unreleased-bounded-app-server-foundation--71).
+
+
+The queue-only SDK pins both environment and CLI SQLite home, then verifies
+opened state/queue DB paths on its OWN native app-server PID before authorizing
+the effect. Config precedes the environment and exact managed requirements can
+supersede the CLI in 0.160.1, so initialize's home echo alone is insufficient.
+Missing/mismatched descriptor proof refuses without queue/fallback. Direct
+native binaries are qualified; launcher wrappers without this PID/storage proof
+remain unsupported. Native bootstrap may create state/cache files according to
+managed policy before binding refusal; zero queue is the guarantee, not zero
+bootstrap filesystem activity. Observers still open only read-only warm stores.
