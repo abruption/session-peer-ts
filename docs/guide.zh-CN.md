@@ -302,3 +302,8 @@ postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能�
 开发中的 0.4.0 源码加入 opt-in private POSIX handoff ledger。已发布的 0.3.1 不含这些命令。所需证据通道 unsupported 时在提交前拒绝；best-effort 提交并不证明 ACK。自动 receipt bootstrap、Windows ledger 和 SSH handoff 尚不支持。
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+
+
+源码专用的 `--wait-for delivered` 限于 Codex 0.160.1/macOS arm64 与已有 metadata store。不返回正文，wait 失败仍保留 queued/submitted 事实。每个 wait 的 operation ID 和终态独立。合成集成测试不是 live ACK 证据；SSH/Windows handoff 与自动 ACK 仍未支持。
+
+[Observation](api.md#unreleased-local-delivery-observation--72)

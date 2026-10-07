@@ -105,7 +105,7 @@ export class HandoffLedger {
         for (const wait of item.waits) {
           closed(wait, ['public', 'clockId', 'cutoff']);
           if (!canonicalId(wait.clockId) || typeof wait.cutoff !== 'number' || !Number.isFinite(wait.cutoff)) fail();
-          validateHandoff({ ...h, wait: wait.public });
+          validateHandoff({ ...h, wait: wait.public, nextActions: ['reconcile'] });
         }
       }
       return data as Ledger;
@@ -165,6 +165,21 @@ export class HandoffLedger {
       context = 'id_unknown';
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') context = 'ledger_missing'; }
     return { reason: 'handoff_history_unavailable', handoffQuery: { schemaVersion: 1, correlationId: id, status: 'unknown', context, retry: { allowed: false, reason: 'history_unavailable' } } };
+  }
+  private selectWait(item: RecordIntent, operationId?: string): StoredWait {
+    if (operationId !== undefined && !canonicalId(operationId)) fail('invalid_wait_operation_id', 2);
+    const wait = operationId === undefined ? item.waits.at(-1) : item.waits.find(value => value.public.operationId === operationId);
+    if (!wait) fail('handoff_wait_unknown');
+    return wait;
+  }
+  private operationSnapshot(item: RecordIntent, wait: StoredWait): Handoff {
+    const h = this.snapshot(item); h.wait = structuredClone(wait.public);
+    // Actions from the latest wait cannot be projected onto a different operation.
+    h.nextActions = ['reconcile']; return validateHandoff(h);
+  }
+  operationStatus(id: string, operationId: string): Handoff {
+    const data = this.read(), item = this.usable(data, id);
+    return this.operationSnapshot(item, this.selectWait(item, operationId));
   }
   prepare(binding: HandoffBinding, options: PrepareOptions = {}): Handoff {
     binding = checkBinding(binding);
@@ -284,13 +299,26 @@ export class HandoffLedger {
       h.observation = { status: 'observed', injectionObserved: true, clientUserMessageId: observation.clientUserMessageId,
         ...(observation.turn ? { turn: structuredClone(observation.turn) } : h.observation.turn ? { turn: h.observation.turn } : {}) };
       if (h.ack.status !== 'acknowledged') h.state = 'delivered';
-      const latest = item.waits.at(-1);
-      if (latest?.public.status === 'pending' && latest.public.for === 'delivered') {
-        if (latest.clockId !== this.clockId) { latest.public.status = 'failed'; latest.public.reason = 'history_unavailable'; }
-        else latest.public.status = this.clock.monotonic() < latest.cutoff ? 'satisfied' : 'timed_out_unknown';
-        h.wait = structuredClone(latest.public);
+      for (const wait of item.waits) {
+        if (wait.public.status !== 'pending' || wait.public.for !== 'delivered') continue;
+        if (wait.clockId !== this.clockId) { wait.public.status = 'failed'; wait.public.reason = 'history_unavailable'; }
+        else wait.public.status = this.clock.monotonic() < wait.cutoff ? 'satisfied' : 'timed_out_unknown';
       }
+      if (item.waits.length) h.wait = structuredClone(item.waits.at(-1)!.public);
       h.nextActions = ['reconcile']; this.write(data); return this.snapshot(item);
+    });
+  }
+  recordObservationFailure(id: string, originalBinding: HandoffBinding, status: 'unsupported' | 'failed', operationId?: string): Handoff {
+    originalBinding = checkBinding(originalBinding);
+    if (!['unsupported','failed'].includes(status)) fail('invalid_handoff_observation');
+    return this.lock(() => {
+      const data = this.read(), item = this.usable(data,id), h = item.handoff;
+      if (!sameBinding(item.binding,originalBinding) || !item.deliverySupported || h.submission.status !== 'submitted') fail('handoff_observation_unqualified');
+      const wait = operationId !== undefined ? this.selectWait(item, operationId) : item.waits.at(-1);
+      if (!h.observation.injectionObserved) h.observation = {status,injectionObserved:false};
+      if(wait?.public.status === 'pending') { wait.public.status = status; wait.public.reason = status === 'unsupported' ? 'evidence_unsupported' : 'evidence_failed'; }
+      if(item.waits.length) h.wait=structuredClone(item.waits.at(-1)!.public);
+      h.nextActions=['reconcile']; this.write(data); return operationId !== undefined ? this.operationSnapshot(item,wait!) : this.snapshot(item);
     });
   }
   private addWait(item: RecordIntent, goal: Exclude<WaitFor, 'none'>, budget: HandoffBudget): void {
@@ -317,16 +345,17 @@ export class HandoffLedger {
       this.write(data); return this.snapshot(item);
     });
   }
-  recordWait(id: string, status: Exclude<WaitStatus, 'pending' | 'not_requested'>, reason?: WaitReason): Handoff {
+  recordWait(id: string, status: Exclude<WaitStatus, 'pending' | 'not_requested'>, reason?: WaitReason, operationId?: string): Handoff {
     return this.lock(() => {
-      const data = this.read(), item = this.usable(data, id), wait = item.waits.at(-1);
-      if (!wait || wait.public.status !== 'pending') fail('handoff_wait_terminal');
+      const data = this.read(), item = this.usable(data, id), wait = this.selectWait(item,operationId);
+      if (wait.public.status !== 'pending') fail('handoff_wait_terminal');
       if (status === 'timed_out_unknown' && (wait.clockId !== this.clockId || this.clock.monotonic() < wait.cutoff)) fail('receipt_order_unprovable');
-      item.handoff.wait.status = status; if (reason) item.handoff.wait.reason = reason;
-      if (status === 'timed_out_unknown') item.handoff.state = 'timed_out_unknown';
+      wait.public.status = status; if (reason) wait.public.reason = reason;
+      if (status === 'timed_out_unknown' && !item.handoff.observation.injectionObserved && item.handoff.ack.status !== 'acknowledged') item.handoff.state = 'timed_out_unknown';
       item.handoff.nextActions = ['reconcile'];
-      wait.public = structuredClone(item.handoff.wait); validateHandoff(item.handoff);
-      this.write(data); return this.snapshot(item);
+      item.handoff.wait = structuredClone(item.waits.at(-1)!.public);
+      validateHandoff({...item.handoff,wait:wait.public});
+      this.write(data); return operationId !== undefined ? this.operationSnapshot(item,wait) : this.snapshot(item);
     });
   }
   private commitAck(item: RecordIntent, assurance: 'operator_confirmed' | 'token_possession'): void {

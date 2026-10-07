@@ -336,6 +336,49 @@ test('wait quota exhaustion and insufficient new-wait budget preserve native sub
   assert.throws(() => f.ledger.beginWait(h.correlationId, 'acknowledged'), /handoff_wait_quota/);
   assert.equal(handoff(f.ledger, h.correlationId).state, 'submitted');
 });
+test('an original wait can stop after another process adds a newer terminal wait', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding, { waitFor:'delivered',observationSupported:true }); submit(f,h);
+  const originalId=h.wait.operationId!;
+  const other=new HandoffLedger(f.ledger.path,{clock:f.clock});
+  const newer=other.beginWait(h.correlationId,'delivered',new HandoffBudget(6,f.clock));
+  assert.equal(newer.wait.status,'unsupported');
+  const stopped=f.ledger.recordWait(h.correlationId,'stopped','stopped_by_operator',originalId);
+  assert.equal(stopped.wait.operationId,originalId); assert.equal(stopped.wait.status,'stopped');
+  assert.equal(f.ledger.operationStatus(h.correlationId,newer.wait.operationId!).wait.status,'unsupported');
+  assert.equal(handoff(f.ledger,h.correlationId).wait.operationId,newer.wait.operationId);
+  assert.throws(()=>f.ledger.recordWait(h.correlationId,'timed_out_unknown',undefined,originalId),/handoff_wait_terminal/);
+});
+test('delivery classifies every same-clock pending operation by its own original cutoff', posix, t => {
+  const f=fixtureLedger(t);f.ledger.init();const h=f.ledger.prepare(f.binding,{waitFor:'delivered',observationSupported:true,budget:new HandoffBudget(6,f.clock)});submit(f,h);
+  const newer=f.ledger.beginWait(h.correlationId,'delivered',new HandoffBudget(7,f.clock));f.advance(1000);
+  f.ledger.recordObservation(h.correlationId,{clientUserMessageId:h.correlationId,injectionObserved:true},f.binding);
+  assert.equal(f.ledger.operationStatus(h.correlationId,h.wait.operationId!).wait.status,'timed_out_unknown');
+  assert.equal(f.ledger.operationStatus(h.correlationId,newer.wait.operationId!).wait.status,'satisfied');
+  assert.equal(handoff(f.ledger,h.correlationId).wait.operationId,newer.wait.operationId);
+});
+test('targeted observation failure preserves a newer operation and rejects unknown IDs without writes', posix, t => {
+  const f=fixtureLedger(t);f.ledger.init();const h=f.ledger.prepare(f.binding,{waitFor:'delivered',observationSupported:true});submit(f,h);
+  const newer=f.ledger.beginWait(h.correlationId,'delivered',new HandoffBudget(6,f.clock));
+  const failed=f.ledger.recordObservationFailure(h.correlationId,f.binding,'failed',h.wait.operationId);
+  assert.equal(failed.wait.status,'failed');assert.equal(failed.wait.operationId,h.wait.operationId);
+  assert.equal(f.ledger.operationStatus(h.correlationId,newer.wait.operationId!).wait.status,'pending');
+  const file=join(f.ledger.path,'ledger.json'),before=readFileSync(file,'utf8'),unknown=randomUUID();
+  assert.throws(()=>f.ledger.operationStatus(h.correlationId,unknown),/handoff_wait_unknown/);
+  assert.throws(()=>f.ledger.recordWait(h.correlationId,'stopped','stopped_by_operator',unknown),/handoff_wait_unknown/);
+  assert.throws(()=>f.ledger.recordObservationFailure(h.correlationId,f.binding,'unsupported',unknown),/handoff_wait_unknown/);
+  assert.equal(readFileSync(file,'utf8'),before);
+});
+test('delivery leaves terminal operations intact and does not guess a different clock deadline', posix, t => {
+  const f=fixtureLedger(t);f.ledger.init();const h=f.ledger.prepare(f.binding,{waitFor:'delivered',observationSupported:true});submit(f,h);
+  const stopped=f.ledger.recordWait(h.correlationId,'stopped','stopped_by_operator',h.wait.operationId);
+  const pending=f.ledger.beginWait(h.correlationId,'delivered',new HandoffBudget(6,f.clock));
+  const restarted=new HandoffLedger(f.ledger.path,{clock:{monotonic:()=>0,utc:f.clock.utc}});
+  restarted.recordObservation(h.correlationId,{clientUserMessageId:h.correlationId,injectionObserved:true},f.binding);
+  assert.deepEqual(restarted.operationStatus(h.correlationId,h.wait.operationId!).wait,stopped.wait);
+  const foreign=restarted.operationStatus(h.correlationId,pending.wait.operationId!);
+  assert.equal(foreign.wait.status,'failed');assert.equal(foreign.wait.reason,'history_unavailable');
+  assert.equal(foreign.observation.injectionObserved,true);assert.equal(foreign.ack.status,'not_requested');
+});
 test('expired details compact to an epoch-bound fence, never restoring send or receipt authority', posix, t => {
   const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
   const capability = f.ledger.mintCapability(h.correlationId, bootstrap); submit(f, h);

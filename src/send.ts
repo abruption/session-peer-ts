@@ -13,6 +13,7 @@ export type SendHooks = {
   resolved: (context: SendContext, snapshot: Record<string, unknown>) => Promise<string | void> | string | void;
   beforeEffect?: () => Promise<void> | void;
   timeoutMs?: () => number;
+  submitCodex?: (context: SendContext, message: string) => Promise<{ queueId?: string; clientUserMessageId: string }>;
 };
 export type SendOptions = { to: string; home?: string; codexBin?: string; message: string; dryRun?: boolean; allowInactive?: boolean; hooks?: SendHooks };
 export class CodexUnknownOutcome extends UnknownOutcome {
@@ -66,6 +67,7 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     if (storage !== 'default') throw new HomeRefusal(storage === 'configured' ? 'unsupported_codex_sqlite_home' : 'codex_config_unreadable', selection.resolution);
     const result = { ...base, target: { agent: 'codex', id }, codexHome: home,
       status: options.dryRun ? 'validated' : 'queued', codexHomeResolution: selection.resolution };
+    let context: SendContext | undefined;
     if (options.hooks) {
       // Bind the identity already captured by selection, not a second sample
       // which could belong to a different incarnation between A -> B -> A.
@@ -74,8 +76,8 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
       const live = selection.resolution.candidates.find(item => item.codexHome === home)?.activity === 'live_writer';
       if (!identity) throw new HomeRefusal('active_writer_unverified', selection.resolution);
       const generation = live ? createHash('sha256').update(identity).digest('hex') : null;
-      const body = await options.hooks.resolved({ agent: 'codex', target: id, home, generation,
-        ...(generation ? { writerIdentity: generation } : {}) }, result);
+      context = { agent: 'codex', target: id, home, generation, ...(generation ? { writerIdentity: generation } : {}) };
+      const body = await options.hooks.resolved(context, result);
       if (body !== undefined) { checkMessage(body, true); options = { ...options, message: body }; result.chars = [...body].length; }
     }
     if (options.dryRun) return result;
@@ -87,6 +89,10 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     // `--message=` keeps a body starting with `-` from being parsed as an option.
     // An inherited CODEX_SQLITE_HOME would queue outside the validated home.
     // Windows environment names are case-insensitive.
+    if (options.hooks?.submitCodex) {
+      const receipt = await options.hooks.submitCodex(context!, options.message);
+      return { ...result, ...(receipt.queueId === undefined ? {} : {queueId:receipt.queueId}) };
+    }
     const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'CODEX_SQLITE_HOME'));
     await options.hooks?.beforeEffect?.();
     const done = await run(binary, ['queue', '--thread', id, `--message=${options.message}`],

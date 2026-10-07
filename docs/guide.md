@@ -562,3 +562,8 @@ never enabled automatically. See [explicit activation and collisions](shorthand.
 Unreleased 0.4.0 source adds an opt-in private POSIX handoff ledger. Published 0.3.1 has no handoff commands. Required unsupported evidence refuses before submission; best-effort unsupported evidence never proves ACK. Automated receipt bootstrap, Windows ledger and SSH handoff remain unsupported.
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+
+
+The source-only `--wait-for delivered` path is narrowly qualified for Codex 0.160.1/macOS arm64 queue mechanics and a warm body-free metadata projection. Failed waits retain queued/submitted facts; every wait has its own immutable operation ID. Synthetic integration is not live ACK proof. SSH/Windows handoff and automatic ACK remain unsupported.
+
+[Observation](api.md#unreleased-local-delivery-observation--72)

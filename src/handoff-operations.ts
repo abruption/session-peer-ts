@@ -5,9 +5,12 @@ import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync } from 'node:fs';
 import { HandoffLedger, payloadDigest, type HandoffBinding } from './handoff-ledger.js';
 import { canonicalId, HANDOFF_LIMITS, HandoffBudget, parseWaitTimeout, type Handoff, type WaitFor } from './handoff.js';
-import { checkMessage, send, type SendContext, type SendOptions } from './send.js';
+import { fileURLToPath } from 'node:url';
+import { nativeQueueCapability, nativeQueueOnce, AppServerFault, type AppServerScope } from './app-server.js';
+import { metadataCapability, observeMetadata, type MetadataScope } from './metadata-observation.js';
+import { checkMessage, queueId, send, type SendContext, type SendOptions } from './send.js';
 import { Refusal } from './discovery.js';
-import { UnknownOutcome } from './process.js';
+import { executable, run, UnknownOutcome } from './process.js';
 
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
@@ -53,51 +56,108 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
   const ledger = new HandoffLedger(handoffOptions.ledgerPath ?? ledgerPath());
   const budget = handoffOptions.budget ?? new HandoffBudget(handoffOptions.seconds ?? 30);
   let handoff: Handoff | undefined, snapshot: Record<string, unknown> | undefined;
+  let scope: MetadataScope | undefined, queueScope: AppServerScope | undefined, deliverySupported = false, stopped = false, operationId: string | undefined;
   let original: HandoffBinding | undefined, fenced = false, knownNative: Record<string, unknown> | undefined;
+  const ownWait = () => { if (handoff && operationId) handoff.wait = ledger.operationStatus(handoff.correlationId,operationId).wait; };
+  const stop = () => { stopped = true; if (handoff?.wait.status === 'pending') { try { handoff = ledger.recordWait(handoff.correlationId, 'stopped', 'stopped_by_operator', operationId); ownWait(); } catch { /* No fabricated terminal evidence after persistence failure. */ } } };
+  const authorize = () => { if (stopped) throw new Refusal('stopped_by_operator', 130); budget.beforeEffect(); handoff = ledger.commitEffect(handoff!.correlationId, original!, budget); fenced = true; };
+  const verifyOwner = async (target: MetadataScope, signal?: AbortSignal) => {
+    if (stopped || signal?.aborted || budget.observationRemainingMs() < 1) return false;
+    const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
+    const result = await run(process.execPath, [worker, target.home, target.threadId], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
+    if (signal?.aborted || stopped || result.code !== 0 || result.interrupted) return false;
+    try { const value = JSON.parse(result.stdout); return value.schemaVersion === 1 && value.ok === true && Object.keys(value).every(key => ['schemaVersion','ok','generation'].includes(key)) && /^[0-9a-f]{64}$/.test(value.generation) && value.generation === target.generation; } catch { return false; }
+  };
   const finish = (value: Record<string, unknown>, exitCode: number): OperationResult => ({ value: { ...value, ...(handoff ? { handoff } : {}) }, exitCode });
   try {
     const value = await send({ ...options, hooks: {
-      resolved(context, native) {
+      async resolved(context, native) {
         snapshot = native; original = binding(context, handoffOptions.payload ?? options.message);
         if (Buffer.byteLength(JSON.stringify(native)) + HANDOFF_LIMITS.publicFrame + (handoffOptions.resultOverhead ?? 1024) > HANDOFF_LIMITS.outerFrame) throw new Refusal('handoff_result_too_large',1);
         // Account for the fixed correlation envelope before allocating an intent.
         checkMessage(correlationEnvelope(options.message, '00000000-0000-4000-8000-000000000000'), context.agent === 'codex');
+        const wantsDelivery = handoffOptions.observeDelivery || handoffOptions.waitFor === 'delivered';
+        if (wantsDelivery && context.agent === 'codex' && context.home && context.generation && budget.observationRemainingMs() > 0) {
+          scope = { home: context.home, threadId: context.target, generation: context.generation };
+          queueScope = { codexHome: context.home, threadId: context.target, generation: context.generation, ownerIdentity: context.writerIdentity! };
+          const version = await run(executable(options.codexBin ?? 'codex'), ['--version'], { timeout: Math.min(1000, budget.observationRemainingMs()), limit: 4096 });
+          const nativeVersion = !version.interrupted && version.code === 0 ? version.stdout.trim().replace(/^codex-cli /, '') : '';
+          if (nativeQueueCapability({version:nativeVersion,platform:`${process.platform}-${process.arch}`,scope:queueScope}).queueSupported) deliverySupported = (await metadataCapability(scope, nativeVersion, budget, verifyOwner)).supported;
+        }
         handoff = ledger.prepare(original, { correlationId: handoffOptions.correlationId,
           requestAck: handoffOptions.requestAck || handoffOptions.waitFor === 'acknowledged',
           observeDelivery: handoffOptions.observeDelivery || handoffOptions.waitFor === 'delivered',
-          waitFor: handoffOptions.waitFor ?? 'none', budget, dryRun: options.dryRun });
+          waitFor: handoffOptions.waitFor ?? 'none', budget, dryRun: options.dryRun, observationSupported: deliverySupported });
+        operationId = handoff.wait.operationId;
+        if (handoffOptions.waitFor && handoff.wait.status === 'pending') process.on('SIGINT', stop);
         if (handoff.state === 'refused') throw new BeforeEffectRefused();
         return correlationEnvelope(options.message, handoff.correlationId);
       },
-      beforeEffect() { budget.beforeEffect(); handoff = ledger.commitEffect(handoff!.correlationId, original!, budget); fenced = true; },
+      beforeEffect: authorize,
+      async submitCodex(context, message) {
+        if (!deliverySupported) {
+          // Best-effort unsupported is chosen before ANY app-server attempt.
+          authorize();
+          const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'CODEX_SQLITE_HOME'));
+          const done = await run(executable(options.codexBin ?? 'codex'), ['queue','--thread',context.target,`--message=${message}`], {env:{...inherited,CODEX_HOME:context.home},timeout:Math.max(1,budget.observationRemainingMs())});
+          if (!done.spawned) throw new Refusal('native_spawn_failed',1);
+          if (done.interrupted || done.code !== 0) throw new UnknownOutcome();
+          const receipt = queueId(done.stdout,context.target);
+          return {queueId:receipt,clientUserMessageId:handoff!.correlationId};
+        }
+        try { return await nativeQueueOnce({binary:executable(options.codexBin ?? 'codex'),scope:queueScope!,message,clientUserMessageId:handoff!.correlationId,deadlineMs:budget.cutoff,verifyOwner: async () => verifyOwner(scope!),beforeEffect: async () => authorize()}); }
+        catch(error) { if (error instanceof AppServerFault && error.attempted) throw new UnknownOutcome(); if(error instanceof AppServerFault) throw new Refusal(`app_server_${error.code}`,1); throw error; }
+      },
       timeoutMs() { budget.beforeEffect(); return Math.max(1, Math.floor(budget.observationRemainingMs())); },
     } });
     knownNative = value;
-    if (!options.dryRun) handoff = ledger.recordSubmission(handoff!.correlationId, 'submitted');
+    if (!options.dryRun) { handoff = ledger.recordSubmission(handoff!.correlationId, 'submitted'); ownWait(); }
+    if (!options.dryRun && deliverySupported && scope && handoff) {
+      do {
+        if (stopped) break;
+        const observed = await observeMetadata({...scope,clientUserMessageId:handoff.correlationId}, budget, verifyOwner);
+        if (!observed.supported) {
+          if (budget.observationRemainingMs() <= 0) break;
+          handoff = ledger.recordObservationFailure(handoff.correlationId, original!, observed.reason === 'metadata_owner_changed' ? 'unsupported' : 'failed', operationId); ownWait();
+          break;
+        }
+        if (observed.injectionObserved) { handoff = ledger.recordObservation(handoff.correlationId,{clientUserMessageId:observed.clientUserMessageId!,injectionObserved:true,...(observed.turn ? {turn:observed.turn} : {})},original!); ownWait(); break; }
+        if (!handoffOptions.waitFor) break;
+        await new Promise<void>(resolve => setTimeout(resolve, Math.min(100,budget.observationRemainingMs())));
+      } while(budget.observationRemainingMs() > 0);
+      if (handoffOptions.waitFor && handoff.wait.status === 'pending') handoff = stopped ? ledger.recordWait(handoff.correlationId,'stopped','stopped_by_operator',operationId) : ledger.recordWait(handoff.correlationId,'timed_out_unknown',undefined,operationId);
+      ownWait();
+      if (handoffOptions.waitFor && handoff.wait.status !== 'satisfied') return finish({...value,ok:false,error:handoff.wait.reason ?? 'timed_out_unknown',retryAllowed:false},handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator' ? 130 : 1);
+    }
     return finish(value, 0);
   } catch (error) {
     if (!handoff || !snapshot) throw error;
     if (knownNative) {
       // An I/O failure after positive native acceptance cannot erase that fact.
-      handoff = { ...handoff, state: 'submitted', submission: { status: 'submitted' }, nextActions: ['reconcile'] };
+      handoff = { ...handoff, state: handoff.ack.status === 'acknowledged' ? 'acknowledged' : handoff.observation.injectionObserved ? 'delivered' : 'submitted', submission: { status: 'submitted' }, nextActions: ['reconcile'] };
       if (handoffOptions.waitFor) {
         if (handoff.wait.status === 'pending') handoff.wait = { ...handoff.wait, status: 'failed', reason: 'evidence_failed' };
-        return finish({ ...knownNative, ok: false, error: 'handoff_persistence_failed', retryAllowed: false }, 1);
+        const interrupted = handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator';
+        return finish({ ...knownNative, ok: false, error: interrupted ? 'stopped_by_operator' : 'handoff_persistence_failed', retryAllowed: false }, interrupted ? 130 : 1);
       }
       return finish({ ...knownNative, handoffWarning: 'persistence_failed', retryAllowed: false }, 0);
     }
     const uncertain = error instanceof UnknownOutcome;
     if (fenced) {
-      try { handoff = ledger.recordSubmission(handoff.correlationId, uncertain ? 'unknown' : 'refused'); }
+      try { handoff = ledger.recordSubmission(handoff.correlationId, uncertain ? 'unknown' : 'refused'); ownWait(); }
       catch { const state = ledger.status(handoff.correlationId); if ('handoff' in state) handoff = state.handoff; }
+    }
+    if (handoffOptions.waitFor && handoff.wait.status === 'pending') {
+      try { handoff = ledger.recordWait(handoff.correlationId, budget.observationRemainingMs() <= 0 ? 'timed_out_unknown' : 'failed', budget.observationRemainingMs() <= 0 ? undefined : 'evidence_failed', operationId); ownWait(); }
+      catch { handoff.wait = {...handoff.wait,status:'failed',reason:'evidence_failed'}; }
     }
     if (!fenced && original && handoff.state !== 'refused') {
       try { handoff = ledger.refusePrepared(handoff.correlationId, original); } catch { /* Keep the last verified facts; never retry. */ }
     }
     const code = error instanceof BeforeEffectRefused ? handoff.wait.reason ?? 'evidence_unsupported' : error instanceof Refusal ? error.code : uncertain ? 'outcome_unknown' : 'handoff_operation_failed';
     return finish({ ...snapshot, ok: false, error: code, status: uncertain ? 'unknown' : 'refused', submitted: uncertain ? null : false,
-      consumptionConfirmed: false, retryAllowed: false }, error instanceof Refusal ? error.exitCode : 1);
-  }
+      consumptionConfirmed: false, retryAllowed: false }, handoffOptions.waitFor && handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator' ? 130 : error instanceof Refusal && error.exitCode !== 130 ? error.exitCode : 1);
+  } finally { process.removeListener('SIGINT',stop); }
 }
 
 // New commands are local owner operations; forwarding them through native send

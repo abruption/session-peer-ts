@@ -866,3 +866,21 @@ Generated schema hashes and the fixed official source commit are recorded in
 `test/fixtures/app-server-schema-evidence.json`; tests use hermetic streams and
 owned Node children. These facts do not re-pin the shipped Python runtime parity
 reference or implement automatic ACK.
+
+
+## Unreleased local observation integration — #72
+
+[Source-only runtime details](docs/api.md#unreleased-local-delivery-observation--72)
+cover bounded one-shot/explicit-wait observation, native CID queueing, original
+writer generation checks, per-operation terminal waits and positive native fact
+preservation. Generated schema/native queue mechanics are distinct from
+synthetic metadata/wait integration and live consumption evidence. The combined
+CLI path is restricted to Codex 0.160.1/macOS arm64; POSIX SQL fixtures alone do
+not qualify other native platforms. No transcript is read, no ACK is inferred
+and no post-attempt fallback/resend occurs.
+
+Open release gates include real local/platform qualification, SSH originating
+ledger coordination, Windows ACL support, receipt producer/collector bootstrap,
+restart observation and bounded cancellation of all initial setup operations.
+#69/#70/#71/#72 remain together in 0.4.0 and open. Ordinary runtime parity and
+published version markers are unchanged.

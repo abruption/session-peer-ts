@@ -318,3 +318,8 @@ npm `--ignore-scripts` は利用でき、postinstall は Skills CLI を呼び出
 開発中の 0.4.0 ソースには opt-in private POSIX handoff ledger が追加されます。公開 0.3.1 にこのコマンドはありません。必須の証拠が unsupported の場合は提出前に拒否し、best-effort の提出は ACK を証明しません。自動 receipt bootstrap、Windows ledger、SSH handoff は未対応です。
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+
+
+ソース専用の `--wait-for delivered` は Codex 0.160.1/macOS arm64 と既存 metadata store に限定されます。本文は返さず、wait 失敗でも queued/submitted の証拠を保ちます。各 wait の operation ID と終了結果は独立です。合成テストは live ACK の証拠ではなく、SSH/Windows handoff と自動 ACK は未対応です。
+
+[Observation](api.md#unreleased-local-delivery-observation--72)
