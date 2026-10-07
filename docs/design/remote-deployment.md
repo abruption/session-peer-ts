@@ -784,8 +784,8 @@ the host nor the account was disposable. It does not qualify Windows-client
   under its dated rules: failed-activation rollback, marker- and receipt-guarded
   retention, lock contention, explicit break-lock with and without a receipt,
   an unowned lock, and the per-file manifest. Selected corresponding Windows
-  fixture cases passed at the 2026-10-07 checkpoint; the result table in
-  VALIDATION.md distinguishes native/local fixtures from operator SSH.
+  fixture cases passed at the 2026-10-07 checkpoint; the dated VALIDATION.md
+  section distinguishes native/local fixtures from operator SSH.
 - Not exercised on Linux under the current rules: explicit recovery of an
   unreceipted target under a fresh lock, corrupt/mismatched/orphan receipt
   handling, `.receipts` trust checks and operator override for unconfirmable
@@ -807,12 +807,12 @@ F5 now has bounded real-destination evidence on Linux x86_64 and Windows
 10 x64. The 2026-10-07 Windows checkpoint used **published 0.3.1** with an
 administrator account, PowerShell 5.1 and Node 24.16.0. The primary offline
 provisioning workflow and operator SSH checks (doctor and refused dry-run;
-no message delivery) passed, plus 31 native storage/local-wrapper fixtures
-whose SSH evidence is limited to the primary install. **On Windows**, Node
+no message delivery) passed, plus 31 native storage/local-wrapper fixtures.
+Only the primary install has operator SSH evidence. **On Windows**, Node
 22 has direct-CLI/native-lock smoke evidence only. Issue #23's last criterion
 remains **partially validated**: current recovery rules have not been
 requalified on Linux, and the other cells listed under "Not validated" above
-remain untested. Local stubs do not replace destination evidence. These
+remain not fully validated. Local stubs do not replace destination evidence. These
 results do not qualify a shipped deploy helper or Windows-client jump.
 
 ## Follow-ups
