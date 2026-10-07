@@ -45,6 +45,8 @@ test('syntax/private inputs reject without minting authority or submitting', { s
  const remote = await f.invoke([...f.send,'--request-ack','--host','fixture']); assert.equal(remote.code,1); assert.equal(remote.value.error,'remote_handoff_unsupported');
  const uri = await f.invoke(['send','--to','session-peer://v1/reply?agent=claude&session=fixture&transport=ssh&host=worker','--request-ack','--message','fixture','--no-from','--no-reply-to']); assert.equal(uri.code,1); assert.equal(uri.value.error,'remote_handoff_unsupported');
  const receipt = await f.invoke(['ack','--receipt','-'], ' '.repeat(4097)); assert.equal(receipt.code,2); assert.equal(receipt.value.error,'input_too_large'); assert.equal(receipt.value.submitted,undefined);
+ const bomReceipt = {schemaVersion:1,kind:'receipt',ledgerEpoch:'11111111-1111-4111-8111-111111111111',correlationId:'11111111-1111-4111-8111-111111111111',targetGeneration:'fixture',receiptId:'22222222-2222-4222-8222-222222222222',capability:Buffer.alloc(32).toString('base64url')};
+ const bom = await f.invoke(['ack','--receipt','-'], '\ufeff'+JSON.stringify(bomReceipt));assert.equal(bom.value.error,'invalid_handoff_json');
  assert.equal(f.messages.length,0);
 });
 
