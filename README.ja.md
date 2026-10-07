@@ -1,3 +1,5 @@
+<div align="center">
+
 # session-peer (TypeScript)
 
 [![npm バージョン](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
@@ -17,6 +19,8 @@
 
 **実行中の Claude Code・Codex セッションを見つけ、ローカルまたは SSH でメッセージを送信します。**
 Python 不要の Node.js クライアントです。パッケージ名とコマンド名は `session-peer` です。
+
+</div>
 
 ## Demo
 

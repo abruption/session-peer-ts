@@ -1,3 +1,5 @@
+<div align="center">
+
 # session-peer (TypeScript)
 
 [![npm 版本](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
@@ -17,6 +19,8 @@
 
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
+
+</div>
 
 ## Demo
 
