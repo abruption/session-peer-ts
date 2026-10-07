@@ -13,6 +13,10 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
+**소스 후보: 0.3.2, 미발행.** 아래 npm 명령은 현재 공개 버전 0.3.1을 설치합니다. 이 체크아웃의 빌드는 `session-peer 0.3.2 (typescript)`를 출력하며 SSH 양쪽에는 같은 검토된 소스 버전이 필요합니다. 후보는 공개된 0.3.1 신뢰성 수정과 릴리스·배포 검증 갱신을 포함하고 0.4 기능은 포함하지 않습니다. 발행에는 정확한 SHA를 지정한 별도 승인이 필요합니다.
+
+별도로 승인된 발행이 완료된 후에만 `npm install --global --ignore-scripts session-peer@0.3.2`를 사용합니다. 그전에는 공개 0.3.1 또는 검토된 로컬 소스 산출물을 사용하세요.
+
 **실행 중인 Claude Code·Codex 세션을 찾고 로컬 또는 SSH로 메시지를 전달합니다.**
 Python 없이 Node.js로 실행하는 클라이언트입니다. 패키지와 명령 이름은 `session-peer`입니다.
 

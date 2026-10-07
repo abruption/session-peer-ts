@@ -4,6 +4,8 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
+**ソース候補: 0.3.2、未公開。** 以下の npm コマンドは現在の公開版 0.3.1 をインストールします。このチェックアウトのビルドは `session-peer 0.3.2 (typescript)` と表示し、SSH の両端に同じレビュー済みソース版が必要です。候補は公開済み 0.3.1 の信頼性修正とリリース・配備検証の更新を含み、0.4 の機能は含みません。公開には正確な SHA を指定した別途承認が必要です。
+
 0.3.1 の詳細ガイドです（[信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。前回の公開記録は [0.3.0 公開リリースの証拠](../VALIDATION.md#public-030--2026-10-03-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
 ## 目次
@@ -86,7 +88,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 任意のグローバルインストール前に PATH の既存コマンドを確認
-npm install --global --ignore-scripts ./session-peer-0.3.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
 session-peer --version
 ```
 
@@ -96,7 +98,7 @@ session-peer --version
 
 インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
-Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.1.tgz` を実行し、`& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` で削除します。
+Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz` を実行し、`& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` で削除します。
 
 ## 使い方
 

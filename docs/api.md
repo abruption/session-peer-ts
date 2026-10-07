@@ -1,5 +1,7 @@
 # API reference
 
+This checkout is the unpublished 0.3.2 source candidate: its exported `VERSION` is `0.3.2`. The npm installation and API example below describe the current public 0.3.1; publication is a separate approval.
+
 [Back to README](../README.md) · [User guide](guide.md)
 
 The package exposes a small ESM API with TypeScript declarations. Install it

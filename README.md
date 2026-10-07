@@ -13,6 +13,10 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
+**Source candidate: 0.3.2, unpublished.** The npm commands below install the current public 0.3.1. Builds from this checkout report `session-peer 0.3.2 (typescript)`; both SSH endpoints need the same reviewed source version. This candidate includes the published 0.3.1 reliability fixes and release/deployment verification updates, without 0.4 features. Publication requires separate exact-SHA approval.
+
+After a separately approved publication, the version-pinned command would be `npm install --global --ignore-scripts session-peer@0.3.2`. Until then, use public 0.3.1 or the reviewed local source artifact.
+
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
 

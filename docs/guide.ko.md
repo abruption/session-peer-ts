@@ -4,6 +4,8 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
+**소스 후보: 0.3.2, 미발행.** 아래 npm 명령은 현재 공개 버전 0.3.1을 설치합니다. 이 체크아웃의 빌드는 `session-peer 0.3.2 (typescript)`를 출력하며 SSH 양쪽에는 같은 검토된 소스 버전이 필요합니다. 후보는 공개된 0.3.1 신뢰성 수정과 릴리스·배포 검증 갱신을 포함하고 0.4 기능은 포함하지 않습니다. 발행에는 정확한 SHA를 지정한 별도 승인이 필요합니다.
+
 0.3.1 상세 가이드입니다([신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0은 다중 호스트 SSH, 발신자 정보와 회신 경로, 업데이트 확인, 선택적 `sp` 단축 이름을 추가했습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). 이전 발행 기록은 [0.3.0 공개 릴리스 증거](../VALIDATION.md#public-030--2026-10-03-kst)에 있습니다. 아래 0.1.0 설명은 이전 버전과의 비교입니다.
 
 ## 목차
@@ -115,7 +117,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 선택 사항: PATH에서 사용할 구현을 명시적으로 선택한 뒤 전역 설치
-npm install --global --ignore-scripts ./session-peer-0.3.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
 session-peer --version
 ```
 
@@ -138,7 +140,7 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.1.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # 이후 제거: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```

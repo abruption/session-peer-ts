@@ -4,6 +4,8 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
+**源码候选版本：0.3.2，尚未发布。** 以下 npm 命令安装当前公开版本 0.3.1。此检出版本构建后显示 `session-peer 0.3.2 (typescript)`；SSH 两端需要相同的已审核源码版本。候选版本包含已发布的 0.3.1 可靠性修复和发布、部署验证更新，不含 0.4 功能。发布仍需针对准确 SHA 的单独批准。
+
 这是 0.3.1 详细指南（[可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。上一次发布记录见 [0.3.0 公开发布证据](../VALIDATION.md#public-030--2026-10-03-kst)；下文 0.1.0 的说明用于旧版本对比。
 
 ## 目录
@@ -85,7 +87,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 可选：全局安装前先检查 PATH 选择的现有命令
-npm install --global --ignore-scripts ./session-peer-0.3.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
 session-peer --version
 ```
 
@@ -95,7 +97,7 @@ session-peer --version
 
 安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer`，随后再次检查 PATH。
 
-在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.1.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` 卸载。
+在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` 卸载。
 
 ## 使用
 

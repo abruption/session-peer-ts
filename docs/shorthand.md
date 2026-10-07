@@ -1,5 +1,7 @@
 # Optional `sp` shorthand
 
+The current public package is 0.3.1. This checkout is the unpublished 0.3.2 candidate; the shorthand still forwards to the explicitly selected CLI and does not install or upgrade it.
+
 [README](../README.md) · [User guide](guide.md)
 
 This feature ships with 0.3.0 and later ([#74](https://github.com/abruption/session-peer-ts/issues/74)).

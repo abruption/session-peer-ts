@@ -13,6 +13,10 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
+**源码候选版本：0.3.2，尚未发布。** 以下 npm 命令安装当前公开版本 0.3.1。此检出版本构建后显示 `session-peer 0.3.2 (typescript)`；SSH 两端需要相同的已审核源码版本。候选版本包含已发布的 0.3.1 可靠性修复和发布、部署验证更新，不含 0.4 功能。发布仍需针对准确 SHA 的单独批准。
+
+仅在单独批准的发布完成后使用 `npm install --global --ignore-scripts session-peer@0.3.2`。在此之前，请使用公开版本 0.3.1 或已审核的本地源码产物。
+
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
 

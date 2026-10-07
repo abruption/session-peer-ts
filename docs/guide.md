@@ -4,6 +4,8 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
+**Source candidate: 0.3.2, unpublished.** The npm commands below install the current public 0.3.1. Builds from this checkout report `session-peer 0.3.2 (typescript)`; both SSH endpoints need the same reviewed source version. This candidate includes the published 0.3.1 reliability fixes and release/deployment verification updates, without 0.4 features. Publication requires separate exact-SHA approval.
+
 This guide covers 0.3.1 ([reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.0 release evidence](../VALIDATION.md#public-030--2026-10-03-kst) records the previous publication. References to 0.1.0 below describe the older release.
 
 ## Contents
@@ -126,11 +128,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.3.1.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
 session-peer --version
 ```
 
-Expected: `session-peer 0.3.1 (typescript)`. Keep the `./...tgz` path to
+Expected for this unpublished source candidate: `session-peer 0.3.2 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -150,7 +152,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.1.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
