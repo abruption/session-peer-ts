@@ -165,5 +165,35 @@
       "windows/worldWritableWarning",
       "windowsSandbox/setupCompleted"
     ]
+  },
+  "storageBindingPin": {
+    "officialSourceCommit": "d27764b82f7118f674371e6d6e76271d9d606edb",
+    "precedence": "config.sqlite_home precedes CODEX_SQLITE_HOME; exact managed requirement can override CLI/config",
+    "environment": "CODEX_HOME and CODEX_SQLITE_HOME are both forced to selected canonical home",
+    "cliOverride": "sqlite_home=<quoted selected canonical home>",
+    "effectiveBindingGuard": "bounded lsof on owned app-server PID requires opened state_5.sqlite and queue_1.sqlite paths in selected home before beforeEffect",
+    "managedPolicy": "not disabled or bypassed; mismatched opened paths refuse before any queue RPC; native bootstrap file creation is not claimed absent",
+    "primaryFiles": {
+      "codex-rs/core/src/config/mod.rs": "854f5a6b184714740500b8d3eae2bb04cb88172efccf11d38a74f2f6189c0341",
+      "codex-rs/core/src/config/requirements.rs": "756ba19bc88333f9b2a3f05fd4214d91c77d42900f4c3548af98a47725566543",
+      "codex-rs/state/src/lib.rs": "0e4d12ca4f6d0e3632b85b26f92e9396e9560cad60352b08314d253963eb6d66"
+    },
+    "zeroQueueNativeFixture": {
+      "version": "0.160.1",
+      "platform": "darwin-arm64",
+      "result": "effect_guard_failed",
+      "beforeEffectCalls": 1,
+      "queueRows": 0,
+      "threadRows": 0,
+      "configAttemptedOtherHome": true,
+      "inheritedEnvAttemptedOtherHome": true,
+      "envAndCLIPinnedSelectedHome": true,
+      "ownedDescriptorBindingVerified": true,
+      "otherHomeUntouched": true,
+      "networkDeniedByMacOSSandbox": true,
+      "authFileCreated": false,
+      "liveOwnerUsed": false,
+      "threadStartResumeOrTurnCalled": false
+    }
   }
 }

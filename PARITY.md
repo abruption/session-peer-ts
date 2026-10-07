@@ -884,3 +884,11 @@ ledger coordination, Windows ACL support, receipt producer/collector bootstrap,
 restart observation and bounded cancellation of all initial setup operations.
 #69/#70/#71/#72 remain together in 0.4.0 and open. Ordinary runtime parity and
 published version markers are unchanged.
+
+
+Storage binding is checked on the owned queue transport before its effect:
+env/CLI pins plus exact opened state/queue paths. Managed-policy redirection or
+missing direct-native PID proof refuses with zero queue RPC. An additional
+network-denied initialization-only fixture verified config/CLI/env precedence
+with zero queued rows and no model/thread effect. Bootstrap policy files are
+not promised unchanged by the native tool; no managed requirement is bypassed.
