@@ -4,9 +4,50 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**Documentation and source version: 0.3.2.** Before using the version-pinned npm commands below, confirm that 0.3.2 is available in the npm registry or version badge. Before publication, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints must use the same reviewed version.
+**Documentation and source version: 0.3.2.** This version is public ([release record](../VALIDATION.md#public-032--2026-10-07-kst)). Before using the version-pinned npm commands below, confirm that 0.3.2 is available in the npm registry or version badge. Before publication, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints must use the same reviewed version.
 
 This guide covers 0.3.2 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records the previous publication. References to 0.1.0 below describe the older release.
+
+## Migration boundaries (0.3.2)
+
+The [public 0.3.2 record](../VALIDATION.md#public-032--2026-10-07-kst) fixes the
+release source and artifact. SSH preflight checks the exact TS version banner,
+not a commit hash; operators must align reviewed source commits separately.
+
+- Python Claude JSON can omit `status`, `submitted` and `consumptionConfirmed`;
+  TS uses `validated`/`posted`, explicit `submitted` and
+  `consumptionConfirmed:false`. An absent field is not false or null. Claude
+  names can be null; Codex `queueId` is optional. Submission never proves ACK.
+- An absent Claude sessions directory yields empty discovery with `status:ok`.
+  Optional missing Codex homes yield `absent` or aggregate `not_installed`.
+  Neither an empty list nor doctor completion grants send authorization.
+- Repeated `--host` returns an ordered array; any failed host makes exit 1.
+  Ordinary 0.3.2 can lose complete-response evidence after SSH exit 255 or
+  timeout; #115/#116 address that separately. Unknown means no automatic resend.
+- Base doctor (introduced in 0.2.0) executes no Codex or inbox submission.
+  Since 0.3.0, explicit `--check-return-route` executes a bounded reverse SSH
+  no-op; `--check-reply-to` is unsupported. Verified means that one probe
+  succeeded, not an authenticated ACK or general reverse-access guarantee.
+- Self Reply-To normalization requires a matching explicit OS user, an exact
+  recognized local name and no explicit SSH option. Conflicting sender evidence
+  omits identity; an unusable Claude name falls back to PID.
+- npm, Python, remote hosts and skills have separate owners. TS has no self- or
+  remote updater; notices default off and opt-out wins. Explicit `update --check`
+  still queries the registry. The legacy skill metadata remains `0.1.0`;
+  #118's Draft successor is not an install pin or a compatible published guard.
+- Windows qualification used published 0.3.1 on Windows 10 x64, an administrator
+  account, PowerShell 5.1 and Node 24.16.0: offline provisioning, wrapper/native
+  locking, operator doctor/nonexistent-target dry-run and 31 local fixtures.
+  Node 22 had banner/native-lock smoke only. Non-admin, other architectures,
+  F6 runtime enforcement and older Linux current-rule gaps remain unverified.
+  This is not 0.3.2 live-ACK or deploy-helper evidence.
+
+See [migration details](../PARITY.md#ordinary-cli-migration-notes--117) and
+[Windows qualification](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst).
+The Python 1.0.2 test reference stays pinned; neither compared public CLI
+provides general native ACK/wait, end-to-end deduplication or Side Session.
+Relay/MCP are outside this migration comparison.
+
 
 ## Contents
 
