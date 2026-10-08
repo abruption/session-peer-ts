@@ -1,3 +1,5 @@
+<div align="center">
+
 # session-peer (TypeScript)
 
 [![npm version](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
@@ -17,6 +19,8 @@
 
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
+
+</div>
 
 ## Demo
 
