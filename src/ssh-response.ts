@@ -75,23 +75,24 @@ export function validateResponse(value: Record<string, unknown>, request: Respon
   if (request.command === 'doctor' && value.ok && (value.diagnosticCompleted !== true || typeof value.ready !== 'boolean' ||
       value.implementation !== 'typescript' || !record(value.agents))) invalid();
   if (request.command === 'doctor' && value.ok && request.returnTo && (!record(value.returnRoute) ||
-      !['verified', 'failed'].includes(value.returnRoute.status as string) || !['local', 'ssh'].includes(value.returnRoute.transport as string))) invalid();
+      !['verified', 'failed'].includes(value.returnRoute.status as string) || value.returnRoute.transport !== 'ssh' ||
+      value.returnRoute.host !== request.returnTo)) invalid();
   if (request.command !== 'send') return;
   if (!value.ok && typeof value.error !== 'string') invalid();
   const codex = request.to?.startsWith('codex:') === true;
   const expected = request.dryRun ? 'validated' : codex ? 'queued' : 'posted';
   if (value.consumptionConfirmed !== false ||
       (value.ok && (value.submitted !== !request.dryRun || value.status !== expected)) ||
-      (!value.ok && !((value.submitted === false && value.status === 'refused') || (value.submitted === null && value.status === 'unknown'))) ||
+      (!value.ok && !((value.submitted === false && value.status === 'refused') ||
+        (!request.dryRun && value.submitted === null && value.status === 'unknown'))) ||
       ('dryRun' in value && value.dryRun !== !!request.dryRun) || ('retryAllowed' in value && value.retryAllowed !== false)) invalid();
-  if (!value.ok) { if (value.submitted === false && 'queueId' in value) invalid(); return; }
+  if (!value.ok) { if ('queueId' in value) invalid(); return; }
   const target = value.target;
   if (!record(target) || (target.agent !== undefined && target.agent !== (codex ? 'codex' : 'claude'))) invalid();
   if (codex) {
     if (typeof target.id !== 'string' || !uuid(target.id) || target.id.toLowerCase() !== request.to!.slice(6).toLowerCase()) invalid();
     if ('queueId' in value && (request.dryRun || typeof value.queueId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.queueId))) invalid();
-    if ('codexHome' in value && (typeof value.codexHome !== 'string' || !/^(?:\/|[A-Za-z]:[\\/]|[\\/]{2})/.test(value.codexHome))) invalid();
-    if (request.home !== undefined && typeof value.codexHome !== 'string') invalid();
+    if (typeof value.codexHome !== 'string' || !/^(?:\/|[A-Za-z]:[\\/]|[\\/]{2})/.test(value.codexHome)) invalid();
     // A receiver can canonicalize a remote alias. It echoes the explicit home
     // it actually parsed, rather than asking the caller to resolve remote paths.
     if ('requestedCodexHome' in value && (request.home === undefined || value.requestedCodexHome !== request.home)) invalid();

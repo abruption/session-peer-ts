@@ -101,6 +101,31 @@ test('peer-supplied transport diagnosis is removed, preserving unrelated extra f
   assert.throws(() => responseOutcome(done({ ...codex, ok: false, submitted: false, status: 'refused', error: 'native_failed' }), request));
 });
 
+test('failed-send and remote-doctor evidence cannot contradict the original request', () => {
+  const unknown = { schemaVersion: 1, host: 'fixture', command: 'send', ok: false, status: 'unknown',
+    submitted: null, consumptionConfirmed: false, error: 'outcome_unknown' };
+  const doctor = { schemaVersion: 1, host: 'fixture', command: 'doctor', ok: true, diagnosticCompleted: true,
+    ready: true, implementation: 'typescript', agents: {},
+    returnRoute: { status: 'verified', transport: 'ssh', host: 'user@origin' } };
+  const routeRequest = { command: 'doctor', returnTo: 'user@origin' };
+  for (const extra of [{ code: 0 }, { code: 255 }, { code: null, interrupted: true, stopReason: 'timeout' as const }]) {
+    for (const to of [`codex:${id}`, 'claude:123']) {
+      for (const queueId of ['queue-17', 'x'.repeat(129), {}]) {
+        assert.throws(() => responseOutcome(done({ ...unknown, queueId }, extra), { command: 'send', to }));
+      }
+      assert.throws(() => responseOutcome(done({ ...unknown, dryRun: true }, extra), { command: 'send', to, dryRun: true }));
+    }
+    const { codexHome: _home, ...withoutHome } = codex;
+    assert.throws(() => responseOutcome(done(withoutHome, extra), request));
+    for (const patch of [{ host: 'other@origin' }, { transport: 'local' }]) {
+      assert.throws(() => responseOutcome(done({ ...doctor, returnRoute: { ...doctor.returnRoute, ...patch } }, extra), routeRequest));
+    }
+    assert.deepEqual(responseOutcome(done(doctor, extra), routeRequest).value.returnRoute, doctor.returnRoute);
+  }
+  assert.equal(responseOutcome(done(unknown, { code: 255 }), request).value.status, 'unknown');
+  assert.equal(responseOutcome(done({ ...doctor, returnRoute: { ...doctor.returnRoute, status: 'failed', reason: 'timeout' } }), routeRequest).value.ok, true);
+});
+
 test('complete native evidence is retained after exit255/timeout; normal exit contracts remain', () => {
   for (const extra of [{ code: 255 }, { code: null, interrupted: true, stopReason: 'timeout' as const },
     { code: null, interrupted: true, stopReason: 'process_error' as const }]) {
