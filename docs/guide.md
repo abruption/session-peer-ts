@@ -21,13 +21,18 @@ not a commit hash; operators must align reviewed source commits separately.
 - An absent Claude sessions directory yields empty discovery with `status:ok`.
   Optional missing Codex homes yield `absent` or aggregate `not_installed`.
   Neither an empty list nor doctor completion grants send authorization.
-- Repeated `--host` returns an ordered array; any failed host makes exit 1.
+- Repeated `--host` returns an ordered array. Per-host dispatch failures make
+  exit 1; command-wide pre-dispatch refusals (such as duplicate hosts or an
+  empty message) retain exit 2, including array output.
   Ordinary 0.3.2 can lose complete-response evidence after SSH exit 255 or
   timeout; #115/#116 address that separately. Unknown means no automatic resend.
 - Base doctor (introduced in 0.2.0) executes no Codex or inbox submission.
   Since 0.3.0, explicit `--check-return-route` executes a bounded reverse SSH
-  no-op; `--check-reply-to` is unsupported. Verified means that one probe
-  succeeded, not an authenticated ACK or general reverse-access guarantee.
+  no-op for a usable non-local destination. A self route instead returns
+  `verified`, `transport:local`, `self_route_normalized` without SSH; a missing
+  host fails before any probe. `--check-reply-to` is unsupported. Verified means
+  local normalization or one successful SSH no-op, not an authenticated ACK or
+  general reverse-access guarantee.
 - Self Reply-To normalization requires a matching explicit OS user, an exact
   recognized local name and no explicit SSH option. Conflicting sender evidence
   omits identity; an unusable Claude name falls back to PID.

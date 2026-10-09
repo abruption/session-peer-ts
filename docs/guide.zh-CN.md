@@ -14,8 +14,8 @@
 
 - Python 的 Claude JSON 可能省略 `status`、`submitted`、`consumptionConfirmed`。TS 使用 `validated`/`posted`、明确的 `submitted` 和 `consumptionConfirmed:false`。缺失字段不等于 false 或 null。Claude 名称可以为 null，Codex `queueId` 是可选字段。提交不能证明 ACK。
 - Claude 会话目录缺失时，返回空列表和 `status:ok`。可选 Codex home 缺失时为 `absent`；没有可读 DB 且没有错误时，整体为 `not_installed`。空列表或 doctor 完成都不授予发送权限。
-- 重复 `--host` 返回按请求顺序排列的数组，只要一个主机失败，退出码就为 1。普通 0.3.2 在 SSH 退出 255 或超时后，也可能丢失完整响应的证据；#115/#116 单独修复这一问题。unknown 时不得自动重发。
-- 0.2.0 引入的基础 doctor 不执行 Codex，也不向 inbox 提交。0.3.0 起，显式 `--check-return-route` 执行有时间限制的反向 SSH 无操作命令。`--check-reply-to` 不受支持。verified 只表示那一次连接探测成功，不是 ACK 认证或通用反向访问保证。
+- 重复 `--host` 返回按请求顺序排列的数组。主机分别执行期间发生的失败汇总为退出码 1；执行前的命令整体拒绝（如主机重复或消息为空）在数组输出中仍保持退出码 2。普通 0.3.2 在 SSH 退出 255 或超时后，也可能丢失完整响应的证据；#115/#116 单独修复这一问题。unknown 时不得自动重发。
+- 0.2.0 引入的基础 doctor 不执行 Codex，也不向 inbox 提交。0.3.0 起，显式 `--check-return-route` 仅对可用的非本地目标执行有时间限制的反向 SSH 无操作命令。同机自身路由无需 SSH 即返回 `verified`、`transport:local`、`self_route_normalized`；缺少主机时在任何探测前失败。`--check-reply-to` 不受支持。verified 表示本地路由归一化或一次 SSH 无操作命令成功，不是 ACK 认证或通用反向访问保证。
 - 将同机 Reply-To 归一化为本地路径，必须明确指定匹配的 OS 用户、使用可识别的准确本机名称，且没有显式 SSH 选项。发送者证据冲突时省略身份；Claude 名称不可用时使用 PID。
 - npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。现有技能元数据保持 `0.1.0`；#118 的后续 Draft 不是安装固定来源，也不是已发布兼容性检查器的证据。
 - Windows 验证使用公开 0.3.1、Windows 10 x64、管理员账号、PowerShell 5.1 和 Node 24.16.0。验证范围包括离线安装、包装器与原生锁、操作端 doctor 和不存在目标的 dry-run，以及 31 项本地 fixture。Node 22 仅确认版本标识和原生锁。非管理员、其他架构、F6 运行时校验、此前 Linux 实验的最新规则仍未验证。这不是 0.3.2 实机 ACK 或部署辅助工具的验证。

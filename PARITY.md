@@ -182,8 +182,10 @@ for migration guidance, not byte/shape parity or a runtime-reference repin.
   with no errors yields `not_installed`. These are discovery states, not proof
   that an agent executable or inbox is ready. Doctor completion is separate
   from `ready`, and neither grants send authorization.
-- Repeated SSH hosts produce ordered per-host results and exit 1 if any fails;
-  a single host stays flat. Presence, `ok`, status and exit must be interpreted
+- Repeated SSH hosts produce ordered per-host results; an operational failure
+  during per-host dispatch makes exit 1. Command-wide refusals before dispatch
+  (for example duplicate hosts or an empty message) retain exit 2, including
+  when rendered as an array. A single host stays flat. Presence, `ok`, status and exit must be interpreted
   separately. The shipped 0.3.2 SSH path can classify even complete stdout as
   unknown after exit 255 or timeout: [#115](https://github.com/abruption/session-peer-ts/issues/115)
   and [#116](https://github.com/abruption/session-peer-ts/issues/116) track the
@@ -196,8 +198,12 @@ for migration guidance, not byte/shape parity or a runtime-reference repin.
 - TS normalizes a self SSH Reply-To only for an explicit matching OS user and
   a recognized exact local name, with no explicit SSH option. Conflicting
   Claude/Codex sender evidence omits identity instead of choosing Claude first;
-  unusable Claude names fall back to PID. A reverse no-op tests one SSH route,
-  not receipt authentication, general reverse access or agent consumption.
+  unusable Claude names fall back to PID. An explicit return-route check runs a
+  reverse SSH no-op only for a usable non-local destination. A self route instead
+  returns `verified`, `transport:local`, `self_route_normalized` without SSH; a
+  missing host fails before a probe. `verified` therefore means local
+  normalization or one successful SSH no-op, not receipt authentication, general
+  reverse access or agent consumption.
 - Stronger TS storage, registry and output guards are intentional; migration
   does not relax them to reproduce Python behavior. General native ACK/wait,
   end-to-end deduplication and Side Session support are not public ordinary-CLI
