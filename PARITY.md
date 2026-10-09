@@ -1,6 +1,6 @@
 # Python compatibility and npm migration
 
-Updated 2026-10-07 KST. Python reference: **1.0.2**,
+Updated 2026-10-09 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
 This matrix describes the **TS 0.3.2 source**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
@@ -10,8 +10,9 @@ separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 changes with their known limitations. Historical **0.1.0**
 differences are called out explicitly. Public availability and tags must be
 checked in the registry; this document does not assert a publication outcome.
-SSH endpoints require the same version; builds from source between releases also
-require the same commit. `referenceVersion: "1.0.2"` identifies the comparison baseline,
+SSH preflight enforces the exact same TS version banner. For builds from source
+between releases, operators should also align reviewed commits; the wire does not
+verify a source commit. `referenceVersion: "1.0.2"` identifies the comparison baseline,
 not complete parity. See [VALIDATION.md](VALIDATION.md) for dated evidence.
 
 ## Feature and command matrix
@@ -27,13 +28,13 @@ not a missing implementation. Issue links describe work, not available features.
 | `list` selection | Unified agent list; optional agent; bounded multiple Codex homes; partial discovery diagnostics | Source: combined Claude/Codex by default, optional agent/home filters, bounded multi-home inventory and partial diagnostics. Published 0.1.0 still requires an agent and explicit Codex home | Implemented in source for [#16](https://github.com/abruption/session-peer-ts/issues/16), 0.2.0; no Antigravity adapter |
 | Codex active queue | Saved UUID, unique live writer, real lock/owner checks, pre-submit revalidation | Source: same protections, full UUID, implicit unique-live selection or explicit home; all known candidates checked | Implemented in source for [#17](https://github.com/abruption/session-peer-ts/issues/17), 0.2.0 |
 | Implicit home / inactive queue | Select unique live home; explicit inactive opt-in under separate guards | Source: unique live selection; explicit saved inactive home with opt-in and verified inactive candidates. Public 0.1.0 has neither | Implemented in source for #17, 0.2.0; no wake/resume |
-| `doctor` | Readiness diagnostics; return-route check is opt-in | Source: read-only local/SSH metadata, per-agent/home results, capabilities and bounded TS skill compatibility. Published 0.1.0 has no doctor | Implemented in source for [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0; no return-route probing |
+| `doctor` | Readiness diagnostics; return-route check is opt-in | Source: read-only local/SSH metadata, per-agent/home results, capabilities and bounded TS skill compatibility. Published 0.1.0 has no doctor | Implemented in source for [#18](https://github.com/abruption/session-peer-ts/issues/18), 0.2.0 base diagnostics; opt-in `doctor --check-return-route` added in 0.3.0 (#21) |
 | CLI input, help and names | Human text or JSON; positional or named/stdin message; Unicode casefold matching | 0.2.0: explicit JSON/text format, positional/named/stdin body, command help, exact Unicode 14.0.0 casefold with PID for ambiguity | Implemented; [#19](https://github.com/abruption/session-peer-ts/issues/19), 0.2.0. Published 0.1.0 help still says “preview”; source help now describes unified list |
 | From / Reply-To | Caller detection, automatic return-route metadata, structured URI resolution | 0.2.1 and earlier: From uses Codex environment UUID only; explicit `--reply-address`; local/SSH Reply-To URI parsing with conflict checks. 0.3.0: Claude/Codex sender detection, generated routes, `--reply-to`, same-user self normalization, Tailscale routing hint and `doctor --check-return-route` ([details](#sender-context-and-return-routes-unreleased-source)) | Implemented for [#21](https://github.com/abruption/session-peer-ts/issues/21); no Antigravity identity, no executable `Reply:` line, 0.3.0 |
 | SSH | Python source streamed to POSIX remote Python; multiple hosts/options/host metadata | Same-version installed TS CLI required; strict preflight; JSON stdin; explicit Windows PowerShell path. 0.3.0: ordered repeated `--host`, allowlisted `--ssh-opt`, typed single-hop `--ssh-jump` (POSIX clients), IPv6 literals and `sshUser`/`sshUserSource` ([details](#multi-host-ssh-and-connection-options-unreleased-source)) | Partial; [#20](https://github.com/abruption/session-peer-ts/issues/20) (no arbitrary options or multi-hop; `--ssh-jump` refused on Windows clients; Tailscale routing hint in #21), [#23](https://github.com/abruption/session-peer-ts/issues/23) deployment/version design ([proposed ADR](docs/design/remote-deployment.md)), 0.3.0 |
 | Updates | Cached advisory client/skill notices (on by default); GitHub release check; standalone self-update and remote push; package-manager guidance | 0.3.0: `update --check` reads npm dist-tags (`latest`/`preview`) with installation-manager guidance; no self-update or remote update; cached client notices are opt-in (`SESSION_PEER_UPDATE_NOTICE=1`), honor `--no-update-notice`/`SESSION_PEER_NO_UPDATE_NOTICE`; no skill notices. 0.2.1 only accepts `--no-update-notice` as a no-op | Partial for [#22](https://github.com/abruption/session-peer-ts/issues/22), 0.3.0; [update boundaries](#source-update-checks--22) |
 | Reusable execution API | Agent/transport capability adapters | Package root exposes pure protocol helpers only; no general typed execution API | Planned [#24](https://github.com/abruption/session-peer-ts/issues/24), Future — Agent integrations |
-| Skill guidance/setup | Companion `session-peer` skill targets Python | Separate `session-peer-ts` companion PR and exact-commit setup; baseline/version/help gates | Source [#25](https://github.com/abruption/session-peer-ts/issues/25), 0.2.0; no tag/publish |
+| Skill guidance/setup | Companion `session-peer` skill targets Python | Separate `session-peer-ts` companion PR and exact-commit setup; baseline/version/help gates | Legacy metadata profile from [#25](https://github.com/abruption/session-peer-ts/issues/25); guidance refresh/guard coordination in [#118](https://github.com/abruption/session-peer-ts/issues/118) |
 | MCP | Optional extra, restricted destinations; separate wake permission | Unsupported | Planned [#26](https://github.com/abruption/session-peer-ts/issues/26), Future — Agent integrations |
 | Codex wake | Explicit opt-in; platform/version gates; may run a model and alter history | Unsupported; queued does not wake or prove consumption | Planned [#27](https://github.com/abruption/session-peer-ts/issues/27), Future — Agent integrations |
 | Antigravity | Experimental registered bridge generation/inbox contract | Unsupported | Planned [#28](https://github.com/abruption/session-peer-ts/issues/28), Future — Agent integrations |
@@ -41,7 +42,7 @@ not a missing implementation. Issue links describe work, not available features.
 | Relay server / hosted control service | Separate infrastructure and deployment | Not part of the TS CLI deliverable | Deliberately different scope; #29 must define client boundaries before implementation |
 | Wait / general ACK / exactly-once consumption | No general CLI wait/ACK or exactly-once consumption guarantee | No general CLI wait/ACK or exactly-once consumption guarantee | Shared limit, not a TS parity gap; paired-device deduplication is not end-to-end consumption |
 
-Source anchors at the baselines:
+Historical 0.2.0 source anchors and the unchanged Python oracle:
 [TS CLI](https://github.com/abruption/session-peer-ts/blob/0edc4f8ae05256698f591b7402e89cd3d5858eef/src/cli.ts),
 [writer](https://github.com/abruption/session-peer-ts/blob/0edc4f8ae05256698f591b7402e89cd3d5858eef/src/writer.ts),
 [send](https://github.com/abruption/session-peer-ts/blob/0edc4f8ae05256698f591b7402e89cd3d5858eef/src/send.ts),
@@ -137,7 +138,7 @@ TS normal envelopes have `schemaVersion`, `host`, `command`, `ok`, `version`,
 | --- | --- | --- |
 | `list.sessions`, `discovery` | Unified/per-agent and per-home diagnostics; partial results can remain with `ok:false` | Source: Claude rows then Codex rows; readable homes survive failed homes/agents with `ok:false`, exit 1. Published 0.1.0 has only selected-agent/single-home results |
 | `send.status`, `submitted` | Submission/wake/transport-specific details; do not assume a uniform error shape | `validated:false`, `posted:true` (Claude), `queued:true` (Codex); caught refusal is `refused:false`, unknown is `unknown:null` |
-| `consumptionConfirmed` | False for native submission; queueing is not consumption | Always false on send results, including refusal/unknown |
+| `consumptionConfirmed` | Optional and transport-specific; never infer a missing value as false or confirmation | Always false on send results, including refusal/unknown |
 | `target`, `chars`, `dryRun`, `codexHome` | Target and home details depend on agent; Codex target includes `id`/`name`, with separate `agent` | Success/dry-run target has `agent` plus `id` or `pid`/`name`; `chars` counts enveloped code points; `codexHome` only on Codex success/dry-run |
 | `queueId` | Present if native queue stdout supplies an ID | Source #17: optional bounded native confirmation ID on successful queue only; absent in public 0.1.0 |
 | `codexHomeResolution` | Resolution diagnostics on Codex success and some refusals | Source #17: sanitized resolution on success and failures after resolution begins; private owner fingerprints remain internal. Absent in public 0.1.0 |
@@ -160,6 +161,60 @@ Output sources: TS CLI/send above; Python
 [commands](https://github.com/abruption/session-peer/blob/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core/commands.py),
 [Codex queue/wake](https://github.com/abruption/session-peer/blob/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core/codex.py),
 [SSH errors](https://github.com/abruption/session-peer/blob/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core/ssh.py).
+
+## Ordinary CLI migration notes — #117
+
+This comparison excludes Relay/MCP and paired-device transports. The existing
+Python 1.0.2 oracle and `referenceVersion` stay unchanged. A separate fixed-source
+review on 2026-10-09 uses published Python 1.0.3
+[`0d252550`](https://github.com/abruption/session-peer/tree/0d252550ab40c26d1ac4a19193df6ca2f84d830b)
+and TS 0.3.2 [`f335f073`](https://github.com/abruption/session-peer-ts/tree/f335f07352c842f2f6ceb12bd2ca6274b52f69f7)
+for migration guidance, not byte/shape parity or a runtime-reference repin.
+
+- Python's [Claude adapter](https://github.com/abruption/session-peer/blob/0d252550ab40c26d1ac4a19193df6ca2f84d830b/session_peer_core/adapters.py)
+  returns `ok`, `target`, `chars` and `dryRun`; ordinary Claude results can omit
+  `status`, `submitted` and `consumptionConfirmed`. TS emits `validated` with
+  `submitted:false` for dry-run and `posted` with `submitted:true` after inbox
+  submission, always with `consumptionConfirmed:false`. Claude `target.name`
+  may be null. Codex queue IDs are optional; none of these facts confirms ACK.
+- Missing Claude session directories yield an empty list and discovery
+  `status:ok`; optional missing Codex homes yield `absent`, and no readable DB
+  with no errors yields `not_installed`. These are discovery states, not proof
+  that an agent executable or inbox is ready. Doctor completion is separate
+  from `ready`, and neither grants send authorization.
+- Repeated SSH hosts produce ordered per-host results; an operational failure
+  during per-host dispatch makes exit 1. Command-wide refusals before dispatch
+  (for example duplicate hosts or an empty message) retain exit 2, including
+  when rendered as an array. A single host stays flat. Presence, `ok`, status and exit must be interpreted
+  separately. The shipped 0.3.2 SSH path can classify even complete stdout as
+  unknown after exit 255 or timeout: [#115](https://github.com/abruption/session-peer-ts/issues/115)
+  and [#116](https://github.com/abruption/session-peer-ts/issues/116) track the
+  correction and strict response parsing. This document does not claim those
+  fixes have shipped. Unknown never permits automatic resend or fallback.
+- TS supports manager-owned npm update checks, not Python's standalone
+  self-update or remote maintenance. Client notices are off by default; opt-out
+  wins over opt-in, but explicit `update --check` still requests the registry.
+  Runtime, remote installation and skill maintenance remain separate.
+- TS normalizes a self SSH Reply-To only for an explicit matching OS user and
+  a recognized exact local name, with no explicit SSH option. Conflicting
+  Claude/Codex sender evidence omits identity instead of choosing Claude first;
+  unusable Claude names fall back to PID. An explicit return-route check runs a
+  reverse SSH no-op only for a usable non-local destination. A self route instead
+  returns `verified`, `transport:local`, `self_route_normalized` without SSH; a
+  missing host fails before a probe. `verified` therefore means local
+  normalization or one successful SSH no-op, not receipt authentication, general
+  reverse access or agent consumption.
+- Stronger TS storage, registry and output guards are intentional; migration
+  does not relax them to reproduce Python behavior. General native ACK/wait,
+  end-to-end deduplication and Side Session support are not public ordinary-CLI
+  features in either compared release. Historical wake tests for native Codex
+  0.154.0 do not qualify a current native CLI.
+- The separately pinned TS companion retains legacy metadata `0.1.0`.
+  Its repository tag and the Python skill version are different version trains.
+  [#118](https://github.com/abruption/session-peer-ts/issues/118) requires a
+  reviewed metadata profile, an actually published runtime guard, then separate
+  skill approval/publication before replacing the install pin. A Draft content
+  candidate is not an approved install source or proof of doctor compatibility.
 
 ## Transport, size and failure boundaries
 
@@ -185,12 +240,13 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `Get-Command session-peer -All` (PowerShell), then `session-peer --version`.
    Record the Python interpreter/venv or owning uv/pipx/package manager before
    changing PATH. Do not delete another manager's files or overwrite its shim.
-2. **Install the chosen version explicitly after checking registry availability.** For 0.2.0:
-   `npm install --global --ignore-scripts session-peer@0.2.0`.
+2. **Install the chosen version explicitly after checking registry availability.** The [public 0.3.2 record](VALIDATION.md#public-032--2026-10-07-kst) pins its source and artifact.
+   Check `npm view session-peer@0.3.2 version dist.integrity`, then use
+   `npm install --global --ignore-scripts session-peer@0.3.2`.
    Verify the resolved command/version again. An isolated npm prefix and explicit
    launcher path allow side-by-side evaluation. Install any desired skill
    separately using the exact reviewed commit, explicit agent and scope in the
-   [README](README.md#agent-skill-explicit-installation). The original companion
+   [guide](docs/guide.md#agent-skill-explicit-installation). The original companion
    `session-peer` skill targets Python; use distinct `session-peer-ts` guidance.
    Check implementation and supported help; 0.1.0 development builds historically shared their version string with the public baseline.
 3. **Make selection and output explicit.** Replace bare `list` with
@@ -308,10 +364,11 @@ This patch is not in the immutable npm 0.3.0 archive.
 
 ## Source read-only doctor — #18 / 0.2.0
 
-Evidence date: 2026-09-28. `doctor --json [--agent claude|codex]` supports local
+Historical base-doctor evidence date: 2026-09-28. Introduced in 0.2.0,
+`doctor --json [--agent claude|codex]` supports local
 inspection and the existing version-checked SSH/stdin JSON transport. Published
 npm 0.1.0 does not contain this command. Both SSH endpoints must use the same
-0.2.0 build; development checkouts should also match commits.
+TS version; reviewed commit alignment for source builds remains the operator's responsibility, not a wire-level commit check.
 
 `ok:true`, exit 0 and `diagnosticCompleted:true` mean the diagnostic command
 completed, including when agents are unavailable. `ready` is a metadata
@@ -339,13 +396,16 @@ These are implementation capabilities, not evidence of agent readiness or ACK.
 
 `skills` inspects only `~/.agents/skills/session-peer-ts/SKILL.md` and
 `<explicit home, CODEX_HOME, or ~/.codex>/skills/session-peer-ts/SKILL.md`.
-No skill installation or reference traversal occurs. The #25 TS skill contract
+No skill installation or reference traversal occurs. The legacy #25 TS skill contract
 requires metadata version/min/full `0.1.0`, implementation `typescript`, and
 capability policy `probe-help`; missing/malformed/incompatible metadata is
 reported separately and does not change agent readiness. This conservative
 metadata check does not certify instruction content. Generic Python
-`session-peer` skills are not inferred compatible. No `--check-reply-to` probe
-or general reply-observation API is implemented.
+`session-peer` skills are not inferred compatible. Since 0.3.0, the separate
+opt-in `doctor --check-return-route` can execute a bounded reverse SSH no-op
+([current behavior](#sender-context-and-return-routes--21--030)); base doctor
+does not run that probe. `--check-reply-to` is not an alias and is unsupported.
+Neither mode observes a reply or authenticates an ACK.
 
 Acceptance evidence: `test/diagnostics.test.ts` ports Python diagnostic cases for
 missing homes/tools, unsupported schema, per-home results, permission/unknown
@@ -387,7 +447,9 @@ name/PID selection with collisions, and text escaping on all CI platforms.
 
 Evidence date: 2026-09-28. TS CLI baseline for this work is `8289da7`; companion
 candidate is [`081cc3c1d16a394bd92824333f4bc61c36951799`](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts).
-This is separately reviewed source, not a skill tag or npm release. Published
+This paragraph records the 2026-09-28 source review, not current repository-tag
+availability. Companion PR #14 was later merged; its separately pinned TS
+metadata remains 0.1.0, and #118 owns any successor contract/pin. Published
 npm 0.1.0 remains unchanged. There is no runtime setup subcommand: user-invoked
 Skills CLI 1.7.0 is the reviewed setup path, with an exact commit, explicit agent,
 and explicit project/user scope chosen before running the documented command.
@@ -487,7 +549,14 @@ endpoints refuse each other at preflight; upgrade them together.
   is verified. No multi-hop and no arbitrary ssh options.
 - **#23 — Partial.** The remote deployment ADR is a proposal. Its POSIX cell
   was exercised by hand ([record](VALIDATION.md#remote-deployment-workflow-posix-cell-23-f5--2026-10-02-kst));
-  the Windows cell and the newer receipt and recovery rules are unvalidated.
+  that dated Linux run did not exercise the later receipt/recovery rules.
+  The [2026-10-07 Windows record](VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)
+  adds bounded published-0.3.1 qualification on Windows 10 x64, an administrator
+  account, PowerShell 5.1 and Node 24.16.0: offline provisioning, wrapper/native
+  locking, operator doctor and nonexistent-target dry-run, plus 31 local storage
+  fixtures. Node 22 has banner/native-lock smoke only, not the full matrix.
+  Non-admin, other architectures, F6 runtime-identity enforcement and the Linux
+  current-rule gaps remain open. No 0.3.2 live ACK or deploy helper is established.
 - **Update notices (#22).** The Windows refresh, refresh-failure and
   forged-`clientUpdate` (injection) cells are unverified; Windows CI covers only
   the array/flat shape and one text stderr line. Those cases have POSIX fixture
@@ -625,7 +694,7 @@ Scope: notices belong to the invoking client. With `--host`, the client adds
 `clientUpdate` (or its stderr line) to its own top-level output, including the
 verified result obtained over SSH; the `--stdio-request` receiver never reads,
 refreshes or produces a notice. The notice is computed once per invocation.
-Multi-host and failures (integration candidate with #20/#21):
+Multi-host and failures (shipped 0.3.0 integration with #20/#21):
 
 - Repeated `--host` JSON array: request order and every element's exact shape are
   kept; no `clientUpdate` in elements and no wrapper object.
@@ -728,4 +797,4 @@ and removal on every supported shell. They do not establish live delivery or ACK
 
 ## 0.3.2 release scope
 
-The 0.3.2 source is prepared from the main line containing the published 0.3.1 fixes. Runtime behavior is unchanged apart from the version banner and exact-version SSH gate. Release tooling now pins public 0.3.1 and the existing preview integrity as the baseline for a separate 0.3.2 approval. Deployment and Windows qualification evidence is recorded in [VALIDATION.md](VALIDATION.md); this preparation does not claim that pending qualification gates passed. No 0.4 handoff/app-server/observation runtime is included.
+The [public 0.3.2 record](VALIDATION.md#public-032--2026-10-07-kst) pins publication source `f335f07352c842f2f6ceb12bd2ca6274b52f69f7` and the artifact. Runtime behavior differs from 0.3.1 only in the version banner and exact-version SSH gate. Its dated preparation record describes the pre-publication checkpoint, not current availability. Windows destination qualification used published 0.3.1, with the limits above. No 0.4 handoff/app-server/observation runtime is included; Drafts and the joint design freeze are not shipped capabilities.

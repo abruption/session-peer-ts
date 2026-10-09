@@ -8,6 +8,21 @@
 
 이 가이드는 0.3.2를 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
 
+## 마이그레이션 경계 (0.3.2)
+
+[0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)은 릴리스 소스와 산출물을 고정합니다. SSH 사전 확인은 정확히 같은 TS 버전 표시를 검사하며 커밋 해시는 검사하지 않습니다. 소스 빌드의 검토 커밋 일치는 운영자가 별도로 확인해야 합니다.
+
+- Python Claude JSON에서는 `status`, `submitted`, `consumptionConfirmed`가 생략될 수 있습니다. TS는 `validated`/`posted`, 명시적 `submitted`, `consumptionConfirmed:false`를 사용합니다. 없는 필드는 false나 null이 아닙니다. Claude 이름은 null일 수 있고 Codex `queueId`는 선택 필드입니다. 제출은 ACK를 증명하지 않습니다.
+- Claude 세션 디렉터리가 없으면 빈 목록과 `status:ok`가 반환됩니다. 선택적 Codex 홈이 없으면 `absent`, 읽을 수 있는 DB와 오류가 모두 없으면 전체 상태가 `not_installed`입니다. 빈 목록이나 doctor 완료는 전송 권한을 부여하지 않습니다.
+- 반복 `--host`는 요청 순서대로 배열을 반환합니다. 호스트별 실행 단계의 실패는 종료코드 1로 집계하지만, 실행 전 명령 전체 거부(호스트 중복이나 빈 메시지 등)는 배열 출력에서도 종료코드 2를 유지합니다. 일반 0.3.2는 SSH 종료 255나 시간 초과 후 완전한 응답의 근거도 잃을 수 있으며, #115/#116에서 별도로 수정합니다. unknown이면 자동 재전송하지 않습니다.
+- 0.2.0에 도입된 기본 doctor는 Codex를 실행하거나 inbox에 제출하지 않습니다. 0.3.0부터 명시적 `--check-return-route`는 사용할 수 있는 비로컬 대상에 한해 제한된 역방향 SSH 무동작 명령을 실행합니다. 자기 경로는 SSH 없이 `verified`, `transport:local`, `self_route_normalized`를 반환하며, 호스트가 없으면 접속 확인 전에 실패합니다. `--check-reply-to`는 지원하지 않습니다. verified는 로컬 경로 정규화 또는 한 번의 SSH 무동작 명령 성공을 의미하며, ACK 인증이나 일반적인 역방향 접근 보장이 아닙니다.
+- 같은 기기의 Reply-To를 로컬로 바꾸려면 명시된 OS 사용자가 일치하고 정확한 로컬 이름으로 확인되며 명시적 SSH 옵션이 없어야 합니다. 발신자 근거가 충돌하면 신원을 생략하고, Claude 이름을 사용할 수 없으면 PID를 사용합니다.
+- npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 기존 스킬 메타데이터는 `0.1.0`이며 #118의 후속 Draft는 설치 고정값이나 공개된 호환성 검사기의 근거가 아닙니다.
+- Windows 검증은 공개 0.3.1, Windows 10 x64, 관리자 계정, PowerShell 5.1, Node 24.16.0에서 수행했습니다. 오프라인 설치, 래퍼·네이티브 잠금, 운영자의 doctor·없는 대상 dry-run과 로컬 fixture 31개가 검증됐습니다. Node 22는 버전 표시·네이티브 잠금 확인만 수행했습니다. 비관리자, 다른 아키텍처, F6 런타임 검사, 이전 Linux 실험의 최신 규칙 검증은 남아 있습니다. 이는 0.3.2 실기 ACK나 배포 도우미 검증이 아닙니다.
+
+[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. Python 1.0.2 테스트 기준은 유지합니다. 비교 대상 공개 CLI 모두 일반 네이티브 ACK/wait, 종단 간 중복 방지, Side Session을 제공하지 않습니다. Relay/MCP는 이 비교 범위에서 제외합니다.
+
+
 ## 목차
 
 - [주요 기능과 범위](#주요-기능과-범위)
