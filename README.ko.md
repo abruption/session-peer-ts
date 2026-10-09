@@ -20,7 +20,7 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**문서·소스 기준 버전: 0.3.2(공개된 안정 버전).** 아래 버전 고정 npm 명령을 실행하기 전에 레지스트리나 버전 배지에서 해당 버전이 공개됐는지 확인하세요. 새 버전을 발행하기 전에는 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드 산출물과 SSH 양쪽 종단은 같은 검토 버전을 사용해야 합니다.
+**문서·소스 기준 버전: 0.3.3.** 2026-10-09 KST 준비 시점에는 0.3.3이 미발행이었고 공개 npm `latest`는 **0.3.2**, `preview`는 `0.1.0-preview.1`이었습니다. 아래 0.3.3 npm 예시를 사용하기 전에 레지스트리에서 현재 제공 여부를 확인하세요. 제공되지 않으면 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드와 SSH 양쪽은 같은 검토 버전이 필요하며, 0.3.2와 0.3.3은 서로의 SSH 사전 확인을 거부합니다.
 
 <a id="demo"></a>
 ## 시연
@@ -65,13 +65,15 @@ PowerShell에서는 `Get-Command session-peer -All`로 PATH(명령 검색 경로
 실행 파일을 찾는지 확인하세요. 사용할 구현을 선택하고 다른 패키지 관리자가 설치한
 파일을 `--force`로 덮어쓰지 마세요. 설치와 갱신은 사용자가 npm으로 직접 수행합니다.
 
+**0.3.3 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](docs/guide.ko.md#소스에서-빌드)를 사용하세요.
+
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.2
+npm view session-peer@0.3.3 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.3
 session-peer --version
 ```
 
-예상 결과는 `session-peer 0.3.2 (typescript)`입니다. 별도 경로에 설치하거나,
+예상 결과는 `session-peer 0.3.3 (typescript)`입니다. 별도 경로에 설치하거나,
 소스에서 빌드하거나, Windows에서 설치·제거하는 방법은 [사용자 가이드](docs/guide.ko.md#설치)를 참고하세요.
 
 선택 사항인 `sp` 단축 명령은 0.3.0 이상에 포함되며(0.2.1 이하에는 없음) 자동으로
@@ -82,13 +84,13 @@ session-peer --version
 ### 업데이트
 
 npm으로 설치한 클라이언트는 사용자가 직접 npm으로 업데이트합니다. 사용 가능한 배포 태그
-(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 0.3.2로
+(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 승인·발행 이후 이전 npm 설치본을 0.3.3으로
 업데이트합니다. `session-peer` CLI는 업데이트를 설치하지 않습니다. `session-peer
 update --check`는 새 버전이 있는지 확인할 뿐입니다.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.2
+npm install --global --ignore-scripts session-peer@0.3.3
 session-peer --version
 ```
 

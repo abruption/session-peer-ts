@@ -1,4 +1,6 @@
-# Ordinary SSH response validation — 0.3.3 development candidate
+<a id="ordinary-ssh-response-validation--033-release-candidate"></a>
+
+# Ordinary SSH response validation — 0.3.3
 
 This describes the source correction for [#116](https://github.com/abruption/session-peer-ts/issues/116) and [#115](https://github.com/abruption/session-peer-ts/issues/115). It is not a claim that the immutable npm 0.3.2 artifact contains it. Both endpoints still require the same TypeScript client version. The Python 1.0.2 development oracle and the separate 0.4.0 handoff proposals are unchanged.
 
@@ -31,3 +33,5 @@ Ordered fanout preserves each destination's result and has exit 1 if any destina
 ## Validation boundaries
 
 The fixtures use synthetic response objects and owned fake processes/SSH endpoints, not live agent delivery. They cover complete versus partial output, exit 0/255, actual process collection timeout, invalid diagnostic bytes, byte/depth/node limits, escaped duplicate keys, nullable Claude names, request mismatches, ordered mixed-host results and one request per host. A test-only import shortens the production request timer in the POSIX CLI fixture; production has no new timeout setting. The portable parser/process tests run in the Windows suite; the native Windows fixture exercises a complete Codex response followed by SSH 255 through encoded PowerShell. CI results and exact commits are recorded in the PR, not inferred from fixture names.
+
+At dependency [PR #127](https://github.com/abruption/session-peer-ts/pull/127) head `8c882fa`, 13 portable parser/process fixtures passed. POSIX fake SSH exercised complete/partial frames with exits 0/255 and a real shortened collection timeout, plus ordered fanout and one attempt per host. The encoded PowerShell Windows fixture retained a complete `queued` native stand-in result (`ok:true`, `submitted:true`) after SSH 255 and invalid diagnostic stderr, while returning local exit 1 with `sshTransport`; it made exactly one queue stand-in call. [CI run 37863835806](https://github.com/abruption/session-peer-ts/actions/runs/37863835806) passed 12/12 checks including macOS/Ubuntu Node 22/24 and Windows native Node 22/24; [CodeQL run 37863832399](https://github.com/abruption/session-peer-ts/actions/runs/37863832399) also passed. This qualifies that dependency head's bounded fixtures, not a future merged main release SHA. It adds no actual agent ACK, real SSH-host, delivery/crash or fleet verification. Final combined candidate checks and exact artifact evidence belong in [VALIDATION.md](../../VALIDATION.md).

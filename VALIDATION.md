@@ -1,4 +1,59 @@
-# Validation record — updated 2026-10-07 KST
+# Validation record — updated 2026-10-09 KST
+
+## 0.3.3 candidate preparation — 2026-10-09 KST
+
+Preparation [#128](https://github.com/abruption/session-peer-ts/issues/128)
+integrates the still-unmerged dependency heads: documentation #125
+`d4c91387b8c968d45a822f82b69ff9333f4ae0bf`, ordinary SSH #127
+`8c882fab220ade044d00beb9d23bf6ecb7727bdc`, and Draft skill guard #126
+`f10b97115830d5968ff7a0583dc470643c3cbeda`, based on main
+`b12699e108c0857b029d4b5c72f82414eb64b21c`. This is an unpublished
+review candidate, not a merged release SHA or publication authorization.
+The 0.4.0 handoff/app-server/observer drafts are excluded. Exact companion
+successor-profile acceptance remains pending; candidate `VERSION=0.3.3`
+exercises a proposed finite row, not published skill compatibility.
+
+Local macOS arm64, Node 24.16.0 checks at preparation checkpoint
+`de0472aa6e5ac94d29f227d04dc93671b4d45646`:
+
+- `npm test`: 183 tests, 178 passed, zero failed, five Windows-only skips.
+  This command also ran `npm run build` and `npm run test:types` successfully.
+  Conformance used the existing Python 1.0.2 oracle at
+  `47c23713d0a2a3c11ebde6186afd8c43489b8b65`; no reference repin.
+- The release, skill-metadata, updates and multi-host integration selection
+  passed 41 tests before the full suite.
+- `npm run test:package`: reproducible package, fresh isolated installation,
+  native dependency loading, bash/zsh shorthand contract, actual fixture
+  version replacement (`0.3.3` to `0.3.3-fixture.1`) and removal passed.
+- `node scripts/check-repository.mjs`, `git diff --check` and `npm audit`
+  passed; audit reported zero vulnerabilities.
+
+The first candidate CI run `37886970517` failed its Windows Node 22
+same-size metadata mutation fixture: the automatic timestamp change was not
+observed while the file was open. The fixture now explicitly advances mtime
+and asserts that metadata changed after inspection returns; fixture mutation
+errors also propagate outside the reader’s conservative error handler, so
+a setup/assertion failure cannot count as expected refusal. No timing sleep
+is used. This tests an
+observable metadata change, not an atomic snapshot or undetectable writes.
+Runtime reader behavior is unchanged. After this test-only correction,
+`npm run build`, `npm run test:types` and the 15 skill-metadata tests passed
+locally. Corrected exact-head Windows/aggregate CI results belong in the PR;
+the first failed run is not reported as all green.
+
+The registry baseline was read as `latest=0.3.2`,
+`preview=0.1.0-preview.1`, and 0.3.3 absent. Previous stable integrity matches
+its public record below. Authenticated pending-stage, Trusted Publisher,
+package MFA and protected-environment policy reads were not performed for
+this preparation. They remain fresh pre-publication gates.
+
+The strict SSH and bounded metadata evidence is fixture/CI evidence described
+in the dependency design documents. No live agent delivery, ACK, real remote
+SSH qualification, crash recovery or fleet update was performed here. Local
+Windows-only skips are not passes; candidate CI and exact post-merge main CI
+must be reported separately at their own exact heads. Local artifact hashes
+and current-head CI results are recorded in the preparation PR, without
+substituting them for an approved Actions publication artifact.
 
 ## Public 0.3.2 — 2026-10-07 KST
 

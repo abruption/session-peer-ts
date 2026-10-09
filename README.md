@@ -15,7 +15,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**Documentation and source version: 0.3.2.** Before using the version-pinned npm commands below, confirm that 0.3.2 is available in the npm registry or version badge. Before publication, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints must use the same reviewed version.
+**Documentation and source version: 0.3.3.** At the 2026-10-09 KST preparation checkpoint, 0.3.3 was unpublished, public npm `latest` was **0.3.2**, and `preview` was `0.1.0-preview.1`. Check the registry for current availability before using the 0.3.3 npm examples; if unavailable, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints need the same reviewed version; 0.3.2 and 0.3.3 refuse each other's SSH preflight.
 
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
@@ -56,13 +56,15 @@ Check `type -a session-peer` on macOS/Linux or `Get-Command session-peer -All`
 in PowerShell before installing. Choose the intended PATH entry; do not use
 `--force` to overwrite another manager’s files.
 
+**Version 0.3.3 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).
+
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.2
+npm view session-peer@0.3.3 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.3
 session-peer --version
 ```
 
-Expected: `session-peer 0.3.2 (typescript)`. For isolated installation, source
+Expected: `session-peer 0.3.3 (typescript)`. For isolated installation, source
 builds, Windows and removal, see the detailed guide below.
 
 Optional `sp` shorthand ships with 0.3.0 and later (not 0.2.1 or earlier) and is
@@ -72,12 +74,12 @@ never enabled automatically. See [explicit activation and collisions](docs/short
 
 Use npm for an npm-managed installation. Check the available tags and review
 the target version, then install that exact version; this example updates an
-older npm installation to 0.3.2. The CLI does not install updates;
+older npm installation to 0.3.3 after approved publication. The CLI does not install updates;
 `session-peer update --check` only reports them.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.2
+npm install --global --ignore-scripts session-peer@0.3.3
 session-peer --version
 ```
 

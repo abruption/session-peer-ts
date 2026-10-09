@@ -4,11 +4,13 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**Documentation and source version: 0.3.2.** This version is public ([release record](../VALIDATION.md#public-032--2026-10-07-kst)). Before using the version-pinned npm commands below, confirm that 0.3.2 is available in the npm registry or version badge. Before publication, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints must use the same reviewed version.
+**Documentation and source version: 0.3.3.** At the 2026-10-09 KST preparation checkpoint, 0.3.3 was unpublished, public npm `latest` was **0.3.2**, and `preview` was `0.1.0-preview.1`. Check the registry for current availability before using the 0.3.3 npm examples; if unavailable, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints need the same reviewed version; 0.3.2 and 0.3.3 refuse each other's SSH preflight.
 
-This guide covers 0.3.2 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records the previous publication. References to 0.1.0 below describe the older release.
+This guide covers version 0.3.3 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
 
-## Migration boundaries (0.3.2)
+<a id="migration-boundaries-033-candidate"></a>
+
+## Migration boundaries (0.3.3)
 
 The [public 0.3.2 record](../VALIDATION.md#public-032--2026-10-07-kst) fixes the
 release source and artifact. SSH preflight checks the exact TS version banner,
@@ -25,7 +27,7 @@ not a commit hash; operators must align reviewed source commits separately.
   exit 1; command-wide pre-dispatch refusals (such as duplicate hosts or an
   empty message) retain exit 2, including array output.
   Ordinary 0.3.2 can lose complete-response evidence after SSH exit 255 or
-  timeout; #115/#116 address that separately. Unknown means no automatic resend.
+  timeout; 0.3.3 preserves complete request-matched facts and reports local exit 1 with `sshTransport`. Partial or invalid evidence remains unknown. Unknown means no automatic resend.
 - Base doctor (introduced in 0.2.0) executes no Codex or inbox submission.
   Since 0.3.0, explicit `--check-return-route` executes a bounded reverse SSH
   no-op for a usable non-local destination. A self route instead returns
@@ -72,7 +74,7 @@ Relay/MCP are outside this migration comparison.
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-This guide describes **0.3.2**. The npm package and CLI command are both **`session-peer`**. This
+This guide describes **version 0.3.3**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -80,10 +82,12 @@ project does not provide a Relay server or hosted service.
 Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
+**Version 0.3.3 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).
+
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.2
-session-peer --version  # session-peer 0.3.2 (typescript)
+npm view session-peer@0.3.3 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.3
+session-peer --version  # session-peer 0.3.3 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -150,7 +154,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, both ends need the same TypeScript client version (0.3.2).
+On SSH, both ends need the same TypeScript client version (0.3.3).
 
 ## Requirements
 
@@ -174,11 +178,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.3.tgz
 session-peer --version
 ```
 
-Expected for version 0.3.2: `session-peer 0.3.2 (typescript)`. Keep the `./...tgz` path to
+Expected for version 0.3.3: `session-peer 0.3.3 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -198,7 +202,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.3.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -221,7 +225,7 @@ Output requires `--json` or `--output-format json|text`.
 
 ### Another machine over SSH
 
-**0.3.3 development candidate:** Complete, strictly validated remote submission facts are retained after a later SSH 255 or collection timeout. Native `ok:true` may coexist with local exit 1 and `sshTransport`; inspect `submitted` and the transport diagnostic before deciding what happened. Partial, malformed or overflowed responses remain unknown and must not be resent automatically. This is unreleased source behavior, not a change to the public 0.3.2 package. See the [response contract](design/ordinary-ssh-responses.md).
+**0.3.3:** Complete, strictly validated remote submission facts are retained after a later SSH 255 or collection timeout. Native `ok:true` may coexist with local exit 1 and `sshTransport`; inspect `submitted` and the transport diagnostic before deciding what happened. Partial, malformed or overflowed responses remain unknown and must not be resent automatically. This 0.3.3 behavior does not change the immutable public 0.3.2 package. See the [response contract](design/ordinary-ssh-responses.md).
 
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
@@ -461,13 +465,15 @@ separate approval. Licensed under [MIT](../LICENSE).
 
 ## Package release
 
+Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current 0.3.3 availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.
+
 Version 0.2.1 was published and verified on 2026-09-29 KST and 0.2.0 on
 2026-09-28 KST; see the [0.2.1 public release record](../VALIDATION.md#public-021--2026-09-29-kst).
 Later releases add their own dated records. Check the exact version and current
 tags before installing:
 
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
+npm view session-peer@0.3.3 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -519,7 +525,7 @@ and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 installation's owner is positively identified from the running CLI's path:
 an npm global prefix whose own `session-peer` launcher points at this package
 (default, Homebrew, nvm, nvm-windows and fnm prefixes), for example
-`npm install --global --ignore-scripts session-peer@0.3.2`; a pnpm, Yarn or Bun
+`npm install --global --ignore-scripts session-peer@0.3.3`; a pnpm, Yarn or Bun
 global store whose manifest declares `session-peer`; Volta; or the npx cache.
 Project installs (`npm_project`, `pnpm_project`), source checkouts (`source`)
 and anything else (`unknown`) get `updateCommand: null` and a `guidance`
@@ -586,6 +592,8 @@ run from that project directory. For Claude Code use `--agent claude-code`.
 For user scope add `--global` consistently to add/list/remove. Inspect any existing
 `session-peer-ts` copy for local edits before approving its replacement. Codex's
 `.agents/skills` directory is shared with other clients that discover that path.
+
+Version 0.3.3 exercises the proposed bounded `metadata_only` guard on the production doctor path. The successor profile (skill `0.2.0` / minimum `0.1.0` / full `0.3.2`) has [companion Draft #20 design-only acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) for exact #126 `ba18bb8` and release Draft #129 `bfb3d6f`; full heads and reviewed design hashes are recorded in the guard design below. This was static source/test/document review with CI-status confirmation and no test rerun. At the 2026-10-09 acceptance checkpoint, runtime and successor skill were unpublished. Acceptance does not authorize runtime merge/release or final successor skill metadata, publication, installation or pin changes, and makes no public compatibility or delivery/ACK claim. The guard must actually publish before separate successor skill finalization/tag/pin changes. Managers own runtime and skill upgrades; no postinstall is introduced. See the [guard proposal](design/typescript-skill-compatibility.md).
 
 ```sh
 npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes

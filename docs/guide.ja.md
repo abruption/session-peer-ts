@@ -4,17 +4,19 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**文書・ソースのバージョン: 0.3.2。** この版は公開済みです（[公開記録](../VALIDATION.md#public-032--2026-10-07-kst)）。以下のバージョン指定 npm コマンドを使う前に、npm レジストリまたはバージョンバッジで 0.3.2 が公開されているか確認してください。公開前はレビュー済みのソースチェックアウトまたはローカルビルド成果物を使います。ビルドと SSH の両端には同じレビュー済みバージョンが必要です。
+**文書・ソースのバージョン: 0.3.3。** 2026-10-09 KST の準備時点では 0.3.3 は未公開で、公開 npm `latest` は **0.3.2**、`preview` は `0.1.0-preview.1` でした。以下の 0.3.3 npm 例を使う前に、レジストリで現在の公開状況を確認してください。利用できない場合はレビュー済みソースまたはローカルビルド成果物を使います。ビルドと SSH の両端は同じレビュー済みバージョンが必要で、0.3.2 と 0.3.3 は互いの SSH 事前確認を拒否します。
 
-0.3.2 の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。前回の公開記録は [0.3.1 公開リリースの証拠](../VALIDATION.md#public-031--2026-10-04-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
+0.3.3 の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。以前の公開記録は [0.3.1 公開リリースの証拠](../VALIDATION.md#public-031--2026-10-04-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
-## 移行時の境界 (0.3.2)
+<a id="移行時の境界-033-候補"></a>
+
+## 移行時の境界 (0.3.3)
 
 [0.3.2 の公開記録](../VALIDATION.md#public-032--2026-10-07-kst)はリリースのソースと成果物を固定しています。SSH の事前確認は TS のバージョン表示の完全一致を検査しますが、コミットハッシュは検査しません。ソースビルドのレビュー済みコミットは運用者が別途揃える必要があります。
 
 - Python の Claude JSON は `status`、`submitted`、`consumptionConfirmed` を省略する場合があります。TS は `validated`/`posted`、明示的な `submitted`、`consumptionConfirmed:false` を使います。欠けたフィールドは false や null ではありません。Claude の名前は null の場合があり、Codex の `queueId` は任意です。提出は ACK の証拠ではありません。
 - Claude のセッションディレクトリがない場合は空の一覧と `status:ok` を返します。任意の Codex ホームがない場合は `absent`、読める DB もエラーもない場合は全体が `not_installed` です。空の一覧や doctor の完了は送信許可ではありません。
-- `--host` を繰り返すと要求順の配列を返します。ホスト別の実行中の失敗は終了コード 1 に集約しますが、実行前のコマンド全体の拒否（重複ホストや空のメッセージなど）は配列出力でも終了コード 2 を維持します。通常の 0.3.2 は SSH の終了 255 やタイムアウト後に完全な応答の証拠も失う場合があり、#115/#116 で別途修正します。unknown の場合は自動再送しません。
+- `--host` を繰り返すと要求順の配列を返します。ホスト別の実行中の失敗は終了コード 1 に集約しますが、実行前のコマンド全体の拒否（重複ホストや空のメッセージなど）は配列出力でも終了コード 2 を維持します。公開 0.3.2 は SSH の終了 255 やタイムアウト後に完全な応答の証拠も失う場合があります。0.3.3 は要求に一致する完全な事実を保持し、ローカル終了コード 1 と `sshTransport` を返します。不完全・不正な証拠は unknown のままです。unknown の場合は自動再送しません。
 - 0.2.0 で導入した基本 doctor は Codex を実行せず inbox に提出しません。0.3.0 以降の明示的な `--check-return-route` は、利用できる非ローカル宛先に対してのみ、時間を制限した逆方向 SSH の無操作コマンドを実行します。自分自身への経路は SSH なしで `verified`、`transport:local`、`self_route_normalized` を返し、ホストがない場合は接続確認前に失敗します。`--check-reply-to` は未対応です。verified はローカル経路の正規化または 1 回の SSH 無操作コマンドの成功であり、ACK の認証や一般的な逆方向アクセスの保証ではありません。
 - 同じ端末の Reply-To をローカルに正規化するには、明示した OS ユーザーの一致、認識できる正確なローカル名、明示的な SSH オプションがないことが必要です。送信者の証拠が競合した場合は識別情報を省き、Claude の名前が使えない場合は PID を使います。
 - npm、Python、リモートホスト、スキルは別管理です。TS は自己更新やリモート更新を提供しません。通知は既定で無効で、無効化指定が優先します。明示的な `update --check` はレジストリを照会します。従来のスキルメタデータは `0.1.0` のままで、#118 の後継 Draft は導入用の固定値や公開済み互換性検査の証拠ではありません。
@@ -38,7 +40,7 @@
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**0.3.2 の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**0.3.3 の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
@@ -55,7 +57,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。0.2.0 でも明示的なコマンド形式を利用できます。
 
-対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（0.3.2）が必要です。
+対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（0.3.3）が必要です。
 
 ### 0.2.0 CLI の使いやすさ
 
@@ -78,13 +80,15 @@ macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**
 
 Node 22.x の 22.13 以上または 24.x を使用し、インストールする正確なバージョンの公開状況を確認してください。Python CLI も同じコマンド名を使うため、既存のインストールがあれば先に PATH を確認してください。
 
+**0.3.3 のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](#ソースからビルド)を使います。
+
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.2
+npm view session-peer@0.3.3 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.3
 session-peer --version
 ```
 
-期待値は `session-peer 0.3.2 (typescript)`。
+期待値は `session-peer 0.3.3 (typescript)`。
 
 1. `session-peer list --agent claude --json` で宛先を探し、正確な PID を選びます。
 2. `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` で提出せずに確認します。
@@ -103,7 +107,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 任意のグローバルインストール前に PATH の既存コマンドを確認
-npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.3.tgz
 session-peer --version
 ```
 
@@ -113,7 +117,7 @@ session-peer --version
 
 インストール前後に `type -a session-peer` と `command -v session-peer` を確認します。他の実装も同名コマンドを提供するため、PATH 上の一つを選ぶか `node /absolute/path/dist/cli.js` を使ってください。`--force` で他の管理ツールのファイルを上書きしないでください。Python パッケージ・スキル・サービスを自動変更しません。削除は `npm uninstall --global session-peer` を使い、PATH を再確認します。
 
-Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz` を実行し、`& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` で削除します。
+Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.3.tgz` を実行し、`& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` で確認します。同じ prefix の `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` で削除します。
 
 ## 使い方
 
@@ -128,7 +132,7 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 
 ### SSH
 
-**0.3.3 開発候補:** 完全なリモート応答を厳密に検証した後、SSH が 255 で終了したり収集がタイムアウトしたりしても、確認済みの送信登録の事実を保持します。リモート結果の `ok:true` とローカル終了コード 1・`sshTransport` が併存するため、`submitted` と接続診断を確認してください。不完全、不正、上限超過の応答は unknown のままで、自動再送してはいけません。これは未公開ソースの動作であり、公開済み 0.3.2 パッケージを変更しません。[応答契約](design/ordinary-ssh-responses.md)を参照してください。
+**0.3.3:** 完全なリモート応答を厳密に検証した後、SSH が 255 で終了したり収集がタイムアウトしたりしても、確認済みの送信登録の事実を保持します。リモート結果の `ok:true` とローカル終了コード 1・`sshTransport` が併存するため、`submitted` と接続診断を確認してください。不完全、不正、上限超過の応答は unknown のままで、自動再送してはいけません。この 0.3.3 の動作は、変更できない公開済み 0.3.2 パッケージを変更しません。[応答契約](design/ordinary-ssh-responses.md)を参照してください。
 
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
@@ -204,11 +208,13 @@ Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c
 
 ## npm リリース
 
+公開 **0.3.2** は 2026-10-07 KST に検証されました（[固定された公開記録](../VALIDATION.md#public-032--2026-10-07-kst)）。以下のレジストリ照会で 0.3.3 の現在の公開状況と npm タグを確認してください。日付付きの準備記録は、その後の公開結果を証明しません。
+
 0.2.1 は 2026-09-29 KST、0.2.0 は 2026-09-28 KST に公開・検証されました。
 [0.2.1 公開記録](../VALIDATION.md#public-021--2026-09-29-kst)を参照し（以降のリリースはそれぞれ日付付きの記録を追加します）、導入前に正確なバージョンと現在のタグを確認してください。
 
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
+npm view session-peer@0.3.3 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -250,7 +256,7 @@ session-peer update --check --channel preview --output-format text
 実行中の CLI のパスからインストールの管理者を確実に特定できた場合にだけ示します。
 対象は、自身の `session-peer` ランチャーがこのパッケージを指す npm グローバル prefix
 （既定、Homebrew、nvm、nvm-windows、fnm。例：
-`npm install --global --ignore-scripts session-peer@0.3.2`）、マニフェストで
+`npm install --global --ignore-scripts session-peer@0.3.3`）、マニフェストで
 `session-peer` を宣言している pnpm・Yarn・Bun のグローバルストア、Volta、npx キャッシュ
 です。プロジェクトへのインストール（`npm_project`、`pnpm_project`）、ソースチェック
 アウト（`source`）、それ以外（`unknown`）では `updateCommand: null` と `guidance` の文だけを
@@ -311,6 +317,8 @@ stderr の 1 行を出します。ホストの数にかかわらず、更新は 
 Claude Code では `--agent claude-code` を使用します。ユーザー単位の場合は add/list/remove の
 すべてに `--global` を付けてください。既存の `session-peer-ts` を置き換える前にローカルの変更を確認してください。
 Codex の `.agents/skills` は、このパスを探索する他のクライアントと共有されます。
+
+0.3.3 は production doctor 経路で、上限付き `metadata_only` ガードの提案を実行します。後継プロファイル（スキル `0.2.0` / 最小 `0.1.0` / 全機能の参照 `0.3.2`）は、厳密な #126 `ba18bb8` とリリース Draft #129 `bfb3d6f` に対する [companion Draft #20 の設計限定承認 `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md)を得ました。完全なコミットとレビュー対象の設計ハッシュは以下のガード設計に記録しています。ソース・テスト・文書の静的レビューと CI 状態の確認で、テストは再実行していません。2026-10-09 の承認時点ではランタイムと後継スキルは未公開でした。この承認はランタイムのマージ・公開や最終的な後継スキルのメタデータ・公開・導入・固定コミット変更を許可せず、公開互換性・配信・ACK を証明しません。ガードランタイムを実際に公開してから、後継スキルの確定・タグ・固定コミットを別途変更します。ランタイムとスキルの更新は各管理者が行い、postinstall は追加しません。[ガード提案](design/typescript-skill-compatibility.md)を参照してください。
 
 ```sh
 npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes

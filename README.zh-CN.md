@@ -15,7 +15,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**文档和源码版本：0.3.2。** 使用以下固定版本 npm 命令前，请通过 npm 注册表或版本徽章确认 0.3.2 是否已发布。发布前，请使用已审核的源码检出版本或本地构建产物。构建和 SSH 两端需要相同的已审核版本。
+**文档和源码版本：0.3.3。** 在 2026-10-09 KST 准备时点，0.3.3 尚未发布，公开 npm `latest` 为 **0.3.2**，`preview` 为 `0.1.0-preview.1`。使用以下 0.3.3 npm 示例前，请查询注册表中的当前可用性；如不可用，请使用已审核的源码或本地构建产物。构建和 SSH 两端必须使用相同的已审核版本；0.3.2 与 0.3.3 会拒绝彼此的 SSH 预检。
 
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
@@ -54,13 +54,15 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 `Get-Command session-peer -All` 检查 PATH。选择所需实现，不要用 `--force`
 覆盖其他安装管理器的文件。
 
+**安装 0.3.3：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](docs/guide.zh-CN.md#从源码构建)。
+
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.2
+npm view session-peer@0.3.3 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.3
 session-peer --version
 ```
 
-预期输出：`session-peer 0.3.2 (typescript)`。隔离安装、源码构建、Windows 和
+预期输出：`session-peer 0.3.3 (typescript)`。隔离安装、源码构建、Windows 和
 卸载步骤见下方详细指南。
 
 可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
@@ -69,11 +71,11 @@ session-peer --version
 ### Update
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
-下面示例将旧 npm 安装更新至 0.3.2。CLI 不会安装更新，`session-peer update --check` 只做检查。
+下面示例在批准发布后将旧 npm 安装更新至 0.3.3。CLI 不会安装更新，`session-peer update --check` 只做检查。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.2
+npm install --global --ignore-scripts session-peer@0.3.3
 session-peer --version
 ```
 
