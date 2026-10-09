@@ -9,6 +9,77 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.3.3 candidate preparation — #128 (2026-10-09 KST)
+
+This dated checkpoint records preparation only. The candidate integrated reviewed
+dependency heads
+[PR #125](https://github.com/abruption/session-peer-ts/pull/125) (`d4c9138`),
+[PR #127](https://github.com/abruption/session-peer-ts/pull/127) (`8c882fa`), and
+[Draft PR #126](https://github.com/abruption/session-peer-ts/pull/126) (`f10b971`).
+At this checkpoint all three remained open and unmerged; human review and merge
+were required. Candidate integration did not establish an approved main release SHA.
+No staging, publication, tag, GitHub Release or fleet rollout is authorized by
+preparation [#128](https://github.com/abruption/session-peer-ts/issues/128).
+
+The registry baseline checked at this checkpoint was **latest=0.3.2** and
+**preview=0.1.0-preview.1**; 0.3.3 was the new target and was not published at that checkpoint.
+Previous stable integrity:
+`sha512-VNlzBqELXLFI8uCopfEdYrfweIacHeP6dMK32/4vwQJy8fUIKC64c5WCE3IwQVeCTKGMz9mXSxhzZnXmSGMuuA==`.
+Previous stable attestation metadata:
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.2`.
+Preserve the immutable public 0.3.2 source
+`f335f07352c842f2f6ceb12bd2ca6274b52f69f7` and all historical evidence below.
+
+1. Review the exact dependency heads and companion guard profile before their
+   human merge gate. Review and merge the 0.3.3 preparation after its dependencies.
+   Require successful CI and release gate for the exact resulting 40-character
+   `main` SHA, including Windows Node 22/24; candidate-only checks do not qualify
+   a different main SHA. Record bounded strict SSH/native and metadata reader
+   evidence in VALIDATION.md without claiming ACK, consumption, general platform
+   qualification or 0.4 features.
+2. Perform fresh authenticated reads of package ownership, pending npm stages,
+   stage-only Trusted Publisher mapping/permissions, package MFA settings and
+   protected GitHub `npm` environment/reviewer/main restrictions. Recheck the
+   registry baseline, previous integrity, unchanged preview tag and absence of
+   0.3.3. The historical 0.3.2 settings-read exception does **not** carry forward.
+   A reauthentication or unread setting leaves this gate incomplete.
+3. Build and verify the local candidate archive from that exact merged source,
+   including packed four-language documentation:
+   package, lockfile, runtime banner, examples and tarball must agree on 0.3.3;
+   archive documentation must describe its approved publication state, retain
+   dated historical records, and pass the artifact documentation gate. Record
+   source SHA, tarball integrity and validation without editing a validated
+   archive in place. See [artifact documentation policy](#documentation-gate-for-the-next-release).
+4. Obtain a separate approval naming that exact merged `main` SHA, **0.3.3**,
+   **stable-stage**, and promotion of `latest` to **0.3.3**. Preparation, dependency
+   review and previous release approvals do not authorize this action.
+5. Only after that approval dispatch `publish.yml` with `mode=stable-stage`,
+   `version=0.3.3`, `source_sha=<approved main SHA>` and
+   `confirmation=session-peer@0.3.3 stable-stage`. Download the prepare job’s
+   `npm-release-<SHA>` artifact and apply the documentation gate before protected
+   GitHub environment approval. Verify staged bytes against that retained
+   artifact and review provenance, then obtain the
+   **separate final npm 2FA approval** for publication and `latest` promotion.
+   Stop on uncertain staging outcomes and inspect the existing stage; do not
+   retry uploads or broaden publisher permissions.
+6. Verify public integrity, provenance/signatures, exact version and isolated
+   install/removal; record the new public checkpoint while keeping preview and
+   historical checkpoints intact. Only an **actually published** guard runtime
+   can precede separate successor skill finalization/tag/publication/pin updates.
+   Companion [Draft #20 design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md)
+   records static review of exact #126 `ba18bb8` and release Draft #129
+   `bfb3d6f` on 2026-10-09; full heads/design hashes are recorded in the
+   [guard design](docs/design/typescript-skill-compatibility.md#exact-companion-design-acceptance--2026-10-09-kst). No tests were rerun in that review. At that
+   checkpoint, runtime and successor skill were unpublished. Design-only
+   acceptance does not authorize runtime merge/release, final successor skill
+   metadata/publication/installation or replace pin
+   `081cc3c1d16a394bd92824333f4bc61c36951799`.
+
+0.3.2 and 0.3.3 refuse each other's SSH version preflight. Operators and package
+managers own coordinated endpoint upgrades; no postinstall, automatic deployment
+or uncertain-send retry is introduced. Windows jump-host #20 and provisioning
+#23 limitations remain; the Python 1.0.2 oracle and 0.4 proposals stay separate.
+
 ## Public release checkpoint — 0.3.2 (2026-10-07 KST)
 
 Public `session-peer@0.3.2` was verified with `latest=0.3.2` and unchanged

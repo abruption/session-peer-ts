@@ -4,17 +4,19 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**문서·소스 기준 버전: 0.3.2.** 0.3.2는 현재 공개된 안정 버전입니다([공개 릴리스·검증 기록](../VALIDATION.md#public-032--2026-10-07-kst)). 버전 고정 npm 명령을 실행하기 전에는 레지스트리나 버전 배지에서 지정한 버전의 공개 여부를 확인하세요. 새 버전을 발행하기 전에는 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드와 SSH 양쪽에는 같은 검토 버전을 사용해야 합니다.
+**문서·소스 기준 버전: 0.3.3.** 2026-10-09 KST 준비 시점에는 0.3.3이 미발행이었고 공개 npm `latest`는 **0.3.2**, `preview`는 `0.1.0-preview.1`이었습니다. 아래 0.3.3 npm 예시를 사용하기 전에 레지스트리에서 현재 제공 여부를 확인하세요. 제공되지 않으면 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드와 SSH 양쪽은 같은 검토 버전이 필요하며, 0.3.2와 0.3.3은 서로의 SSH 사전 확인을 거부합니다.
 
-이 가이드는 0.3.2를 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
+이 가이드는 0.3.3을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
 
-## 마이그레이션 경계 (0.3.2)
+<a id="마이그레이션-경계-033-후보"></a>
+
+## 마이그레이션 경계 (0.3.3)
 
 [0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)은 릴리스 소스와 산출물을 고정합니다. SSH 사전 확인은 정확히 같은 TS 버전 표시를 검사하며 커밋 해시는 검사하지 않습니다. 소스 빌드의 검토 커밋 일치는 운영자가 별도로 확인해야 합니다.
 
 - Python Claude JSON에서는 `status`, `submitted`, `consumptionConfirmed`가 생략될 수 있습니다. TS는 `validated`/`posted`, 명시적 `submitted`, `consumptionConfirmed:false`를 사용합니다. 없는 필드는 false나 null이 아닙니다. Claude 이름은 null일 수 있고 Codex `queueId`는 선택 필드입니다. 제출은 ACK를 증명하지 않습니다.
 - Claude 세션 디렉터리가 없으면 빈 목록과 `status:ok`가 반환됩니다. 선택적 Codex 홈이 없으면 `absent`, 읽을 수 있는 DB와 오류가 모두 없으면 전체 상태가 `not_installed`입니다. 빈 목록이나 doctor 완료는 전송 권한을 부여하지 않습니다.
-- 반복 `--host`는 요청 순서대로 배열을 반환합니다. 호스트별 실행 단계의 실패는 종료코드 1로 집계하지만, 실행 전 명령 전체 거부(호스트 중복이나 빈 메시지 등)는 배열 출력에서도 종료코드 2를 유지합니다. 일반 0.3.2는 SSH 종료 255나 시간 초과 후 완전한 응답의 근거도 잃을 수 있으며, #115/#116에서 별도로 수정합니다. unknown이면 자동 재전송하지 않습니다.
+- 반복 `--host`는 요청 순서대로 배열을 반환합니다. 호스트별 실행 단계의 실패는 종료코드 1로 집계하지만, 실행 전 명령 전체 거부(호스트 중복이나 빈 메시지 등)는 배열 출력에서도 종료코드 2를 유지합니다. 공개 0.3.2는 SSH 종료 255나 시간 초과 후 완전한 응답의 근거도 잃을 수 있습니다. 0.3.3은 요청에 맞는 완전한 사실을 보존하며 로컬 종료코드 1과 `sshTransport`를 반환합니다. 불완전하거나 잘못된 근거는 unknown으로 남습니다. unknown이면 자동 재전송하지 않습니다.
 - 0.2.0에 도입된 기본 doctor는 Codex를 실행하거나 inbox에 제출하지 않습니다. 0.3.0부터 명시적 `--check-return-route`는 사용할 수 있는 비로컬 대상에 한해 제한된 역방향 SSH 무동작 명령을 실행합니다. 자기 경로는 SSH 없이 `verified`, `transport:local`, `self_route_normalized`를 반환하며, 호스트가 없으면 접속 확인 전에 실패합니다. `--check-reply-to`는 지원하지 않습니다. verified는 로컬 경로 정규화 또는 한 번의 SSH 무동작 명령 성공을 의미하며, ACK 인증이나 일반적인 역방향 접근 보장이 아닙니다.
 - 같은 기기의 Reply-To를 로컬로 바꾸려면 명시된 OS 사용자가 일치하고 정확한 로컬 이름으로 확인되며 명시적 SSH 옵션이 없어야 합니다. 발신자 근거가 충돌하면 신원을 생략하고, Claude 이름을 사용할 수 없으면 PID를 사용합니다.
 - npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 기존 스킬 메타데이터는 `0.1.0`이며 #118의 후속 Draft는 설치 고정값이나 공개된 호환성 검사기의 근거가 아닙니다.
@@ -90,7 +92,7 @@ JSON에는 정제된 `codexHomeResolution`이 포함되며, 네이티브 응답�
 `queueId`도 포함됩니다. 둘 다 메시지를 읽거나 처리했음을 확인하지 않습니다.
 [홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
 공개 **0.1.0**은 여전히 실행 중인 홈을 명시해야 하며 비활성 세션 허용 옵션이 없습니다.
-SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.3.2)을 설치해야
+SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.3.3)을 설치해야
 합니다.
 
 <a id="020-cli-사용성"></a>
@@ -130,18 +132,20 @@ Claude Code에는 받은 메시지함에 접근할 수 있는 실행 중 TUI(터
 
 Node 22.x의 22.13 이상 또는 24.x를 사용하세요. Python CLI도 같은 `session-peer`
 명령 이름을 쓰므로, 설치 전에 PATH(명령 검색 경로)에서 어떤 실행 파일을 찾는지
-확인하세요. 아래 명령은 사용자가 공개된 0.3.2를 npm으로 설치하는 예입니다.
+확인하세요. 아래 명령은 0.3.3이 승인·발행된 뒤 npm으로 설치하는 예입니다.
 CLI 자체는 패키지를 설치하거나 업데이트하지 않습니다.
 
+**0.3.3 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.
+
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.2
-session-peer --version  # session-peer 0.3.2 (typescript)
+npm view session-peer@0.3.3 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.3
+session-peer --version  # session-peer 0.3.3 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-예상 결과는 `session-peer 0.3.2 (typescript)`입니다.
+예상 결과는 `session-peer 0.3.3 (typescript)`입니다.
 
 1. 세션을 조회하고 `CLAUDE_PID`를 대상으로 선택한 정확한 PID로 바꾸세요.
 2. `--dry-run`으로 검증합니다. 이 단계에서는 메시지를 제출하지 않습니다.
@@ -169,11 +173,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.3.2.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.3.tgz
 session-peer --version
 ```
 
-0.3.2에서 예상되는 결과는 `session-peer 0.3.2 (typescript)`입니다. 로컬 빌드
+0.3.3에서 예상되는 결과는 `session-peer 0.3.3 (typescript)`입니다. 로컬 빌드
 산출물을 선택하려면 `./...tgz` 경로를 그대로 두세요. 이후 버전에 이 명령을 사용할
 때는 먼저 체크아웃한 소스의 버전을 확인하세요.
 
@@ -194,7 +198,7 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.2.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.3.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -218,7 +222,7 @@ Codex 전송에는 전체 UUID가 필요하며 홈은 위의 선택 규칙을 �
 <a id="another-machine-over-ssh"></a>
 ### 다른 머신으로 SSH 전송
 
-**0.3.3 개발 후보:** 완전한 원격 응답을 엄격하게 검증한 뒤 SSH가 255로 종료되거나 수집 시간이 초과되어도 확인된 제출 사실은 보존합니다. 원격 결과의 `ok:true`와 로컬 종료코드 1·`sshTransport`가 함께 나올 수 있으므로 `submitted`와 전송 진단을 함께 확인하세요. 잘리거나 잘못된 응답, 출력 상한을 넘긴 응답은 계속 unknown으로 처리하며 자동 재전송하지 않습니다. 이는 미발행 소스의 동작으로 공개 0.3.2 패키지를 바꾸지 않습니다. [응답 계약](design/ordinary-ssh-responses.md)을 참고하세요.
+**0.3.3:** 완전한 원격 응답을 엄격하게 검증한 뒤 SSH가 255로 종료되거나 수집 시간이 초과되어도 확인된 제출 사실은 보존합니다. 원격 결과의 `ok:true`와 로컬 종료코드 1·`sshTransport`가 함께 나올 수 있으므로 `submitted`와 전송 진단을 함께 확인하세요. 잘리거나 잘못된 응답, 출력 상한을 넘긴 응답은 계속 unknown으로 처리하며 자동 재전송하지 않습니다. 이 0.3.3 동작은 변경할 수 없는 공개 0.3.2 패키지를 바꾸지 않습니다. [응답 계약](design/ordinary-ssh-responses.md)을 참고하세요.
 
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
@@ -437,6 +441,8 @@ Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증
 <a id="package-release"></a>
 ## npm 릴리스
 
+아래 레지스트리 조회로 0.3.3의 현재 제공 여부와 npm 태그를 확인하세요. 날짜가 기록된 준비 근거는 이후 발행 결과를 입증하지 않습니다.
+
 0.3.2는 2026-10-07 KST에, 0.3.1은 2026-10-04 KST에 공개·검증했습니다.
 [0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)과
 [0.3.1 공개 기록](../VALIDATION.md#public-031--2026-10-04-kst)을 참고하세요.
@@ -446,7 +452,7 @@ Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증
 설치 전에는 정확한 버전과 현재 npm 태그를 확인하세요.
 
 ```sh
-npm view session-peer@0.3.2 version dist.integrity
+npm view session-peer@0.3.3 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -501,7 +507,7 @@ session-peer update --check --channel preview --output-format text
 `updateCommand`는 실행 중인 CLI 경로로 설치 주체를 확인할 수 있을 때 사용자에게 안내합니다.
 해당하는 경우는
 자체 `session-peer` 실행기가 이 패키지를 가리키는 npm 전역 prefix(기본, Homebrew, nvm,
-nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.2`),
+nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.3`),
 매니페스트에 `session-peer`가 선언된 pnpm·Yarn·Bun 전역 저장소, Volta, npx 캐시입니다.
 프로젝트 설치(`npm_project`, `pnpm_project`), 소스 체크아웃(`source`), 그 밖의
 경우(`unknown`)에는 `updateCommand: null`과 `guidance` 문장만 돌려주므로, 관련 없는 현재
@@ -563,6 +569,8 @@ HTTP, 자격 증명 불가). npm 설정과 `.npmrc`는 읽지 않습니다.
 Claude Code는 `--agent claude-code`를 사용합니다. 사용자 범위는 add/list/remove 모두에
 `--global`을 동일하게 추가하세요. 기존 `session-peer-ts` 사본을 교체하기 전에 로컬 수정 사항을
 확인하세요. Codex의 `.agents/skills` 디렉터리는 이 경로를 탐색하는 다른 클라이언트와 공유됩니다.
+
+0.3.3은 production doctor 경로에서 제한된 `metadata_only` 검사기 제안을 실행합니다. 후속 프로필(스킬 `0.2.0` / 최소 `0.1.0` / 전체 기능 기준 `0.3.2`)은 정확한 #126 `ba18bb8`와 릴리스 Draft #129 `bfb3d6f`에 대해 [companion Draft #20의 설계 한정 수락 `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md)을 받았습니다. 전체 커밋과 검토한 설계 해시는 아래 검사기 설계에 기록되어 있습니다. 소스·테스트·문서의 정적 검토와 CI 상태 확인이며 테스트를 재실행하지 않았습니다. 2026-10-09 수락 시점에는 런타임과 후속 스킬이 미발행이었습니다. 이 수락은 런타임 병합·발행이나 최종 후속 스킬 메타데이터·발행·설치·고정 커밋 변경을 승인하지 않으며 공개 호환성·전달·ACK를 입증하지 않습니다. 검사기 런타임이 실제 발행된 뒤에만 후속 스킬 확정·태그·고정 커밋을 별도로 변경할 수 있습니다. 런타임과 스킬의 업그레이드는 각 관리자가 담당하며 postinstall은 추가하지 않습니다. [검사기 제안](design/typescript-skill-compatibility.md)을 참고하세요.
 
 ```sh
 npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes

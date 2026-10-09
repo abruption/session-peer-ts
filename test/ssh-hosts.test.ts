@@ -32,7 +32,7 @@ fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({args,input})+'\\n');
 const dest=args[args.indexOf('--')+1],list=k=>(process.env[k]||'').split(',');
 if(args.includes('-G')){if(process.env.FAKE_G==='fail'||list('FAKE_G_FAIL').includes(dest))process.exit(255);console.log('hostname x\\nuser config-user\\nport 22');process.exit(0);}
 if(list('FAKE_DOWN').includes(dest)){console.error('ssh: connect to host: Connection refused SECRET-SENTINEL');process.exit(255);}
-if(args.at(-1).endsWith('--version')){console.log('session-peer 0.3.2 (typescript)');process.exit(0);}
+if(args.at(-1).endsWith('--version')){console.log('session-peer 0.3.3 (typescript)');process.exit(0);}
 if(list('FAKE_LOSS').includes(dest))process.exit(255);
 const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});
 if(list('FAKE_MALFORMED_TARGET').includes(dest)){const value=JSON.parse(r.stdout);value.target.agent={toString:null};r.stdout=JSON.stringify(value);}
@@ -339,7 +339,7 @@ const proxy=args.find(a=>a.startsWith('ProxyCommand='));
 if(proxy){const cmd=proxy.slice(13).replace(/%(.)/g,(m,c)=>c==='%'?'%':c==='h'?name:c==='p'?port:c==='n'?dest:c==='r'?'config-user':m);
   if(spawnSync('/bin/sh',['-c','exec '+cmd],{stdio:'inherit'}).status!==0)process.exit(255);}
 fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({hop:false,args,input})+'\\n');
-if(args.at(-1).endsWith('--version')){console.log('session-peer 0.3.2 (typescript)');process.exit(0);}
+if(args.at(-1).endsWith('--version')){console.log('session-peer 0.3.3 (typescript)');process.exit(0);}
 const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});
 process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const env = { PATH: bin + delimiter + f.env.PATH };

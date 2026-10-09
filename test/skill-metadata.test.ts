@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { syncBuiltinESMExports } from 'node:module';
 import childProcess, { execFileSync } from 'node:child_process';
 import { inspectSkill, SKILL_METADATA_LIMIT, validateSkillMetadata } from '../dist/skill-metadata.js';
+import { VERSION } from '../dist/protocol.js';
 const fields = { version: '0.1.0', 'runtime-implementation': 'typescript', 'runtime-min-version': '0.1.0',
   'runtime-full-version': '0.1.0', 'runtime-capability-policy': 'probe-help' };
 function fixtureText(values: Record<string, string> = fields, name = 'session-peer-ts') {
@@ -23,15 +24,18 @@ const missing = { status: 'unknown', code: 'skill_metadata_missing' };
 const unreadable = { status: 'unknown', code: 'skill_metadata_unreadable' };
 function withoutPath(value: ReturnType<typeof inspectSkill>) { const { path: _path, ...rest } = value; return rest; }
 
-test('finite runtime/profile matrix preserves public legacy and contains successor source proposal', () => {
+test('finite runtime/profile matrix preserves public 0.3.2 and checks the 0.3.3 candidate proposal', () => {
   const legacy = fixtureText(), successor = fixtureText({ ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' });
-  assert.deepEqual(validateSkillMetadata(legacy), compatible); // Current VERSION0.3.2, no release bump.
-  assert.deepEqual(validateSkillMetadata(successor), incompatible);
+  assert.deepEqual(validateSkillMetadata(legacy, '0.3.2'), compatible);
+  assert.deepEqual(validateSkillMetadata(successor, '0.3.2'), incompatible);
+  assert.equal(VERSION, '0.3.3');
   for (const text of [legacy, successor]) {
-    assert.deepEqual(validateSkillMetadata(text, '0.3.3'), compatible); // Proposed, not shipped guard fixture.
+    // Candidate source proposal only; companion exact review remains required.
+    assert.deepEqual(validateSkillMetadata(text, '0.3.3'), compatible);
+    assert.deepEqual(validateSkillMetadata(text), compatible);
+    assert.deepEqual(validateSkillMetadata(text, undefined), validateSkillMetadata(text, VERSION));
     for (const runtime of ['0.0.9', '0.3.4', '0.4.0', '1.0.0']) assert.deepEqual(validateSkillMetadata(text, runtime), incompatible);
-    for (const runtime of [undefined, null, {}, 0, '', '0.3.3-preview.1', '00.3.3']) {
-      if (runtime === undefined) continue; // Omitted internal argument intentionally uses own VERSION.
+    for (const runtime of [null, {}, 0, '', '0.3.3-preview.1', '00.3.3']) {
       assert.deepEqual(validateSkillMetadata(text, runtime), missing);
     }
   }

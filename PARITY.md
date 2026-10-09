@@ -2,12 +2,12 @@
 
 Updated 2026-10-09 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes the **TS 0.3.2 source**: the 0.2.0 unified listing, safe home selection,
+This matrix describes the **TS 0.3.3 source/package contract**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
 separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 [0.2.1 reliability and hardening](#021-reliability-and-hardening) changes, and the
 [0.3.0 remote usability and maintenance](#030-remote-usability-and-maintenance)
-changes with their known limitations. Historical **0.1.0**
+changes with their known limitations, plus the [bounded ordinary SSH correction](#ordinary-ssh-response-correction--033-candidate) and [proposed skill guard](#typescript-skill-guard--033-candidate). At the 2026-10-09 KST preparation checkpoint, public npm `latest` was **0.3.2** and `preview` was `0.1.0-preview.1`. Historical **0.1.0**
 differences are called out explicitly. Public availability and tags must be
 checked in the registry; this document does not assert a publication outcome.
 SSH preflight enforces the exact same TS version banner. For builds from source
@@ -240,9 +240,9 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
    `Get-Command session-peer -All` (PowerShell), then `session-peer --version`.
    Record the Python interpreter/venv or owning uv/pipx/package manager before
    changing PATH. Do not delete another manager's files or overwrite its shim.
-2. **Install the chosen version explicitly after checking registry availability.** The [public 0.3.2 record](VALIDATION.md#public-032--2026-10-07-kst) pins its source and artifact.
-   Check `npm view session-peer@0.3.2 version dist.integrity`, then use
-   `npm install --global --ignore-scripts session-peer@0.3.2`.
+2. **Install the chosen version explicitly after checking registry availability.** The [public 0.3.2 record](VALIDATION.md#public-032--2026-10-07-kst) pins its source and artifact verified on 2026-10-07 KST. If 0.3.3 is unavailable in the registry, use a reviewed source build.
+   Check `npm view session-peer@0.3.3 version dist.integrity`, then use
+   `npm install --global --ignore-scripts session-peer@0.3.3`.
    Verify the resolved command/version again. An isolated npm prefix and explicit
    launcher path allow side-by-side evaluation. Install any desired skill
    separately using the exact reviewed commit, explicit agent and scope in the
@@ -799,11 +799,23 @@ and removal on every supported shell. They do not establish live delivery or ACK
 
 The [public 0.3.2 record](VALIDATION.md#public-032--2026-10-07-kst) pins publication source `f335f07352c842f2f6ceb12bd2ca6274b52f69f7` and the artifact. Runtime behavior differs from 0.3.1 only in the version banner and exact-version SSH gate. Its dated preparation record describes the pre-publication checkpoint, not current availability. Windows destination qualification used published 0.3.1, with the limits above. No 0.4 handoff/app-server/observation runtime is included; Drafts and the joint design freeze are not shipped capabilities.
 
-## Ordinary SSH response correction — 0.3.3 candidate
 
-Unreleased source for [#116](https://github.com/abruption/session-peer-ts/issues/116) and [#115](https://github.com/abruption/session-peer-ts/issues/115) validates bounded raw stdout with fatal UTF-8, one complete JSON object, decoded-key uniqueness, depth 64 and 65,536 nodes. Stdout has a 1 MiB byte cap; diagnostic stderr has an independent 4,096-byte retained budget. Overflow cannot turn a retained prefix into success.
+<a id="ordinary-ssh-response-correction--033-candidate"></a>
+
+## Ordinary SSH response correction — 0.3.3
+
+The 0.3.3 correction for [#116](https://github.com/abruption/session-peer-ts/issues/116) and [#115](https://github.com/abruption/session-peer-ts/issues/115) validates bounded raw stdout with fatal UTF-8, one complete JSON object, decoded-key uniqueness, depth 64 and 65,536 nodes. Stdout has a 1 MiB byte cap; diagnostic stderr has an independent 4,096-byte retained budget. Overflow cannot turn a retained prefix into success.
 
 Complete request-matched native facts survive a later SSH 255 or collection timeout. Native `ok/status/submitted/target/queueId` stay intact, while local exit 1 and client-owned `sshTransport` report transport failure. A peer-supplied `sshTransport` is discarded. Missing, partial, polluted, malformed or mismatched send responses remain `outcome_unknown`/`submitted:null`/`retryAllowed:false`. No retry, fallback or failover occurs, and submission is not ACK. Normal verified exit 0/1/2 behavior, nullable Claude names, optional queue IDs, per-host ordering and text/JSON output remain supported. Explicit Codex home/inactive selection context is checked; canonical remote aliases remain a destination trust boundary.
 
-See [the response contract and fixture limits](docs/design/ordinary-ssh-responses.md). This source candidate is not part of the immutable public 0.3.2 artifact, does not change the Python 1.0.2 oracle, and adds no 0.4.0 handoff/observer/ACK feature.
+See [the response contract and fixture limits](docs/design/ordinary-ssh-responses.md). This 0.3.3 correction is not part of the immutable public 0.3.2 artifact, does not change the Python 1.0.2 oracle, and adds no 0.4.0 handoff/observer/ACK feature.
 
+<a id="typescript-skill-guard--033-candidate"></a>
+
+## TypeScript skill guard — 0.3.3
+
+Version 0.3.3 uses compiled `VERSION=0.3.3` on the production doctor inspection path. Its proposed finite matrix accepts the legacy profile (skill/minimum/full `0.1.0`) and the exact proposed successor (skill `0.2.0`, minimum `0.1.0`, full `0.3.2`, `typescript`, `probe-help`, root name `session-peer-ts`). Unsupported well-formed tuples are incompatible; malformed or conflicting metadata is unknown. Supported and incompatible tuple verdicts report `verification:metadata_only`; missing, permission and unknown results omit it. Whole-file reading is bounded at 65,536 bytes with a single overflow-detection byte, fatal UTF-8 and regular-file/change checks. This does not authenticate instruction content or authorize delivery.
+
+See the [bounded grammar, matrix and reader evidence](docs/design/typescript-skill-compatibility.md). Companion [Draft #20 design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the 2026-10-09 static design review of exact #126 `ba18bb806a6ba503381259b4255211af3adc0336` and release Draft #129 `bfb3d6f1256ab076a76660e08a7bf1ad071a6c6c`; their reviewed design SHA-256 values are recorded in the linked guard design. No tests were rerun in that review. At this dated checkpoint, runtime and successor skill were unpublished. The earlier queued coordination request remains historical, without independently established consumption or approval. Design/fixture acceptance does not authorize runtime merge/release, final skill metadata/publication/installation/pin changes or claim public compatibility; the immutable npm 0.3.2 checker stays legacy-only. The guard runtime must actually publish before separate successor skill finalization/tag/publication/pin changes. Keep the existing `081cc3c1d16a394bd92824333f4bc61c36951799` install pin; managers own upgrades, and no postinstall is introduced.
+
+At the 2026-10-09 KST preparation checkpoint, [#128](https://github.com/abruption/session-peer-ts/issues/128) integrated open PRs #125/#127 and Draft #126 for review; that preparation did not bypass their human merge gate or approve staging/publication. 0.3.2 and 0.3.3 refuse each other's SSH preflight. Windows jump-host #20, provisioning #23, the Python 1.0.2 oracle, and unshipped 0.4/native ACK boundaries remain unchanged.

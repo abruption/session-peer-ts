@@ -45,7 +45,7 @@ function fixture(t: TestContext) {
 const fs=require('node:fs'),{spawnSync}=require('node:child_process');
 fs.appendFileSync(${JSON.stringify(sshLog)},'1');
 if(process.argv.includes('-G')){console.log('user fixture-user');process.exit(0);}
-if(process.argv.at(-1).endsWith('--version')){console.log('session-peer 0.3.2 (typescript)');process.exit(0);}
+if(process.argv.at(-1).endsWith('--version')){console.log('session-peer 0.3.3 (typescript)');process.exit(0);}
 const input=fs.readFileSync(0,'utf8');
 const result=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});
 process.stdout.write(result.stdout);process.exit(result.status);`, { mode: 0o700 });
