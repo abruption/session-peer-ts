@@ -98,23 +98,42 @@ test('reader rejects directories and POSIX FIFOs without reading, supports manag
   }
 });
 
-test('reader verifies descriptor/path stability for growth, truncation, replacement and same-size mutation', async t => {
+test('reader verifies descriptor/path stability for growth, truncation, replacement and observable same-size changes', async t => {
   for (const mutation of ['growth', 'truncation', ...(process.platform === 'win32' ? [] : ['replacement']), 'same-size'] as const) {
     await t.test(mutation, st => {
       const { file } = fixture(st), originalRead = fs.readSync;
-      let changed = false;
+      let changed = false, mutationFailure: { error: unknown } | undefined;
+      let sameSizeTimes: { before: bigint; after: bigint } | undefined;
       st.mock.method(fs, 'readSync', ((fd: any, ...args: any[]) => {
         const count = (originalRead as any)(fd, ...args);
         if (!changed) {
           changed = true;
-          if (mutation === 'growth') fs.appendFileSync(file, 'x'.repeat(SKILL_METADATA_LIMIT));
-          else if (mutation === 'truncation') fs.truncateSync(file, 0);
-          else if (mutation === 'replacement') { fs.unlinkSync(file); writeFileSync(file, fixtureText()); }
-          else { const text = fixtureText(); writeFileSync(file, text.replace('local only', 'other only')); }
+          try {
+            if (mutation === 'growth') fs.appendFileSync(file, 'x'.repeat(SKILL_METADATA_LIMIT));
+            else if (mutation === 'truncation') fs.truncateSync(file, 0);
+            else if (mutation === 'replacement') { fs.unlinkSync(file); writeFileSync(file, fixtureText()); }
+            else {
+              const before = fs.statSync(file, { bigint: true });
+              const text = fixtureText(); writeFileSync(file, text.replace('local only', 'other only'));
+              // Windows can defer an automatic timestamp update while this file
+              // is open. Make the metadata change observable without timing sleeps.
+              fs.utimesSync(file, before.atime, new Date(Number(before.mtimeMs) + 1000));
+              sameSizeTimes = { before: before.mtimeNs, after: fs.statSync(file, { bigint: true }).mtimeNs };
+            }
+          } catch (error) { mutationFailure = { error }; }
         }
         return count;
       }) as typeof fs.readSync); syncBuiltinESMExports();
-      assert.deepEqual(withoutPath(inspectSkill(file)), unreadable);
+      const result = inspectSkill(file);
+      // Reader error handling must not turn a failed fixture assertion/setup
+      // into the expected unreadable result and conceal a false positive.
+      if (mutationFailure) throw mutationFailure.error;
+      assert.equal(changed, true);
+      if (mutation === 'same-size') {
+        assert.ok(sameSizeTimes);
+        assert.notEqual(sameSizeTimes.after, sameSizeTimes.before);
+      }
+      assert.deepEqual(withoutPath(result), unreadable);
     });
   }
 });
