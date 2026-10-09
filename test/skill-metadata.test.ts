@@ -48,6 +48,7 @@ test('each unsupported well-formed scalar differs from missing, duplicated or ma
       assert.deepEqual(validateSkillMetadata(fixtureText().replace(line, `  ${key}: ${value}`)), missing, `${key}:${value}`);
     }
   }
+  for (const version of ['__proto__', 'constructor', 'toString']) assert.deepEqual(validateSkillMetadata(fixtureText({ ...fields, version })), incompatible);
   assert.deepEqual(validateSkillMetadata(fixtureText(fields, 'session-peer')), incompatible);
   for (const text of [fixtureText().replace('name: session-peer-ts\n', ''), fixtureText().replace('name: session-peer-ts', 'name: session-peer-ts\nname: session-peer-ts'),
     fixtureText().replace('metadata:', 'metadata: []'), fixtureText().replace('metadata:', 'metadata:\nmetadata:'),

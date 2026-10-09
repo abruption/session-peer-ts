@@ -60,7 +60,7 @@ export function validateSkillMetadata(text: string, runtime: unknown = VERSION):
   }
   if (keys.some(key => !fields.has(key))) return unknown();
   const values = keys.map(key => fields.get(key)!);
-  const profile = profiles[values[0]!];
+  const profile = Object.hasOwn(profiles, values[0]!) ? profiles[values[0]!] : undefined;
   return verdict(names[0] === 'session-peer-ts' && !!profile && profile.every((value, i) => value === values[i]) &&
     !!matrix[runtime]?.includes(values[0]!));
 }
