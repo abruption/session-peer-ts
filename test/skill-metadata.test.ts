@@ -138,6 +138,70 @@ test('reader verifies descriptor/path stability for growth, truncation, replacem
   }
 });
 
+test('reader rejects observed malformed-content rewrites during bounded chunked reads and closes its descriptor', async t => {
+  for (const mutation of ['malformed-scalar', 'invalid-utf8'] as const) {
+    await t.test(mutation, st => {
+      const { file } = fixture(st), healthy = Buffer.from(fixtureText()), malformed = Buffer.from(healthy);
+      const valueOffset = healthy.indexOf(Buffer.from('"0.1.0"'));
+      assert.ok(valueOffset > 4);
+      if (mutation === 'malformed-scalar') {
+        malformed.write('[0.1.0]', valueOffset, 'utf8'); // Same seven bytes as the quoted scalar.
+        assert.deepEqual(validateSkillMetadata(malformed.toString('utf8')), missing);
+      } else {
+        malformed[valueOffset] = 0xff;
+        assert.throws(() => new TextDecoder('utf-8', { fatal: true }).decode(malformed));
+      }
+      assert.deepEqual(validateSkillMetadata(healthy.toString('utf8')), compatible);
+      const read = fs.readSync, open = fs.openSync, close = fs.closeSync;
+      const opened: number[] = [], closed: number[] = [], chunks: Buffer[] = [];
+      const requests: { length: number; allocation: number }[] = [];
+      let changed = false, fixtureFailure: { error: unknown } | undefined;
+      let evidence: { before: fs.BigIntStats; after: fs.BigIntStats } | undefined;
+      st.mock.method(fs, 'openSync', ((...args: any[]) => {
+        const fd = (open as any)(...args); opened.push(fd); return fd;
+      }) as typeof fs.openSync);
+      st.mock.method(fs, 'closeSync', (fd: number) => { close(fd); closed.push(fd); });
+      st.mock.method(fs, 'readSync', ((fd: number, bytes: Buffer, offset: number, length: number, position: number) => {
+        requests.push({ length, allocation: bytes.length });
+        try {
+          const count = read(fd, bytes, offset, Math.min(length, 4), position);
+          if (count) chunks.push(Buffer.from(bytes.subarray(offset, offset + count)));
+          if (count && !changed) {
+            changed = true;
+            const before = fs.statSync(file, { bigint: true });
+            // Use the original functions for the fixture writer so accounting
+            // covers only the inspected descriptor. Preserve inode and size.
+            const writer = open(file, 'r+');
+            try { writeFileSync(writer, malformed); } finally { close(writer); }
+            fs.utimesSync(file, before.atime, new Date(Number(before.mtimeMs) + 1000));
+            evidence = { before, after: fs.statSync(file, { bigint: true }) };
+          }
+          return count;
+        } catch (error) { fixtureFailure = { error }; throw error; }
+      }) as typeof fs.readSync);
+      syncBuiltinESMExports();
+      const result = inspectSkill(file);
+      // All assertions and fixture errors stay outside the reader's catch:
+      // unreadable must not conceal a failed mutation or mock assertion.
+      if (fixtureFailure) throw fixtureFailure.error;
+      assert.equal(changed, true);
+      assert.ok(evidence);
+      assert.equal(evidence.after.dev, evidence.before.dev);
+      assert.equal(evidence.after.ino, evidence.before.ino);
+      assert.equal(evidence.after.size, evidence.before.size);
+      assert.notEqual(evidence.after.mtimeNs, evidence.before.mtimeNs);
+      assert.ok(chunks.length > 1);
+      assert.deepEqual(Buffer.concat(chunks), malformed);
+      assert.ok(malformed.length <= SKILL_METADATA_LIMIT);
+      assert.ok(requests.every(({ length, allocation }) => length <= SKILL_METADATA_LIMIT + 1 && allocation <= SKILL_METADATA_LIMIT + 1));
+      assert.deepEqual(result, { path: file, ...unreadable });
+      assert.equal('verification' in result, false);
+      assert.equal(opened.length, 1);
+      assert.deepEqual(closed, opened);
+    });
+  }
+});
+
 test('reader rechecks path and descriptor after EOF and never accepts a replaced installed alias', { skip: process.platform === 'win32' }, t => {
   const { root, file } = fixture(t), alias = join(root, 'alias'), second = join(root, 'second');
   writeFileSync(second, fixtureText()); symlinkSync(file, alias);
