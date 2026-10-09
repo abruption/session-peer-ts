@@ -62,9 +62,12 @@ test('root name forbids continuations across comments or map boundaries while ig
   for (const values of [fields, { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' }]) {
     const legacy = fixtureText(values), quoted = legacy.replace('name: session-peer-ts', 'name: "session-peer-ts"');
     const nameAfterMetadata = quoted.replace('name: "session-peer-ts"\n', '').replace('\n---\nDo not', '\nname: "session-peer-ts"\n---\nDo not');
-    for (const base of [legacy, quoted, nameAfterMetadata]) {
+    const plainNameAfterMetadata = nameAfterMetadata.replace('name: "session-peer-ts"', 'name: session-peer-ts');
+    for (const base of [legacy, quoted, nameAfterMetadata, plainNameAfterMetadata]) {
       assert.deepEqual(validateSkillMetadata(base, '0.3.3'), compatible);
       const name = base.includes('name: "session-peer-ts"') ? 'name: "session-peer-ts"' : 'name: session-peer-ts';
+      assert.deepEqual(validateSkillMetadata(base.replace(name, name.replace('name: ', 'name: \t')), '0.3.3'), compatible);
+      assert.deepEqual(validateSkillMetadata(base.replace(name, name.replace('name: ', 'name:\t')), '0.3.3'), missing);
       for (const continuation of [' extra', '  extra', '    extra', '  name: session-peer-ts', '  metadata:', '\n  # comment\n\n  extra']) {
         const text = base.replace(name + '\n', name + '\n' + continuation + '\n');
         assert.deepEqual(validateSkillMetadata(text, '0.3.3'), missing);
