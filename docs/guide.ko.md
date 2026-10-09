@@ -218,6 +218,8 @@ Codex 전송에는 전체 UUID가 필요하며 홈은 위의 선택 규칙을 �
 <a id="another-machine-over-ssh"></a>
 ### 다른 머신으로 SSH 전송
 
+**0.3.3 개발 후보:** 완전한 원격 응답을 엄격하게 검증한 뒤 SSH가 255로 종료되거나 수집 시간이 초과되어도 확인된 제출 사실은 보존합니다. 원격 결과의 `ok:true`와 로컬 종료코드 1·`sshTransport`가 함께 나올 수 있으므로 `submitted`와 전송 진단을 함께 확인하세요. 잘리거나 잘못된 응답, 출력 상한을 넘긴 응답은 계속 unknown으로 처리하며 자동 재전송하지 않습니다. 이는 미발행 소스의 동작으로 공개 0.3.2 패키지를 바꾸지 않습니다. [응답 계약](design/ordinary-ssh-responses.md)을 참고하세요.
+
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json

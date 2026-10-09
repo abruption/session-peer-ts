@@ -86,7 +86,7 @@ async function fixture(t: TestContext) {
     assert.equal(signal, null, `CLI fixture deadline: ${stderr}`);
     assert.ok([0, 1, 2].includes(code as number), `CLI exit ${code}: ${stderr}`);
     const result = JSON.parse(stdout), items = [result].flat();
-    assert.ok(items.every(item => item.schemaVersion === 1)); assert.equal(items.every(item => item.ok), code === 0);
+    assert.ok(items.every(item => item.schemaVersion === 1)); assert.equal(items.every(item => item.ok && !item.sshTransport), code === 0);
     return result;
   }
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', binary, '--message', 'fixture 🚀', '--no-from'];
@@ -237,6 +237,14 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const lost = await f.invoke(args, { FIXTURE_SSH_MODE: 'loss' });
     assert.equal(lost.status, 'unknown'); assert.equal(lost.submitted, null); assert.equal(lost.retryAllowed, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    const sshBeforeComplete = f.log('FIXTURE_SSH_LOG').length;
+    const complete = await f.invoke(args, { FIXTURE_SSH_MODE: 'complete255' });
+    assert.equal(complete.ok, true); assert.equal(complete.status, 'queued'); assert.equal(complete.submitted, true);
+    assert.deepEqual(complete.target, sent.target); assert.equal(complete.queueId, 'fixture-17');
+    assert.equal(complete.consumptionConfirmed, false); assert.equal(complete.retryAllowed, false);
+    assert.deepEqual(complete.sshTransport, { status: 'failed', reason: 'ssh_exit_nonzero', exitCode: 255 });
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2); // Exactly one additional native fixture call, never a retry.
+    assert.equal(f.log('FIXTURE_SSH_LOG').length, sshBeforeComplete + 2); // Preflight plus one request.
     const remoteProfile = join(f.root, 'remote-user');
     const remoteHome = join(remoteProfile, '.codex'); f.database(remoteHome);
     const listed = await f.invoke(['list', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote],
@@ -247,13 +255,13 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     assert.equal(listed.discovery.claude.status, 'ok');
     assert.equal(listed.discovery.codex.homes.at(-1).code, 'state_db_missing');
     assert.equal(listed.sshHost, 'fixture'); assert.equal('submitted' in listed, false);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
     const diagnosed = await f.invoke(['doctor', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote,
       '--agent', 'codex', '--codex-bin', f.binary], { FIXTURE_REMOTE_PROFILE: remoteProfile, FIXTURE_REMOTE_HOMES: '[]' });
     assert.equal(diagnosed.ok, true); assert.equal(diagnosed.ready, true); assert.equal(diagnosed.command, 'doctor');
     assert.equal(diagnosed.agents.codex.homes[0].codexHome, remoteHome);
     assert.equal(diagnosed.agents.codex.tool.executed, false); assert.equal(diagnosed.sshHost, 'fixture');
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
     // #20: repeated hosts run in order through the same encoded PowerShell path.
     const sshBefore = f.log('FIXTURE_SSH_LOG').length;
     const pair = await f.invoke(['list', '--agent', 'codex', '--host', 'fixture', '--host', 'user@[2001:db8::1]', '--remote-platform', 'win32',
@@ -264,7 +272,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const pairCalls = f.log('FIXTURE_SSH_LOG').slice(sshBefore);
     assert.deepEqual(pairCalls.map(call => call.args[call.args.indexOf('--') + 1]), ['fixture', 'fixture', 'user@2001:db8::1', 'user@2001:db8::1']);
     for (const call of pairCalls) assert.deepEqual(call.args.slice(call.args.indexOf('-p'), call.args.indexOf('-p') + 2), ['-p', '2222']);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
     // #22 with #20: an opted-in client notice (fresh cache, no refresh) never enters the
     // repeated --host array; text gets one stderr line; one flat host carries the field.
     const cacheDir = join(f.root, 'update-cache'); mkdirSync(cacheDir, { recursive: true });
@@ -296,7 +304,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const quietText = await raw([...pairArgs, '--output-format', 'text', '--no-update-notice']);
     assert.equal(quietText.code, noticedText.code); assert.equal(noticedText.stdout, quietText.stdout); assert.equal(quietText.stderr, '');
     assert.deepEqual(readdirSync(cacheDir), ['npm-update.json']);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
     await f.stop(owner);
     const inactive = await f.invoke([...args, '--allow-inactive-codex-home']);
     assert.equal(inactive.status, 'queued'); assert.equal(inactive.queueId, 'fixture-17');

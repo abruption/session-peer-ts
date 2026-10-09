@@ -127,6 +127,8 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 
 ### 跨机器 SSH
 
+**0.3.3 开发候选：** 完整的远程响应通过严格验证后，即使 SSH 随后以 255 退出或收集超时，已确认的提交事实也会保留。远程结果的 `ok:true` 可与本地退出码 1 和 `sshTransport` 同时出现，请结合 `submitted` 与传输诊断判断结果。不完整、无效或超过输出上限的响应仍为 unknown，禁止自动重发。这是尚未发布的源码行为，不会改变已公开的 0.3.2 包。请参阅[响应契约](design/ordinary-ssh-responses.md)。
+
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json

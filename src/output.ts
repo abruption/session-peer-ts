@@ -49,5 +49,10 @@ export function renderOutput(value: Record<string, unknown> | Record<string, unk
       lines.push(value.updateCommand ? `This installation is managed by ${safe(value.managedBy)}. Upgrade with: ${safe(value.updateCommand)}` : safe(value.guidance));
     if (value.command === 'send') lines.push(value.submitted === null ? 'Submission outcome unknown. Do not retry automatically.' : 'Nothing submitted.');
   }
+  if (value.sshTransport && typeof value.sshTransport === 'object') {
+    const transport = value.sshTransport as Record<string, unknown>;
+    lines.push(`SSH transport: ${safe(transport.status)} (${safe(transport.reason)}); verified remote facts retained.`);
+    if (value.submitted === true) lines.push('Do not resend automatically.');
+  }
   return lines.join('\n');
 }
