@@ -21,7 +21,7 @@ const profiles: Record<string, readonly string[]> = {
 // Deliberately not general YAML: plain ASCII tokens or unescaped quoted strings,
 // followed by an optional comment. YAML tags, aliases, maps and sequences fail.
 function scalar(value: string): string | undefined {
-  const match = /^(?:"([^"\\\r\n]*)"|'([^'\\\r\n]*)'|([A-Za-z0-9][A-Za-z0-9._/-]*))[ ]*(?:#.*)?$/.exec(value);
+  const match = /^(?:"([^"\\\r\n]*)"|'([^'\\\r\n]*)'|([A-Za-z0-9][A-Za-z0-9._/-]*))(?:[ ]+(?:#.*)?)?$/.exec(value);
   const result = match ? match[1] ?? match[2] ?? match[3] : undefined;
   return result?.length ? result : undefined;
 }
@@ -29,20 +29,23 @@ export function validateSkillMetadata(text: string, runtime: unknown = VERSION):
   if (text.length > SKILL_METADATA_LIMIT || Buffer.byteLength(text, 'utf8') > SKILL_METADATA_LIMIT) return unknown('skill_metadata_unreadable');
   if (typeof runtime !== 'string' || !/^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(runtime)) return unknown();
   // BOM and controls are rejected explicitly; whole-file fatal UTF-8 happens in
-  // the reader. LF and CRLF are supported, lone CR and tabs are not.
+  // the reader. LF/CRLF and body tabs are supported; lone CR is not.
+  // Map indentation and value separators use spaces rather than tabs.
   if (text.startsWith('\uFEFF') || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]|\r(?!\n)/.test(text)) return unknown();
   const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text)?.[1];
   if (!front) return unknown();
   const lines = front.split(/\r?\n/), names: string[] = [], sections: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
+    if (!line.startsWith(' ') && !/^[ ]*(?:#.*)?$/.test(line) && !/^[a-z][a-z0-9-]*:/.test(line)) return unknown();
     if (/^name:/.test(line)) {
+      if (!/^name:[ ]+/.test(line)) return unknown();
       const name = scalar(line.slice(5).trimStart());
       if (name === undefined) return unknown();
       names.push(name);
     }
     if (/^metadata:/.test(line)) {
-      if (!/^metadata:[ ]*(?:#.*)?$/.test(line)) return unknown();
+      if (!/^metadata:(?:[ ]+(?:#.*)?)?$/.test(line)) return unknown();
       sections.push(i);
     }
   }
@@ -52,7 +55,7 @@ export function validateSkillMetadata(text: string, runtime: unknown = VERSION):
     const line = lines[i]!;
     if (/^[ ]*(?:#.*)?$/.test(line)) continue;
     if (!line.startsWith(' ')) break;
-    const match = /^  ([a-z][a-z0-9-]*):[ ]*(.*)$/.exec(line);
+    const match = /^  ([a-z][a-z0-9-]*):[ ]+(.*)$/.exec(line);
     if (!match || fields.has(match[1]!)) return unknown();
     const value = scalar(match[2]!);
     if (value === undefined) return unknown();

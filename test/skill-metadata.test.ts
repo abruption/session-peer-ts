@@ -64,6 +64,13 @@ test('limited scalar grammar accepts comments, quoting, CRLF and ignores unrelat
   assert.deepEqual(validateSkillMetadata('\uFEFF' + legacy), missing);
   assert.deepEqual(validateSkillMetadata(legacy.replace('\nmetadata:', '\rmetadata:')), missing);
   assert.deepEqual(validateSkillMetadata(legacy + '\u0000'), missing);
+  for (const text of [legacy.replace('\nmetadata:', '\n"name": session-peer\nmetadata:'),
+    legacy.replace('\nmetadata:', '\n"na\\u006de": session-peer\nmetadata:'),
+    legacy.replace('\nmetadata:', '\nmetadata : {}\nmetadata:'),
+    legacy.replace('  version: "0.1.0"', '  version: 0.1.0#not-a-comment'),
+    legacy.replace('name: session-peer-ts', 'name:session-peer-ts'),
+    legacy.replace('  version: "0.1.0"', '  version:"0.1.0"'),
+    legacy.replace('metadata:', 'metadata:#not-a-map')]) assert.deepEqual(validateSkillMetadata(text), missing);
 });
 
 test('reader counts whole-file UTF8 bytes and accepts exact limit, not overflow or invalid UTF8', t => {
