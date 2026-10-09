@@ -57,6 +57,36 @@ test('each unsupported well-formed scalar differs from missing, duplicated or ma
   }
 });
 
+test('root name forbids continuations across comments or map boundaries while ignored fields retain their scope', t => {
+  const { file } = fixture(t);
+  for (const values of [fields, { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' }]) {
+    const legacy = fixtureText(values), quoted = legacy.replace('name: session-peer-ts', 'name: "session-peer-ts"');
+    const nameAfterMetadata = quoted.replace('name: "session-peer-ts"\n', '').replace('\n---\nDo not', '\nname: "session-peer-ts"\n---\nDo not');
+    for (const base of [legacy, quoted, nameAfterMetadata]) {
+      assert.deepEqual(validateSkillMetadata(base, '0.3.3'), compatible);
+      const name = base.includes('name: "session-peer-ts"') ? 'name: "session-peer-ts"' : 'name: session-peer-ts';
+      for (const continuation of [' extra', '  extra', '    extra', '  name: session-peer-ts', '  metadata:', '\n  # comment\n\n  extra']) {
+        const text = base.replace(name + '\n', name + '\n' + continuation + '\n');
+        assert.deepEqual(validateSkillMetadata(text, '0.3.3'), missing);
+        writeFileSync(file, text);
+        assert.deepEqual(inspectSkill(file), { path: file, ...missing });
+      }
+      const comments = base.replace(name + '\n', name + '\n\n  # comment\n# another comment\n');
+      assert.deepEqual(validateSkillMetadata(comments, '0.3.3'), compatible);
+      assert.deepEqual(validateSkillMetadata(comments.replaceAll('\n', '\r\n'), '0.3.3'), compatible);
+      const unrelated = base.replace(name + '\n', name + '\ndescription: |\n  ignored content\n  name: ignored-nested-value\n');
+      assert.deepEqual(validateSkillMetadata(unrelated, '0.3.3'), compatible);
+      assert.deepEqual(validateSkillMetadata(base + '  body content is not frontmatter\n', '0.3.3'), compatible);
+      assert.deepEqual(validateSkillMetadata(base.replace(name, 'name: unsupported'), '0.3.3'), incompatible);
+      assert.deepEqual(validateSkillMetadata(base.replace(name, 'name: unsupported\n  extra'), '0.3.3'), missing);
+    }
+    const orphan = quoted.replace('---\n', '---\n  extra\n');
+    assert.deepEqual(validateSkillMetadata(orphan, '0.3.3'), missing);
+    writeFileSync(file, orphan);
+    assert.deepEqual(inspectSkill(file), { path: file, ...missing });
+  }
+});
+
 test('limited scalar grammar accepts comments, quoting, CRLF and ignores unrelated root fields', () => {
   const legacy = fixtureText();
   assert.deepEqual(validateSkillMetadata(legacy.replace('metadata:', 'version: ignored-root-value\nmetadata: # section').replace('"0.1.0"', '0.1.0 # version')), compatible);
@@ -185,6 +215,7 @@ test('reader rejects observed malformed-content rewrites during bounded chunked 
       // unreadable must not conceal a failed mutation or mock assertion.
       if (fixtureFailure) throw fixtureFailure.error;
       assert.equal(changed, true);
+      assert.equal(chunks[0]?.length, 4);
       assert.ok(evidence);
       assert.equal(evidence.after.dev, evidence.before.dev);
       assert.equal(evidence.after.ino, evidence.before.ino);

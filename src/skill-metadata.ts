@@ -35,9 +35,19 @@ export function validateSkillMetadata(text: string, runtime: unknown = VERSION):
   const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text)?.[1];
   if (!front) return unknown();
   const lines = front.split(/\r?\n/), names: string[] = [], sections: number[] = [];
+  let rootOwner: string | undefined;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (!line.startsWith(' ') && !/^[ ]*(?:#.*)?$/.test(line) && !/^[a-z][a-z0-9-]*:/.test(line)) return unknown();
+    if (/^[ ]*(?:#.*)?$/.test(line)) continue;
+    if (line.startsWith(' ')) {
+      // Comments/blank lines do not end a root scalar. Only metadata and
+      // ignored unrelated fields can own indented content; name cannot.
+      if (rootOwner === undefined || rootOwner === 'name') return unknown();
+      continue;
+    }
+    const root = /^([a-z][a-z0-9-]*):/.exec(line);
+    if (!root) return unknown();
+    rootOwner = root[1]!;
     if (/^name:/.test(line)) {
       if (!/^name:[ ]+/.test(line)) return unknown();
       const name = scalar(line.slice(5).trimStart());
