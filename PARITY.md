@@ -798,3 +798,12 @@ and removal on every supported shell. They do not establish live delivery or ACK
 ## 0.3.2 release scope
 
 The [public 0.3.2 record](VALIDATION.md#public-032--2026-10-07-kst) pins publication source `f335f07352c842f2f6ceb12bd2ca6274b52f69f7` and the artifact. Runtime behavior differs from 0.3.1 only in the version banner and exact-version SSH gate. Its dated preparation record describes the pre-publication checkpoint, not current availability. Windows destination qualification used published 0.3.1, with the limits above. No 0.4 handoff/app-server/observation runtime is included; Drafts and the joint design freeze are not shipped capabilities.
+
+## Ordinary SSH response correction — 0.3.3 candidate
+
+Unreleased source for [#116](https://github.com/abruption/session-peer-ts/issues/116) and [#115](https://github.com/abruption/session-peer-ts/issues/115) validates bounded raw stdout with fatal UTF-8, one complete JSON object, decoded-key uniqueness, depth 64 and 65,536 nodes. Stdout has a 1 MiB byte cap; diagnostic stderr has an independent 4,096-byte retained budget. Overflow cannot turn a retained prefix into success.
+
+Complete request-matched native facts survive a later SSH 255 or collection timeout. Native `ok/status/submitted/target/queueId` stay intact, while local exit 1 and client-owned `sshTransport` report transport failure. A peer-supplied `sshTransport` is discarded. Missing, partial, polluted, malformed or mismatched send responses remain `outcome_unknown`/`submitted:null`/`retryAllowed:false`. No retry, fallback or failover occurs, and submission is not ACK. Normal verified exit 0/1/2 behavior, nullable Claude names, optional queue IDs, per-host ordering and text/JSON output remain supported. Explicit Codex home/inactive selection context is checked; canonical remote aliases remain a destination trust boundary.
+
+See [the response contract and fixture limits](docs/design/ordinary-ssh-responses.md). This source candidate is not part of the immutable public 0.3.2 artifact, does not change the Python 1.0.2 oracle, and adds no 0.4.0 handoff/observer/ACK feature.
+

@@ -7,7 +7,8 @@ import { lstatSync } from 'node:fs';
 import { listing, Refusal } from './discovery.js';
 import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { checkMessage, send, CodexUnknownOutcome } from './send.js';
-import { HomeRefusal, uuid } from './writer.js';
+import { HomeRefusal } from './writer.js';
+import { responseOutcome } from './ssh-response.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 import { CHANNELS, checkUpdate, noticeText, refreshCache, refuseSelfUpdate, REFRESH_ARG, updateNotice, UpdateRefusal } from './updates.js';
 import { jumpOptions, sshConfig, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
@@ -201,36 +202,17 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   // The destination probes back to this machine; the request carries only the host.
   if (returnTo) args.push('--return-route-host', returnTo);
   const done = await run(ssh, [...base, invoke('--stdio-request')], {
-    timeout: 90000, input: JSON.stringify({ schemaVersion: 1, args })
+    timeout: 90000, rawStdout: true, input: JSON.stringify({ schemaVersion: 1, args })
   });
   const uncertain = () => { if (command === 'send' && !flags.has('--dry-run') && done.spawned) throw new UnknownOutcome(); throw new Refusal('remote_response_unverified', 1); };
-  if (done.interrupted || !done.spawned) return uncertain();
-  let value: Record<string, unknown>;
-  try { value = JSON.parse(done.stdout); } catch { return uncertain(); }
-  if (!value || value.schemaVersion !== 1 || value.command !== command || typeof value.ok !== 'boolean' || typeof value.host !== 'string' ||
-      ![0, 1, 2].includes(done.code ?? -1) || (value.ok !== (done.code === 0))) return uncertain();
-  if (command === 'doctor' && value.ok && (value.diagnosticCompleted !== true || typeof value.ready !== 'boolean' || value.implementation !== 'typescript' || !value.agents || typeof value.agents !== 'object' || Array.isArray(value.agents))) return uncertain();
-  const probe = value.returnRoute as Record<string, unknown> | undefined;
-  if (command === 'doctor' && value.ok && returnTo && (!probe || typeof probe !== 'object' || !['verified', 'failed'].includes(probe.status as string) || !['local', 'ssh'].includes(probe.transport as string))) return uncertain();
-  const expectedStatus = flags.has('--dry-run') ? 'validated' : values.get('--to')?.startsWith('codex:') ? 'queued' : 'posted';
-  if (command === 'send' && (value.consumptionConfirmed !== false ||
-      (value.ok && (value.submitted !== !flags.has('--dry-run') || value.status !== expectedStatus)) ||
-      (!value.ok && !((value.submitted === false && value.status === 'refused') || (value.submitted === null && value.status === 'unknown'))))) return uncertain();
-  if (command === 'send' && value.ok) {
-    const target = value.target as Record<string, unknown> | undefined;
-    const requestedTarget = values.get('--to') ?? '';
-    const requestedCodexThread = requestedTarget.startsWith('codex:') ? requestedTarget.slice(6) : undefined;
-    const validTarget = target && !Array.isArray(target) &&
-      (target.agent === undefined || target.agent === (requestedCodexThread ? 'codex' : 'claude')) &&
-      (requestedCodexThread
-        ? typeof target.id === 'string' && uuid(target.id) && target.id.toLowerCase() === requestedCodexThread.toLowerCase()
-        : Number.isSafeInteger(target.pid) && (target.pid as number) > 0 &&
-          (typeof target.name === 'string' || target.name === null));
-    if (!validTarget) return uncertain();
-  }
+  let verified: ReturnType<typeof responseOutcome>;
+  try { verified = responseOutcome(done, { command, to: values.get('--to'), dryRun: flags.has('--dry-run'), returnTo,
+    home: values.get('--codex-home'), allowInactive: flags.has('--allow-inactive-codex-home') }); }
+  catch { return uncertain(); }
+  const { value } = verified;
   // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
   delete value.clientUpdate;
-  return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: done.code! };
+  return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: verified.exitCode };
 }
 function failure(error: unknown, command: string, where: string): { value: Record<string, unknown>; exitCode: number } {
   const unknown = error instanceof UnknownOutcome;
@@ -363,6 +345,10 @@ try {
     }
     else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
     if (command === 'send') { results = results?.map(item => ({ ...item, ...routing })); result = { ...result, ...routing }; }
+    // Wire-only request context for remote home canonicalization. The caller
+    // validates and removes this scalar; ordinary local result shape is unchanged.
+    if (wire && command === 'send' && result.ok === true && options.values.has('--codex-home'))
+      result.requestedCodexHome = options.values.get('--codex-home');
     // Without a return host there is nothing to probe from the destination.
     if (command === 'doctor' && options.flags.has('--check-return-route') && !returnTo) results = results?.map(item => item.ok === false ? item : ({ ...item, returnRoute: { status: 'failed', transport: 'ssh', host: null, reason: 'return_host_unavailable' } }));
     const shape = (item: Record<string, unknown>) => ({ schemaVersion: 1, host: hostname(), command, ok: item.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...item });

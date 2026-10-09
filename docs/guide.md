@@ -221,6 +221,8 @@ Output requires `--json` or `--output-format json|text`.
 
 ### Another machine over SSH
 
+**0.3.3 development candidate:** Complete, strictly validated remote submission facts are retained after a later SSH 255 or collection timeout. Native `ok:true` may coexist with local exit 1 and `sshTransport`; inspect `submitted` and the transport diagnostic before deciding what happened. Partial, malformed or overflowed responses remain unknown and must not be resent automatically. This is unreleased source behavior, not a change to the public 0.3.2 package. See the [response contract](design/ordinary-ssh-responses.md).
+
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json

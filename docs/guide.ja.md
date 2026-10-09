@@ -128,6 +128,8 @@ session-peer send --to codex:THREAD_UUID --codex-home "$HOME/.codex" --message '
 
 ### SSH
 
+**0.3.3 開発候補:** 完全なリモート応答を厳密に検証した後、SSH が 255 で終了したり収集がタイムアウトしたりしても、確認済みの送信登録の事実を保持します。リモート結果の `ok:true` とローカル終了コード 1・`sshTransport` が併存するため、`submitted` と接続診断を確認してください。不完全、不正、上限超過の応答は unknown のままで、自動再送してはいけません。これは未公開ソースの動作であり、公開済み 0.3.2 パッケージを変更しません。[応答契約](design/ordinary-ssh-responses.md)を参照してください。
+
 ```sh
 session-peer send --host user@machine --remote-bin /absolute/path/session-peer \
   --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json

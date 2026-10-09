@@ -85,7 +85,12 @@ public static class Fixture {
         child.StandardInput.BaseStream.Write(inputBytes, 0, inputBytes.Length);
         child.StandardInput.Close();
         if (!child.WaitForExit(60000)) { child.Kill(); return 254; }
-        Console.Write(stdout.Result); Console.Error.Write(stderr.Result); return child.ExitCode;
+        Console.Write(stdout.Result); Console.Error.Write(stderr.Result);
+        if (!preflight && modeSsh == "complete255") {
+          Console.OpenStandardError().WriteByte(255); // Invalid diagnostic UTF-8 does not invalidate stdout.
+          return 255;
+        }
+        return child.ExitCode;
       }
     } catch (Exception error) { Console.Error.WriteLine(error.Message); return 2; }
   }

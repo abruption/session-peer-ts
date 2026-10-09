@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { accessSync, constants, realpathSync, statSync } from 'node:fs';
 import { delimiter, isAbsolute, join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { Refusal } from './discovery.js';
 
 export class UnknownOutcome extends Error {}
@@ -22,7 +23,9 @@ export function executable(name: string): string {
   }
   throw new Refusal('executable_unavailable', 1);
 }
-export type Done = { code: number | null; stdout: string; stderr: string; spawned: boolean; interrupted: boolean };
+export type StopReason = 'timeout' | 'output_limit' | 'process_error';
+export type Done = { code: number | null; stdout: string; stderr: string; spawned: boolean; interrupted: boolean;
+  stdoutBytes?: Buffer; stopReason?: StopReason };
 // On POSIX every child is started detached: a new session and process group
 // with no controlling terminal. A timeout, an output overflow or a signal to
 // this CLI reaps that group, which includes descendants such as a jump
@@ -42,10 +45,12 @@ function forward(signal: NodeJS.Signals) {
   process.kill(process.pid, signal);
 }
 export function run(binary: string, args: string[], options: {
-  env?: NodeJS.ProcessEnv; input?: string; timeout?: number; limit?: number;
+  env?: NodeJS.ProcessEnv; input?: string; timeout?: number; limit?: number; rawStdout?: boolean;
 } = {}): Promise<Done> {
   return new Promise(resolve => {
-    let stdout = '', stderr = '', bytes = 0, spawned = false, interrupted = false, finished = false, stopped = false;
+    let stdout = '', stderr = '', bytes = 0, stderrBytes = 0, spawned = false, interrupted = false, finished = false, stopped = false;
+    let stopReason: StopReason | undefined;
+    const chunks: Buffer[] = [], outputDecoder = new StringDecoder('utf8'), diagnosticDecoder = new StringDecoder('utf8');
     const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: posix });
     const release = () => {
       if (child.pid === undefined || !groups.delete(child.pid) || groups.size) return;
@@ -54,11 +59,13 @@ export function run(binary: string, args: string[], options: {
     const finish = (code: number | null) => {
       if (finished) return;
       finished = true; clearTimeout(timer); release();
-      resolve({ code, stdout, stderr, spawned, interrupted });
+      stdout += outputDecoder.end(); stderr += diagnosticDecoder.end();
+      resolve({ code, stdout, stderr, spawned, interrupted,
+        ...(options.rawStdout ? { stdoutBytes: Buffer.concat(chunks, bytes) } : {}), ...(stopReason ? { stopReason } : {}) });
     };
-    const stop = () => {
+    const stop = (reason: StopReason) => {
       if (stopped || finished) return;
-      stopped = interrupted = true;
+      stopped = interrupted = true; stopReason = reason;
       if (posix) reap(child.pid); else child.kill('SIGKILL');
       // A descendant outside our reach (Windows) may still hold the pipes:
       // stop reading so completion depends on the exit, not on their close.
@@ -66,9 +73,9 @@ export function run(binary: string, args: string[], options: {
       // Already exited (only a descendant was left): complete after the grace.
       if (child.exitCode !== null || child.signalCode !== null) setTimeout(() => finish(child.exitCode), 100);
     };
-    const timer = setTimeout(stop, options.timeout ?? 3000);
+    const timer = setTimeout(() => stop('timeout'), options.timeout ?? 3000);
     const register = () => {
-      if (!posix || child.pid === undefined || groups.has(child.pid)) return;
+      if (finished || stopped || !posix || child.pid === undefined || groups.has(child.pid)) return;
       if (!groups.size) for (const name of signals) process.on(name, forward);
       groups.add(child.pid);
     };
@@ -77,20 +84,26 @@ export function run(binary: string, args: string[], options: {
     register();
     child.once('spawn', () => { spawned = true; register(); });
     child.stdin.on('error', () => { /* Close/exit determines outcome, never resend. */ });
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (part: string) => {
-      bytes += Buffer.byteLength(part);
-      if (bytes > (options.limit ?? 1024 * 1024)) stop();
-      else stdout += part;
+    child.stdout.on('data', (part: Buffer) => {
+      if (bytes + part.length > (options.limit ?? 1024 * 1024)) { stop('output_limit'); return; }
+      bytes += part.length;
+      if (options.rawStdout) chunks.push(part); else stdout += outputDecoder.write(part);
     });
     // Drain but never report native stderr (it may contain message text/credentials).
     // Retain stderr only for allowlisted error classification. Never include it in CLI output.
     child.stderr.on('data', (part: Buffer) => {
-      bytes += part.length;
-      if (stderr.length < 4096) stderr += part.toString('utf8').slice(0, 4096 - stderr.length);
-      if (bytes > (options.limit ?? 1024 * 1024)) stop();
+      // Protocol mode has an independent 4096-byte diagnostic budget. Excess
+      // diagnostics are drained without retaining them or invalidating stdout.
+      if (stderrBytes < 4096) {
+        const kept = part.subarray(0, 4096 - stderrBytes); stderrBytes += kept.length;
+        stderr += diagnosticDecoder.write(kept);
+      }
+      if (!options.rawStdout) {
+        if (bytes + part.length > (options.limit ?? 1024 * 1024)) stop('output_limit');
+        else bytes += part.length;
+      }
     });
-    child.once('error', () => { interrupted = true; });
+    child.once('error', () => { interrupted = true; stopReason = 'process_error'; });
     // After a kill, the exit plus a short fixed grace bounds completion even if
     // a pipe never closes; otherwise 'close' (all output read) completes it.
     // A descendant that keeps the pipes open after the child exits runs into

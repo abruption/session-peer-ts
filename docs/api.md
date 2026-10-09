@@ -30,3 +30,6 @@ not verify a live writer, establish a return route, or confirm consumption.
 Only the exports above form the public package API; internal `dist` modules are
 not package subpath exports. Use the [CLI guide](guide.md#use) for sending and
 [CONTRIBUTING.md](../CONTRIBUTING.md) for development and test setup.
+
+
+The ordinary SSH response correction is documented separately as an [unreleased 0.3.3 candidate](design/ordinary-ssh-responses.md); its internal parser is not a package-root export.

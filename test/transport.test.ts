@@ -210,6 +210,11 @@ test('SSH resolves Codex homes at destination and preserves resolution/queue met
   assert.equal(unknown.status, 'unknown'); assert.equal(unknown.submitted, null);
   assert.equal(unknown.codexHomeResolution.reason, 'single_stable_live_writer'); assert.equal(unknown.queueId, undefined);
   assert.equal(JSON.stringify(unknown).includes('SECRET-SENTINEL'), false);
+  const alias = join(path, 'remote-home-alias'); symlinkSync(home, alias, 'dir');
+  const canonicalDryRun = await invoke([...args, '--codex-home', alias, '--dry-run'], local);
+  assert.equal(canonicalDryRun.status, 'validated'); assert.equal(canonicalDryRun.codexHome, home);
+  assert.equal(canonicalDryRun.codexHomeResolution.status, 'explicit');
+  assert.equal('requestedCodexHome' in canonicalDryRun, false); // Wire context is consumed, never exposed by the caller.
   owner.kill(); await once(owner, 'close');
   const refused = await invoke(args, local);
   assert.equal(refused.error, 'inactive_writer'); assert.equal(refused.submitted, false);
