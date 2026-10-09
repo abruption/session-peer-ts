@@ -3,7 +3,8 @@
 import { accessSync, constants, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
-import { canonical, listingCandidates, sqliteHome } from './discovery.js';
+import { listingCandidates, sqliteHome } from './discovery.js';
+import { inspectSkill } from './skill-metadata.js';
 import { batchShim } from './process.js';
 import { windowsProcessStart } from './windows.js';
 
@@ -143,28 +144,5 @@ export async function doctor(agent?: 'claude' | 'codex', home?: string, binary?:
 export function inspectSkills(home?: string): Check[] {
   const paths = new Set([join(homedir(), '.agents/skills/session-peer-ts/SKILL.md'),
     join(home || process.env.CODEX_HOME || join(homedir(), '.codex'), 'skills/session-peer-ts/SKILL.md')]);
-  return [...paths].map(path => {
-    try {
-      path = canonical(path);
-      if (!statSync(path).isFile() || statSync(path).size > 65536) return { path, status: 'unknown', code: 'skill_metadata_unreadable' };
-      const text = readFileSync(path, 'utf8');
-      const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text)?.[1];
-      if (!front) return { path, status: 'unknown', code: 'skill_metadata_missing' };
-      const lines = front.split(/\r?\n/);
-      const sections = lines.map((line, index) => /^metadata: *(?:#.*)?$/.test(line) ? index : -1).filter(index => index >= 0);
-      if (sections.length !== 1) return { path, status: 'unknown', code: 'skill_metadata_missing' };
-      const start = sections[0]! + 1;
-      let end = start;
-      while (end < lines.length && (/^ /.test(lines[end]!) || /^ *(?:#.*)?$/.test(lines[end]!))) end++;
-      const fields = lines.slice(start, end).map(line => /^  ([a-z-]+): *(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^#"'\r\n]*?)) *(?:#.*)?$/.exec(line));
-      const field = (key: string) => {
-        const values = fields.filter(match => match?.[1] === key).map(match => (match![2] ?? match![3] ?? match![4])!.trim());
-        return values.length === 1 ? values[0] : undefined;
-      };
-      const implementation = field('runtime-implementation'), minimum = field('runtime-min-version');
-      const policy = field('runtime-capability-policy');
-      const compatible = implementation === 'typescript' && minimum === '0.1.0' && policy === 'probe-help' && field('version') === '0.1.0' && field('runtime-full-version') === '0.1.0';
-      return { path, status: compatible ? 'compatible' : 'incompatible', code: compatible ? 'skill_contract_compatible' : 'skill_contract_mismatch', verification: 'metadata_only' };
-    } catch (error) { return { path, ...failure(error, 'skill_missing', 'skill_metadata_unreadable') }; }
-  });
+  return [...paths].map(inspectSkill);
 }
