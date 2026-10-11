@@ -195,5 +195,219 @@
       "liveOwnerUsed": false,
       "threadStartResumeOrTurnCalled": false
     }
-  }
+  },
+  "additionalQueueOnlyProfiles": [
+    {
+      "version": "0.162.1",
+      "platform": "darwin-arm64",
+      "officialSourceCommit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "qualification": "mechanics_from_isolated_fixture",
+      "productionObservationRouteQualified": false,
+      "methods": {
+        "queueAdd": {
+          "schemaPath": "v2/ThreadQueueAddResponse.json",
+          "responseSha256": "c11b9772788427b19c9f9decf0765e2b41cbdead1aa9c3d39f42fdd70b339314",
+          "bodyPath": [
+            "queuedSubmission",
+            "input"
+          ],
+          "paramsSha256": "60f25b7d3e3357c215bef9d2fe7047200f545e030dca9e00527ac0620cd0c88f"
+        },
+        "itemStarted": {
+          "schemaPath": "v2/ItemStartedNotification.json",
+          "responseSha256": "692c5876f44a4c12a9b9211912860ceddb65d34497ab4fe9aa46cbebe1a63166",
+          "bodyPath": [
+            "item",
+            "content"
+          ]
+        },
+        "turnCompleted": {
+          "schemaPath": "v2/TurnCompletedNotification.json",
+          "responseSha256": "69413578ec3ecd02691424bdeb9d640c7244b4ca4c5c3ef26f69a2efe7c37db8",
+          "bodyPath": [
+            "turn",
+            "items"
+          ]
+        }
+      },
+      "sourceHashes": {
+        "codex-rs/app-server/src/request_processors/thread_queue_processor.rs": "4270d4b8560862e854ff960eb161590f8d57da947976da821e035072bc39ec77",
+        "codex-rs/ext/queue/src/service.rs": "110253b6c2b74de1ad8610b347ac331479d4f09873a1c8f9793a6921438d6ae1",
+        "codex-rs/app-server/src/request_processors/initialize_processor.rs": "4535560b07ab10d1538acd461560a55c1bdf0c9b4049e72775d6b770421f117f",
+        "codex-rs/app-server/src/transport.rs": "5e88d3210a738216a1c8e1dd678a947a8991a486b729685e4089a6a36aa769c8",
+        "codex-rs/core/src/config/mod.rs": "32babb117ff4bf0dc08050c4a755f5996f57f51fcebb82595c81648420394259",
+        "codex-rs/state/src/lib.rs": "7a2df1f8605e5b8ce19e488e271c8c0a5ee426809783347b3e4a32ea2e46712b"
+      },
+      "optOutNotificationMethods": [
+        "error",
+        "thread/started",
+        "thread/status/changed",
+        "thread/archived",
+        "thread/deleted",
+        "thread/unarchived",
+        "thread/closed",
+        "thread/reverted",
+        "skills/changed",
+        "thread/name/updated",
+        "thread/attachment/updated",
+        "thread/goal/updated",
+        "thread/prediction/updated",
+        "thread/goal/cleared",
+        "thread/queue/changed",
+        "project/changed",
+        "thread/project/updated",
+        "thread/environment/connected",
+        "thread/environment/disconnected",
+        "thread/settings/updated",
+        "thread/tokenUsage/updated",
+        "turn/started",
+        "hook/started",
+        "turn/completed",
+        "hook/completed",
+        "turn/diff/updated",
+        "turn/plan/updated",
+        "item/started",
+        "item/autoApprovalReview/started",
+        "item/autoApprovalReview/completed",
+        "autoApprovalReview/strictReviewRequired",
+        "item/completed",
+        "item/agentMessage/delta",
+        "item/plan/delta",
+        "command/exec/outputDelta",
+        "process/outputDelta",
+        "process/exited",
+        "item/commandExecution/outputDelta",
+        "item/commandExecution/terminalInteraction",
+        "item/fileChange/outputDelta",
+        "item/fileChange/patchUpdated",
+        "serverRequest/resolved",
+        "item/mcpToolCall/progress",
+        "mcpServer/oauthLogin/completed",
+        "mcpServer/startupStatus/updated",
+        "mcpServer/event/stream/notification",
+        "account/updated",
+        "account/gatewayOAuth/changed",
+        "account/rateLimits/updated",
+        "app/list/updated",
+        "remoteControl/status/changed",
+        "externalAgentConfig/import/progress",
+        "externalAgentConfig/import/completed",
+        "fs/changed",
+        "item/reasoning/summaryTextDelta",
+        "item/reasoning/summaryPartAdded",
+        "item/reasoning/textDelta",
+        "thread/compacted",
+        "model/rerouted",
+        "model/verification",
+        "modelProvider/authRecoveryStarted",
+        "modelProvider/authRecoveryCompleted",
+        "turn/moderationMetadata",
+        "model/safetyBuffering/updated",
+        "warning",
+        "guardianWarning",
+        "deprecationNotice",
+        "configWarning",
+        "fuzzyFileSearch/sessionUpdated",
+        "fuzzyFileSearch/sessionCompleted",
+        "thread/realtime/started",
+        "thread/realtime/itemAdded",
+        "thread/realtime/item/started",
+        "thread/realtime/item/transcript/delta",
+        "thread/realtime/item/completed",
+        "thread/realtime/transcript/delta",
+        "thread/realtime/transcript/done",
+        "thread/realtime/outputAudio/delta",
+        "thread/realtime/sdp",
+        "thread/realtime/error",
+        "thread/realtime/closed",
+        "windows/worldWritableWarning",
+        "windowsSandbox/setupCompleted",
+        "account/login/completed"
+      ],
+      "nativeFixture": {
+        "version": "0.162.1",
+        "platform": "darwin-arm64",
+        "scope": "synthetic_unloaded_thread_only_not_live_delivery",
+        "networkDeniedByMacOSSandbox": true,
+        "userHomeReadsDeniedExceptNativeExecutable": true,
+        "queueAttempts": 1,
+        "loadedBefore": 0,
+        "echoKeys": [
+          "text",
+          "text_elements",
+          "type"
+        ],
+        "ownEffectInputEchoExact": true,
+        "loadedAfter": 0,
+        "queueRows": 1,
+        "queueIdMatches": true,
+        "clientCIDMatches": true,
+        "hasUserEventAfter": 0,
+        "reason": "queue_only_fixture_pass",
+        "processReaped": true,
+        "stderrBytes": 0,
+        "onlyMethods": [
+          "initialize",
+          "initialized",
+          "thread/loaded/list",
+          "thread/queue/add",
+          "thread/loaded/list"
+        ],
+        "suppressedNotifications": 84,
+        "unexpectedNotifications": 0,
+        "authFileCreated": false,
+        "metadataVerification": "read-only SQL projection of id/thread_id/UserInput.client_id only",
+        "nativeFixtureOnly": true,
+        "actualLiveWriterUsed": false,
+        "liveDeliveryAckExperimentPerformed": false
+      },
+      "sandboxNegativeControls": {
+        "userReadDenied": true,
+        "networkDenied": true
+      },
+      "initialHarnessFailures": [
+        {
+          "reason": "overly_strict_own_echo_assertion_expected_optional_text_elements_omitted",
+          "queueAttempts": 1,
+          "queueRowsAfter": 1,
+          "newIndependentThreadAndCorrelationUsedForLaterProbe": true,
+          "submissionNotReplayed": true
+        },
+        {
+          "reason": "harness_seeded_prior_fixture_home_instead_of_new_home",
+          "queueAttempts": 1,
+          "queueRowsInNewHomeAfter": 0,
+          "errorCode": -32603,
+          "newIndependentThreadAndCorrelationUsedForLaterProbe": true,
+          "submissionNotReplayed": true
+        }
+      ],
+      "remainingGates": [
+        "live_original_writer_generation_route",
+        "body_free_native_observation",
+        "Windows_and_Linux_native_qualification",
+        "actual_delivery_or_receipt_ack"
+      ],
+      "beforeEffectNativeApiFixture": {
+        "version": "0.162.1",
+        "platform": "darwin-arm64",
+        "scope": "synthetic-before-effect-refusal",
+        "fault": {
+          "code": "effect_guard_failed",
+          "attempted": false,
+          "fallbackEligible": false
+        },
+        "ownerFixtureChecks": 3,
+        "beforeEffectCalls": 1,
+        "binaryCalls": 2,
+        "processesReaped": true,
+        "nativeOwnedStorageBindingPassed": true,
+        "liveOwnerUsed": false,
+        "networkDeniedByMacOSSandbox": true,
+        "threadRows": 0,
+        "queueRows": 0,
+        "authFileCreated": false
+      }
+    }
+  ]
 }

@@ -1,6 +1,6 @@
 // Bounded queue-only mechanics and metadata-only client foundation.
 // No live owner/delivery observation route is qualified.
-// Official Codex 0.160.1 schema generated with an isolated HOME/CODEX_HOME:
+// Official Codex schemas generated separately with isolated HOME/CODEX_HOME:
 // https://learn.chatgpt.com/docs/app-server (schema is version-specific).
 // queue/list returns QueuedSubmission.input; item/started returns full content;
 // turn/completed returns Turn.items. These are not metadata-only observers.
@@ -23,6 +23,22 @@ export const APP_SERVER_EVIDENCE = Object.freeze({
   itemStartedSha256: '7574788d2a352747f50d44be3ef649011cb8de8069da4c655faff14d0aee32c4',
   turnCompletedSha256: '016870158603b0f84bd9f8f65f927161c9fd5128e5ec632087616462dc44e085',
 });
+// Each entry qualifies queue-only mechanics on this exact native version and
+// platform. Neither generated schemas nor isolated unloaded-thread fixtures
+// qualify a live writer endpoint, metadata-only observer or delivery/ACK.
+export const APP_SERVER_QUEUE_EVIDENCE = Object.freeze([
+  APP_SERVER_EVIDENCE,
+  Object.freeze({
+    version: '0.162.1', inspectedPlatform: 'darwin-arm64',
+    officialSourceCommit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
+    scope: 'generated_schema_only',
+    queueAddParamsSha256: '60f25b7d3e3357c215bef9d2fe7047200f545e030dca9e00527ac0620cd0c88f',
+    queueAddResponseSha256: 'c11b9772788427b19c9f9decf0765e2b41cbdead1aa9c3d39f42fdd70b339314',
+    itemStartedSha256: '692c5876f44a4c12a9b9211912860ceddb65d34497ab4fe9aa46cbebe1a63166',
+    turnCompletedSha256: '69413578ec3ecd02691424bdeb9d640c7244b4ca4c5c3ef26f69a2efe7c37db8',
+  }),
+]);
+function queueEvidence(version: string) { return APP_SERVER_QUEUE_EVIDENCE.find(profile => profile.version === version); }
 export const APP_SERVER_LIMITS = Object.freeze({
   frameBytes: 65536, receivedBytes: 1024 * 1024, sentBytes: 256 * 1024,
   frames: 512, notifications: 256, requests: 16, observations: 64, messageBytes: 32768,
@@ -37,7 +53,8 @@ export type AppServerCapability = {
   reason: 'metadata_only_owner_route_unvalidated' | 'version_unqualified'; attempted: false; queueSupported: boolean;
 };
 export function appServerCapability(context: AppServerContext): AppServerCapability {
-  const qualified = context.version === APP_SERVER_EVIDENCE.version && context.platform === APP_SERVER_EVIDENCE.inspectedPlatform;
+  const profile = queueEvidence(context.version);
+  const qualified = profile !== undefined && profile.inspectedPlatform === context.platform;
   return { supported: false, schema: qualified ? 'version_qualified' : 'version_unqualified', route: 'route_unsupported',
     reason: qualified ? 'metadata_only_owner_route_unvalidated' : 'version_unqualified', attempted: false, queueSupported: qualified };
 }
@@ -83,9 +100,10 @@ export function nativeQueueCapability(context: AppServerContext): {
   return { queueSupported: qualified, observationSupported: false,
     qualification: qualified ? 'mechanics_from_isolated_fixture' : 'unsupported', reason: qualified ? 'queue_only' : 'version_unqualified' };
 }
-// All 83 methods from the experimental 0.160.1 ServerNotification schema are
-// suppressed before queue/add. A notification reaching us is a qualification
-// failure, not an invitation to inspect/filter its body or perform another RPC.
+// All methods from each exact experimental ServerNotification schema (83 for
+// 0.160.1, 84 for 0.162.1) are suppressed before queue/add. A notification
+// reaching us is a qualification failure, not an invitation to inspect/filter
+// its body or perform another RPC.
 export const NATIVE_QUEUE_NOTIFICATION_OPTOUTS = Object.freeze([
   'account/gatewayOAuth/changed', 'account/login/completed', 'account/rateLimits/updated', 'account/updated', 'app/list/updated',
   'autoApprovalReview/strictReviewRequired', 'command/exec/outputDelta', 'configWarning', 'deprecationNotice', 'error',
@@ -107,6 +125,14 @@ export const NATIVE_QUEUE_NOTIFICATION_OPTOUTS = Object.freeze([
   'thread/tokenUsage/updated', 'thread/unarchived', 'turn/completed', 'turn/diff/updated', 'turn/moderationMetadata',
   'turn/plan/updated', 'turn/started', 'warning', 'windows/worldWritableWarning', 'windowsSandbox/setupCompleted',
 ]);
+export const NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS = Object.freeze([
+  ...NATIVE_QUEUE_NOTIFICATION_OPTOUTS, 'thread/prediction/updated',
+]);
+function nativeNotifications(version: string): readonly string[] {
+  if (version === '0.160.1') return NATIVE_QUEUE_NOTIFICATION_OPTOUTS;
+  if (version === '0.162.1') return NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS;
+  throw new AppServerFault('unsupported_version', false);
+}
 export type MetadataEvent =
   { kind: 'injected'; scope: AppServerScope; clientUserMessageId: string; itemId: string; turnId: string } |
   { kind: 'turn'; scope: AppServerScope; clientUserMessageId: string; turnId: string;
@@ -247,16 +273,18 @@ export class BoundedAppServerClient implements AppServerPort {
   // Hermetic test hook for the exact native RPC profile. It does not qualify a
   // binary, platform or writer. Production callers use nativeQueueOnce instead.
   static async connectNativeQueueFixture(scope: AppServerScope, transport: MetadataOnlyTransport, deadlineMs: number,
-    verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>): Promise<NativeQueuePort> {
-    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect);
+    verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>,
+    nativeVersion: string = APP_SERVER_EVIDENCE.version): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, nativeVersion);
   }
   static async connectNativeQueueWire(scope: AppServerScope, transport: NativeQueueTransport, deadlineMs: number,
-    verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>): Promise<NativeQueuePort> {
-    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect);
+    verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>,
+    nativeVersion: string = APP_SERVER_EVIDENCE.version): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, nativeVersion);
   }
   private static async connectWire(scope: AppServerScope, transport: ClientTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, nativeQueue: boolean,
-    beforeEffect: () => Promise<void> = async () => {}): Promise<BoundedAppServerClient> {
+    beforeEffect: () => Promise<void> = async () => {}, nativeVersion: string = APP_SERVER_EVIDENCE.version): Promise<BoundedAppServerClient> {
     let original: AppServerScope;
     try { original = scopeValue(scope); } catch { await disposeTransport(transport); throw new AppServerFault('invalid_scope', false); }
     if (transport.qualification !== 'hermetic_fixture_only' && !(nativeQueue && transport.qualification === 'native_queue_only_stdio')) {
@@ -270,9 +298,10 @@ export class BoundedAppServerClient implements AppServerPort {
     try {
       await client.owner();
       if (nativeQueue) {
+        const notifications = nativeNotifications(nativeVersion);
         const hello = object(await client.request('initialize', {
           clientInfo: { name: 'session-peer-native-queue', version: '1' },
-          capabilities: { experimentalApi: true, optOutNotificationMethods: [...NATIVE_QUEUE_NOTIFICATION_OPTOUTS] },
+          capabilities: { experimentalApi: true, optOutNotificationMethods: [...notifications] },
         }), ['codexHome', 'platformFamily', 'platformOs', 'userAgent']);
         if (hello.codexHome !== original.codexHome || hello.platformFamily !== 'unix' || hello.platformOs !== 'macos' ||
             !safeId(hello.userAgent, 4096)) throw new AppServerFault('owner_changed', false);
@@ -500,7 +529,7 @@ function lsofFilename(raw: string): string {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(bytes)); }
   catch { throw new AppServerFault('storage_binding_unverified', false); }
 }
-// Queue mechanics were verified only for the exact installed version/platform
+// Queue mechanics were verified only for the exact listed versions/platform
 // in a network-denied synthetic home. This is not a live delivery/ACK claim.
 // Root integration owns generation, canonical home, storage and writer guards.
 // This function never invokes thread start/resume/read/list or a model turn.
@@ -513,7 +542,7 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
   // Reject malformed effect input before even a version probe or bootstrap can
   // start the binary and access/create native files in the selected home.
   validateQueueInput(options, false);
-  // In 0.160.1 config.sqlite_home precedes CODEX_SQLITE_HOME. Pin BOTH env and
+  // In the qualified versions config.sqlite_home precedes CODEX_SQLITE_HOME. Pin BOTH env and
   // a quoted CLI value so an ordinary config A->B->A load cannot redirect us.
   // Managed policy can still supersede the CLI pin, hence the FD-path check.
   const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env), CODEX_HOME: original.codexHome,
@@ -523,7 +552,8 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
     env, timeout: Math.max(1, options.deadlineMs - performance.now()), limit: 4096,
   });
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
-  if (version.interrupted || version.code !== 0 || version.stdout.trim() !== `codex-cli ${APP_SERVER_EVIDENCE.version}`) {
+  const nativeVersion = version.stdout.trim().slice('codex-cli '.length);
+  if (version.interrupted || version.code !== 0 || !queueEvidence(nativeVersion) || version.stdout.trim() !== `codex-cli ${nativeVersion}`) {
     throw new AppServerFault('unsupported_version', false);
   }
   const transport: NativeQueueTransport = { qualification: 'native_queue_only_stdio',
@@ -531,7 +561,7 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
       '-c', `sqlite_home=${JSON.stringify(original.codexHome)}`], env, original.codexHome) };
   let client: NativeQueuePort | undefined;
   try {
-    client = await BoundedAppServerClient.connectNativeQueueWire(original, transport, options.deadlineMs, options.verifyOwner, options.beforeEffect);
+    client = await BoundedAppServerClient.connectNativeQueueWire(original, transport, options.deadlineMs, options.verifyOwner, options.beforeEffect, nativeVersion);
     await verifyOwnedSqliteBinding(transport.pid, original.codexHome, options.deadlineMs);
     return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
   } finally { if (client) await client.close(); else await disposeTransport(transport); }

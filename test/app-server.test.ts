@@ -10,9 +10,9 @@ import { tmpdir } from 'node:os';
 import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
-import { APP_SERVER_EVIDENCE, APP_SERVER_LIMITS, AppServerFault, BoundedAppServerClient,
+import { APP_SERVER_EVIDENCE, APP_SERVER_QUEUE_EVIDENCE, APP_SERVER_LIMITS, AppServerFault, BoundedAppServerClient,
   appServerCapability, connectAppServer, parseMetadataEvent, spawnOwnedMetadataFixture, nativeQueueCapability,
-  nativeQueueOnce, NATIVE_QUEUE_NOTIFICATION_OPTOUTS,
+  nativeQueueOnce, NATIVE_QUEUE_NOTIFICATION_OPTOUTS, NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS,
   type AppServerScope, type MetadataOnlyTransport } from '../dist/app-server.js';
 
 const scope: AppServerScope = { codexHome: join(tmpdir(), 'fixture-home'), threadId: 'fixture-thread', generation: 'fixture-generation', ownerIdentity: 'fixture-owner' };
@@ -64,6 +64,15 @@ test('native queue capability qualifies exact mechanics only, never live deliver
   for (const patch of [{ version: '0.160.2' }, { platform: 'linux-x64' }, { platform: 'win32-x64' }]) {
     assert.equal(nativeQueueCapability({ version: '0.160.1', platform: 'darwin-arm64', scope, ...patch }).queueSupported, false);
   }
+  assert.equal(nativeQueueCapability({ version: '0.162.1', platform: 'darwin-arm64', scope }).queueSupported, true);
+  assert.equal(appServerCapability({ version: '0.162.1', platform: 'darwin-arm64', scope }).supported, false);
+  for (const version of ['0.161.0', '0.162.0', '0.162.2', '0.163.0', '0.162.1-rc.1', 'v0.162.1']) {
+    assert.equal(nativeQueueCapability({ version, platform: 'darwin-arm64', scope }).queueSupported, false);
+  }
+  for (const platform of ['darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64']) {
+    assert.equal(nativeQueueCapability({ version: '0.162.1', platform, scope }).queueSupported, false);
+  }
+  assert.equal(nativeQueueCapability({ version: undefined, platform: undefined, scope } as any).queueSupported, false);
 });
 
 test('generated schema evidence explicitly records body-bearing APIs as unsupported', () => {
@@ -338,7 +347,7 @@ test('closing an owned POSIX fixture also kills its owned process-group descenda
   assert.equal(running(pids.parent), false); assert.equal(running(pids.descendant), false);
 });
 
-function nativeFixture(t: TestContext, queueReply?: (r: any, reply: (v: unknown) => void) => void) {
+function nativeFixture(t: TestContext, queueReply?: (r: any, reply: (v: unknown) => void) => void, nativeVersion = '0.160.1') {
   const f = fixture(t, (r, reply) => {
     if (r.method === 'initialize') reply({ id: r.id, result: { codexHome: scope.codexHome, platformFamily: 'unix', platformOs: 'macos', userAgent: 'fixture-native' } });
     else if (r.method === 'initialized') return;
@@ -347,7 +356,7 @@ function nativeFixture(t: TestContext, queueReply?: (r: any, reply: (v: unknown)
   });
   async function connect(beforeEffect: () => Promise<void> = async () => {}, timeout = 1000,
     owner: (value: AppServerScope) => Promise<boolean> = async () => true) {
-    const client = await BoundedAppServerClient.connectNativeQueueFixture(scope, f.transport, performance.now() + timeout, owner, beforeEffect);
+    const client = await BoundedAppServerClient.connectNativeQueueFixture(scope, f.transport, performance.now() + timeout, owner, beforeEffect, nativeVersion);
     t.after(() => client.close()); return client;
   }
   return { ...f, connect };
@@ -364,6 +373,37 @@ test('native fixture opts out all 83 notifications before one queue RPC and vali
   assert.equal(JSON.stringify(result).includes('PRIVATE'), false);
   assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'initialized', 'thread/queue/add']);
   await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'again' }), fault('already_attempted', true));
+});
+
+test('qualified 0.162.1 fixture opts out all 84 notifications without claiming an observer', async t => {
+  const evidence = JSON.parse(readFileSync(new URL('./fixtures/app-server-schema-evidence.json', import.meta.url), 'utf8'));
+  const profile = evidence.additionalQueueOnlyProfiles[0];
+  assert.equal(profile.version, '0.162.1'); assert.equal(profile.platform, 'darwin-arm64');
+  const codeEvidence = APP_SERVER_QUEUE_EVIDENCE.find(value => value.version === profile.version)!;
+  assert.equal(profile.officialSourceCommit, codeEvidence.officialSourceCommit);
+  assert.equal(profile.methods.queueAdd.paramsSha256, codeEvidence.queueAddParamsSha256);
+  assert.equal(profile.methods.queueAdd.responseSha256, codeEvidence.queueAddResponseSha256);
+  assert.equal(profile.methods.itemStarted.responseSha256, codeEvidence.itemStartedSha256);
+  assert.equal(profile.methods.turnCompleted.responseSha256, codeEvidence.turnCompletedSha256);
+  assert.deepEqual(new Set(profile.optOutNotificationMethods), new Set(NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS));
+  assert.equal(NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS.length, 84);
+  assert.equal(new Set(NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS).size, 84);
+  assert.equal(profile.nativeFixture.queueAttempts, 1); assert.equal(profile.nativeFixture.loadedBefore, 0);
+  assert.equal(profile.nativeFixture.loadedAfter, 0); assert.equal(profile.productionObservationRouteQualified, false);
+  assert.deepEqual(profile.beforeEffectNativeApiFixture.fault,
+    { code: 'effect_guard_failed', attempted: false, fallbackEligible: false });
+  assert.equal(profile.beforeEffectNativeApiFixture.queueRows, 0);
+  const f = nativeFixture(t, undefined, '0.162.1'), client = await f.connect();
+  assert.deepEqual(f.requests[0].params.capabilities.optOutNotificationMethods, NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS);
+  assert.deepEqual(await client.queueOnce({ clientUserMessageId: id, message: 'own echo' }),
+    { queueId: 'fixture-native-q', clientUserMessageId: id });
+  assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'initialized', 'thread/queue/add']);
+});
+
+test('unqualified native fixture versions close before initialize and cannot invoke effect guards', async t => {
+  const f = nativeFixture(t, undefined, '0.162.2'); let guards = 0;
+  await assert.rejects(f.connect(async () => { guards++; }), fault('unsupported_version', false));
+  assert.equal(guards, 0); assert.equal(f.requests.length, 0); assert.equal(f.closes(), 1);
 });
 
 test('root effect-guard refusal cannot authorize any native queue or fallback', async t => {

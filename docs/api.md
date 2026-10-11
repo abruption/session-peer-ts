@@ -89,9 +89,10 @@ message/transcript scan manufactures ACK. Ordinary generated Reply-To stays v1.
 `dist/app-server.js` is an internal opt-in module, not a new public package
 export or a change to ordinary CLI submission. `nativeQueueOnce` requires an
 absolute executable, exact home/thread/original generation, bounded owner
-verifier and durable `beforeEffect` callback. Exact Codex 0.160.1/macOS arm64
-queue mechanics were tested in a network-denied synthetic home; other platform
-or version tuples fail before an effect. The caller owns proof of original
+verifier and durable `beforeEffect` callback. Exact Codex 0.160.1 and 0.162.1
+queue mechanics were tested on macOS arm64 in network-denied synthetic homes;
+other platform or version tuples fail before an effect. There is no minor-range
+or latest-version inference. The caller owns proof of original
 writer/home and any resources used by its verifier.
 
 Only initialize, initialized and one thread/queue/add are used. Queue receipt
@@ -102,11 +103,24 @@ outcome uncertain even when the subsequent response is malformed. No automatic
 fallback follows a possible effect. Fixture-only metadata ports are not native
 observation qualification. See [source evidence](../PARITY.md#unreleased-bounded-app-server-foundation--71).
 
+The 0.162.1 qualification uses source `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`
+and generated schema hashes, with all 84 native notifications opted out before
+the effect (0.160.1 retains its exact 83-method list). A saved synthetic thread
+remained unloaded before and after one queue request; its own echoed input and
+queue/thread/client IDs were checked. A separate native API fixture verified
+owned SQLite descriptor binding and durable-guard refusal with zero queue rows.
+Neither fixture proves a live writer's generation, actual delivery, receipt ACK
+or a body-free native observer. Linux and Windows native mechanics remain
+unqualified. The initial qualification harness had echo-shape and temporary-home
+mapping failures; each subsequent probe used a distinct home/thread/client ID,
+and no attempted submission was replayed. Details are retained in the
+`test/fixtures/app-server-schema-evidence.json` source fixture.
+
 
 The queue-only SDK pins both environment and CLI SQLite home, then verifies
 opened state/queue DB paths on its OWN native app-server PID before authorizing
 the effect. Config precedes the environment and exact managed requirements can
-supersede the CLI in 0.160.1, so initialize's home echo alone is insufficient.
+supersede the CLI in the qualified versions, so initialize's home echo alone is insufficient.
 Missing/mismatched descriptor proof refuses without queue/fallback. Direct
 native binaries are qualified; launcher wrappers without this PID/storage proof
 remain unsupported. Native bootstrap may create state/cache files according to
