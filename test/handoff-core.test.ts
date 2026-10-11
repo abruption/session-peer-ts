@@ -310,6 +310,54 @@ test('strictly-before-cutoff receipt satisfies wait and terminal results cannot 
   assert.equal(f.ledger.acceptReceipt(receipt(h, capability)).wait.status, 'satisfied');
   assert.throws(() => f.ledger.recordWait(h.correlationId, 'stopped', 'stopped_by_operator'), /handoff_wait_terminal/);
 });
+test('one receipt or confirmation resolves concurrent ACK waits by their own immutable deadlines', posix, t => {
+  for (const route of ['receipt', 'confirmation'] as const) {
+    const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
+    const capability = f.ledger.mintCapability(h.correlationId, bootstrap); submit(f, h);
+    const first = f.ledger.beginWait(h.correlationId, 'acknowledged', new HandoffBudget(6, f.clock));
+    f.advance(500);
+    const second = f.ledger.beginWait(h.correlationId, 'acknowledged', new HandoffBudget(6, f.clock));
+    f.advance(500); // At the first cutoff, strictly before the second cutoff.
+    const raw = receipt(h, capability);
+    const accepted = route === 'receipt' ? f.ledger.acceptReceipt(raw) : f.ledger.confirm(confirmation(h));
+    assert.equal(accepted.ack.late, true, route);
+    assert.equal(accepted.wait.operationId, second.wait.operationId, route);
+    assert.equal(accepted.wait.status, 'satisfied', route);
+    const stored = JSON.parse(readFileSync(join(f.ledger.path, 'ledger.json'), 'utf8')).data.records[h.correlationId];
+    assert.deepEqual(stored.waits.map((wait: any) => [wait.public.operationId, wait.public.status]), [
+      [first.wait.operationId, 'timed_out_unknown'], [second.wait.operationId, 'satisfied'],
+    ], route);
+    const before = readFileSync(join(f.ledger.path, 'ledger.json'), 'utf8');
+    f.advance(1000);
+    const duplicate = route === 'receipt' ? f.ledger.acceptReceipt(raw) : f.ledger.confirm(confirmation(h));
+    assert.deepEqual(duplicate.ack, accepted.ack, route);
+    assert.equal(readFileSync(join(f.ledger.path, 'ledger.json'), 'utf8'), before, route);
+  }
+});
+test('receipt preserves an earlier stopped ACK wait while satisfying a newer wait', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
+  const capability = f.ledger.mintCapability(h.correlationId, bootstrap); submit(f, h);
+  const first = f.ledger.beginWait(h.correlationId, 'acknowledged', new HandoffBudget(6, f.clock));
+  f.ledger.recordWait(h.correlationId, 'stopped', 'stopped_by_operator');
+  const second = f.ledger.beginWait(h.correlationId, 'acknowledged', new HandoffBudget(6, f.clock));
+  const accepted = f.ledger.acceptReceipt(receipt(h, capability));
+  assert.equal(accepted.wait.operationId, second.wait.operationId); assert.equal(accepted.wait.status, 'satisfied');
+  const stored = JSON.parse(readFileSync(join(f.ledger.path, 'ledger.json'), 'utf8')).data.records[h.correlationId];
+  assert.deepEqual(stored.waits[0].public, { ...first.wait, status: 'stopped', reason: 'stopped_by_operator' });
+});
+test('newer unsupported wait cannot hide a restarted pending ACK operation from receipt ordering checks', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
+  f.ledger.mintCapability(h.correlationId, bootstrap); submit(f, h);
+  f.ledger.beginWait(h.correlationId, 'acknowledged', new HandoffBudget(6, f.clock));
+  f.advance(1000); f.ledger.recordWait(h.correlationId, 'timed_out_unknown');
+  f.ledger.beginWait(h.correlationId, 'acknowledged', new HandoffBudget(6, f.clock));
+  const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
+  assert.equal(restarted.beginWait(h.correlationId, 'acknowledged', new HandoffBudget(6, f.clock)).wait.status, 'unsupported');
+  const before = readFileSync(join(f.ledger.path, 'ledger.json'), 'utf8');
+  assert.throws(() => restarted.confirm(confirmation(h)), /receipt_order_unprovable/);
+  assert.equal(readFileSync(join(f.ledger.path, 'ledger.json'), 'utf8'), before);
+  assert.notEqual(handoff(restarted, h.correlationId).ack.status, 'acknowledged');
+});
 test('manual confirmation with unprovable restarted pending wait ordering refuses without ACK', posix, t => {
   const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
   f.ledger.mintCapability(h.correlationId, bootstrap); submit(f, h);

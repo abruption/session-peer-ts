@@ -105,7 +105,8 @@ export class HandoffLedger {
         for (const wait of item.waits) {
           closed(wait, ['public', 'clockId', 'cutoff']);
           if (!canonicalId(wait.clockId) || typeof wait.cutoff !== 'number' || !Number.isFinite(wait.cutoff)) fail();
-          validateHandoff({ ...h, wait: wait.public });
+          // Current actions belong to the latest operation, not archived waits.
+          validateHandoff({ ...h, wait: wait.public, nextActions: ['reconcile'] });
         }
       }
       return data as Ledger;
@@ -331,18 +332,20 @@ export class HandoffLedger {
   }
   private commitAck(item: RecordIntent, assurance: 'operator_confirmed' | 'token_possession'): void {
     const h = item.handoff, origin = item.waits[0];
+    // Classify every pending ACK operation against one observed instant. A
+    // newer wait must not hide an older operation's deadline or clock loss.
+    const now = this.clock.monotonic();
+    const pending = item.waits.filter(wait => wait.public.status === 'pending' && wait.public.for === 'acknowledged');
+    if (pending.some(wait => wait.clockId !== this.clockId)) fail('receipt_order_unprovable');
     let late = false;
     if (origin) {
       if (origin.public.status === 'timed_out_unknown') late = true;
-      else if (origin.clockId === this.clockId) late = this.clock.monotonic() >= origin.cutoff;
+      else if (origin.clockId === this.clockId) late = now >= origin.cutoff;
       else fail('receipt_order_unprovable');
     }
     h.state = 'acknowledged'; h.ack = { status: 'acknowledged', assurance, receivedAtUtcMs: Math.floor(this.clock.utc()), late };
-    const latest = item.waits.at(-1);
-    if (latest?.public.status === 'pending' && latest.public.for === 'acknowledged') {
-      if (latest.clockId !== this.clockId) fail('receipt_order_unprovable');
-      latest.public.status = this.clock.monotonic() < latest.cutoff ? 'satisfied' : 'timed_out_unknown'; h.wait = structuredClone(latest.public);
-    }
+    for (const wait of pending) wait.public.status = now < wait.cutoff ? 'satisfied' : 'timed_out_unknown';
+    if (item.waits.length) h.wait = structuredClone(item.waits.at(-1)!.public);
     h.nextActions = ['reconcile'];
   }
   confirm(raw: string | Uint8Array): Handoff {
