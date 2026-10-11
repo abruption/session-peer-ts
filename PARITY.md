@@ -1063,7 +1063,7 @@ without rewriting its wait classification or journal.
 ## Unreleased bounded app-server foundation — #71
 
 The opt-in internal client is qualified only for queue mechanics on Codex
-0.160.1 / macOS arm64, using an isolated network-denied synthetic home. One
+0.160.1 and 0.162.1 / macOS arm64, using separate isolated network-denied synthetic homes. One
 native queue/add, original client message ID persistence and no loaded/resumed
 thread were observed. This is not live delivery, general owner-route or receipt
 ACK qualification. Legacy Codex queue remains the default CLI path.
@@ -1090,3 +1090,15 @@ missing direct-native PID proof refuses with zero queue RPC. An additional
 network-denied initialization-only fixture verified config/CLI/env precedence
 with zero queued rows and no model/thread effect. Bootstrap policy files are
 not promised unchanged by the native tool; no managed requirement is bypassed.
+
+### Exact 0.162.1 queue profile qualification
+
+The internal queue client also pins Codex 0.162.1/source
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d` on macOS arm64. The source/schema
+fixture records the exact notification opt-out set (84 methods, compared with
+83 in 0.160.1). An unloaded, isolated thread received one queue request with its
+exact supplied client ID and native queue receipt; a separate owned-descriptor
+fixture refused the durable effect guard and left zero queue rows. No version
+range, Linux/Windows qualification, live delivery or ACK follows from these
+queue-only fixtures. Initial harness failures are recorded separately and were
+never retried with an already-attempted intent.
