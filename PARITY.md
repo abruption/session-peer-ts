@@ -975,8 +975,10 @@ Python [1.1.0](https://github.com/abruption/session-peer/releases/tag/v1.1.0) is
 [handoff contract](https://github.com/abruption/session-peer/blob/8ca77cf31254c8287a2593fe484bb30a7dba2727/docs/contracts/handoff-v1.md)
 SHA-256 is `46a953010c49214bd8f969412f26713384fbe09a0ba78ebf0fef75da40d0d889`,
 byte-identical to the jointly reviewed design. The published fixture SHA-256 is
-`866429a99973047cd6211fdc67013d9929b5a27ba3e618036ab1836bcfd07d3c`;
-two negative control-character examples differ from the frozen shared fixture.
+`963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441`,
+also byte-identical to the frozen shared fixture. Both identities were rechecked
+against the exact release source through local Git without replace objects and
+the GitHub contents API.
 The exact reviewed TS mirror remains unchanged; publication is not permission
 to regenerate shared vectors or declare runtime conformance.
 

@@ -59,8 +59,8 @@
     "version": "1.1.0",
     "commit": "8ca77cf31254c8287a2593fe484bb30a7dba2727",
     "documentSha256": "46a953010c49214bd8f969412f26713384fbe09a0ba78ebf0fef75da40d0d889",
-    "fixtureSha256": "866429a99973047cd6211fdc67013d9929b5a27ba3e618036ab1836bcfd07d3c",
-    "reviewScope": "published_document_identity_and_fixture_diff_only",
+    "fixtureSha256": "963b94e78f510c2535e405813558275d512a5bfe6bbd99ffdf0994b4d2e6e441",
+    "reviewScope": "published_document_and_fixture_byte_identity_only",
     "sharedFixtureReplaced": false,
     "runtimeParityEstablished": false
   }
