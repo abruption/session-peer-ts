@@ -138,6 +138,13 @@ function safeId(value: unknown, maximum = 128): value is string {
       const cp = char.codePointAt(0)!; return cp < 0xd800 || cp > 0xdfff;
     });
 }
+function validateQueueInput(input: { clientUserMessageId: string; message: string }, attempted: boolean): void {
+  if (!safeId(input.clientUserMessageId) || typeof input.message !== 'string' || !input.message ||
+      Buffer.byteLength(input.message) > APP_SERVER_LIMITS.messageBytes || input.message.includes('\0') ||
+      [...input.message].some(char => { const cp = char.codePointAt(0)!; return cp >= 0xd800 && cp <= 0xdfff; })) {
+    throw new AppServerFault('invalid_input', attempted);
+  }
+}
 function scopeValue(value: unknown): AppServerScope {
   const v = object(value, ['codexHome', 'threadId', 'generation', 'ownerIdentity']);
   if (!safeId(v.codexHome, 4096) || !isAbsolute(v.codexHome) || !safeId(v.threadId) ||
@@ -365,6 +372,10 @@ export class BoundedAppServerClient implements AppServerPort {
     if (bytes.length > APP_SERVER_LIMITS.frameBytes || this.sent > APP_SERVER_LIMITS.sentBytes) { this.fail('frame_limit'); return Promise.reject(this.fault); }
     if (effect) {
       try { await this.bounded(this.beforeEffect(), 'effect_guard_failed'); } catch { this.fail('effect_guard_failed'); throw this.fault; }
+      // Durable intent/effect fencing can await I/O. Recheck the ORIGINAL
+      // owner after that await, before marking an attempt or writing the RPC.
+      // The ledger may already be fenced; this never authorizes a new effect.
+      await this.owner();
       this.check();
     }
     return new Promise((resolve, reject) => {
@@ -376,9 +387,7 @@ export class BoundedAppServerClient implements AppServerPort {
   }
   async queueOnce(input: { clientUserMessageId: string; message: string }): Promise<{ queueId: string; clientUserMessageId: string }> {
     this.check();
-    if (!safeId(input.clientUserMessageId) || typeof input.message !== 'string' || !input.message ||
-      Buffer.byteLength(input.message) > APP_SERVER_LIMITS.messageBytes || input.message.includes('\0') ||
-      [...input.message].some(char => { const cp = char.codePointAt(0)!; return cp >= 0xd800 && cp <= 0xdfff; })) throw new AppServerFault('invalid_input', this.attempted);
+    validateQueueInput(input, this.attempted);
     if (this.reserved) throw new AppServerFault('already_attempted', true);
     this.reserved = true;
     try {
@@ -501,6 +510,9 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
   let original: AppServerScope;
   try { original = scopeValue(options.scope); } catch { throw new AppServerFault('invalid_scope', false); }
   if (!isAbsolute(options.binary) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(original.threadId)) throw new AppServerFault('invalid_input', false);
+  // Reject malformed effect input before even a version probe or bootstrap can
+  // start the binary and access/create native files in the selected home.
+  validateQueueInput(options, false);
   // In 0.160.1 config.sqlite_home precedes CODEX_SQLITE_HOME. Pin BOTH env and
   // a quoted CLI value so an ordinary config A->B->A load cannot redirect us.
   // Managed policy can still supersede the CLI pin, hence the FD-path check.

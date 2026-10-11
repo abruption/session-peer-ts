@@ -345,8 +345,9 @@ function nativeFixture(t: TestContext, queueReply?: (r: any, reply: (v: unknown)
     else if (queueReply) queueReply(r, reply);
     else reply({ id: r.id, result: { queuedSubmission: { id: 'fixture-native-q', input: r.params.input, clientUserMessageId: r.params.clientUserMessageId } } });
   });
-  async function connect(beforeEffect: () => Promise<void> = async () => {}, timeout = 1000) {
-    const client = await BoundedAppServerClient.connectNativeQueueFixture(scope, f.transport, performance.now() + timeout, async () => true, beforeEffect);
+  async function connect(beforeEffect: () => Promise<void> = async () => {}, timeout = 1000,
+    owner: (value: AppServerScope) => Promise<boolean> = async () => true) {
+    const client = await BoundedAppServerClient.connectNativeQueueFixture(scope, f.transport, performance.now() + timeout, owner, beforeEffect);
     t.after(() => client.close()); return client;
   }
   return { ...f, connect };
@@ -375,6 +376,57 @@ test('root effect guard shares original deadline and cannot write after it', asy
   const f = nativeFixture(t), client = await f.connect(() => new Promise(() => {}), 40);
   await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'one' }), fault('deadline', false));
   assert.equal(f.requests.length, 2); assert.equal(f.closes(), 1);
+});
+
+test('owner changes during an awaited durable effect guard refuse before the queue write', async t => {
+  const f = nativeFixture(t); let currentOwner = true, guards = 0, checks = 0;
+  let releaseGuard!: () => void;
+  const guardPending = new Promise<void>(resolve => { releaseGuard = resolve; });
+  let enteredGuard!: () => void;
+  const guardEntered = new Promise<void>(resolve => { enteredGuard = resolve; });
+  const client = await f.connect(async () => { guards++; enteredGuard(); await guardPending; }, 1000,
+    async original => { assert.deepEqual(original, scope); checks++; return currentOwner; });
+  const queue = client.queueOnce({ clientUserMessageId: id, message: 'must-not-be-written' });
+  await guardEntered;
+  assert.equal(checks, 2); assert.equal(guards, 1);
+  currentOwner = false; releaseGuard();
+  await assert.rejects(queue, fault('owner_changed', false));
+  assert.equal(checks, 3); assert.equal(f.closes(), 1);
+  assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'initialized']);
+  await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'no-retry' }), fault('owner_changed', false));
+  assert.equal(guards, 1); assert.equal(f.requests.length, 2);
+});
+
+test('post-guard owner verification retains the original deadline and cannot issue a late queue', async t => {
+  const f = nativeFixture(t); let checks = 0, finishOwner!: (value: boolean) => void;
+  const finalOwner = new Promise<boolean>(resolve => { finishOwner = resolve; });
+  const client = await f.connect(async () => {}, 80, async () => ++checks < 3 || await finalOwner);
+  await assert.rejects(client.queueOnce({ clientUserMessageId: id, message: 'no-late-effect' }), fault('deadline', false));
+  assert.equal(checks, 3); assert.equal(f.closes(), 1);
+  finishOwner(true);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'initialized']);
+});
+
+test('native invalid message or client ID is refused before owner checks and binary bootstrap', {
+  skip: process.platform !== 'darwin' || process.arch !== 'arm64',
+}, async () => {
+  let owners = 0, guards = 0;
+  for (const input of [
+    { message: '', clientUserMessageId: id },
+    { message: 'x\0y', clientUserMessageId: id },
+    { message: '\ud800', clientUserMessageId: id },
+    { message: 'x'.repeat(APP_SERVER_LIMITS.messageBytes + 1), clientUserMessageId: id },
+    { message: 'valid', clientUserMessageId: '' },
+    { message: 'valid', clientUserMessageId: '\ud800' },
+    { message: 'valid', clientUserMessageId: 'x'.repeat(129) },
+  ]) {
+    await assert.rejects(nativeQueueOnce({ binary: process.execPath,
+      scope: { ...scope, threadId: '01950000-0000-7000-8000-000000000071' }, ...input,
+      deadlineMs: performance.now() + 1000,
+      verifyOwner: async () => { owners++; return true; }, beforeEffect: async () => { guards++; } }), fault('invalid_input', false));
+  }
+  assert.equal(owners, 0); assert.equal(guards, 0);
 });
 
 test('native own-input echo conflicts are post-attempt unknown, not observer evidence', async t => {
