@@ -1,5 +1,51 @@
 # Python compatibility and npm migration
 
+## Current development comparison — Python 1.1.0 / 0.4.0 candidate
+
+Updated 2026-10-11 KST. The unpublished 0.4.0 source candidate uses published
+Python **1.1.0**, commit
+[`8ca77cf`](https://github.com/abruption/session-peer/tree/8ca77cf31254c8287a2593fe484bb30a7dba2727),
+as the ordinary list/discovery comparison baseline. Candidate JSON reports
+`referenceVersion: "1.1.0"`; this identifies a comparison source, not complete
+runtime parity. The rebased candidate keeps published `VERSION=0.3.6`; its handoff features
+remain unpublished until a separately reviewed release. It does not change
+immutable public npm artifacts or their historical comparison markers.
+
+- The exact-release `compatibility-v1.json` and compatibility document are
+  byte-identical to the historical Python 1.0.2 versions. The existing
+  `conformance.test.ts` and `discovery.test.ts` selection passed **21 tests** on
+  macOS arm64 / Node 24.16.0 / Python 3.15.0 against an isolated export of the
+  exact 1.1.0 source. This is ordinary list/discovery and synthetic refusal
+  evidence, not full send/handoff/SSH interoperability or live ACK evidence.
+- [`python-reference.pin.json`](test/fixtures/python-reference.pin.json) records
+  the exact ordinary source, comparison scope and selected source-file hashes;
+  the tests check those hashes before using the oracle. CI and the publishing
+  workflow use the same immutable source. This test-only manifest is not an npm
+  runtime dependency or an installed-package authenticity check.
+- Python 1.1.0 source adds bounded Claude registry reads and fail-closed Codex
+  SQLite-storage checks, along with revised SSH evidence handling and opt-in
+  target-generation/handoff behavior. TS retains its own error codes, stricter
+  selected-storage parser and distinct native result shapes; it does not copy
+  Python output mechanically or weaken its existing guards. These differences
+  were inspected statically; the 21 tests are not coverage of every new path.
+- Python 1.1.0 has an experimental local Claude receipt-only ACK path. This
+  does not establish automated ACK, SSH handoff or Windows handoff support in
+  the TS 0.4.0 drafts. Receipt bootstrap, original generation, body-free native
+  observation, cleanup and platform qualification remain separate gates.
+  Neither a native queue result nor turn completion establishes ACK or safe
+  retry; no end-to-end consumption/exactly-once guarantee is introduced.
+
+The frozen handoff design and its historical Python 1.0.3 design-review baseline
+remain separate from this ordinary runtime comparison. Exact frozen bytes and
+hashes are preserved. See [the published design checkpoint](#published-python-handoff-checkpoint--2026-10-11)
+and [VALIDATION.md](VALIDATION.md#python-110-ordinary-comparison--2026-10-11-kst).
+
+## Historical 0.3.x comparison context
+
+The retained tables and dated migration sections below describe their original
+Python 1.0.2/1.0.3 comparisons and TS 0.3.x source snapshots. Their historical
+pins and evidence are not rewritten as new-release conformance claims.
+
 Updated 2026-10-14 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
 This matrix describes the **TS 0.3.6 source/package contract**: the 0.2.0 unified listing, safe home selection,
@@ -74,7 +120,7 @@ not a missing implementation. Issue links describe work, not available features.
 | Relay server / hosted control service | Separate infrastructure and deployment | Not part of the TS CLI deliverable | Deliberately different scope; #29 must define client boundaries before implementation |
 | Wait / general ACK / exactly-once consumption | No general CLI wait/ACK or exactly-once consumption guarantee | No general CLI wait/ACK or exactly-once consumption guarantee | Shared limit, not a TS parity gap; paired-device deduplication is not end-to-end consumption |
 
-Historical 0.2.0 source anchors and the unchanged Python oracle:
+Historical 0.2.0 source anchors and the then-pinned Python oracle:
 [TS CLI](https://github.com/abruption/session-peer-ts/blob/0edc4f8ae05256698f591b7402e89cd3d5858eef/src/cli.ts),
 [writer](https://github.com/abruption/session-peer-ts/blob/0edc4f8ae05256698f591b7402e89cd3d5858eef/src/writer.ts),
 [send](https://github.com/abruption/session-peer-ts/blob/0edc4f8ae05256698f591b7402e89cd3d5858eef/src/send.ts),
@@ -196,9 +242,10 @@ Output sources: TS CLI/send above; Python
 
 ## Ordinary CLI migration notes — #117
 
-This comparison excludes Relay/MCP and paired-device transports. The existing
-Python 1.0.2 oracle and `referenceVersion` stay unchanged. A separate fixed-source
-review on 2026-10-09 uses published Python 1.0.3
+This dated 0.3.x comparison excludes Relay/MCP and paired-device transports.
+It retained the Python 1.0.2 oracle and `referenceVersion` at that checkpoint;
+the current 0.4.0 candidate baseline is described above. A fixed-source
+review on 2026-10-09 used published Python 1.0.3
 [`0d252550`](https://github.com/abruption/session-peer/tree/0d252550ab40c26d1ac4a19193df6ca2f84d830b)
 and TS 0.3.2 [`f335f073`](https://github.com/abruption/session-peer-ts/tree/f335f07352c842f2f6ceb12bd2ca6274b52f69f7)
 for migration guidance, not byte/shape parity or a runtime-reference repin.
@@ -327,11 +374,12 @@ excluded from the npm package; the existing 51-file package allowlist is unchang
 
 The design review uses published Python 1.0.3 at
 `0d252550ab40c26d1ac4a19193df6ca2f84d830b` as its compatibility baseline.
-Current TS runtime/conformance/referenceVersion markers still retain their existing
-1.0.2 comparison pin. This PR neither re-pins runtime parity to an unshipped Python
-feature release nor claims that Python and TS legacy outputs are identical.
-An approved design commit may pin the shared contract fixture; feature parity can
-move to a release only after that release actually implements the contract.
+The original review retained the then-current Python 1.0.2 ordinary comparison
+pin. The current candidate separately checks ordinary list/discovery against
+published Python 1.1.0; that does not change these frozen design bytes or claim
+identical Python/TS legacy outputs or implemented cross-runtime handoff parity.
+An approved design commit pins the shared contract fixture independently of
+runtime publication and the bounded ordinary comparison.
 
 ### Proposed separation and TS implementation gates
 
@@ -982,9 +1030,12 @@ the GitHub contents API.
 The exact reviewed TS mirror remains unchanged; publication is not permission
 to regenerate shared vectors or declare runtime conformance.
 
-The pin manifest records this source-only comparison separately from the
-historical Python 1.0.3 design baseline and the Python 1.0.2 ordinary test oracle.
+The handoff pin manifest records this source-only comparison separately from the
+historical Python 1.0.3 design baseline and the historical Python 1.0.2 ordinary
+oracle. The current candidate's ordinary source pin is recorded separately in
+`python-reference.pin.json`.
 The Python release's experimental local Claude receipt path does not establish
 automated ACK support in the TS implementation. Cross-runtime execution,
 receipt bootstrap, original generation and platform acceptance remain #69–72
-implementation gates. No runtime/reference marker is repinned by this record.
+implementation gates. This design-identity record alone does not repin a runtime
+reference or establish runtime conformance.

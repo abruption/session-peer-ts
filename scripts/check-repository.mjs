@@ -9,6 +9,15 @@ process.chdir(fileURLToPath(root));
 const read = path => readFileSync(path, 'utf8');
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
+const pythonReference = JSON.parse(read('test/fixtures/python-reference.pin.json'));
+assert.equal(pythonReference.repository, 'abruption/session-peer');
+assert.equal(pythonReference.version, '1.1.0');
+assert.equal(pythonReference.commit, '8ca77cf31254c8287a2593fe484bb30a7dba2727');
+assert.equal(pythonReference.scope, 'ordinary-list-discovery-projection');
+for (const workflow of ['.github/workflows/ci.yml', '.github/workflows/publish.yml']) {
+  assert.ok(read(workflow).includes(`ref: ${pythonReference.commit}`), `${workflow}: Python reference pin`);
+}
+assert.ok(read('src/cli.ts').includes(`referenceVersion: '${pythonReference.version}'`), 'CLI Python reference marker');
 assert.equal(pkg.name, 'session-peer');
 assert.equal(pkg.private, false);
 assert.deepEqual(pkg.publishConfig, { registry: 'https://registry.npmjs.org/', access: 'public', tag: 'latest' });
@@ -20,7 +29,7 @@ assert.equal(read('src/protocol.ts').match(/export const VERSION = '([^']+)'/)[1
 
 const locales = ['README.md', 'README.ko.md', 'README.ja.md', 'README.zh-CN.md'];
 const guides = locales.map(file => file.replace('README', 'docs/guide'));
-const marker = '<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->';
+const marker = '<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->';
 for (const file of locales) {
   const content = read(file);
   for (const token of [marker,

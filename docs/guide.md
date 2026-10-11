@@ -50,9 +50,13 @@ not a commit hash; operators must align reviewed source commits separately.
 
 See [migration details](../PARITY.md#ordinary-cli-migration-notes--117) and
 [Windows qualification](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst).
-The Python 1.0.2 test reference stays pinned; neither compared public CLI
-provides general native ACK/wait, end-to-end deduplication or Side Session.
-Relay/MCP are outside this migration comparison.
+The dated migration comparison above uses the historical public versions.
+The unpublished 0.4.0 source candidate now uses Python 1.1.0 as its development
+comparison baseline; public npm 0.3.3 retains its historical 1.0.2 marker.
+Python 1.1.0 includes an experimental local Claude receipt-only ACK path.
+That does not provide automated ACK, SSH handoff or Windows handoff in this TS
+candidate. Neither baseline provides an end-to-end consumption guarantee;
+Side Session remains experimental. Relay/MCP are outside this comparison.
 
 
 [0.4.0 handoff design (jointly agreed, unimplemented)](../PARITY.md#handoff-v1-design-candidate--69)
@@ -443,8 +447,10 @@ npm run test:package
 npm audit
 ```
 
-Python is only the development conformance oracle (v1.0.2 commit
-`47c23713d0a2a3c11ebde6186afd8c43489b8b65`), never a runtime dependency. Tests also
+Python is only the development comparison oracle (v1.1.0 commit
+`8ca77cf31254c8287a2593fe484bb30a7dba2727`), never a runtime dependency.
+The tested projection covers ordinary list/discovery; it does not establish full
+send/handoff interoperability. Tests also
 need a C compiler and lsof for the POSIX contract suite. CI uses Node 22/24 on
 macOS, Linux and Windows. macOS/Linux run the full contract suite and package
 checks against the pinned reference. Windows x64 runs build/type checks, native

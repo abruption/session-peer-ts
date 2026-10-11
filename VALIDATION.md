@@ -142,6 +142,48 @@ request-count assertions are preserved. This was test isolation, not a runtime
 failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
 results are recorded in the PR after the correction.
 
+## Python 1.1.0 ordinary comparison — 2026-10-11 KST
+
+Unpublished 0.4.0 development checkpoint: an isolated `git archive` export of
+published Python 1.1.0 commit `8ca77cf31254c8287a2593fe484bb30a7dba2727`
+was compared with the #69 worktree at `d62e813c8146e9832659654a850734fc986fd3d7`.
+Only the subsequent published-design identity correction was pending; it did
+not change the selected list/discovery source. No user's Python checkout,
+agent home or saved thread was used. Archive SHA-256:
+`7243c124398ec3b4cf4541881788dac955247d50949339e5f9f659bbb0d15ff9`.
+
+macOS arm64 / Node 24.16.0 / Python 3.15.0 command:
+
+```sh
+SESSION_PEER_PYTHON_ROOT=<exact-reference-export> TASK_TEMP=<private-fixtures> PYTHONDONTWRITEBYTECODE=1 node --import ./test/fixtures/isolate-env.mjs --experimental-strip-types --test test/conformance.test.ts test/discovery.test.ts
+```
+
+Result: **21 tests, 21 passed, zero failed/cancelled/skipped**, exit 0 and empty
+stderr. The private fixture directory was empty after test cleanup. These
+existing tests compare ordinary listing/discovery projections and exercise
+synthetic refusal paths; they do not establish full send/handoff/SSH
+interoperability, native model delivery or ACK. No real native queue, message,
+receipt, installation, policy or operation change occurred.
+
+The subsequent candidate ordinary reference pin uses this exact release;
+`test/fixtures/python-reference.pin.json` records its scope and selected source
+hashes. `compatibility-v1.json` SHA-256 remains
+`afd5a0b37562bb6a81afa9c20628bfae0cfe4d1caf9e88db402005fc42aabcd7`,
+byte-identical to the historical 1.0.2 fixture. Frozen handoff design bytes and
+the historical design baseline are unchanged. The earlier 0.3.x validation
+records below retain their actual 1.0.2 oracle; the public npm 0.3.3 artifact
+is not rewritten. Current integrated CI on the new pin is a separate gate.
+
+After applying the candidate reference-pin changes on the #69 worktree based
+on `f99417b`, `npm run build` and `npm run test:types` passed. The same isolated
+reference export was used for the conformance/discovery/updates/handoff-contract
+selection: **44 tests passed, zero failed/cancelled/skipped**, exit 0. The new
+source-hash pin checks executed. Update tests use fixture registries and private
+caches, not the public registry or an actual installation update. The repository
+metadata/link/anchor checker and `git diff --check` passed. These are candidate
+checks before root integration/current-head CI, not a public release or broader
+native/ACK validation.
+
 ## 0.3.3 candidate preparation — 2026-10-09 KST
 
 Preparation [#128](https://github.com/abruption/session-peer-ts/issues/128)

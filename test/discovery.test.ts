@@ -1,4 +1,4 @@
-// Port of Python 1.0.2 unified-list/multi-home-list contracts. No live user homes.
+// Ordinary list/discovery projection checked against Python 1.1.0. No live user homes.
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import fs, { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';

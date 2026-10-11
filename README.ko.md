@@ -18,7 +18,7 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 </div>
 
-<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
 **문서·소스 기준 버전: 0.3.6.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.5와 0.3.6는 서로의 SSH 사전 확인을 거부합니다.
 
