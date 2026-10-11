@@ -40,6 +40,7 @@ console.log(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,pla
 fs.appendFileSync(log,JSON.stringify({method:r.method,clientId:r.params.clientUserMessageId})+'\\n');
 if(mode==='concurrent-stop')return;
 if(mode==='loss'){process.exit(0);return;}
+if(mode==='ledger-failure')fs.chmodSync(path.join(process.env.SESSION_PEER_HANDOFF_HOME,'ledger.json'),0o644);
 if(mode==='inject'){const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(path.join(process.env.CODEX_HOME,'thread_history_1.sqlite'));db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(r.params.threadId,'turn-fixture','native-item-not-client-id',1,JSON.stringify({type:'userMessage',id:'native-item-not-client-id',clientId:r.params.clientUserMessageId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');db.close();}
 console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture',clientUserMessageId:r.params.clientUserMessageId,input:r.params.input}}}));
 }});`,{mode:0o700});
@@ -68,6 +69,39 @@ test('qualified local opt-in waits for exact client ID injection, not completed 
 });
 test('unknown after possible native write never falls back to legacy queue',qualified,async t=>{
  const f=await fixture(t,'loss');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1,r.stdout);assert.equal(r.value.status,'unknown');assert.equal(r.value.submitted,null);assert.equal(r.value.handoff.submission.status,'unknown');assert.equal(r.value.handoff.wait.status,'failed');assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');
+});
+test('positive native acceptance survives a subsequent ledger failure without another submission',qualified,async t=>{
+ const f=await fixture(t,'ledger-failure');
+ const r=await f.invoke([...f.args,'--wait-for','delivered']);
+ assert.equal(r.code,1,r.stdout);assert.equal(r.value.ok,false);
+ assert.equal(r.value.error,'handoff_persistence_failed');
+ assert.equal(r.value.status,'queued');assert.equal(r.value.submitted,true);
+ assert.equal(r.value.queueId,'queue-fixture');assert.equal(r.value.consumptionConfirmed,false);
+ const h=validateHandoff(r.value.handoff);
+ assert.equal(h.submission.status,'submitted');assert.equal(h.state,'submitted');
+ assert.equal(h.wait.status,'failed');assert.equal(h.wait.reason,'evidence_failed');
+ assert.equal(h.observation.injectionObserved,false);assert.equal(h.ack.status,'not_requested');
+ assert.equal(h.retry.allowed,false);assert.deepEqual(f.calls().map(call=>call.method),['thread/queue/add']);
+ // The accepted result is an in-memory fact. Persistence failure did not
+ // magically commit it: a different invocation must reconcile the retained
+ // pre-effect fence as unknown and cannot submit this intent a second time.
+ chmodSync(join(f.root,'state','handoff','ledger.json'),0o600);
+ const recovered=await f.invoke(['handoff','status','--correlation-id',h.correlationId]);
+ assert.equal(recovered.code,0);assert.equal(recovered.value.handoff.submission.status,'unknown');
+ const duplicate=await f.invoke([...f.args,'--correlation-id',h.correlationId]);
+ assert.equal(duplicate.code,1);assert.equal(duplicate.value.error,'handoff_already_attempted');
+ assert.equal(f.calls().length,1);
+});
+test('current unqualified native version cannot enter the app-server or required delivery path',qualified,async t=>{
+ const f=await fixture(t,'inject','0.162.1');
+ const required=await f.invoke([...f.args,'--wait-for','delivered']);
+ assert.equal(required.code,1);assert.equal(required.value.submitted,false);
+ assert.equal(required.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
+ const best=await f.invoke([...f.args,'--observe-delivery']);
+ assert.equal(best.code,0);assert.equal(best.value.status,'queued');assert.equal(best.value.submitted,true);
+ assert.equal(best.value.handoff.observation.status,'unsupported');
+ assert.equal(best.value.handoff.observation.injectionObserved,false);
+ assert.deepEqual(f.calls(),[{method:'legacy'}]);
 });
 test('unsupported version/absent warm store refuse required goals, best-effort fallback is chosen before app-server effect',qualified,async t=>{
  const f=await fixture(t,'inject','0.159.0');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1);assert.equal(r.value.submitted,false);assert.equal(r.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
