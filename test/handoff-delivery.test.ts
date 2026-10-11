@@ -22,9 +22,12 @@ async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  if(warm){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));db.exec(schema);db.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread,'turn-fixture','completed');db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread,100,100);db.close();}
  const lock=join(home,'thread-writer-locks',thread+'.lock'),locks=createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt');
  const held=spawn(process.execPath,['-e',"const f=require('fs').openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(f,'exnb');console.log('ready');setInterval(()=>{},1000)",lock,locks]);held.stderr.resume();await once(held.stdout,'data');t.after(async()=>{if(held.exitCode===null&&held.signalCode===null){held.kill('SIGKILL');await once(held,'close');}});
- const lsof=join(bin,'lsof');writeFileSync(lsof+'.json',JSON.stringify('p'+held.pid+'\0ccodex-fixture\0u'+process.getuid?.()+'\0'),{mode:0o600});
- writeFileSync(lsof,`#!${process.execPath}\nprocess.stdout.write(JSON.parse(require('fs').readFileSync(__filename+'.json','utf8')));`,{mode:0o700});
- writeFileSync(join(bin,'ps'),`#!${process.execPath}\nconsole.log('Fixture stable start');`,{mode:0o700});
+ // The real tools are native executables. Do not spend the bounded owner
+ // probe's budget on four extra Node startups under parallel CI load.
+ // Owner data stays in a separate file, never interpolated into shell code.
+ const lsof=join(bin,'lsof');writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+process.getuid?.()+'\0',{mode:0o600});
+ writeFileSync(lsof,'#!/bin/sh\nexec /bin/cat "$0.data"\n',{mode:0o700});
+ writeFileSync(join(bin,'ps'),'#!/bin/sh\nprintf "Fixture stable start\\n"\n',{mode:0o700});
  const log=join(root,'queue-log-\'"\\\n\u2028\u2029'),nativeLog=join(root,'native-calls.jsonl');writeFileSync(log,'');writeFileSync(nativeLog,'');const codex=join(bin,'codex');
  const initializeReady=join(root,'initialize-ready'),initializeRelease=join(root,'initialize-release');
  // Runtime configuration is JSON data; no fixture path/mode/version is code.
@@ -71,7 +74,7 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
   });
  }
  function inject(clientId:string){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));try{db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(thread,'turn-fixture','after-submit-item',1,JSON.stringify({type:'userMessage',id:'after-submit-item',clientId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');}finally{db.close();}}
- return{root,home,codex,env,calls,nativeCalls,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.json',JSON.stringify('p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0'),{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
+ return{root,home,codex,env,calls,nativeCalls,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
 test('scripted fixture paths, modes and versions remain literal data', {skip:process.platform==='win32'}, async t=>{
  const payload='\');throw new Error("fixture data executed");//\n\u2028\u2029';

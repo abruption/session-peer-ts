@@ -142,6 +142,28 @@ request-count assertions are preserved. This was test isolation, not a runtime
 failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
 results are recorded in the PR after the correction.
 
+## 0.4.0 owner-probe fixture follow-up — 2026-10-11 KST
+
+CI run `38110140277` at test/docs checkpoint
+`60895b46d8758c7427b90bc154414bd4d01487e7` failed the macOS Node 22
+positive-acceptance/ledger-failure regression: it returned
+`app_server_owner_changed` before the intended persistence failure.
+The other platform jobs passed; the release gate failed, so this run is not
+all green. CodeQL run `38110137845` passed with no open branch alerts.
+The holder remains alive until test cleanup; no holder expiry was found.
+The bounded owner probe had four extra Node starts for its fake lsof/ps tools,
+in addition to the production 250ms sample interval. This is a fixture startup
+burden consistent with the failure, not proof of its precise timing cause.
+
+The fixture now uses static POSIX scripts for lsof/ps and keeps owner evidence
+as separate raw NUL-delimited data. PID, UID, start identity, changed-owner
+checks, real lock holder and cleanup are preserved. Production 800ms probe
+budget, 250ms recheck, refusal behavior and regression assertions are unchanged.
+No runtime, native qualification or platform-support change is part of this fix.
+The focused macOS arm64 / Node 24.16.0 delivery suite passed 16/16, including
+the intended persistence failure and changed-owner refusal. Follow-up full
+validation and exact-head CI are recorded in PR #109.
+
 ## 0.4.0 real Linux SSH submission checks — 2026-10-11 KST
 
 The unpublished development checkpoint `e83fcffa2dbee33de0694e30b6420d83a128fc5e`
