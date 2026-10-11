@@ -142,6 +142,51 @@ request-count assertions are preserved. This was test isolation, not a runtime
 failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
 results are recorded in the PR after the correction.
 
+## 0.4.0 real Linux SSH submission checks — 2026-10-11 KST
+
+The unpublished development checkpoint `e83fcffa2dbee33de0694e30b6420d83a128fc5e`
+was copied explicitly to fresh, private marked test prefixes on two Linux
+arm64 hosts. Both ends used that candidate, rather than the public npm package
+whose version label is also 0.3.3. Candidate/dependency archive SHA-256 was
+`aadfd3630b67d905a8f474e305f972c7bf670a99365c62dd53fa83d1e04764da`;
+each destination verified the hash before extraction. No global installation,
+profile, service, SSH trust, native configuration or authentication change was
+made. SSH used strict host-key checking, batch authentication and no control
+socket. Each private destination ledger was explicitly initialized.
+
+On the first host, Node 24.16.0 / native Codex 0.162.1, the user-authorized
+existing session passed saved-thread and unique stable live-writer dry-run
+checks. One best-effort correlated send exited 0 with `queued`,
+`submitted=true`, an optional native `queueId` and handoff `submitted`.
+Observation and automatic ACK remained `unsupported`; a later status query
+preserved those facts. A requested voluntary reply was not yet received at
+this checkpoint; no transcript or queue polling was used to infer receipt.
+
+On the second host, Node 24.18.0 / native Codex 0.159.2, the existing saved
+session was inactive and dry-run correctly refused with `inactive_writer`.
+It was neither resumed nor queued through inactive opt-in. A separately owned
+read-only test TUI in an already trusted working directory produced READY,
+passed unique live-writer dry-run, and received exactly one candidate SSH
+submission. The original terminal displayed its requested identification
+response. An explicit operator confirmation bound to the original correlation,
+ledger epoch and generation was recorded before any separate wait: confirmation
+and status exited 0 with `acknowledged`, `assurance=operator_confirmed`,
+`late=false`; a subsequent acknowledged wait exited 0 with `satisfied` and
+performed no submission. This is operator attestation, not automated receipt
+authentication or native client-ID observation. The test TUI closed and
+`inspectWriter` then reported inactive/absent. Its native test record remains;
+no existing native record was deleted.
+
+On both hosts, required `--wait-for delivered` refused before effect with
+`evidence_unsupported`, `submitted=false` and retry disallowed. Best-effort
+results retained `consumptionConfirmed=false`; neither queue receipt nor
+terminal response changed that field. These are real SSH/native ordinary-queue
+checks, not Linux observation qualification: Linux native app-server/client-ID
+projection and automatic original-sender SSH ACK bootstrap remain unsupported.
+Both marked remote prefixes and their test ledgers were removed with ownership
+checks, and their absence was verified. Local evidence retains only the test
+results; public descriptions omit host/account paths and session identifiers.
+
 ## 0.4.0 integrated SSH review checkpoint — 2026-10-11 KST
 
 Independent read-only review used Claude Code 2.1.296 with tools disabled and
@@ -296,6 +341,42 @@ confirmed. No private hostnames, account paths or session identifiers are
 included here. Windows native observation, SSH handoff, automated ACK,
 restart/crash continuity and other native versions/platforms remain outside
 these successful macOS checks.
+
+### Windows follow-up: alternate test launcher
+
+Further controls on the same Windows 10 x64 / Node 24.16.0 host separated
+launcher behavior without changing policies, permissions, services or production
+guards. C#/.NET Framework launching PowerShell 5.1 `-EncodedCommand` reproduced
+AccessDenied for both the owned `.cmd` wrapper and a direct Node version command.
+The same PowerShell 5.1 encoded command launched by Node succeeded, as did
+PowerShell 5.1 `-File`, direct `cmd.exe /d /s /c`, and the already installed
+PowerShell 7 alternatives. This identifies a tested launcher-dependent difference;
+it does not establish which security product or host setting caused the failure.
+
+The test-only C# fake SSH now delegates to a fixed Node helper, preserving
+PowerShell 5.1, `-NoProfile -NonInteractive -EncodedCommand`, the encoded request,
+stdin, stdout/stderr and exit behavior. No execution-policy option or production
+fallback was added. The helper's 55-second child limit remains inside the fake
+SSH parent's 60-second limit; harness timeout returns 254, not native success.
+
+An isolated copy of checkpoint `e83fcffa2dbee33de0694e30b6420d83a128fc5e`
+with only those three test-file changes passed build/types, the Windows native
+contract **9/9**, and `npm run test:windows`: **295 total / 165 passed / zero
+failed / 130 skipped**. Unsupported native-platform guards separately passed
+3/3. This replaces the failed fixture execution path with a validated alternate
+test launcher; the original failure record above remains historical evidence.
+It neither qualifies Windows native observation/ACK nor proves a real remote
+agent send. The final C# fixture additionally requires the exact production
+PowerShell prefix and one base64 token. Three real-host controls passed: exact
+version command exits 0, a changed option is refused with exit 2, and trailing
+whitespace is refused with exit 2. The C# file SHA-256 was
+`b7845190939d4d915c56d1d072f23f5eeac3447a9994791d0b06ea2f0f147c38`.
+The final guarded contract repeat and ownership-checked cleanup are reported
+in the PR checkpoint. The integrated macOS arm64 / Node 24.16.0 run after these
+test-file changes passed build/types and all tests: **337 total / 332 passed /
+zero failed / five Windows-only skipped**, using the same exact Python 1.1.0
+reference export. Repository/diff checks passed and audit reported zero
+vulnerabilities. No runtime source or package metadata changed in this follow-up.
 
 ## Python 1.1.0 ordinary comparison — 2026-10-11 KST
 
