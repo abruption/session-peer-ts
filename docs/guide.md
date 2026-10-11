@@ -59,7 +59,7 @@ candidate. Neither baseline provides an end-to-end consumption guarantee;
 Side Session remains experimental. Relay/MCP are outside this comparison.
 
 
-[0.4.0 handoff design (jointly agreed, unimplemented)](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff design and unreleased implementation scope](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## Contents
 
@@ -630,3 +630,5 @@ Unreleased 0.4.0 source adds an opt-in private POSIX handoff ledger. Published 0
 The source candidate supports exact Codex 0.160.1/0.162.1 on macOS arm64 with an already-warm metadata store. Retained qualified intents can start an independent read-only `handoff wait`; no native submission is repeated. Each operation owns its cutoff and preserves other pending or terminal waits. Dedicated new 0.162.1 Codex and Claude Code 2.1.296 sessions supplied local evidence; synthetic tests remain separate. Queued/posted, injection, turn completion and plain reply are distinct from receipt ACK. Automated ACK and Windows handoff remain unsupported.
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
+
+Native delivery observation is unsupported on Linux and Windows. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 candidate scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).

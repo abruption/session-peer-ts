@@ -4,9 +4,11 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync, readFileSync, renameSync, unlinkSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { HandoffLedger, payloadDigest } from '../dist/handoff-ledger.js';
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 async function fixture(t: TestContext) {
   const path = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-hc-')));
@@ -48,6 +50,45 @@ test('syntax/private inputs reject without minting authority or submitting', { s
  const bomReceipt = {schemaVersion:1,kind:'receipt',ledgerEpoch:'11111111-1111-4111-8111-111111111111',correlationId:'11111111-1111-4111-8111-111111111111',targetGeneration:'fixture',receiptId:'22222222-2222-4222-8222-222222222222',capability:Buffer.alloc(32).toString('base64url')};
  const bom = await f.invoke(['ack','--receipt','-'], '\ufeff'+JSON.stringify(bomReceipt));assert.equal(bom.value.error,'invalid_handoff_json');
  assert.equal(f.messages.length,0);
+});
+
+test('operator confirmation accepts only a matching private frame and never queues or infers injection', { skip: process.platform === 'win32' }, async t => {
+ const f = await fixture(t), path = join(f.path, 'state', 'handoff');
+ // Seed known submission evidence in an isolated ledger; no native send occurs.
+ const initialized = await f.invoke(['handoff', 'init']); assert.equal(initialized.code, 0);
+ const ledger = new HandoffLedger(path);
+ const binding = { agent: 'codex' as const, destination: 'fixture', target: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  home: f.path, writerIdentity: 'fixture-writer', generation: 'fixture-generation', payloadDigest: payloadDigest('fixture body') };
+ const prepared = ledger.prepare(binding); ledger.commitEffect(prepared.correlationId, binding);
+ const submitted = ledger.recordSubmission(prepared.correlationId, 'submitted');
+ const proof = { schemaVersion: 1, ledgerEpoch: submitted.ledgerEpoch, correlationId: submitted.correlationId,
+  targetGeneration: submitted.targetGeneration, confirmed: true };
+ const raw = JSON.stringify(proof), file = join(path, 'ledger.json'), before = readFileSync(file);
+ const command = ['handoff', 'confirm', '--receipt', '-'];
+ for (const [input, error] of [
+  [JSON.stringify({ ...proof, correlationId: randomUUID() }), 'handoff_id_unknown'],
+  [JSON.stringify({ ...proof, ledgerEpoch: randomUUID() }), 'confirmation_binding_invalid'],
+  [JSON.stringify({ ...proof, targetGeneration: 'successor' }), 'confirmation_binding_invalid'],
+  [JSON.stringify({ ...proof, confirmed: false }), 'invalid_confirmation'],
+  [JSON.stringify({ ...proof, body: 'a model reply is not an ACK' }), 'invalid_handoff'],
+  [raw.replace('"confirmed":true', '"confirmed":true,"confirmed":true'), 'invalid_handoff_json'],
+  ['\ufeff' + raw, 'invalid_handoff_json'],
+  [raw + ' '.repeat(4097 - Buffer.byteLength(raw)), 'input_too_large'],
+ ] as const) {
+  const result = await f.invoke(command, input);
+  assert.notEqual(result.code, 0); assert.equal(result.value.ok, false); assert.equal(result.value.error, error);
+  assert.equal(result.value.handoff, undefined); assert.equal(result.value.submitted, undefined);
+  assert.deepEqual(readFileSync(file), before); assert.deepEqual(ledger.status(submitted.correlationId), { handoff: submitted });
+  assert.equal(f.messages.length, 0);
+ }
+ const argv = await f.invoke(['handoff', 'confirm', '--receipt', raw]);
+ assert.equal(argv.code, 2); assert.equal(argv.value.error, 'private_receipt_stdin_required'); assert.deepEqual(readFileSync(file), before);
+ const accepted = await f.invoke(command, raw);
+ assert.equal(accepted.code, 0); assert.equal(accepted.value.handoff.ack.assurance, 'operator_confirmed');
+ assert.equal(accepted.value.handoff.observation.injectionObserved, false); assert.equal(accepted.value.handoff.submission.status, 'submitted');
+ const confirmed = readFileSync(file), duplicate = await f.invoke(command, raw);
+ assert.equal(duplicate.code, 0); assert.deepEqual(duplicate.value.handoff, accepted.value.handoff);
+ assert.deepEqual(readFileSync(file), confirmed); assert.equal(f.messages.length, 0);
 });
 
 test('init refuses a symlinked parent before creating a directory through it', { skip: process.platform === 'win32' }, async t => {

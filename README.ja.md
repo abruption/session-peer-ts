@@ -112,7 +112,7 @@ session-peer --version
 - [開発・貢献](CONTRIBUTING.md).
 - [リリース手順](RELEASING.md).
 
-- [0.4.0 handoff 設計（共同合意・未実装）](PARITY.md#handoff-v1-design-candidate--69).
+- [0.4.0 handoff 設計と未公開実装の範囲](PARITY.md#handoff-v1-design-candidate--69).
 
 - [開発中の private handoff CLI と制限](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
 

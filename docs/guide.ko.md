@@ -25,7 +25,7 @@
 [마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 미발행 0.4.0 소스 후보는 개발 비교 기준을 Python 1.1.0으로 갱신하며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 후보의 자동 ACK·원래 발신자의 SSH 수신 확인 수집기·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
 
 
-[0.4.0 handoff 설계(공동 확정·미구현)](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff 설계와 미발행 구현 범위](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 목차
 
@@ -603,3 +603,5 @@ npm `--ignore-scripts`로 설치해도 되며, 설치 후 Skills CLI를 호출�
 미발행 소스 후보의 전송 관찰은 macOS arm64의 정확한 Codex 0.160.1/0.162.1과 이미 생성된 메타데이터 저장소에 한정됩니다. 검증 근거가 보존된 전송은 별도 `handoff wait`로 읽기 전용 관찰을 다시 시작할 수 있으며, native 전송을 반복하지 않습니다. 각 대기는 자신의 마감 시각으로만 판단하고 다른 대기와 기존 종료 결과를 보존합니다. 새로 만든 Codex 0.162.1·Claude Code 2.1.296 테스트 세션의 실기 근거와 합성 테스트는 구분합니다. queued/posted, 실제 주입, 턴 종료, 일반 응답은 수령 확인 ACK와 다릅니다. 자동 ACK와 Windows handoff는 미지원입니다.
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
+
+Linux·Windows의 native 주입 관측은 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 후보 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.

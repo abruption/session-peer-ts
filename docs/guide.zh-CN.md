@@ -25,7 +25,7 @@
 请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。上述带日期的迁移比较针对当时的公开版本。未发布的 0.4.0 源码候选将开发比较基准更新为 Python 1.1.0；公开 npm 0.3.3 原有的 1.0.2 标识保持不变。Python 1.1.0 包含实验性的本地 Claude 收件确认专用 ACK 路径。这不表示 TS 候选支持自动 ACK、原发送方的 SSH 收件确认收集器或 Windows handoff。两种基准均不保证端到端消费，Side Session 仍属实验功能。Relay/MCP 不在比较范围内。
 
 
-[0.4.0 handoff 设计（联合确认、未实现）](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff 设计与未发布实现范围](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 目录
 
@@ -334,3 +334,5 @@ postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能�
 未发布的源码候选仅支持 macOS arm64 上的精确 Codex 0.160.1/0.162.1 和已有的元数据存储。保留验证依据的提交可通过独立的 `handoff wait` 继续只读观察，不会再次进行 native 提交。每项等待只按自己的截止时间判断，并保留其他等待及过去的终态。新建专用 Codex 0.162.1、Claude Code 2.1.296 会话的实机依据与合成测试分开记录。queued/posted、注入、轮次结束及普通回复均不等于收件确认 ACK。自动 ACK 和 Windows handoff 仍不支持。
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
+
+Linux、Windows 的 native 注入观察尚不支持。支持的 POSIX ledger 可将操作人员明确确认的收件事实记录为 `operator_confirmed`，但这不是自动 ACK 收集。0.4.0 候选范围是已验证的 macOS 观察和操作人员的明确确认。Linux、Windows 观察及 receipt bootstrap 分别作为 [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) 的后续工作。

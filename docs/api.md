@@ -197,7 +197,9 @@ turn/start or full item/turn notification APIs. SQLite itself projects only
 `clientId`, thread/turn IDs and an allowlisted status. Recent row keys are bounded
 to 256; cells over 256 KiB are excluded before JSON extraction. Temporary SQLite
 storage is memory-only and materializes keys/bounded scalars. Body/error columns
-are never returned to JavaScript. Only an already-warm original store is used;
+are never returned to JavaScript. SQLite internally evaluates body-bearing
+`item_json` cells to project metadata; this is not a guarantee that message-body
+bytes are never accessed inside the SQLite engine. Only an already-warm original store is used;
 there is no migration, warm-up/backfill, new model turn or wake. Existing WAL/SHM
 must already be trusted; SQLite read-only readers can participate in transient
 SHM read locks. DB/WAL bytes and sidecar creation remain unchanged in fixtures.
@@ -239,8 +241,11 @@ operator attestation, not automatic token-possession receipt collection. Dedicat
 confirmed correlated socket delivery and best-effort ACK remaining unsupported;
 a required unsupported ACK refused before posting.
 
-Linux/Windows native queue/observation, Windows private ledger and automated
-receipt collector/bootstrap remain unsupported. Other native versions are not
+The qualified native app-server queue/observation route is unsupported on
+Linux/Windows. Ordinary Codex queue submission and explicit operator confirmation
+on supported POSIX ledgers are separate capabilities, demonstrated by the KR/US
+checks in VALIDATION. Windows private ledger and automated receipt
+collector/bootstrap remain unsupported. Other native versions are not
 inferred from a minor range. The original-sender SSH collector is not provided.
 No package/version publication or completed milestone is implied by these
 source-only checks. Exact evidence and limits are in [VALIDATION](../VALIDATION.md).
@@ -248,3 +253,14 @@ source-only checks. Exact evidence and limits are in [VALIDATION](../VALIDATION.
 
 
 
+
+## 0.4.0 candidate scope
+
+The release candidate includes the qualified macOS arm64 observer and explicit
+`operator_confirmed` receipts on supported POSIX ledgers. Other platforms do not
+inherit that qualification. Linux observation [#130](https://github.com/abruption/session-peer-ts/issues/130),
+Windows observation/private storage [#131](https://github.com/abruption/session-peer-ts/issues/131) and
+voluntary receipt producer/authenticated collector bootstrap [#132](https://github.com/abruption/session-peer-ts/issues/132)
+are future extensions. An automatic collector would still require an explicit
+receiver receipt; it must never infer ACK from messages or turn completion.
+Unsupported required goals refuse before effect; no post-attempt fallback or resend.

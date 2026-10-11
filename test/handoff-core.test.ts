@@ -291,6 +291,31 @@ test('operator confirmation is metadata-only, correlated and never manufactures 
   const restarted = new HandoffLedger(f.ledger.path, { clock: { monotonic: () => 0, utc: () => 1 } });
   assert.deepEqual(handoff(restarted, h.correlationId).ack, acknowledged.ack);
 });
+test('invalid operator confirmation cannot acknowledge another intent or change retained evidence', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding); submit(f, h);
+  const otherBinding = { ...f.binding, generation: 'different-original-generation' };
+  const other = f.ledger.prepare(otherBinding);
+  f.ledger.commitEffect(other.correlationId, otherBinding); f.ledger.recordSubmission(other.correlationId, 'submitted');
+  const raw = confirmation(h), proof = JSON.parse(raw);
+  const file = join(f.ledger.path, 'ledger.json'), before = readFileSync(file);
+  const original = handoff(f.ledger, h.correlationId), unrelated = handoff(f.ledger, other.correlationId);
+  for (const [invalid, error] of [
+    [confirmation({ ...h, correlationId: randomUUID() }), /handoff_id_unknown/],
+    [confirmation({ ...h, correlationId: other.correlationId }), /confirmation_binding_invalid/],
+    [confirmation({ ...h, ledgerEpoch: randomUUID() }), /confirmation_binding_invalid/],
+    [confirmation({ ...h, targetGeneration: 'successor' }), /confirmation_binding_invalid/],
+    [JSON.stringify({ ...proof, confirmed: false }), /invalid_confirmation/],
+    [JSON.stringify({ ...proof, body: 'ordinary reply is not confirmation' }), /invalid_handoff/],
+    [raw.replace('"schemaVersion":1', '"schemaVersion":1.0'), /invalid_handoff_json/],
+    [raw.replace('"confirmed":true', '"confirmed":true,"confirmed":true'), /invalid_handoff_json/],
+  ] as const) {
+    assert.throws(() => f.ledger.confirm(invalid), error);
+    assert.deepEqual(readFileSync(file), before);
+    assert.deepEqual(handoff(f.ledger, h.correlationId), original);
+    assert.deepEqual(handoff(f.ledger, other.correlationId), unrelated);
+    assert.equal(handoff(f.ledger, h.correlationId).ack.status, 'not_requested');
+  }
+});
 test('private receipt authority is hash-only, bound to original tuple and first receipt', posix, t => {
   const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
   const capability = f.ledger.mintCapability(h.correlationId, bootstrap); assert.equal(capability.length, 43);

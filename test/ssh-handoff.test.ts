@@ -1,20 +1,23 @@
-// Owned fake SSH and a recording socket only; no live agent or remote host.
+// Owned fake SSH, recording socket and scripted native fixture; no live agent or remote host.
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { responseOutcome, type ResponseRequest } from '../dist/ssh-response.js';
-import { HandoffBudget, type Handoff } from '../dist/handoff.js';
+import { HandoffBudget, validateHandoff, type Handoff } from '../dist/handoff.js';
 import { VERSION_LINE } from '../dist/protocol.js';
 import type { Done } from '../dist/process.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const posix = { skip: process.platform === 'win32' };
+const qualified = { skip: process.platform !== 'darwin' || process.arch !== 'arm64' };
 const wireArgs = (ms: number) => ['--stdio-request', `--handoff-remaining-ms=${ms}`];
 const cid = '11111111-1111-4111-8111-111111111111', epoch = '22222222-2222-4222-8222-222222222222';
 const thread = '33333333-3333-4333-8333-333333333333';
@@ -109,7 +112,8 @@ test('SSH remaining duration charges setup/frame time and never renews cleanup o
 async function fixture(t: TestContext) {
   const root = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-ssh-handoff-'))); chmodSync(root, 0o700);
   const destination = join(root, 'destination'), origin = join(root, 'origin'), socket = join(root, 'socket'), log = join(root, 'calls.jsonl');
-  mkdirSync(origin); mkdirSync(join(destination, '.claude', 'sessions'), { recursive: true }); writeFileSync(log, '');
+  const preparationLog = join(root, 'preparations.jsonl');
+  mkdirSync(origin); mkdirSync(join(destination, '.claude', 'sessions'), { recursive: true }); writeFileSync(log, ''); writeFileSync(preparationLog, '');
   const messages: string[] = [];
   const server = createServer(s => { let body = ''; s.on('data', part => { body += part; }); s.on('end', () => { messages.push(body); s.end(); }); });
   server.listen(socket); await once(server, 'listening');
@@ -124,22 +128,113 @@ fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify(request)+'\\n');
 if(process.env.FIXTURE_PARTIAL_PREPARE&&request.handoff?.preparation){process.stdout.write('{');process.exit(0);}
 const env={...process.env,HOME:process.env.FIXTURE_DEST,USERPROFILE:process.env.FIXTURE_DEST,CLAUDE_CONFIG_DIR:process.env.FIXTURE_DEST+'/.claude',SESSION_PEER_HANDOFF_HOME:process.env.FIXTURE_DEST+'/state/handoff'};
 const selector=args.at(-1).match(/ --handoff-remaining-ms=([1-9][0-9]{0,4})$/);
-const child=cp.spawn(process.execPath,[process.env.FIXTURE_CLI,'--stdio-request',...(selector?['--handoff-remaining-ms='+selector[1]]:[])],{env,stdio:['pipe','inherit','inherit']});
-child.stdin.end(input);child.on('exit',(code,signal)=>{if(signal)process.kill(process.pid,signal);else process.exitCode=request.handoff?.preparation&&process.env.FIXTURE_PREPARE_EXIT255?255:code;});
+const child=cp.spawn(process.execPath,[process.env.FIXTURE_CLI,'--stdio-request',...(selector?['--handoff-remaining-ms='+selector[1]]:[])],{env,stdio:['pipe','pipe','inherit']});
+let output='';child.stdout.on('data',part=>{output+=part;process.stdout.write(part);});
+child.stdin.end(input);child.on('close',(code,signal)=>{if(request.handoff?.preparation)fs.appendFileSync(process.env.FIXTURE_PREPARATIONS,output);if(signal)process.kill(process.pid,signal);else process.exitCode=request.handoff?.preparation&&process.env.FIXTURE_PREPARE_EXIT255?255:code;});
 `, { mode: 0o700 });
   const common = { ...process.env, CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_UPDATE_NOTICE: '',
-    PATH: root + delimiter + process.env.PATH, FIXTURE_VERSION: VERSION_LINE, FIXTURE_LOG: log, FIXTURE_CLI: cli, FIXTURE_DEST: destination };
+    PATH: root + delimiter + process.env.PATH, FIXTURE_VERSION: VERSION_LINE, FIXTURE_LOG: log, FIXTURE_PREPARATIONS: preparationLog, FIXTURE_CLI: cli, FIXTURE_DEST: destination };
   const destEnv = { ...common, HOME: destination, USERPROFILE: destination, CLAUDE_CONFIG_DIR: join(destination, '.claude'), SESSION_PEER_HANDOFF_HOME: join(destination, 'state', 'handoff') };
   const originEnv = { ...common, HOME: origin, USERPROFILE: origin, CLAUDE_CONFIG_DIR: join(origin, '.claude'), SESSION_PEER_HANDOFF_HOME: join(origin, 'state', 'handoff') };
   async function invoke(args: string[], destinationSide = false, input?: string, extra: NodeJS.ProcessEnv = {}) {
     const child = spawn(process.execPath, [cli, ...args], { env: { ...(destinationSide ? destEnv : originEnv), ...extra } });
     let stdout = '', stderr = ''; child.stdout.on('data', part => { stdout += part; }); child.stderr.on('data', part => { stderr += part; }); child.stdin.end(input);
-    const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+    // Harness margin permits cleanup/reporting; the request budget is unchanged.
+    const timer = setTimeout(() => child.kill('SIGKILL'), 20000);
     const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null, stderr);
-    return { code, value: JSON.parse(stdout), stderr };
+    return { code, value: JSON.parse(stdout), stdout, stderr };
   }
   return { root, destination, origin, destEnv, messages, invoke, calls: () => readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
+    preparations: () => readFileSync(preparationLog, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
     args: ['send', '--host', 'fixture', '--to', String(process.pid), '--message=fixture body', '--no-from', '--no-reply-to', '--json'] };
+}
+
+async function codexFixture(t: TestContext, mode: 'inject' | 'none' | 'loss') {
+  const f = await fixture(t), home = join(f.destination, 'codex-home'), bin = join(f.root, 'codex-bin');
+  mkdirSync(home, { mode: 0o700 }); mkdirSync(bin, { mode: 0o700 });
+  mkdirSync(join(home, 'thread-writer-locks'), { mode: 0o700 });
+  const state = new DatabaseSync(join(home, 'state_5.sqlite'));
+  state.exec('CREATE TABLE threads(id TEXT)'); state.prepare('INSERT INTO threads VALUES(?)').run(thread); state.close();
+  const warm = new DatabaseSync(join(home, 'thread_history_1.sqlite'));
+  warm.exec(`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
+CREATE TABLE thread_items(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,item_id TEXT NOT NULL,rollout_ordinal INTEGER NOT NULL,item_json TEXT NOT NULL,item_type TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id,item_id));
+CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_ordinal) WHERE item_type='userMessage';
+CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rollout_byte_offset INTEGER NOT NULL,next_rollout_ordinal INTEGER NOT NULL);`);
+  warm.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread, 'ssh-turn-fixture', 'completed');
+  warm.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread, 100, 100); warm.close();
+  const holder = fileURLToPath(new URL('./fixtures/ssh-codex-lock-holder.cjs', import.meta.url));
+  const held = spawn(process.execPath, [holder, join(home, 'thread-writer-locks', thread + '.lock'), createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt')]);
+  held.stderr.resume();
+  t.after(async () => { if (held.exitCode === null && held.signalCode === null) { held.kill('SIGKILL'); await once(held, 'close'); } });
+  const readyTimer = setTimeout(() => held.kill('SIGKILL'), 3000);
+  try { await Promise.race([once(held.stdout, 'data'), once(held, 'close').then(() => { throw new Error('fixture lock holder exited before readiness'); })]); }
+  finally { clearTimeout(readyTimer); }
+  const lsof = join(bin, 'lsof');
+  writeFileSync(lsof + '.data', 'p' + held.pid + '\0ccodex-fixture\0u' + process.getuid?.() + '\0', { mode: 0o600 });
+  writeFileSync(lsof, '#!/bin/sh\nexec /bin/cat "$0.data"\n', { mode: 0o700 });
+  writeFileSync(join(bin, 'ps'), '#!/bin/sh\nprintf "Fixture stable start\\n"\n', { mode: 0o700 });
+  const queueLog = join(f.root, 'codex-queue.jsonl'), nativeLog = join(f.root, 'codex-native.jsonl'), codex = join(bin, 'codex');
+  writeFileSync(queueLog, ''); writeFileSync(nativeLog, '');
+  copyFileSync(fileURLToPath(new URL('./fixtures/ssh-codex-native.cjs', import.meta.url)), codex); chmodSync(codex, 0o700);
+  writeFileSync(codex + '.json', JSON.stringify({ mode, version: '0.160.1', queueLog, nativeLog }), { mode: 0o600 });
+  const env = { CODEX_HOME: home, SESSION_PEER_CODEX_HOMES: '[]', PATH: bin + delimiter + f.destEnv.PATH };
+  assert.equal((await f.invoke(['handoff', 'init', '--json'], true, undefined, env)).code, 0);
+  const readLog = (path: string) => readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  return { ...f, home, env, queueCalls: () => readLog(queueLog), nativeCalls: () => readLog(nativeLog),
+    ledger: () => JSON.parse(readFileSync(join(f.destination, 'state', 'handoff', 'ledger.json'), 'utf8')),
+    args: ['send', '--host', 'fixture', '--to', `codex:${thread}`, '--codex-home', home, '--codex-bin', codex,
+      '--message=fixture request', '--no-from', '--no-reply-to', '--wait-for', 'delivered', '--wait-timeout', '15', '--json'] };
+}
+
+for (const mode of ['inject', 'none', 'loss'] as const) {
+  test(`qualified SSH Codex ${mode} keeps destination preparation binding and at most one native queue`, qualified, async t => {
+    const f = await codexFixture(t, mode), started = performance.now();
+    const sent = await f.invoke(f.args, false, undefined, f.env);
+    assert.equal(sent.code, mode === 'inject' ? 0 : 1, sent.stdout);
+    const calls = f.calls(); assert.equal(calls.length, 2);
+    assert.equal(calls[0].handoff.preparation, true); assert.equal(calls[1].handoff.preparation, undefined);
+    assert.ok(calls[1].handoff.remainingMs < calls[0].handoff.remainingMs);
+    const original = f.preparations()[0], initial = validateHandoff(original.handoff);
+    assert.equal(original.ok, true); assert.equal(original.status, 'validated'); assert.equal(original.submitted, false);
+    assert.equal(original.target.id, thread); assert.equal(original.codexHome, f.home);
+    assert.ok(initial.targetGeneration);
+    assert.equal(calls[1].args[calls[1].args.indexOf('--correlation-id') + 1], initial.correlationId);
+    assert.equal(calls[1].args[calls[1].args.indexOf('--codex-home') + 1], original.codexHome);
+    assert.equal(calls[1].args[calls[1].args.indexOf('--to') + 1], `codex:${original.target.id}`);
+    assert.deepEqual(f.queueCalls(), [{ method: 'thread/queue/add', clientId: initial.correlationId, threadId: thread, codexHome: f.home }]);
+    assert.equal(f.nativeCalls().some(call => call.command === 'queue'), false);
+    assert.equal(f.messages.length, 0); assert.equal(existsSync(join(f.origin, 'state', 'handoff')), false);
+    const retained = f.ledger().data.records[initial.correlationId];
+    assert.equal(retained.binding.agent, 'codex'); assert.equal(retained.binding.target, thread);
+    assert.equal(retained.binding.home, original.codexHome); assert.equal(retained.binding.generation, initial.targetGeneration);
+    assert.equal(retained.handoff.ledgerEpoch, initial.ledgerEpoch);
+    if (mode === 'loss') {
+      assert.equal(sent.value.status, 'unknown'); assert.equal(sent.value.submitted, null);
+      assert.equal(retained.handoff.submission.status, 'unknown');
+    } else {
+      assert.equal(sent.value.status, 'queued'); assert.equal(sent.value.submitted, true);
+      assert.equal(sent.value.consumptionConfirmed, false); assert.equal(sent.value.queueId, 'ssh-queue-fixture');
+      assert.equal(sent.value.target.id, original.target.id); assert.equal(sent.value.codexHome, original.codexHome);
+      const h = validateHandoff(sent.value.handoff);
+      for (const key of ['correlationId', 'ledgerEpoch', 'targetGeneration'] as const) assert.equal(h[key], initial[key]);
+      assert.equal(h.submission.status, 'submitted'); assert.equal(h.retry.allowed, false); assert.equal(h.ack.status, 'not_requested');
+      assert.equal(h.wait.status, mode === 'inject' ? 'satisfied' : 'timed_out_unknown');
+      assert.equal(h.observation.injectionObserved, mode === 'inject');
+      if (mode === 'inject') {
+        assert.equal(h.state, 'delivered'); assert.equal(h.observation.clientUserMessageId, initial.correlationId);
+        assert.equal(h.observation.turn?.status, 'completed');
+      } else { assert.equal(sent.value.ok, false); assert.equal(sent.value.error, 'timed_out_unknown'); }
+      const beforeStatus = f.nativeCalls();
+      const status = await f.invoke(['handoff', 'status', '--correlation-id', initial.correlationId, '--json'], true, undefined, f.env);
+      assert.equal(status.code, 0); assert.deepEqual(status.value.handoff.wait, h.wait); assert.deepEqual(f.nativeCalls(), beforeStatus);
+    }
+    assert.ok(performance.now() - started < 20000);
+    for (const secret of ['PRIVATE_SSH_CODEX_BODY_SENTINEL', 'payloadDigest', 'observationQualification']) assert.equal(sent.stdout.includes(secret), false);
+    const duplicate = await f.invoke([...f.args, '--correlation-id', initial.correlationId], false, undefined, f.env);
+    assert.equal(duplicate.code, 1); assert.equal(duplicate.value.error, 'handoff_already_attempted');
+    assert.equal(f.calls().length, 3); assert.equal(f.calls()[2].handoff.preparation, true);
+    assert.equal(f.queueCalls().length, 1); assert.equal(f.nativeCalls().some(call => call.command === 'queue'), false);
+  });
 }
 
 test('SSH uses only an explicitly initialized destination ledger, prepares before one effect, and leaves origin untouched', posix, async t => {

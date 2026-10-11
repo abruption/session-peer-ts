@@ -142,6 +142,53 @@ request-count assertions are preserved. This was test isolation, not a runtime
 failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
 results are recorded in the PR after the correction.
 
+## 0.4.0 scoped acceptance follow-up — 2026-10-11 KST
+
+The user approved qualified macOS arm64 Codex observation and explicit operator
+confirmation as the limited 0.4.0 scope. #69/#70/#71/#72 remain together. Linux
+client-ID observation #130, Windows observation/private handoff storage #131
+and voluntary receipt producer/authenticated collector bootstrap #132 are
+Future extensions, not mandatory platforms/collectors for this release. Required
+unsupported goals still refuse before effect; ordinary queues/manual receipts
+do not qualify native observation or automated receipt authentication.
+
+The source follow-up updates four-language README/guide scope, API and PARITY
+without changing runtime or the frozen contract/pin bytes. Dated 0.3.3 preparation
+evidence is retained; installation examples and explicitly unreleased handoff
+sections are distinguished. SQLite may evaluate body-bearing cells internally;
+body/error values are not returned to JavaScript or ordinary output.
+
+Pure-validator cross-runtime checks invoke exact published Python 1.1.0
+`8ca77cf31254c8287a2593fe484bb30a7dba2727` standalone and canonical handoff
+module hashes, never its main/ledger/native CLI/collector. Five tests/45 data
+cases passed: 19 accepted examples spanning all seven states, 12 schema/privacy/
+ACK/retry negatives, four Python unsupported-observation state projections,
+four Claude optional-absence/native-profile cases and six Codex native-profile
+cases. Python UUID reason names remain distinct from TS. The first launch lacked
+the reference environment (ENOENT), and the next run exposed an incorrect
+expected Python UUID reason; both were corrected before the final pass. This is
+actual pure-function comparison, not native delivery/receipt/runtime parity.
+
+Focused ACK core/CLI checks passed 55/55 after adding wrong correlation/epoch/
+generation and malformed/private-input negatives, byte-identical ledger
+preservation and positive/duplicate operator confirmation with no native queue.
+The companion guidance candidate is tracked in session-peer-skill #31. Its named
+session was inactive at dry-run, so no message was queued and no wake/resume was
+used. Existing skill metadata/immutable pin are not upgraded by this work.
+
+The SSH handoff suite passed 14/14 on macOS arm64. Three destination-side Codex
+fixtures cover exact-ID injection, no injection before deadline and queue-response
+loss, with original preparation binding and at most one queue RPC. These use fake
+SSH and a scripted native peer, not a new remote/native qualification. The request
+budget is 15 seconds; the harness has a separate 20-second cleanup limit.
+
+Integrated `npm test` (including build and type checks) passed 347 tests:
+342 pass, zero fail, five Windows-only skips on macOS arm64 / Node 24.16.0.
+Packaging and exact-head CI are recorded in PR #109. Tests are separate from the
+earlier KR/US real ordinary queues and local native qualification. Issue checklists
+and publication approval are separate gates; no merge/release/tag operation is
+included here.
+
 ## 0.4.0 owner-probe fixture follow-up — 2026-10-11 KST
 
 CI run `38110140277` at test/docs checkpoint
