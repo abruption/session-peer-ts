@@ -4,6 +4,10 @@
 // state/thread_history_migrations/0001_thread_history.sql, 0002_thread_items_item_type.sql;
 // app-server-protocol/src/protocol/v2/item.rs (userMessage.clientId);
 // thread-store/src/local/thread_history.rs (turn_status, projection lag).
+// Also checked against rust-v0.162.1 / 092d3acd6bec3e3a14bdc7e7a2810ab628ab759d:
+// the same migrations, camelCase userMessage.clientId mapping and bounded
+// metadata column projection. Exact source hashes/live native evidence are in
+// test/fixtures/metadata-observation-native-evidence.json. No history/body API.
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';

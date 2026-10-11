@@ -1072,16 +1072,54 @@ The client bounds frames, RPCs, traffic, owner verification, monotonic deadlines
 and owned process-group cleanup. An authorized caller supplies a durable
 before-effect fence; at most one queue RPC follows it. After a possible write,
 disconnect, timeout, schema error or remote refusal never enables fallback or
-resend. initialize opts out all 83 notifications in the exact qualified native
-schema; queue/add's own input echo is validated but only IDs are returned.
+resend. initialize opts out the exact profile notification set (83 for 0.160.1,
+84 for 0.162.1); queue/add's own input echo is validated but only IDs are returned.
 queue/list, history, full item/turn notifications, resume/start and model turns
 are excluded. The separate synthetic metadata protocol is explicitly fixture
-only. Other platforms/versions and native observation remain unsupported.
+only. Other platforms/versions and native app-server observation remain unsupported.
 
 Generated schema hashes and the fixed official source commit are recorded in
 `test/fixtures/app-server-schema-evidence.json`; tests use hermetic streams and
-owned Node children. These facts do not re-pin the shipped Python runtime parity
-reference or implement automatic ACK.
+owned Node children. These mechanics do not establish Python runtime delivery parity
+or implement automatic ACK.
+
+
+## Unreleased local observation integration — #72
+
+[Source-only runtime details](docs/api.md#unreleased-local-delivery-observation--72)
+cover bounded one-shot/explicit-wait observation, native CID queueing, original
+writer generation checks, per-operation terminal waits and positive native fact
+preservation. Generated schema/native queue mechanics are distinct from
+synthetic metadata/wait integration and live consumption evidence. The combined
+CLI path is restricted to Codex 0.160.1 or 0.162.1/macOS arm64; POSIX SQL fixtures alone do
+not qualify other native platforms. No rollout/transcript API is queried, no ACK is inferred
+and no post-attempt fallback/resend occurs.
+
+Dedicated 0.162.1 Codex and Claude Code 2.1.296 test sessions supplied additional
+local evidence; native client ID injection is separate from plain model response
+or ACK. Retained qualified intents support independent read-only waits with no
+new native submission. Each process owns its wait cutoff; foreign pending and
+old terminal waits are preserved. A separate voluntary matching reply was
+explicitly confirmed before any wait with `operator_confirmed`; ACK status and
+a later acknowledged wait succeeded. Confirmation after an earlier independent
+wait correctly refused `receipt_order_unprovable`, without replay. This is manual
+operator attestation, not an automated token-possession collector.
+
+POSIX SSH opt-in now prepares an unattempted intent at an explicitly initialized
+destination ledger, pins resolved target/home/generation/epoch/CID, then sends
+once. Strict request-aware native facts survive complete failed-transport
+responses; unsolicited/malformed handoff cannot create ACK. Source deadlines
+are not renewed; destination remaining-duration watchdogs reap owned groups.
+Transit delay cannot be synchronized across independent monotonic clocks.
+Actual destination-handler/recording-socket fixtures use fake SSH; real remote
+network/native-agent qualification is not implied. See [SSH details](docs/api.md#unreleased-destination-side-ssh-handoff).
+
+Open capabilities include original-sender SSH collector coordination, Windows
+ACL/native observation and automated receipt producer/collector bootstrap. Other
+platform/version tuples and arbitrary blocking-filesystem deadlines are not
+qualified by these tests.
+#69/#70/#71/#72 remain together in 0.4.0 and open. Ordinary runtime parity and
+published version markers are unchanged.
 
 
 Storage binding is checked on the owned queue transport before its effect:

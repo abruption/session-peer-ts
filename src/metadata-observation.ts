@@ -1,13 +1,31 @@
 // Opt-in, metadata-only observation for the exact qualified Codex store below.
 // No transcript, native client, warming, migration or receipt bootstrap is used.
 import childProcess, { type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const METADATA_SOURCE = Object.freeze({ version: '0.160.1',
   commit: 'd27764b82f7118f674371e6d6e76271d9d606edb',
   database: 'thread_history_1.sqlite', recentUsers: 256, maxCellBytes: 256 * 1024, childMs: 1000 });
 export type MetadataScope = Readonly<{ home: string; threadId: string; generation: string | null }>;
+// Persist this private qualification only after the original native queue and
+// metadata preflight have both selected this exact source. A version read from
+// today's PATH, a caller-supplied flag or the metadata schema alone cannot
+// establish how an older intent was submitted.
+export const METADATA_RESUME_QUALIFICATION = Object.freeze({ version: METADATA_SOURCE.version,
+  commit: METADATA_SOURCE.commit, platform: 'darwin-arm64' });
+export type MetadataQualification = Readonly<{ version: string; commit: string; platform: string }>;
+// Exact native qualification is separate from POSIX structural-store fixtures.
+// No version range, current PATH inference or schema-only upgrade is permitted.
+const metadataQualifications: readonly MetadataQualification[] = Object.freeze([
+  METADATA_RESUME_QUALIFICATION,
+  Object.freeze({ version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d', platform: 'darwin-arm64' }),
+]);
+export function metadataQualification(version: string): MetadataQualification | undefined {
+  if (typeof version !== 'string') return undefined;
+  const exact = version.startsWith('codex-cli ') ? version.slice('codex-cli '.length) : version;
+  return metadataQualifications.find(profile => profile.version === exact);
+}
 export type MetadataBudget = { observationRemainingMs(): number };
 // The caller owns any resources used by this verifier and must honor its signal.
 // A true result proves the ORIGINAL generation, rather than selecting a new one.
@@ -131,11 +149,41 @@ async function inspect(scope: MetadataScope, mode: 'capability' | 'observe', bud
 }
 export async function metadataCapability(scope: MetadataScope, version: string, budget: MetadataBudget | undefined,
   verifyOwner: VerifyMetadataOwner): Promise<MetadataCapability> {
-  if (!/^(?:codex-cli )?0\.160\.1$/.test(version)) return { supported: false, reason: 'metadata_version_unsupported' };
+  if (!metadataQualification(version)) return { supported: false, reason: 'metadata_version_unsupported' };
   const result = await inspect(scope, 'capability', budget, verifyOwner);
   return { supported: result.supported, ...(result.reason === undefined ? {} : { reason: result.reason }) };
 }
 export function observeMetadata(scope: MetadataScope & { clientUserMessageId: string }, budget: MetadataBudget,
   verifyOwner: VerifyMetadataOwner): Promise<MetadataObservation> {
+  return inspect(scope, 'observe', budget, verifyOwner, scope.clientUserMessageId);
+}
+// Read-only reconciliation of a retained, positively submitted intent. The
+// ledger caller supplies the ORIGINAL binding/qualification and must neither
+// infer missing submission evidence nor replace the generation with today's
+// owner. This API never finds or invokes Codex and never submits or warms data.
+export function resumeMetadataObservation(scope: MetadataScope & { clientUserMessageId: string },
+  qualification: MetadataQualification, budget: MetadataBudget,
+  verifyOwner: VerifyMetadataOwner): Promise<MetadataObservation> {
+  if (!qualification || typeof qualification !== 'object' || Array.isArray(qualification) ||
+      Object.keys(qualification).length !== 3 ||
+      Object.keys(qualification).some(key => !['version', 'commit', 'platform'].includes(key))) {
+    return Promise.resolve(unsupported('metadata_scope_invalid'));
+  }
+  const expected = metadataQualification(qualification.version);
+  // Retained records use the canonical native version, not a CLI banner.
+  if (!expected || qualification.version !== expected.version) {
+    return Promise.resolve(unsupported('metadata_version_unsupported'));
+  }
+  if (qualification.commit !== expected.commit) {
+    return Promise.resolve(unsupported('metadata_schema_unsupported'));
+  }
+  if (qualification.platform !== expected.platform ||
+      qualification.platform !== `${process.platform}-${process.arch}`) {
+    return Promise.resolve(unsupported('metadata_platform_unsupported'));
+  }
+  if (!scope || !safe(scope.home, 2048) || !isAbsolute(scope.home) || resolve(scope.home) !== scope.home ||
+      typeof scope.generation !== 'string' || !/^[a-f0-9]{64}$/.test(scope.generation)) {
+    return Promise.resolve(unsupported('metadata_scope_invalid'));
+  }
   return inspect(scope, 'observe', budget, verifyOwner, scope.clientUserMessageId);
 }

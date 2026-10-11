@@ -22,7 +22,7 @@
 - npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 공개 TS 0.3.5는 공개 스킬 `0.2.1`과 기존 `0.1.0`·`0.2.0`의 정확한 프로필을 허용하며, 공개 TS 0.3.2·0.3.3·0.3.4는 `0.2.1`을 거부합니다. 설치 절에는 별도로 공개된 스킬 소스를 고정했습니다.
 - Windows 검증은 공개 0.3.1, Windows 10 x64, 관리자 계정, PowerShell 5.1, Node 24.16.0에서 수행했습니다. 오프라인 설치, 래퍼·네이티브 잠금, 운영자의 doctor·없는 대상 dry-run과 로컬 fixture 31개가 검증됐습니다. Node 22는 버전 표시·네이티브 잠금 확인만 수행했습니다. 비관리자, 다른 아키텍처, F6 런타임 검사, 이전 Linux 실험의 최신 규칙 검증은 남아 있습니다. 이는 0.3.2 실기 ACK나 배포 도우미 검증이 아닙니다.
 
-[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 미발행 0.4.0 소스 후보는 개발 비교 기준을 Python 1.1.0으로 갱신하며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 후보의 자동 ACK·SSH handoff·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
+[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 미발행 0.4.0 소스 후보는 개발 비교 기준을 Python 1.1.0으로 갱신하며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 후보의 자동 ACK·원래 발신자의 SSH 수신 확인 수집기·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
 
 
 [0.4.0 handoff 설계(공동 확정·미구현)](../PARITY.md#handoff-v1-design-candidate--69)
@@ -595,11 +595,11 @@ npm `--ignore-scripts`로 설치해도 되며, 설치 후 Skills CLI를 호출�
 
 ## Unreleased handoff
 
-개발 중인 0.4.0 소스에는 opt-in private POSIX handoff ledger가 추가됩니다. 공개 0.3.1에는 이 명령이 없습니다. 필수 증거 채널이 unsupported이면 제출 전에 거절하며, best-effort 제출은 ACK를 증명하지 않습니다. 자동 receipt bootstrap, Windows ledger 및 SSH handoff는 아직 미지원입니다.
+개발 중인 0.4.0 소스에는 opt-in private POSIX handoff ledger가 추가됩니다. 공개 0.3.3에는 이 명령이 없습니다. 필수 증거 채널이 unsupported이면 제출 전에 거절하며, best-effort 제출은 ACK를 증명하지 않습니다. 자동 수신 확인 연결 설정, Windows ledger 및 원래 발신자의 SSH 수신 확인 수집기는 미지원입니다. POSIX SSH opt-in은 명시적으로 초기화한 목적지 ledger에서 전송 없는 준비 단계로 대상·home·generation을 고정한 뒤 한 번만 전송합니다. [목적지 SSH 설명](api.md#unreleased-destination-side-ssh-handoff)을 참고하세요. 가짜 SSH fixture는 실제 네트워크 검증과 구분합니다.
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
-소스 전용 `--wait-for delivered` 경로는 Codex 0.160.1/macOS arm64 queue mechanics와 이미 생성된 metadata store에 한정됩니다. 본문을 반환하지 않으며 wait 실패도 queued/submitted 증거를 지우지 않습니다. 각 wait의 operation ID·종료 결과는 별개입니다. 합성 통합 검증은 live ACK 증거가 아니며 SSH/Windows handoff와 자동 ACK는 미지원입니다.
+미발행 소스 후보의 전송 관찰은 macOS arm64의 정확한 Codex 0.160.1/0.162.1과 이미 생성된 메타데이터 저장소에 한정됩니다. 검증 근거가 보존된 전송은 별도 `handoff wait`로 읽기 전용 관찰을 다시 시작할 수 있으며, native 전송을 반복하지 않습니다. 각 대기는 자신의 마감 시각으로만 판단하고 다른 대기와 기존 종료 결과를 보존합니다. 새로 만든 Codex 0.162.1·Claude Code 2.1.296 테스트 세션의 실기 근거와 합성 테스트는 구분합니다. queued/posted, 실제 주입, 턴 종료, 일반 응답은 수령 확인 ACK와 다릅니다. 자동 ACK와 Windows handoff는 미지원입니다.
 
 [Observation](api.md#unreleased-local-delivery-observation--72)

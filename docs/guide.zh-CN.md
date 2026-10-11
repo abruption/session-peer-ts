@@ -22,7 +22,7 @@
 - npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。公开 TS 0.3.5 接受公开技能 `0.2.1` 及旧 `0.1.0`、`0.2.0` 的精确配置；公开 TS 0.3.2、0.3.3 和 0.3.4 拒绝 `0.2.1`。安装部分固定了独立发布的技能源码。
 - Windows 验证使用公开 0.3.1、Windows 10 x64、管理员账号、PowerShell 5.1 和 Node 24.16.0。验证范围包括离线安装、包装器与原生锁、操作端 doctor 和不存在目标的 dry-run，以及 31 项本地 fixture。Node 22 仅确认版本标识和原生锁。非管理员、其他架构、F6 运行时校验、此前 Linux 实验的最新规则仍未验证。这不是 0.3.2 实机 ACK 或部署辅助工具的验证。
 
-请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。上述带日期的迁移比较针对当时的公开版本。未发布的 0.4.0 源码候选将开发比较基准更新为 Python 1.1.0；公开 npm 0.3.3 原有的 1.0.2 标识保持不变。Python 1.1.0 包含实验性的本地 Claude 收件确认专用 ACK 路径。这不表示 TS 候选支持自动 ACK、SSH handoff 或 Windows handoff。两种基准均不保证端到端消费，Side Session 仍属实验功能。Relay/MCP 不在比较范围内。
+请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。上述带日期的迁移比较针对当时的公开版本。未发布的 0.4.0 源码候选将开发比较基准更新为 Python 1.1.0；公开 npm 0.3.3 原有的 1.0.2 标识保持不变。Python 1.1.0 包含实验性的本地 Claude 收件确认专用 ACK 路径。这不表示 TS 候选支持自动 ACK、原发送方的 SSH 收件确认收集器或 Windows handoff。两种基准均不保证端到端消费，Side Session 仍属实验功能。Relay/MCP 不在比较范围内。
 
 
 [0.4.0 handoff 设计（联合确认、未实现）](../PARITY.md#handoff-v1-design-candidate--69)
@@ -326,11 +326,11 @@ postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能�
 
 ## Unreleased handoff
 
-开发中的 0.4.0 源码加入 opt-in private POSIX handoff ledger。已发布的 0.3.1 不含这些命令。所需证据通道 unsupported 时在提交前拒绝；best-effort 提交并不证明 ACK。自动 receipt bootstrap、Windows ledger 和 SSH handoff 尚不支持。
+开发中的 0.4.0 源码加入 opt-in private POSIX handoff ledger。已发布的 0.3.3 不含这些命令。所需证据通道 unsupported 时在提交前拒绝；best-effort 提交并不证明 ACK。自动收件确认连接设置、Windows ledger 和原发送方的 SSH 收件确认收集器尚不支持。POSIX SSH opt-in 在已明确初始化的目标 ledger 上进行无发送的准备，固定目标、home、generation 后只发送一次。请参阅[目标端 SSH 说明](api.md#unreleased-destination-side-ssh-handoff)。模拟 SSH fixture 与实际网络验证分别记录。
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
-源码专用的 `--wait-for delivered` 限于 Codex 0.160.1/macOS arm64 与已有 metadata store。不返回正文，wait 失败仍保留 queued/submitted 事实。每个 wait 的 operation ID 和终态独立。合成集成测试不是 live ACK 证据；SSH/Windows handoff 与自动 ACK 仍未支持。
+未发布的源码候选仅支持 macOS arm64 上的精确 Codex 0.160.1/0.162.1 和已有的元数据存储。保留验证依据的提交可通过独立的 `handoff wait` 继续只读观察，不会再次进行 native 提交。每项等待只按自己的截止时间判断，并保留其他等待及过去的终态。新建专用 Codex 0.162.1、Claude Code 2.1.296 会话的实机依据与合成测试分开记录。queued/posted、注入、轮次结束及普通回复均不等于收件确认 ACK。自动 ACK 和 Windows handoff 仍不支持。
 
 [Observation](api.md#unreleased-local-delivery-observation--72)

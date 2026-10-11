@@ -84,6 +84,52 @@ explicitly labeled and must match retained original context. No arbitrary
 message/transcript scan manufactures ACK. Ordinary generated Reply-To stays v1.
 
 
+### Unreleased destination-side SSH handoff
+
+POSIX opt-in `send --host HOST` performs an exact-version preflight and a
+no-effect preparation before one destination-side send. Both ends must contain
+this reviewed candidate: the public 0.3.3 banner alone does not establish new
+capability. Initialize the destination's private ledger explicitly; no command
+auto-installs a handler or initializes missing history. The origin does not
+create a local receipt collector. Reconcile with `handoff status`/`wait` on the
+destination that owns the retained intent, without another send.
+
+Preparation fixes the canonical destination target/home, original generation,
+epoch and correlation ID. A supplied ID must already be unattempted/prepared
+there. Fanout uses a distinct ID per destination, is limited to 32 destinations,
+and rejects one caller-supplied ID for multiple hosts. An incomplete preparation
+refuses before effect. After a possible effect, partial/malformed/oversized
+responses remain unknown and are never replayed. Complete request-matched native
+facts survive SSH 255/timeout; malformed optional handoff cannot create ACK or
+erase separately valid submission facts. Ordinary opt-out discards unsolicited
+handoff/query/warning fields.
+
+The origin retains its original monotonic deadline. Each private request carries
+only remaining duration, repeated in a private numeric argv selector. The
+destination establishes its input timeout and owned-process cleanup watchdog
+before reading the frame, requires the two durations to match, and charges
+normal Node bootstrap/frame-read time to the same budget. An indefinitely blocked
+static import before handler startup is outside this in-process watchdog; the
+origin still has its own hard transport deadline. Transit delay is
+not measurable across independent monotonic clocks: this is not a synchronized
+cross-host cutoff guarantee. The source deadline is never renewed, and 5 seconds
+of cleanup reserve remain inside each per-destination budget. Fake-SSH fixtures
+exercise the actual destination handler and a recording socket, including the
+watchdog's group cleanup; they do not constitute an actual network SSH or remote
+native-agent qualification.
+
+Each fanout destination starts its own total budget; sequential fanout can take
+up to the sum of those budgets (at most 32 × 60 seconds), rather than one shared
+invocation deadline. No setup, preparation or wait renews a destination's
+deadline. Transport loss can return unknown before a delayed destination effect
+has finished; it is not evidence of non-delivery and never authorizes a retry.
+
+Original-sender ACK collector/bootstrap and Windows SSH handoff remain
+unsupported. Required acknowledged wait refuses before submission; best-effort
+request-ack reports unsupported. Destination-native observation retains the
+same exact Codex version/platform/home/generation gates as local observation.
+
+
 ## Unreleased bounded app-server mechanics — 0.4.0 work
 
 `dist/app-server.js` is an internal opt-in module, not a new public package
@@ -131,7 +177,7 @@ bootstrap filesystem activity. Observers still open only read-only warm stores.
 ## Unreleased local delivery observation — #72
 
 A narrower qualified source path combines #71 queue mechanics with a warm
-Codex 0.160.1 metadata store on macOS arm64. `--observe-delivery` checks once
+Codex 0.160.1 or 0.162.1 metadata store on macOS arm64. `--observe-delivery` checks once
 (best effort); `--wait-for delivered` polls within the original remaining
 budget. The native client ID is the reserved correlation ID. A positive native
 receipt remains `status: queued`, `submitted: true`, `consumptionConfirmed:
@@ -166,11 +212,39 @@ concurrent later waits do not replace the originating send's result. An explicit
 SIGINT-stopped wait returns exit 130 when its matching stopped record is proven,
 retaining independently known submission facts and never retracting/resending.
 
-Qualification boundaries: combined CLI route is macOS arm64/Codex 0.160.1;
-portable SQL/owner fixtures run on POSIX. End-to-end tests use synthetic writer,
-SSH/process metadata and native RPC fixtures, not real user TUIs. Actual live
-injection/ACK and Linux/Windows native queue integration are not qualified.
-Windows ledger, sender-ledger SSH coordination, automated receipt bootstrap,
-restart-resumed observation, full setup/filesystem cancellation and other native
-versions remain open. Required ACK remains unsupported. The 0.4.0 milestone is
-not complete and no package/version publication is implied.
+`handoff wait --correlation-id UUID --wait-for delivered` starts a new read-only
+operation over a retained, positively submitted intent. It preserves the original
+home/thread/writer generation and private, exact version/source/platform
+qualification. Missing qualification is unsupported; today's PATH or matching
+schema never reconstructs it. A new wait has its own cutoff and never rewrites
+an old terminal wait. Other processes' pending waits remain untouched and each
+owner classifies its own deadline. No native executable, queue request, transcript
+API or model turn is started by status/wait. Ledger contention is retried only
+inside the existing total budget. A persistence failure returns the last verified
+operation and known submission facts with `handoff_persistence_failed`; it does
+not claim that a terminal record was written.
+
+Qualification boundaries: the combined native CLI route is macOS arm64/Codex
+0.160.1 or 0.162.1, each with an exact pinned source profile. Dedicated new
+0.162.1 TUI sessions demonstrated one native queue attempt and exact client-ID
+injection in the original thread/home using bounded metadata projections.
+Synthetic tests separately cover independent-process resume, timeout, SIGINT,
+concurrent waits, owner change and persistence failure. Neither completion nor
+visible response establishes machine ACK. A separate voluntary matching reply
+was explicitly recorded with `handoff confirm --receipt -` before any wait:
+`operator_confirmed`, retained ACK and a later acknowledged wait succeeded.
+A prior test that started a delivered wait before confirmation correctly refused
+unprovable cross-process ordering; its intent was not resubmitted. This is manual
+operator attestation, not automatic token-possession receipt collection. Dedicated Claude Code 2.1.296 tests
+confirmed correlated socket delivery and best-effort ACK remaining unsupported;
+a required unsupported ACK refused before posting.
+
+Linux/Windows native queue/observation, Windows private ledger and automated
+receipt collector/bootstrap remain unsupported. Other native versions are not
+inferred from a minor range. The original-sender SSH collector is not provided.
+No package/version publication or completed milestone is implied by these
+source-only checks. Exact evidence and limits are in [VALIDATION](../VALIDATION.md).
+
+
+
+

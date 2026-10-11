@@ -5,6 +5,7 @@ import { randomBytes, randomUUID, createHash, timingSafeEqual, createCipheriv, c
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import type { MetadataQualification } from './metadata-observation.js';
 import { canonicalId, closed, fail, HANDOFF_LIMITS, HandoffBudget, parseStrictJson, safeId, safeInteger,
   systemClock, validateConfirmation, validateHandoff, validateReceipt, type Clock, type Handoff, type WaitFor, type WaitReason, type WaitStatus } from './handoff.js';
 
@@ -12,13 +13,14 @@ export type HandoffBinding = Readonly<{ agent: 'claude' | 'codex'; destination: 
   home?: string; writerIdentity?: string; generation: string | null; payloadDigest: string }>;
 export type PrepareOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; waitFor?: WaitFor;
   budget?: HandoffBudget; dryRun?: boolean; channels?: { delivery: boolean; receipt?: boolean };
-  observationSupported?: boolean; clientUserMessageId?: string };
+  observationSupported?: boolean; clientUserMessageId?: string; observationQualification?: MetadataQualification };
+export type ObservationContext = Readonly<{ binding: HandoffBinding; clientUserMessageId: string; qualification: MetadataQualification }>;
 export type HandoffObservation = { clientUserMessageId: string; injectionObserved: boolean; turn?: Handoff['observation']['turn'] };
 type StoredWait = { public: Handoff['wait']; clockId: string; cutoff: number };
 type RecordIntent = { binding: HandoffBinding; preparedUtc: number; clockId: string; preparedMono: number;
   phase: 'prepared' | 'attempted' | 'finished' | 'refused'; handoff: Handoff; waits: StoredWait[];
   reserve: number; capabilityHash?: string; capabilityClockId?: string; receiptId?: string; revoked?: boolean; expired?: boolean;
-  deliverySupported?: boolean; clientUserMessageId?: string };
+  deliverySupported?: boolean; clientUserMessageId?: string; observationQualification?: MetadataQualification };
 type Ledger = { version: 1; epoch: string; keyId: string; quarantined: boolean; records: Record<string, RecordIntent> };
 export type HandoffQueryError = { schemaVersion: 1; correlationId: string; status: 'unknown';
   context: 'ledger_missing' | 'ledger_corrupt' | 'id_unknown'; retry: { allowed: false; reason: 'history_unavailable' } };
@@ -35,6 +37,11 @@ function checkBinding(value: HandoffBinding): HandoffBinding {
 }
 function sameBinding(a: HandoffBinding, b: HandoffBinding): boolean {
   return ['agent', 'destination', 'target', 'home', 'writerIdentity', 'generation', 'payloadDigest'].every(key => a[key as keyof HandoffBinding] === b[key as keyof HandoffBinding]);
+}
+function checkQualification(value: MetadataQualification): MetadataQualification {
+  const row = closed(value, ['version', 'commit', 'platform']);
+  if (!safeId(row.version, 64) || !safeId(row.platform, 64) || typeof row.commit !== 'string' || !/^[0-9a-f]{40}$/.test(row.commit)) fail('invalid_observation_qualification', 2);
+  return structuredClone(value);
 }
 function privateStat(path: string, directory: boolean) {
   const uid = process.getuid?.(); if (uid === undefined || process.platform === 'win32') fail('handoff_storage_unsupported');
@@ -123,10 +130,11 @@ export class HandoffLedger {
       const records = data.records as Record<string, RecordIntent>;
       if (Object.keys(records).length > HANDOFF_LIMITS.intents) fail();
       for (const [id, item] of Object.entries(records)) {
-        closed(item, ['binding', 'preparedUtc', 'clockId', 'preparedMono', 'phase', 'handoff', 'waits', 'reserve'], ['capabilityHash', 'capabilityClockId', 'receiptId', 'revoked', 'expired', 'deliverySupported', 'clientUserMessageId']);
+        closed(item, ['binding', 'preparedUtc', 'clockId', 'preparedMono', 'phase', 'handoff', 'waits', 'reserve'], ['capabilityHash', 'capabilityClockId', 'receiptId', 'revoked', 'expired', 'deliverySupported', 'clientUserMessageId', 'observationQualification']);
         if (!canonicalId(id)) fail();
         item.binding = { ...item.binding, payloadDigest: this.revealDigest(item.binding?.payloadDigest, key, data.epoch as string, id) };
         checkBinding(item.binding);
+        if (item.observationQualification !== undefined) checkQualification(item.observationQualification);
         if (!canonicalId(id) || !canonicalId(item.clockId) || !safeInteger(item.preparedUtc) || typeof item.preparedMono !== 'number' || item.preparedMono < 0 ||
             !['prepared', 'attempted', 'finished', 'refused'].includes(item.phase) || !Array.isArray(item.waits) || item.waits.length > HANDOFF_LIMITS.waits ||
             !safeInteger(item.reserve) || item.reserve > reserveBytes || (item.capabilityHash !== undefined && !/^[a-f0-9]{64}$/.test(item.capabilityHash)) ||
@@ -191,7 +199,7 @@ export class HandoffLedger {
     if (item.expired || this.clock.utc() - item.preparedUtc >= HANDOFF_LIMITS.detailMs) fail('handoff_history_unavailable');
     return item;
   }
-  private snapshot(item: RecordIntent, quarantine = false): Handoff {
+  private snapshot(item: RecordIntent, quarantine = false, currentWait = item.waits.at(-1)): Handoff {
     const h = structuredClone(item.handoff);
     if (quarantine || item.expired || this.clock.utc() - item.preparedUtc >= HANDOFF_LIMITS.detailMs) {
       h.state = 'unknown'; h.submission = { status: 'unknown' }; h.observation = { status: 'not_requested', injectionObserved: false };
@@ -200,7 +208,8 @@ export class HandoffLedger {
     if ((item.capabilityClockId !== this.clockId || item.revoked || this.clock.monotonic() - item.preparedMono >= HANDOFF_LIMITS.capabilityMs) && h.ack.status === 'pending') {
       h.ack = { status: 'unsupported' }; h.nextActions = ['reconcile'];
     }
-    if (item.clockId !== this.clockId && h.observation.status === 'pending') {
+    const resumed = item.observationQualification !== undefined && currentWait?.clockId === this.clockId && currentWait.public.for === 'delivered' && currentWait.public.status === 'pending';
+    if (item.clockId !== this.clockId && h.observation.status === 'pending' && !resumed) {
       h.observation = { status: 'unsupported', injectionObserved: false }; h.nextActions = ['reconcile'];
     }
     return validateHandoff(h);
@@ -222,13 +231,23 @@ export class HandoffLedger {
     return wait;
   }
   private operationSnapshot(item: RecordIntent, wait: StoredWait): Handoff {
-    const h = this.snapshot(item); h.wait = structuredClone(wait.public);
+    const h = this.snapshot(item, false, wait); h.wait = structuredClone(wait.public);
     // Actions from the latest wait cannot be projected onto a different operation.
     h.nextActions = ['reconcile']; return validateHandoff(h);
   }
   operationStatus(id: string, operationId: string): Handoff {
     const data = this.read(), item = this.usable(data, id);
     return this.operationSnapshot(item, this.selectWait(item, operationId));
+  }
+  // Private projection only. Do not return this binding/digest or qualification
+  // in ordinary JSON. Missing historical provenance cannot be reconstructed
+  // from today's native executable or a matching database schema.
+  observationContext(id: string): ObservationContext | undefined {
+    const data = this.read(), item = this.usable(data, id);
+    if (item.phase !== 'finished' || item.handoff.submission.status !== 'submitted' || !item.deliverySupported ||
+        !item.observationQualification || item.binding.agent !== 'codex' || !item.binding.home ||
+        !item.binding.generation || item.binding.writerIdentity !== item.binding.generation || !item.clientUserMessageId) return undefined;
+    return structuredClone({ binding: item.binding, clientUserMessageId: item.clientUserMessageId, qualification: item.observationQualification });
   }
   prepare(binding: HandoffBinding, options: PrepareOptions = {}): Handoff {
     binding = checkBinding(binding);
@@ -271,6 +290,17 @@ export class HandoffLedger {
     if (options.observeDelivery || goal === 'delivered') {
       item.deliverySupported = delivery; item.clientUserMessageId = clientId;
       h.observation.status = delivery ? 'pending' : 'unsupported';
+      if (delivery && options.observationQualification !== undefined) {
+        const qualification = checkQualification(options.observationQualification);
+        if (item.observationQualification && JSON.stringify(item.observationQualification) !== JSON.stringify(qualification)) fail('handoff_binding_conflict');
+        item.observationQualification = qualification;
+      } else delete item.observationQualification;
+    } else {
+      // A prepared reservation may be reused by a non-observing submission.
+      // Its old native qualification must not describe that different path.
+      item.deliverySupported = false;
+      delete item.observationQualification;
+      h.observation = { status: 'not_requested', injectionObserved: false };
     }
     if (goal !== 'none') {
       const budget = options.budget ?? new HandoffBudget(30, this.clock); this.addWait(item, goal, budget);
@@ -378,7 +408,7 @@ export class HandoffLedger {
     item.handoff.wait = { for: goal, status: 'pending', operationId: randomUUID(), deadlineAtUtcMs: budget.deadlineAtUtcMs };
     item.waits.push({ public: structuredClone(item.handoff.wait), clockId: this.clockId, cutoff: budget.cutoff });
   }
-  beginWait(id: string, goal: Exclude<WaitFor, 'none'>, budget = new HandoffBudget(30, this.clock)): Handoff {
+  beginWait(id: string, goal: Exclude<WaitFor, 'none'>, budget = new HandoffBudget(30, this.clock), options: { observationSupported?: boolean } = {}): Handoff {
     if (!['delivered', 'acknowledged'].includes(goal)) fail('invalid_wait_for', 2);
     return this.lock(() => {
       const data = this.read(), item = this.usable(data, id); this.addWait(item, goal, budget);
@@ -386,7 +416,9 @@ export class HandoffLedger {
       h.nextActions = ['reconcile'];
       if ((goal === 'acknowledged' && h.ack.status === 'acknowledged') || (goal === 'delivered' && h.observation.injectionObserved)) h.wait.status = 'satisfied';
       else if (budget.seconds <= 5) { h.wait.status = 'failed'; h.wait.reason = 'insufficient_budget'; }
-      else if (goal === 'delivered' && item.deliverySupported && item.binding.generation !== null && item.clockId === this.clockId && h.submission.status === 'submitted') {
+      else if (goal === 'delivered' && item.deliverySupported && item.binding.generation !== null && h.submission.status === 'submitted' &&
+          (options.observationSupported === true ? item.observationQualification !== undefined : options.observationSupported === undefined && item.clockId === this.clockId)) {
+        h.observation = { status: 'pending', injectionObserved: false };
         h.nextActions = ['keep_waiting', 'reconcile', 'stop_waiting'];
       }
       else if (goal === 'acknowledged' && item.capabilityHash && !item.revoked && item.capabilityClockId === this.clockId &&

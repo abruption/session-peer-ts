@@ -8,9 +8,11 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { performance } from 'node:perf_hooks';
-import { metadataCapability, observeMetadata, METADATA_SOURCE, type MetadataScope } from '../dist/metadata-observation.js';
+import { metadataCapability, metadataQualification, observeMetadata, resumeMetadataObservation, METADATA_RESUME_QUALIFICATION,
+  METADATA_SOURCE, type MetadataScope, type MetadataQualification } from '../dist/metadata-observation.js';
 
 const posix = { skip: process.platform === 'win32' };
+const resumeQualified = { skip: process.platform !== 'darwin' || process.arch !== 'arm64' };
 const threadId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const clientId = 'client-message-fixture-1';
 // Structural fixture from the official 0.160.1 migrations 0001/0002. Later
@@ -43,6 +45,108 @@ function fixture(t: TestContext, wal = false) {
 const budget = () => ({ observationRemainingMs: () => 5000 });
 const owner = () => true;
 const observe = (scope: MetadataScope, clientUserMessageId = clientId) => observeMetadata({ ...scope, clientUserMessageId }, budget(), owner);
+
+test('native metadata qualification is a finite immutable source/platform tuple, not a SemVer range', () => {
+  assert.deepEqual(metadataQualification('0.160.1'), METADATA_RESUME_QUALIFICATION);
+  const current = metadataQualification('codex-cli 0.162.1');
+  assert.deepEqual(current, { version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d', platform: 'darwin-arm64' });
+  assert.equal(Object.isFrozen(current), true);
+  for (const version of ['0.162.0', '0.162.2', '0.163.0', '0.162.1+unknown', ' 0.162.1', 'codex-cli 0.162.1\n']) {
+    assert.equal(metadataQualification(version), undefined);
+  }
+  const evidence = JSON.parse(readFileSync(new URL('./fixtures/metadata-observation-native-evidence.json', import.meta.url), 'utf8'));
+  assert.equal(evidence.nativeProfile.version, current!.version);
+  assert.equal(evidence.nativeProfile.commit, current!.commit);
+  assert.equal(evidence.nativeProfile.platform, current!.platform);
+  assert.equal(evidence.liveFixture.oneQueueAttempt, true);
+  assert.equal(evidence.liveFixture.matchingClientIdRows, 1);
+  assert.equal(evidence.liveFixture.nativeItemIdEqualsClientId, false);
+  assert.equal(evidence.liveFixture.generationUnchanged, true);
+  assert.equal(evidence.liveFixture.acknowledged, false);
+  assert.deepEqual(evidence.productionReader.exactQualification, current);
+  assert.equal(evidence.productionReader.capabilitySupported, true);
+  assert.equal(evidence.productionReader.injectionObserved, true);
+  assert.equal(evidence.productionReader.originalGenerationProvedBeforeAndAfter, true);
+  assert.equal(evidence.actualCli.secondThreadOperatorConfirmation.assurance, 'operator_confirmed');
+  assert.equal(evidence.actualCli.automatedReceiptCapability, false);
+});
+
+test('0.162.1 structural store fixture retains exact native client ID and body-free source qualification', posix, async t => {
+  const f = fixture(t, true); f.item(1); f.db.exec("UPDATE thread_turns SET status='completed'");
+  assert.deepEqual(await metadataCapability(f.scope, 'codex-cli 0.162.1', budget(), owner), { supported: true });
+  assert.deepEqual(await observe(f.scope), { supported: true, injectionObserved: true,
+    clientUserMessageId: clientId, turn: { id: 'turn-fixture-1', status: 'completed' } });
+  // Structural fixture coverage on another POSIX platform is not native qualification.
+  if (process.platform === 'darwin' && process.arch === 'arm64') {
+    assert.deepEqual(await resumeMetadataObservation({ ...f.scope, generation: 'a'.repeat(64), clientUserMessageId: clientId },
+      metadataQualification('0.162.1')!, budget(), owner), { supported: true, injectionObserved: true,
+      clientUserMessageId: clientId, turn: { id: 'turn-fixture-1', status: 'completed' } });
+  } else {
+    assert.deepEqual(await resumeMetadataObservation({ ...f.scope, generation: 'a'.repeat(64), clientUserMessageId: clientId },
+      metadataQualification('0.162.1')!, budget(), owner),
+      { supported: false, injectionObserved: false, reason: 'metadata_platform_unsupported' });
+  }
+});
+
+test('retained observation source qualification rejects unknown versions/commits/platforms before opening storage', async t => {
+  let spawned = 0, owners = 0;
+  mock.method(childProcess, 'spawn', () => { spawned++; throw new Error('unexpected observation worker'); });
+  t.after(() => mock.restoreAll());
+  const scope = { home: '/no-such-fixture', threadId, generation: 'a'.repeat(64), clientUserMessageId: clientId };
+  const cases: [MetadataQualification, string][] = [
+    [{ ...METADATA_RESUME_QUALIFICATION, version: '0.163.0' }, 'metadata_version_unsupported'],
+    [{ ...METADATA_RESUME_QUALIFICATION, commit: 'a'.repeat(40) }, 'metadata_schema_unsupported'],
+    [{ ...metadataQualification('0.162.1')!, commit: METADATA_RESUME_QUALIFICATION.commit }, 'metadata_schema_unsupported'],
+    [{ ...METADATA_RESUME_QUALIFICATION, platform: 'win32-x64' }, 'metadata_platform_unsupported'],
+    [{} as MetadataQualification, 'metadata_scope_invalid'],
+    [{ ...METADATA_RESUME_QUALIFICATION, future: true } as MetadataQualification, 'metadata_scope_invalid'],
+  ];
+  if (process.platform !== 'darwin' || process.arch !== 'arm64') cases.push([METADATA_RESUME_QUALIFICATION, 'metadata_platform_unsupported']);
+  for (const [qualification, reason] of cases) {
+    assert.deepEqual(await resumeMetadataObservation(scope, qualification, budget(), () => { owners++; return true; }),
+      { supported: false, injectionObserved: false, reason });
+  }
+  assert.equal(spawned, 0); assert.equal(owners, 0);
+});
+
+test('retained exact scope resumes only body-free metadata workers, with original generation and no native submission', resumeQualified, async t => {
+  const f = fixture(t, true); f.item(1);
+  const scope = { ...f.scope, generation: 'a'.repeat(64), clientUserMessageId: clientId };
+  const before = new Map(readdirSync(f.home).filter(name => !name.endsWith('-shm')).map(name => [name, readFileSync(join(f.home, name))]));
+  const spawned: string[][] = [], actualSpawn = childProcess.spawn;
+  mock.method(childProcess, 'spawn', (binary: string, args: readonly string[], options: any) => {
+    assert.equal(binary, process.execPath); assert.equal(options.shell, false);
+    assert.equal(args.length, 1); assert.ok(args[0]!.endsWith('/handoff-observer-probe.js'));
+    spawned.push([...args]); return actualSpawn(binary, args, options);
+  });
+  t.after(() => mock.restoreAll());
+  let owners = 0;
+  const result = await resumeMetadataObservation(scope, METADATA_RESUME_QUALIFICATION, budget(), original => {
+    owners++; assert.equal(original.home, scope.home); assert.equal(original.threadId, scope.threadId);
+    assert.equal(original.generation, scope.generation); assert.equal(Object.isFrozen(original), true); return true;
+  });
+  assert.deepEqual(result, { supported: true, injectionObserved: true, clientUserMessageId: clientId,
+    turn: { id: 'turn-fixture-1', status: 'running' } });
+  assert.equal(owners, 2); assert.equal(spawned.length, 3);
+  assert.equal(JSON.stringify(result).includes('PRIVATE_'), false);
+  for (const [name, bytes] of before) assert.deepEqual(readFileSync(join(f.home, name)), bytes);
+});
+
+test('resume does not replace original generation, infer a different client ID or create proof for malformed scope', resumeQualified, async t => {
+  const f = fixture(t); f.item(1);
+  const scope = { ...f.scope, generation: 'a'.repeat(64), clientUserMessageId: clientId };
+  assert.deepEqual(await resumeMetadataObservation(scope, METADATA_RESUME_QUALIFICATION, budget(), () => false),
+    { supported: false, injectionObserved: false, reason: 'metadata_owner_changed' });
+  assert.deepEqual(await resumeMetadataObservation({ ...scope, clientUserMessageId: 'different-client' }, METADATA_RESUME_QUALIFICATION, budget(), owner),
+    { supported: true, injectionObserved: false });
+  let owners = 0;
+  for (const invalid of [{ ...scope, generation: null }, { ...scope, home: f.home + '/../other' },
+    { ...scope, home: 'relative-fixture' }, { ...scope, generation: 'unverified' }]) {
+    assert.deepEqual(await resumeMetadataObservation(invalid, METADATA_RESUME_QUALIFICATION, budget(), () => { owners++; return true; }),
+      { supported: false, injectionObserved: false, reason: 'metadata_scope_invalid' });
+  }
+  assert.equal(owners, 0);
+});
 
 test('qualified warm metadata is projected without body/error output and without DB/WAL writes', posix, async t => {
   const f = fixture(t, true); f.item(1);
@@ -102,7 +206,7 @@ test('duplicate native client IDs fail closed instead of choosing a turn', posix
 test('version/platform scope and unknown generation refuse before starting any probe', posix, async t => {
   const f = fixture(t); let called = 0;
   const verify = () => { called++; return true; };
-  for (const version of ['0.159.0', '0.160.2', '0.160.1+unknown', 'garbage']) {
+  for (const version of ['0.159.0', '0.160.2', '0.162.2', '0.163.0', '0.160.1+unknown', 'garbage']) {
     assert.deepEqual(await metadataCapability(f.scope, version, budget(), verify), { supported: false, reason: 'metadata_version_unsupported' });
   }
   assert.deepEqual(await metadataCapability({ ...f.scope, generation: null }, '0.160.1', budget(), verify),

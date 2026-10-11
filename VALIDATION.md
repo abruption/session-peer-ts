@@ -142,6 +142,161 @@ request-count assertions are preserved. This was test isolation, not a runtime
 failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
 results are recorded in the PR after the correction.
 
+## 0.4.0 integrated SSH review checkpoint — 2026-10-11 KST
+
+Independent read-only review used Claude Code 2.1.296 with tools disabled and
+no session persistence. The first 163,540-byte input timed out after 240 seconds
+(exit 143, no response), so it supplied no review evidence. One narrower
+104,671-byte retry completed in 268.508 seconds with exit 0, `is_error=false`
+and actual model `claude-opus-5-5` (first-party). Its input SHA-256 was
+`69169aacf2c7f02d6606aebbdb23961e2694a0845e86875f2848469ea97a1718`,
+unchanged before/after the call. Neither call edited files or ran tests.
+
+The review identified two required corrections: a complete successful
+preparation followed by SSH failure must refuse the actual send, and a
+post-submission persistence failure must preserve a verified pending wait
+instead of losing its identifiers or inventing a terminal record. A stopped
+wait with the wrong process exit is also discarded without discarding separate
+native acceptance facts. These fixes and the earlier partial/no-EOF input
+deadline correction have focused regression tests; subsequent integrated
+test results are recorded separately. The review input predates those final
+corrections and is not a whole-final-commit external verification.
+
+A subsequent internal source audit found that failed-wait normalization could
+discard the original malformed/missing `error` before envelope validation. The
+regression now rejects that handoff while retaining independently valid native
+acceptance facts. The first integrated full run recorded 337 total / 331 pass /
+1 failure / 5 skips: a sub-millisecond early probe cutoff attempted to commit a
+timeout before its exact monotonic deadline and therefore retained pending
+state. The fix waits out only that fractional tail within the existing budget;
+it neither extends the deadline nor invents a persisted terminal result. The
+corrected run is recorded below.
+
+The corrected integrated macOS arm64 / Node 24.16.0 run used the exact published
+Python 1.1.0 export as `SESSION_PEER_PYTHON_ROOT` and
+`PYTHONDONTWRITEBYTECODE=1`: `npm test` (build, test:types and all test files)
+passed **337 total / 332 passed / zero failed / five Windows-only skipped**.
+The preceding focused SSH/delivery run passed 27/27. Repository/link/anchor and
+diff checks passed; `npm audit` reported zero vulnerabilities. These fixture
+results do not widen the native/platform or actual Windows evidence above.
+
+The first packaging invocation failed its reproducibility check because this
+validation document was edited between its two packs. That invocation is not a
+successful package check. Source/document edits were then stopped before the
+repeat packaging check; its result and the exact-commit artifact are reported
+in the PR checkpoint separately.
+
+The apparent fanout deadline extension follows the frozen **per-destination**
+budget, rather than one aggregate invocation deadline. Each destination keeps
+one setup/preparation/effect/observation budget with its cleanup reserve;
+sequential fanout can take their sum. Independent clocks cannot measure SSH
+transit delay, and an unknown source result may precede a delayed destination
+effect. No retry is authorized. A rejected dry-run timeout example lacked the
+required prepared correlation and already fails option validation; it did not
+require a runtime change.
+
+## 0.4.0 additional native verification — 2026-10-11 KST
+
+These are unpublished development checks on isolated, newly created test
+sessions. They do not establish final whole-commit/full-suite CI or authorize
+publication. Existing working sessions received no test message. Evidence is
+bounded to the tested compiled components; later integrated checks are separate.
+
+### Codex: exact metadata observation and manual confirmation
+
+On macOS arm64 / Node 24.16.0, native Codex **0.162.1**, upstream source
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`, was checked against the
+version/platform/source and live evidence in
+[`metadata-observation-native-evidence.json`](test/fixtures/metadata-observation-native-evidence.json).
+The production reader matched the original exact client message ID, original
+thread and generation before/after observation, and a positively linked
+completed turn. Native item ID differed from client ID; neither that turn
+completion nor the queue receipt was treated as ACK. The probe returned
+bounded IDs/status only, with no body or history API output. SQLite internally
+projects metadata from a body-bearing cell; this is not a promise that SQLite
+never accesses body bytes.
+
+Actual CLI checks used two additional fresh test threads, **one native queue
+attempt per thread**, with no fallback or resubmission. Both observe-send
+commands exited 0 with `status=queued`, `submitted=true`,
+`consumptionConfirmed=false` and retry disallowed. A separate delivered wait
+on the first thread was satisfied with exact injection evidence; status query
+exited 0. Starting that wait before manual confirmation lost provable ordering:
+confirmation correctly exited 1 with `receipt_order_unprovable`, retaining
+original delivery facts and performing no requeue.
+
+On the second thread, the operator verified the test-only voluntary response
+against the original correlation, then confirmed **before starting another
+wait**. Confirmation and status exited 0 with `state=acknowledged`,
+`assurance=operator_confirmed`, `late=false`; a subsequent acknowledged wait
+was satisfied and exited 0. This is an explicit operator attestation, not an
+automated receipt collector or model identity proof. Automated receipt
+capability remains unsupported. All owned test terminals were closed. Native
+home test records were retained; no existing native record was deleted.
+
+The fixture records exact compiled component hashes, including
+`dist/metadata-observation.js` SHA-256
+`4d01dae9a90f4cda3c7b45bf0c126067bff403f345d0d23bc593cc57363e0f83`
+and `dist/handoff-ledger.js`
+`efb46bcd1892ba9eb843a4ae603987f15ce535d942938dfe2c0e98a1343edcb9`.
+These identify the tested components, not a final integrated commit.
+
+### Claude: correlated submission and unsupported required ACK
+
+A separate test-only Claude Code **2.1.296 / Opus 5.5** session on macOS
+arm64 / Node 24.16.0 produced a READY response. Its launch identity, PID and
+fresh private working directory were checked before each submission. Native
+Claude assigned a non-null name; nullable names remain synthetic fixture
+coverage. No tools, commands, file tasks or external messages were requested.
+
+A prepared-ID correlated send and a separate best-effort `--request-ack`
+send each submitted exactly once and exited 0 with `status=posted`,
+`submitted=true`, `consumptionConfirmed=false`, handoff state `submitted`
+and retry disallowed. Each produced its own identification-marker response
+in the owned terminal. Subsequent status queries retained state `submitted`,
+`injectionObserved=false` and ACK `not_requested`/`unsupported`: a plain
+assistant response was not promoted to machine ACK or native observation.
+Required `--wait-for acknowledged` instead exited 1 before effect with
+`evidence_unsupported`, `status=refused`, `submitted=false` and unsupported
+ACK/wait. Its marker never appeared in the owned terminal. Zero effect is
+supported by the pre-effect code/result contract and terminal check, not socket
+instrumentation. The terminal closed; its PID and native registry record were
+absent. Private workspace, message files and sender ledger were removed.
+
+The tested Claude compiled `dist/cli.js` SHA-256 was
+`7195f5bd049bdba7ffbffd1d69473d9b90f9a42646851697e1df149054dc5d1f`;
+`dist/handoff-operations.js` was
+`99e15fbd8ad04e5f28490512b61bf0296b21d96ee787d63d1b8293e905f8665e`.
+This earlier build differs from the subsequent Codex build; these results
+must not be presented as a single final whole-commit run. Default native CLI
+authentication was used without reading, copying or recording credentials.
+
+### Windows: separate failed real-host fixture gate
+
+The actual Windows 10 x64 / Node 24.16.0 suite recorded **266 total,
+155 passed, 2 failed, 109 skipped**. The child failure and enclosing failure
+refer to one underlying fake-SSH path, not two independent runtime defects.
+The unsupported native-platform qualification guard selection separately
+passed 3/3; it does not qualify observation on Windows.
+
+Additional strict/batch SSH diagnostics compiled the repository C# fixture.
+Twelve minimal Node/PowerShell child-launch controls passed across standard
+stream redirection and window settings; encoded PowerShell `exit 0` also
+passed. The owned test `.cmd --version` command instead reproduced
+`Win32Exception: Access is denied` in `Process.StartWithCreateProcess`, with
+both ordinary and isolated HOME/USERPROFILE, including a failure followed by
+a successful `exit 0` control in the same executable. General process creation
+worked; the exact host cause remains unverified. A recent Defender event query
+with no matches neither identifies nor excludes a security product/policy.
+The **real-host SSH fixture gate remains unpassed**; fixture CI is distinct
+and cannot erase this result. No policy, permission, service, guard or execution
+bypass was applied. No real agent/native queue was invoked by these Windows
+fixtures. The marked remote diagnostic directory was deleted and its absence
+confirmed. No private hostnames, account paths or session identifiers are
+included here. Windows native observation, SSH handoff, automated ACK,
+restart/crash continuity and other native versions/platforms remain outside
+these successful macOS checks.
+
 ## Python 1.1.0 ordinary comparison — 2026-10-11 KST
 
 Unpublished 0.4.0 development checkpoint: an isolated `git archive` export of
