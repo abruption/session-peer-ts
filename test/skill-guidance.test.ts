@@ -60,7 +60,7 @@ test('TS skill baseline list and guarded Codex dry-run examples never submit', t
   const env = { ...process.env, HOME: root, USERPROFILE: root, CODEX_HOME: '', SESSION_PEER_CODEX_HOMES: '[]',
     CLAUDE_CONFIG_DIR: join(root, '.claude'), ANTHROPIC_CONFIG_DIR: '' };
   function invoke(args: string[]) {
-    const result = spawnSync(process.execPath, [cli, ...args], { env, encoding: 'utf8', input: 'fixture message', timeout: 15000 });
+    const result = spawnSync(process.execPath, [cli, ...args], { env, encoding: 'utf8', input: args.includes('--message') && args[args.indexOf('--message') + 1] === '-' ? 'fixture message' : undefined, timeout: 15000 });
     assert.ifError(result.error); assert.equal(result.signal, null);
     return result;
   }

@@ -36,7 +36,7 @@ The ordinary SSH response correction is documented separately as the [0.3.3 ordi
 
 ## Unreleased opt-in handoff CLI — 0.4.0 work
 
-This source adds an explicit private POSIX sender ledger. The published 0.3.1
+This source adds an explicit private POSIX sender ledger. The published 0.3.3
 package does not contain these commands. Default sends retain their native
 status, optional fields and exit behavior. The frozen design is tracked in #69;
 this implementation does not change its exact vendored document or fixture.
