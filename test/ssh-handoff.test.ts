@@ -241,18 +241,16 @@ test('private wire input has a deadline before EOF, with bootstrap charged and n
 
 test('destination hard watchdog terminates a hung handler and reaps its owned native process group', posix, async t => {
   const f = await fixture(t), pidFile = join(f.root, 'owned-worker.pid');
-  const worker = `require('node:fs').writeFileSync(process.argv[1],String(process.pid));setInterval(()=>{},1000);`;
-  const processModule = new URL('../dist/process.js', import.meta.url).href;
   // Replace only the operation with a hung owned-worker stand-in. The actual
   // wire parser, monotonic budget, watchdog and process signal cleanup run.
-  const replacement = `import { run } from ${JSON.stringify(processModule)};
-export const privateMessage=()=>'';export const handoffCommand=()=>{};
-export async function prepareHandoff(){await run(process.execPath,['-e',${JSON.stringify(worker)},${JSON.stringify(pidFile)}],{timeout:60000});return {value:{},exitCode:1};}
-export const handoffSend=prepareHandoff;`;
-  const hook = join(f.root, 'watchdog-hook.mjs'), loader = join(f.root, 'watchdog-loader.mjs');
-  writeFileSync(hook, `export async function load(url,context,next){if(url.endsWith('/handoff-operations.js'))return {format:'module',shortCircuit:true,source:${JSON.stringify(replacement)}};return next(url,context);}`);
-  writeFileSync(loader, `import {register} from 'node:module';register(${JSON.stringify(new URL('file://' + hook).href)},import.meta.url);`);
-  const child = spawn(process.execPath, ['--import', loader, cli, ...wireArgs(6500)], { env: f.destEnv });
+  // Paths are structured loader data/process arguments, never generated code.
+  const loader = fileURLToPath(new URL('./fixtures/watchdog-bootstrap.mjs', import.meta.url));
+  const child = spawn(process.execPath, ['--import', loader, cli, ...wireArgs(6500)], {
+    env: { ...f.destEnv, FIXTURE_WATCHDOG_PID_FILE: pidFile, FIXTURE_WATCHDOG_LOADER: JSON.stringify({
+      targetUrl: new URL('../dist/handoff-operations.js', import.meta.url).href,
+      replacementUrl: new URL('./fixtures/watchdog-operation.mjs', import.meta.url).href,
+    }) },
+  });
   child.stdout.resume(); child.stderr.resume();
   const timeout = setTimeout(() => child.kill('SIGKILL'), 10000);
   t.after(() => { clearTimeout(timeout); if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); });
