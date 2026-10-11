@@ -966,3 +966,23 @@ Version 0.3.3 uses compiled `VERSION=0.3.3` on the production doctor inspection 
 See the [bounded grammar, matrix and reader evidence](docs/design/typescript-skill-compatibility.md). Companion [Draft #20 design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the 2026-10-09 static design review of exact #126 `ba18bb806a6ba503381259b4255211af3adc0336` and release Draft #129 `bfb3d6f1256ab076a76660e08a7bf1ad071a6c6c`; their reviewed design SHA-256 values are recorded in the linked guard design. No tests were rerun in that review. At this dated checkpoint, runtime and successor skill were unpublished. The earlier queued coordination request remains historical, without independently established consumption or approval. Design/fixture acceptance does not authorize runtime merge/release, final skill metadata/publication/installation/pin changes or claim public compatibility; the immutable npm 0.3.2 checker stays legacy-only. The guard runtime must actually publish before separate successor skill finalization/tag/publication/pin changes. At that checkpoint the install pin remained `081cc3c1d16a394bd92824333f4bc61c36951799`; managers own upgrades, and no postinstall is introduced.
 
 At the 2026-10-09 KST preparation checkpoint, [#128](https://github.com/abruption/session-peer-ts/issues/128) integrated open PRs #125/#127 and Draft #126 for review; that preparation did not bypass their human merge gate or approve staging/publication. 0.3.2 and 0.3.3 refuse each other's SSH preflight. Windows jump-host #20, provisioning #23, the Python 1.0.2 oracle, and unshipped 0.4/native ACK boundaries remain unchanged.
+
+
+### Published Python handoff checkpoint — 2026-10-11
+
+Python [1.1.0](https://github.com/abruption/session-peer/releases/tag/v1.1.0) is now public at
+`8ca77cf31254c8287a2593fe484bb30a7dba2727`. Its
+[handoff contract](https://github.com/abruption/session-peer/blob/8ca77cf31254c8287a2593fe484bb30a7dba2727/docs/contracts/handoff-v1.md)
+SHA-256 is `46a953010c49214bd8f969412f26713384fbe09a0ba78ebf0fef75da40d0d889`,
+byte-identical to the jointly reviewed design. The published fixture SHA-256 is
+`866429a99973047cd6211fdc67013d9929b5a27ba3e618036ab1836bcfd07d3c`;
+two negative control-character examples differ from the frozen shared fixture.
+The exact reviewed TS mirror remains unchanged; publication is not permission
+to regenerate shared vectors or declare runtime conformance.
+
+The pin manifest records this source-only comparison separately from the
+historical Python 1.0.3 design baseline and the Python 1.0.2 ordinary test oracle.
+The Python release's experimental local Claude receipt path does not establish
+automated ACK support in the TS implementation. Cross-runtime execution,
+receipt bootstrap, original generation and platform acceptance remain #69–72
+implementation gates. No runtime/reference marker is repinned by this record.

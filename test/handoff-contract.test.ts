@@ -176,3 +176,15 @@ test('final candidate distinguishes native profiles, unsupported waits and inter
     assert.equal(value.expected.wireAccepted, false); assert.equal(value.expected.resubmit, false);
   }
 });
+
+
+test('published Python checkpoint cannot silently replace the frozen fixture or claim runtime parity', () => {
+  const review = (JSON.parse(file('handoff-v1.pin.json').toString('utf8')) as { publishedPythonReview: Record<string, unknown> }).publishedPythonReview;
+  assert.equal(review.version, '1.1.0');
+  assert.equal(review.commit, '8ca77cf31254c8287a2593fe484bb30a7dba2727');
+  assert.equal(review.documentSha256, pin.document.sha256);
+  assert.notEqual(review.fixtureSha256, pin.fixture.sha256);
+  assert.equal(review.sharedFixtureReplaced, false);
+  assert.equal(review.runtimeParityEstablished, false);
+  assert.equal(review.reviewScope, 'published_document_identity_and_fixture_diff_only');
+});
