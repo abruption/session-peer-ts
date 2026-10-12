@@ -66,6 +66,14 @@ used the existing Python 1.0.2 reference at
 fixture (19 files) were byte-compared with the exact upstream archive before
 execution. No reference repin was made.
 
+Initial PR CI `38187131255` passed the added real-PowerShell exit regression on
+Windows Node 22 but failed the following existing SSH contract's absolute
+call-count assertion: it inherited the new subtest's log entries. The fixture
+now explicitly initializes that existing subtest's own SSH call log; its exact
+request-count assertions are preserved. This was test isolation, not a runtime
+failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
+results are recorded in the PR after the correction.
+
 ## 0.3.3 candidate preparation — 2026-10-09 KST
 
 Preparation [#128](https://github.com/abruption/session-peer-ts/issues/128)

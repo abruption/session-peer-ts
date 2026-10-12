@@ -252,6 +252,8 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     assert.equal(readFileSync(log, 'utf8'), '', 'failed executable lookup cannot dispatch a request');
   });
   await t.test('Windows SSH executes encoded PowerShell/.cmd with stdin JSON and preserves refused/unknown', async () => {
+    // This subtest measures its own dispatches; earlier native-exit cases also use fake SSH.
+    writeFileSync(process.env.FIXTURE_SSH_LOG!, '');
     const remote = join(f.root, 'remote cli.cmd');
     writeFileSync(remote, `@echo off\r\n"${process.execPath}" "${cli}" %*\r\n`);
     const args = ['send', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote,
