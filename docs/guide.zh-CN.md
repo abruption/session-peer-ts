@@ -4,13 +4,13 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**文档和源码版本：0.3.3。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](../VALIDATION.md)，发布流程见 [RELEASING.md](../RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.2 与 0.3.3 会拒绝彼此的 SSH 预检。
+**文档和源码版本：0.3.4。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](../VALIDATION.md)，发布流程见 [RELEASING.md](../RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.3 与 0.3.4 会拒绝彼此的 SSH 预检。
 
-这是 0.3.3 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。此前的发布记录见 [0.3.1 公开发布证据](../VALIDATION.md#public-031--2026-10-04-kst)；下文 0.1.0 的说明用于旧版本对比。
+这是 0.3.4 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。此前的发布记录见 [0.3.1 公开发布证据](../VALIDATION.md#public-031--2026-10-04-kst)；下文 0.1.0 的说明用于旧版本对比。
 
 <a id="迁移边界-033-候选"></a>
 
-## 迁移边界 (0.3.3)
+## 迁移边界 (0.3.4)
 
 [0.3.2 公开记录](../VALIDATION.md#public-032--2026-10-07-kst)固定了发布源码和产物。SSH 预检验证 TS 版本标识完全一致，不检查提交哈希；源码构建使用的已审核提交需要由操作人员另行对齐。
 
@@ -19,7 +19,7 @@
 - 重复 `--host` 返回按请求顺序排列的数组。主机分别执行期间发生的失败汇总为退出码 1；执行前的命令整体拒绝（如主机重复或消息为空）在数组输出中仍保持退出码 2。公开 0.3.2 在 SSH 退出 255 或超时后，也可能丢失完整响应的证据。0.3.3 保留与请求匹配的完整事实，并返回本地退出码 1 和 `sshTransport`。不完整或无效证据仍为 unknown。unknown 时不得自动重发。
 - 0.2.0 引入的基础 doctor 不执行 Codex，也不向 inbox 提交。0.3.0 起，显式 `--check-return-route` 仅对可用的非本地目标执行有时间限制的反向 SSH 无操作命令。同机自身路由无需 SSH 即返回 `verified`、`transport:local`、`self_route_normalized`；缺少主机时在任何探测前失败。`--check-reply-to` 不受支持。verified 表示本地路由归一化或一次 SSH 无操作命令成功，不是 ACK 认证或通用反向访问保证。
 - 将同机 Reply-To 归一化为本地路径，必须明确指定匹配的 OS 用户、使用可识别的准确本机名称，且没有显式 SSH 选项。发送者证据冲突时省略身份；Claude 名称不可用时使用 PID。
-- npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。现有技能元数据保持 `0.1.0`；#118 的后续 Draft 不是安装固定来源，也不是已发布兼容性检查器的证据。
+- npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。公开 TS 0.3.3 接受经过审核的旧 `0.1.0` 和已发布 `0.2.0` 技能的精确配置；此 0.3.4 候选保留相同的有限判定表。安装部分固定了独立发布的技能源码。
 - Windows 验证使用公开 0.3.1、Windows 10 x64、管理员账号、PowerShell 5.1 和 Node 24.16.0。验证范围包括离线安装、包装器与原生锁、操作端 doctor 和不存在目标的 dry-run，以及 31 项本地 fixture。Node 22 仅确认版本标识和原生锁。非管理员、其他架构、F6 运行时校验、此前 Linux 实验的最新规则仍未验证。这不是 0.3.2 实机 ACK 或部署辅助工具的验证。
 
 请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。Python 1.0.2 测试基准保持不变。对比的两个公开 CLI 都没有通用原生 ACK/wait、端到端去重或 Side Session 支持。Relay/MCP 不在此次迁移对比范围内。
@@ -40,7 +40,7 @@
 
 向正在运行的 **Claude Code 和 Codex 会话**发送消息，支持本机和跨机器 SSH。这是运行于 Node.js 的 TypeScript 客户端，不需要 Python。
 
-**这是 0.3.3 使用指南。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
+**这是 0.3.4 使用指南。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。
 
 ## 功能与边界
 
@@ -57,7 +57,7 @@
 
 构建后，`node dist/cli.js list --json` 合并列出 Claude/Codex，`list --agent codex --json` 查找已知 home。公开 npm **0.1.0** 仍要求显式 agent，以及 Codex 列表所需的 home；0.2.0 也支持显式命令格式。
 
-范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（0.3.3）。
+范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（0.3.4）。
 
 ### 0.2.0 CLI 易用性
 
@@ -79,15 +79,15 @@ macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x
 
 使用 Node 22.x 的 22.13 及以上或 24.x，并确认要安装的确切版本是否已发布。Python CLI 也使用同一个命令名；若已有安装，请先检查 PATH。
 
-**安装 0.3.3：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](#从源码构建)。
+**安装 0.3.4：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](#从源码构建)。
 
 ```sh
-npm view session-peer@0.3.3 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.3
+npm view session-peer@0.3.4 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.4
 session-peer --version
 ```
 
-预期输出：`session-peer 0.3.3 (typescript)`。
+预期输出：`session-peer 0.3.4 (typescript)`。
 
 1. 用 `session-peer list --agent claude --json` 查找目标并选择准确 PID。
 2. 用 `session-peer send --to CLAUDE_PID --message 'Please reply after checking.' --dry-run --json` 验证，不提交。
@@ -106,7 +106,7 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # 可选：全局安装前先检查 PATH 选择的现有命令
-npm install --global --ignore-scripts ./session-peer-0.3.3.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.4.tgz
 session-peer --version
 ```
 
@@ -116,7 +116,7 @@ session-peer --version
 
 安装前后用 `type -a session-peer` 和 `command -v session-peer` 检查实际执行项。其他实现也可能提供同名命令；请选择 PATH 上的一种，或显式运行 `node /absolute/path/dist/cli.js`。不要用 `--force` 覆盖其他管理器的文件。本包不会自动安装、删除或调整 Python 包、技能或服务。卸载使用 `npm uninstall --global session-peer`，随后再次检查 PATH。
 
-在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.3.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` 卸载。
+在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.4.tgz` 安装到隔离目录。以 `& "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version` 验证，并可用 `npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer` 卸载。
 
 ## 使用
 
@@ -207,14 +207,14 @@ Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde618
 
 ## npm 版本
 
-公开 **0.3.2** 于 2026-10-07 KST 完成验证（[不可变公开记录](../VALIDATION.md#public-032--2026-10-07-kst)）。请用下方注册表查询确认 0.3.3 的当前可用性和 npm 标签；带日期的准备证据不能证明后续发布结果。
+公开 **0.3.2** 于 2026-10-07 KST 完成验证（[不可变公开记录](../VALIDATION.md#public-032--2026-10-07-kst)）。请用下方注册表查询确认 0.3.4 的当前可用性和 npm 标签；带日期的准备证据不能证明后续发布结果。
 
 0.2.1 已于 2026-09-29 KST、0.2.0 已于 2026-09-28 KST 公开并验证。请参阅
 [0.2.1 公开记录](../VALIDATION.md#public-021--2026-09-29-kst)（之后的版本各自追加带日期的记录），
 安装前核对准确版本与当前标签。
 
 ```sh
-npm view session-peer@0.3.3 version dist.integrity
+npm view session-peer@0.3.4 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -253,7 +253,7 @@ dist-tag（3 秒超时，不重试），并报告 `current`、`latest`、`channe
 `ahead`）、`managedBy`、`updateCommand` 和 `guidance`。只有根据当前 CLI 路径能确切识别
 安装的管理方时才给出命令：其自身 `session-peer` 启动器指向本包的 npm 全局 prefix
 （默认、Homebrew、nvm、nvm-windows、fnm，例如
-`npm install --global --ignore-scripts session-peer@0.3.3`），清单中声明了
+`npm install --global --ignore-scripts session-peer@0.3.4`），清单中声明了
 `session-peer` 的 pnpm、Yarn、Bun 全局存储，Volta，或 npx 缓存。项目安装
 （`npm_project`、`pnpm_project`）、源码检出（`source`）以及其他情况（`unknown`）只返回
 `updateCommand: null` 和一句 `guidance`，因此不会给出可能修改无关当前目录的命令。它只报告

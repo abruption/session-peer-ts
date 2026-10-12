@@ -13,7 +13,7 @@ export const SKILL_METADATA_LIMIT = 65536;
 const keys = ['version', 'runtime-implementation', 'runtime-min-version', 'runtime-full-version', 'runtime-capability-policy'] as const;
 // Finite reviewed profiles: public 0.3.2 is legacy-only; public 0.3.3 accepts
 // both profiles. The explicit 0.3.4 row is an unreleased patch proposal, not
-// generic future-version support. Compiled VERSION remains 0.3.3 here.
+// generic future-version support. Compiled VERSION is 0.3.4 in this candidate.
 const matrix: Record<string, readonly string[]> = {
   '0.3.2': ['0.1.0'], '0.3.3': ['0.1.0', '0.2.0'], '0.3.4': ['0.1.0', '0.2.0']
 };

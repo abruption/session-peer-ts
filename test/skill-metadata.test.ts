@@ -28,7 +28,7 @@ test('finite runtime/profile matrix preserves published 0.3.2 and 0.3.3 profiles
   const legacy = fixtureText(), successor = fixtureText({ ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' });
   assert.deepEqual(validateSkillMetadata(legacy, '0.3.2'), compatible);
   assert.deepEqual(validateSkillMetadata(successor, '0.3.2'), incompatible);
-  assert.equal(VERSION, '0.3.3');
+  assert.equal(VERSION, '0.3.4');
   for (const text of [legacy, successor]) {
     assert.deepEqual(validateSkillMetadata(text, '0.3.3'), compatible);
     assert.deepEqual(validateSkillMetadata(text), compatible);
@@ -40,9 +40,9 @@ test('finite runtime/profile matrix preserves published 0.3.2 and 0.3.3 profiles
   }
 });
 
-test('unreleased 0.3.4 patch row permits only the two exact published profiles', () => {
+test('0.3.4 patch row permits only the two exact published profiles', () => {
   const successor = { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' };
-  assert.equal(VERSION, '0.3.3');
+  assert.equal(VERSION, '0.3.4');
   for (const values of [fields, successor]) {
     assert.deepEqual(validateSkillMetadata(fixtureText(values), '0.3.4'), compatible);
     for (const key of Object.keys(values)) {

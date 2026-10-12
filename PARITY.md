@@ -1,8 +1,8 @@
 # Python compatibility and npm migration
 
-Updated 2026-10-09 KST. Python reference: **1.0.2**,
+Updated 2026-10-12 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes the **TS 0.3.3 source/package contract**: the 0.2.0 unified listing, safe home selection,
+This matrix describes the **TS 0.3.4 source/package contract**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
 separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 [0.2.1 reliability and hardening](#021-reliability-and-hardening) changes, and the
@@ -14,6 +14,12 @@ SSH preflight enforces the exact same TS version banner. For builds from source
 between releases, operators should also align reviewed commits; the wire does not
 verify a source commit. `referenceVersion: "1.0.2"` identifies the comparison baseline,
 not complete parity. See [VALIDATION.md](VALIDATION.md) for dated evidence.
+
+## 0.3.4 patch preparation — 2026-10-12 KST
+
+[PR #134](https://github.com/abruption/session-peer-ts/pull/134) corrects Windows-destination PowerShell forwarding of native exit codes for version preflight and wire requests. A missing native exit fails with 1; complete validated abnormal responses retain independent submission facts. Strict response limits, exact-version SSH, host-key checks and no automatic resend remain unchanged. This is not delivery or ACK evidence.
+
+The four guides pin independently published TS skill 0.2.0 source `8482cf644507c682915e35c85aa3384c53864906`. The 0.3.4 candidate accepts only the same two exact reviewed profiles as public 0.3.3; 0.3.5 and unreviewed versions remain incompatible. Python reference 1.0.2 is unchanged. Draft 0.4 handoff/app-server/observation and Side Session are excluded.
 
 ## Feature and command matrix
 
