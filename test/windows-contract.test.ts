@@ -11,6 +11,7 @@ import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { inspectWriter, probeLock, resolveWriter } from '../dist/writer.js';
 import { inspectWindows, windowsProcessStart } from '../dist/windows.js';
+import { VERSION_LINE } from '../dist/protocol.js';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const cli = resolve('dist/cli.js');
@@ -76,7 +77,7 @@ async function fixture(t: TestContext) {
     const path = process.env[key]!;
     return existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
   }
-  async function invoke(args: string[], env: NodeJS.ProcessEnv = {}) {
+  async function invokeWithExit(args: string[], env: NodeJS.ProcessEnv = {}) {
     const child = spawn(process.execPath, [cli, ...args, '--json', '--no-update-notice'], { env: { ...process.env, ...env } });
     children.add(child);
     let stdout = '', stderr = ''; child.stdout!.on('data', part => { stdout += part; }); child.stderr!.on('data', part => { stderr += part; });
@@ -87,10 +88,11 @@ async function fixture(t: TestContext) {
     assert.ok([0, 1, 2].includes(code as number), `CLI exit ${code}: ${stderr}`);
     const result = JSON.parse(stdout), items = [result].flat();
     assert.ok(items.every(item => item.schemaVersion === 1)); assert.equal(items.every(item => item.ok && !item.sshTransport), code === 0);
-    return result;
+    return { value: result, code };
   }
+  const invoke = async (args: string[], env: NodeJS.ProcessEnv = {}) => (await invokeWithExit(args, env)).value;
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', binary, '--message', 'fixture 🚀', '--no-from'];
-  return { root, binary, home, lock, database, holder, stop, log, invoke, args, closeChildren };
+  return { root, binary, home, lock, database, holder, stop, log, invoke, invokeWithExit, args, closeChildren };
 }
 
 // Replace only the production sampling delay with an explicit barrier. Waiting
@@ -206,6 +208,48 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
       assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
     }
     await f.stop(owner);
+  });
+  await t.test('Windows PowerShell forwards native exits rather than collapsing 2 and 255 to 1', async () => {
+    const dir = join(f.root, 'native-exit'); mkdirSync(dir);
+    copyFileSync(resolve('test/fixtures/windows-ssh-exit.mjs'), join(dir, 'native-fixture.mjs'));
+    const remote = join(dir, 'remote cli.cmd'), config = join(dir, 'config.json'), log = join(dir, 'calls.jsonl');
+    writeFileSync(remote, `@echo off\r\n"${process.execPath}" "%~dp0native-fixture.mjs" %*\r\n`);
+    const args = ['send', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote,
+      '--to', `codex:${id}`, '--codex-home', f.home, '--message=EXIT FIXTURE', '--no-from', '--no-reply-to'];
+    const modes = [
+      { resultKind: 'success', nativeExit: 0, exit: 0, status: 'queued' },
+      { resultKind: 'refused', nativeExit: 1, exit: 1, status: 'refused' },
+      { resultKind: 'refused', nativeExit: 2, exit: 2, status: 'refused' },
+      { resultKind: 'success', nativeExit: 255, exit: 1, status: 'queued' },
+      { resultKind: 'malformed', nativeExit: 2, exit: 1, status: 'unknown' },
+      { resultKind: 'missing', nativeExit: 0, exit: 1, status: 'unknown' },
+    ];
+    for (const mode of modes) {
+      writeFileSync(config, JSON.stringify({ ...mode, preflightBanner: VERSION_LINE }));
+      writeFileSync(log, '');
+      const result = await f.invokeWithExit(args);
+      assert.equal(result.code, mode.exit); assert.equal(result.value.status, mode.status);
+      const calls = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+      assert.deepEqual(calls.map(c => c.flag), ['--version', '--stdio-request']);
+      assert.ok(calls.every(c => c.argvCount === 1)); assert.equal(calls[1].hasStdinMessage, true);
+      if (mode.resultKind === 'success') {
+        assert.equal(result.value.submitted, true); assert.equal(result.value.queueId, 'fixture-only-queue-id');
+        assert.equal(result.value.consumptionConfirmed, false);
+        if (mode.nativeExit === 255) {
+          assert.deepEqual(result.value.sshTransport, { status: 'failed', reason: 'ssh_exit_nonzero', exitCode: 255 });
+          assert.equal(result.value.retryAllowed, false);
+        }
+      } else if (mode.resultKind === 'refused') assert.equal(result.value.submitted, false);
+      else { assert.equal(result.value.error, 'outcome_unknown'); assert.equal(result.value.submitted, null); assert.equal(result.value.retryAllowed, false); }
+    }
+    writeFileSync(config, JSON.stringify({ preflightExit: 2, preflightBanner: VERSION_LINE })); writeFileSync(log, '');
+    const preflight = await f.invokeWithExit(args);
+    assert.equal(preflight.code, 1); assert.equal(preflight.value.error, 'ssh_preflight_failed'); assert.equal(preflight.value.submitted, false);
+    assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line).flag), ['--version']);
+    writeFileSync(log, '');
+    const missing = await f.invokeWithExit(args.map(arg => arg === remote ? join(dir, 'absent.cmd') : arg));
+    assert.equal(missing.code, 1); assert.equal(missing.value.error, 'ssh_preflight_failed'); assert.equal(missing.value.submitted, false);
+    assert.equal(readFileSync(log, 'utf8'), '', 'failed executable lookup cannot dispatch a request');
   });
   await t.test('Windows SSH executes encoded PowerShell/.cmd with stdin JSON and preserves refused/unknown', async () => {
     const remote = join(f.root, 'remote cli.cmd');

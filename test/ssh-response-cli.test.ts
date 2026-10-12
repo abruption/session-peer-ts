@@ -23,7 +23,12 @@ function fixture(t: TestContext) {
   writeFileSync(join(dir, 'ssh'), `#!${process.execPath}
 const fs=require('node:fs'),args=process.argv.slice(2);
 if(args.includes('-G')){console.log('user fixture-user');process.exit(0);}
-if(args.at(-1).endsWith('--version')){console.log(process.env.FIXTURE_VERSION);process.exit(0);}
+let command=args.at(-1);
+if(command.startsWith('powershell.exe ')){
+command=Buffer.from(command.split(' ').at(-1),'base64').toString('utf16le');
+if(!command.endsWith('; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE'))throw new Error('missing_native_exit_forwarding');
+}
+if(command.endsWith('--version')||command.includes(' --version;')){console.log(process.env.FIXTURE_VERSION);process.exit(0);}
 const input=fs.readFileSync(0,'utf8'),host=args[args.indexOf('--')+1];
 fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify({host,input,args})+'\\n');
 const responses=JSON.parse(fs.readFileSync(process.env.FIXTURE_RESPONSES,'utf8')),r=responses[host];
@@ -114,4 +119,18 @@ test('CLI wrong Claude PID/name and wrong command/target evidence stay unknown',
   const dry = { ...claude, status: 'validated', submitted: false, dryRun: true };
   const validated = await f.invoke({ fixture: { text: JSON.stringify(dry), code: 255 } }, [...args('123'), '--dry-run']);
   assert.equal(validated.value.status, 'validated'); assert.equal(validated.value.submitted, false); assert.equal(validated.calls.length, 1);
+});
+
+// On POSIX this checks construction/framing only. Actual PowerShell execution is
+// covered by windows-contract.test.ts and the separately recorded physical SSH run.
+test('Windows destination command keeps native exit forwarding out of the stdin message', posix, async t => {
+  const f = fixture(t);
+  const r = await f.invoke({ fixture: { text: JSON.stringify(codex), code: 0 } },
+    [...args(`codex:${id}`), '--remote-platform', 'win32', '--remote-bin', String.raw`C:\fixture\quote'cli.cmd`]);
+  assert.equal(r.code, 0); assert.equal(r.value.submitted, true); assert.equal(r.calls.length, 1);
+  const command = r.calls[0].args.at(-1);
+  const decoded = Buffer.from(command.split(' ').at(-1), 'base64').toString('utf16le');
+  assert.ok(decoded.startsWith(String.raw`& 'C:\fixture\quote''cli.cmd' --stdio-request;`));
+  assert.equal(decoded.includes('DEMO-FIXTURE'), false);
+  assert.ok(JSON.parse(r.calls[0].input).args.includes('--message=DEMO-FIXTURE'));
 });

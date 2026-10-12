@@ -20,7 +20,7 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**문서·소스 기준 버전: 0.3.3.** 2026-10-09 KST 준비 시점에는 0.3.3이 미발행이었고 공개 npm `latest`는 **0.3.2**, `preview`는 `0.1.0-preview.1`이었습니다. 아래 0.3.3 npm 예시를 사용하기 전에 레지스트리에서 현재 제공 여부를 확인하세요. 제공되지 않으면 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드와 SSH 양쪽은 같은 검토 버전이 필요하며, 0.3.2와 0.3.3은 서로의 SSH 사전 확인을 거부합니다.
+**문서·소스 기준 버전: 0.3.3.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.2와 0.3.3은 서로의 SSH 사전 확인을 거부합니다.
 
 <a id="demo"></a>
 ## 시연
@@ -84,7 +84,7 @@ session-peer --version
 ### 업데이트
 
 npm으로 설치한 클라이언트는 사용자가 직접 npm으로 업데이트합니다. 사용 가능한 배포 태그
-(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 승인·발행 이후 이전 npm 설치본을 0.3.3으로
+(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 공개된 0.3.3으로
 업데이트합니다. `session-peer` CLI는 업데이트를 설치하지 않습니다. `session-peer
 update --check`는 새 버전이 있는지 확인할 뿐입니다.
 

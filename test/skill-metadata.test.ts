@@ -24,21 +24,38 @@ const missing = { status: 'unknown', code: 'skill_metadata_missing' };
 const unreadable = { status: 'unknown', code: 'skill_metadata_unreadable' };
 function withoutPath(value: ReturnType<typeof inspectSkill>) { const { path: _path, ...rest } = value; return rest; }
 
-test('finite runtime/profile matrix preserves public 0.3.2 and checks the 0.3.3 candidate proposal', () => {
+test('finite runtime/profile matrix preserves published 0.3.2 and 0.3.3 profiles', () => {
   const legacy = fixtureText(), successor = fixtureText({ ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' });
   assert.deepEqual(validateSkillMetadata(legacy, '0.3.2'), compatible);
   assert.deepEqual(validateSkillMetadata(successor, '0.3.2'), incompatible);
   assert.equal(VERSION, '0.3.3');
   for (const text of [legacy, successor]) {
-    // Candidate source proposal only; companion exact review remains required.
     assert.deepEqual(validateSkillMetadata(text, '0.3.3'), compatible);
     assert.deepEqual(validateSkillMetadata(text), compatible);
     assert.deepEqual(validateSkillMetadata(text, undefined), validateSkillMetadata(text, VERSION));
-    for (const runtime of ['0.0.9', '0.3.4', '0.4.0', '1.0.0']) assert.deepEqual(validateSkillMetadata(text, runtime), incompatible);
+    for (const runtime of ['0.0.9', '0.3.5', '0.4.0', '1.0.0']) assert.deepEqual(validateSkillMetadata(text, runtime), incompatible);
     for (const runtime of [null, {}, 0, '', '0.3.3-preview.1', '00.3.3']) {
       assert.deepEqual(validateSkillMetadata(text, runtime), missing);
     }
   }
+});
+
+test('unreleased 0.3.4 patch row permits only the two exact published profiles', () => {
+  const successor = { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' };
+  assert.equal(VERSION, '0.3.3');
+  for (const values of [fields, successor]) {
+    assert.deepEqual(validateSkillMetadata(fixtureText(values), '0.3.4'), compatible);
+    for (const key of Object.keys(values)) {
+      assert.deepEqual(validateSkillMetadata(fixtureText({ ...values, [key]: 'unsupported' }), '0.3.4'), incompatible, key);
+    }
+    assert.deepEqual(validateSkillMetadata(fixtureText(values, 'session-peer'), '0.3.4'), incompatible);
+    assert.deepEqual(validateSkillMetadata(fixtureText(values).replace('metadata:', 'metadata: []'), '0.3.4'), missing);
+    for (const runtime of ['0.3.5', '0.4.0', '9.9.9']) assert.deepEqual(validateSkillMetadata(fixtureText(values), runtime), incompatible);
+    for (const runtime of ['0.3.4-preview.1', '00.3.4']) assert.deepEqual(validateSkillMetadata(fixtureText(values), runtime), missing);
+  }
+  // Mixing legitimate fields from the two profiles must not create a third one.
+  assert.deepEqual(validateSkillMetadata(fixtureText({ ...fields, 'runtime-full-version': '0.3.2' }), '0.3.4'), incompatible);
+  assert.deepEqual(validateSkillMetadata(fixtureText({ ...successor, 'runtime-full-version': '0.1.0' }), '0.3.4'), incompatible);
 });
 
 test('each unsupported well-formed scalar differs from missing, duplicated or malformed evidence', () => {

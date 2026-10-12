@@ -182,7 +182,9 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   const invoke = (flag: string) => {
     if (!windows) return `${quote(binary)} ${flag}`;
     // PowerShell also closes single-quoted strings on U+2018-U+201B.
-    const code = `& '${binary.replace(/['\u2018-\u201b]/g, '$&$&')}' ${flag}`;
+    // PowerShell otherwise maps every native nonzero exit to 1. A failed
+    // invocation has no native exit code and must not accidentally exit 0.
+    const code = `& '${binary.replace(/['\u2018-\u201b]/g, '$&$&')}' ${flag}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
     return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(code, 'utf16le').toString('base64')}`;
   };
   // OpenSSH keeps the first value obtained, so the fixed hardening options

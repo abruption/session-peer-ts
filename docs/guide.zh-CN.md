@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**文档和源码版本：0.3.3。** 在 2026-10-09 KST 准备时点，0.3.3 尚未发布，公开 npm `latest` 为 **0.3.2**，`preview` 为 `0.1.0-preview.1`。使用以下 0.3.3 npm 示例前，请查询注册表中的当前可用性；如不可用，请使用已审核的源码或本地构建产物。构建和 SSH 两端必须使用相同的已审核版本；0.3.2 与 0.3.3 会拒绝彼此的 SSH 预检。
+**文档和源码版本：0.3.3。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](../VALIDATION.md)，发布流程见 [RELEASING.md](../RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.2 与 0.3.3 会拒绝彼此的 SSH 预检。
 
 这是 0.3.3 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。此前的发布记录见 [0.3.1 公开发布证据](../VALIDATION.md#public-031--2026-10-04-kst)；下文 0.1.0 的说明用于旧版本对比。
 
@@ -295,18 +295,18 @@ npm 版本，Python 版 `session-peer` 的发布是独立的版本序列，从�
 
 ## 显式安装代理技能
 
-独立的 `session-peer-ts` 技能在配套 PR 中管理，不代表新 npm 或技能标签发布。它支持已发布的 0.1.0 基础功能，通过 TypeScript 标识和帮助检查开发功能。Python 的 `session-peer` 技能仍独立保留。
+独立的 `session-peer-ts` 技能已发布为[技能 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0)。技能版本与 npm 运行时独立，安装其中一个不会安装另一个。Python 的 `session-peer` 技能也独立保留。
 
-先检查[固定提交的技能源码](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts)，再选择代理和安装范围。
+先检查[固定提交的技能源码](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts)，再选择代理和安装范围。
 以下示例选择 **Codex、当前项目**；请在该项目目录中运行。
 Claude Code 使用 `--agent claude-code`。用户范围安装应在 add/list/remove 中一致添加 `--global`。
 批准替换已有的 `session-peer-ts` 副本前，请检查本地修改。
 Codex 的 `.agents/skills` 目录与其他扫描该路径的客户端共享。
 
-0.3.3 可在 production doctor 路径执行有界 `metadata_only` 检查器提案。后继配置（技能 `0.2.0` / 最低 `0.1.0` / 完整功能参考 `0.3.2`）已获得针对精确 #126 `ba18bb8` 和发布 Draft #129 `bfb3d6f` 的 [companion Draft #20 仅限设计的接受记录 `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md)。完整提交与已审核设计哈希记录在下方检查器设计中。本次为源码、测试和文档的静态审核及 CI 状态确认，没有重新运行测试。在 2026-10-09 接受时点，运行时和后继技能尚未发布。该接受不授权运行时合并或发布，也不授权最终后继技能元数据、发布、安装或固定提交变更，不能证明公开兼容性、投递或 ACK。检查器运行时必须实际发布，之后才能另行完成后继技能、标签和固定提交的变更。运行时和技能由各自管理者升级，不引入 postinstall。请参阅[检查器提案](design/typescript-skill-compatibility.md)。
+公开 TS 0.3.3 接受技能 0.2.0 的精确配置（`typescript`、最低 `0.1.0`、文档功能参考 `0.3.2`、`probe-help`）以及旧 0.1.0 配置。公开 0.3.2 拒绝 0.2.0 配置，因此使用新技能前，应通过原安装管理工具升级运行时。带有 `verification:metadata_only` 的 `compatible` 仅表示有界元数据检查，不代表内容认证、发送授权、投递或 ACK 证据。最低版本是基础 CLI 兼容下限，完整功能版本是文档所涵盖的公开功能参考版本。可选操作仍需检查实际执行文件的 version/help 以及平台和原生工具条件。运行时与技能由各自管理工具独立升级，不引入 postinstall。请参阅[有限判定表与读取边界](design/typescript-skill-compatibility.md)。
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```

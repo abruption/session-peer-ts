@@ -350,5 +350,5 @@ test('Windows --remote-bin doubles every PowerShell single-quote variant', async
   const result = await invoke(['list', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', binary], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(result.error, 'ssh_preflight_failed');
   const decoded = Buffer.from(readFileSync(calls, 'utf8').trim().split(' ').at(-1)!, 'base64').toString('utf16le');
-  assert.equal(decoded, "& 'C:\\a''\u2018\u2018\u2019\u2019\u201a\u201a\u201b\u201b;calc;#' --version");
+  assert.equal(decoded, "& 'C:\\a''\u2018\u2018\u2019\u2019\u201a\u201a\u201b\u201b;calc;#' --version; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE");
 });

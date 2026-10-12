@@ -11,10 +11,12 @@ const verdict = (compatible: boolean): SkillCheck => ({ status: compatible ? 'co
   code: compatible ? 'skill_contract_compatible' : 'skill_contract_mismatch', verification: 'metadata_only' });
 export const SKILL_METADATA_LIMIT = 65536;
 const keys = ['version', 'runtime-implementation', 'runtime-min-version', 'runtime-full-version', 'runtime-capability-policy'] as const;
-// Finite source proposal for #118; 0.3.3 successor support requires companion
-// exact review before merge/release. VERSION identifies this 0.3.3 candidate;
-// it does not establish companion approval or public runtime availability.
-const matrix: Record<string, readonly string[]> = { '0.3.2': ['0.1.0'], '0.3.3': ['0.1.0', '0.2.0'] };
+// Finite reviewed profiles: public 0.3.2 is legacy-only; public 0.3.3 accepts
+// both profiles. The explicit 0.3.4 row is an unreleased patch proposal, not
+// generic future-version support. Compiled VERSION remains 0.3.3 here.
+const matrix: Record<string, readonly string[]> = {
+  '0.3.2': ['0.1.0'], '0.3.3': ['0.1.0', '0.2.0'], '0.3.4': ['0.1.0', '0.2.0']
+};
 const profiles: Record<string, readonly string[]> = {
   '0.1.0': ['0.1.0', 'typescript', '0.1.0', '0.1.0', 'probe-help'],
   '0.2.0': ['0.2.0', 'typescript', '0.1.0', '0.3.2', 'probe-help']

@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**문서·소스 기준 버전: 0.3.3.** 2026-10-09 KST 준비 시점에는 0.3.3이 미발행이었고 공개 npm `latest`는 **0.3.2**, `preview`는 `0.1.0-preview.1`이었습니다. 아래 0.3.3 npm 예시를 사용하기 전에 레지스트리에서 현재 제공 여부를 확인하세요. 제공되지 않으면 검토한 소스 체크아웃이나 로컬 빌드 산출물을 사용하세요. 빌드와 SSH 양쪽은 같은 검토 버전이 필요하며, 0.3.2와 0.3.3은 서로의 SSH 사전 확인을 거부합니다.
+**문서·소스 기준 버전: 0.3.3.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.2와 0.3.3은 서로의 SSH 사전 확인을 거부합니다.
 
 이 가이드는 0.3.3을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
 
@@ -132,7 +132,7 @@ Claude Code에는 받은 메시지함에 접근할 수 있는 실행 중 TUI(터
 
 Node 22.x의 22.13 이상 또는 24.x를 사용하세요. Python CLI도 같은 `session-peer`
 명령 이름을 쓰므로, 설치 전에 PATH(명령 검색 경로)에서 어떤 실행 파일을 찾는지
-확인하세요. 아래 명령은 0.3.3이 승인·발행된 뒤 npm으로 설치하는 예입니다.
+확인하세요. 아래 명령은 공개된 0.3.3을 npm으로 설치하는 예입니다.
 CLI 자체는 패키지를 설치하거나 업데이트하지 않습니다.
 
 **0.3.3 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.
@@ -562,18 +562,18 @@ HTTP, 자격 증명 불가). npm 설정과 `.npmrc`는 읽지 않습니다.
 <a id="agent-skill-explicit-installation"></a>
 ## 에이전트 스킬: 명시적 설치
 
-별도 `session-peer-ts` 동반 스킬은 [동반 PR #14](https://github.com/abruption/session-peer-skill/pull/14)에서 추적합니다. 새 npm 패키지나 스킬 태그를 발행하는 작업은 아닙니다. 공개된 0.1.0 기본 기능을 지원하고, TypeScript 구현 표시를 감지하며, 개발 중인 기능을 사용하기 전에 도움말에서 지원 여부를 확인합니다. Python `session-peer` 스킬은 별도로 유지합니다.
+별도 `session-peer-ts` 스킬은 [스킬 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0)으로 공개되었습니다. 스킬 버전은 npm 런타임과 독립적이며, 어느 한쪽을 설치해도 다른 쪽은 설치되지 않습니다. Python의 `session-peer` 스킬도 별도로 유지합니다.
 
-[고정된 스킬 소스](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts)를 검토한 뒤 에이전트와 설치 범위를 선택하세요.
+[고정된 스킬 소스](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts)를 검토한 뒤 에이전트와 설치 범위를 선택하세요.
 아래 예시는 **Codex, 현재 프로젝트**를 선택합니다. 해당 프로젝트 디렉터리에서 실행하세요.
 Claude Code는 `--agent claude-code`를 사용합니다. 사용자 범위는 add/list/remove 모두에
 `--global`을 동일하게 추가하세요. 기존 `session-peer-ts` 사본을 교체하기 전에 로컬 수정 사항을
 확인하세요. Codex의 `.agents/skills` 디렉터리는 이 경로를 탐색하는 다른 클라이언트와 공유됩니다.
 
-0.3.3은 production doctor 경로에서 제한된 `metadata_only` 검사기 제안을 실행합니다. 후속 프로필(스킬 `0.2.0` / 최소 `0.1.0` / 전체 기능 기준 `0.3.2`)은 정확한 #126 `ba18bb8`와 릴리스 Draft #129 `bfb3d6f`에 대해 [companion Draft #20의 설계 한정 수락 `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md)을 받았습니다. 전체 커밋과 검토한 설계 해시는 아래 검사기 설계에 기록되어 있습니다. 소스·테스트·문서의 정적 검토와 CI 상태 확인이며 테스트를 재실행하지 않았습니다. 2026-10-09 수락 시점에는 런타임과 후속 스킬이 미발행이었습니다. 이 수락은 런타임 병합·발행이나 최종 후속 스킬 메타데이터·발행·설치·고정 커밋 변경을 승인하지 않으며 공개 호환성·전달·ACK를 입증하지 않습니다. 검사기 런타임이 실제 발행된 뒤에만 후속 스킬 확정·태그·고정 커밋을 별도로 변경할 수 있습니다. 런타임과 스킬의 업그레이드는 각 관리자가 담당하며 postinstall은 추가하지 않습니다. [검사기 제안](design/typescript-skill-compatibility.md)을 참고하세요.
+공개 TS 0.3.3은 스킬 0.2.0의 정확한 프로필(`typescript`, 최소 `0.1.0`, 문서화된 기능 기준 `0.3.2`, `probe-help`)과 기존 0.1.0 프로필을 허용합니다. 공개 0.3.2는 0.2.0 프로필을 거부하므로 새 스킬을 사용하기 전에 기존 설치 관리자로 런타임을 업데이트하세요. `verification:metadata_only`를 포함한 `compatible`은 제한된 메타데이터 검사 결과이며, 내용 인증·전송 허가·전달 또는 ACK의 근거가 아닙니다. 최소 버전은 기본 CLI 호환 하한이고, 전체 기능 기준은 문서가 다루는 공개 기능의 참조 버전입니다. 선택 기능은 실제 실행 파일의 version/help와 플랫폼·네이티브 도구 조건을 따로 확인해야 합니다. 런타임과 스킬은 각 관리자로 별도 업데이트하며 postinstall은 추가하지 않습니다. [유한 판정표와 읽기 제한](design/typescript-skill-compatibility.md)을 참고하세요.
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
