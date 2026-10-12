@@ -822,7 +822,7 @@ Evidence recheck: 2026-10-12 KST. Public TS runtime 0.3.3 at `c0ed30273b9e9c0049
 
 `compatible / skill_contract_compatible / metadata_only` is a bounded metadata verdict, not a content signature, send permission or delivery/ACK result. Minimum is the baseline CLI compatibility floor; full is the documented published feature coverage reference. Optional operations still need actual version/help and platform/native prerequisites. Runtime and skill management remain separate, without postinstall. The Python 1.0.2 reference and Python skill are unchanged.
 
-The patch source explicitly adds runtime `0.3.4` for these same two profiles, tested through validator arguments while compiled `VERSION` stays `0.3.3`. This is an unreleased patch proposal; valid unreviewed runtimes such as `0.3.5` remain incompatible. It neither broadens support to arbitrary future versions nor publishes a runtime or skill. See the [finite matrix and retained dated review](docs/design/typescript-skill-compatibility.md). The dated candidate checkpoint below remains historical.
+This source/package uses compiled `VERSION=0.3.4` and accepts these same two exact profiles through the default inspector; valid unreviewed runtimes such as `0.3.5` remain incompatible. At the earlier PR #134 checkpoint, compiled `VERSION` was `0.3.3` and the 0.3.4 row was tested through explicit validator arguments. That checkpoint is historical. Source support neither broadens compatibility to arbitrary future versions nor establishes runtime or skill publication. See the [finite matrix and retained dated review](docs/design/typescript-skill-compatibility.md). The dated candidate checkpoint below remains historical.
 
 <a id="typescript-skill-guard--033-candidate"></a>
 

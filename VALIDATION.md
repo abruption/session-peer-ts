@@ -1,5 +1,13 @@
 # Validation record — updated 2026-10-12 KST
 
+## 0.3.4 artifact documentation correction — 2026-10-12 KST
+
+The approved-source prepare run [38193012263](https://github.com/abruption/session-peer-ts/actions/runs/38193012263) at `1c99b39138c26a5ec08245f78f133d058bc354f0` passed tests/packaging and produced the same bytes as the local archive, SHA-256 `a0026b157ca9444931243cb60416ac24ad773bd118425852650e6671a545d773`. Independent packaged-document review then found stale current-description text in the skill design and PARITY: the package compiled VERSION was 0.3.4, but those paragraphs still said 0.3.3 and marked the added row as an unreleased proposal without clearly restricting it to PR #134 history.
+
+The artifact documentation gate therefore failed. The workflow was cancelled before protected environment approval: prepare succeeded, publish was cancelled, and no npm upload or public publication occurred. The rejected archive and Actions manifest are retained for comparison; they were not edited in place. The correction describes current source/package VERSION 0.3.4 while explicitly retaining the original PR #134 checkpoint as history. Runtime logic, finite profile values, metadata/pins, release baseline and all other packaged documents are unchanged.
+
+A new reviewed source and artifact require fresh exact-source staging approval. The earlier approved SHA and settings-read exception remain external historical records, not authority to stage changed bytes. No new publication result is claimed here.
+
 ## 0.3.4 preparation checkpoint — 2026-10-12 KST
 
 Base main: `c210ee963741f77153df10038c28e228ea7a902f`, merged [PR #134](https://github.com/abruption/session-peer-ts/pull/134). Exact base main CLI [38191285491](https://github.com/abruption/session-peer-ts/actions/runs/38191285491) and CodeQL [38191285293](https://github.com/abruption/session-peer-ts/actions/runs/38191285293) completed successfully, including Windows Node 22/24. Draft 0.4 PR #106–#109 and experimental #82 are excluded. This is preparation, not approval to stage or publish.

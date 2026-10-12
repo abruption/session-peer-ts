@@ -14,12 +14,12 @@ The finite runtime/profile matrix is:
 | `0.3.2` | `0.2.0` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | incompatible |
 | `0.3.3` (published) | `0.1.0` | `typescript` | `0.1.0` | `0.1.0` | `probe-help` | compatible, published guard |
 | `0.3.3` (published) | `0.2.0` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | compatible, published guard |
-| `0.3.4` (unreleased patch proposal) | `0.1.0` | `typescript` | `0.1.0` | `0.1.0` | `probe-help` | compatible in explicit candidate fixtures |
-| `0.3.4` (unreleased patch proposal) | `0.2.0` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | compatible in explicit candidate fixtures |
+| `0.3.4` (source/package) | `0.1.0` | `typescript` | `0.1.0` | `0.1.0` | `probe-help` | compatible, compiled guard |
+| `0.3.4` (source/package) | `0.2.0` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | compatible, compiled guard |
 | Other valid runtime/profile | Any | Any | Any | Any | Any | incompatible |
 | Unavailable/malformed runtime identity | Any | Any | Any | Any | Any | unknown |
 
-All compatible rows also require exactly one `name: session-peer-ts`. Inspection uses this runtime’s compiled `VERSION`, without executing a binary. Public 0.3.3 accepts both reviewed profiles, while the immutable public 0.3.2 artifact remains legacy-only. The patch candidate keeps compiled `VERSION=0.3.3` and adds only the explicit 0.3.4 row for the unchanged profiles; it does not establish a public 0.3.4 runtime or allow 0.3.5 or later. Tests exercise exact profiles, mismatches and unreviewed runtimes. Every later runtime/profile row needs explicit review; minimum/full arithmetic does not replace this finite matrix.
+All compatible rows also require exactly one `name: session-peer-ts`. Inspection uses this runtime’s compiled `VERSION`, without executing a binary. Public 0.3.3 accepts both reviewed profiles, while the immutable public 0.3.2 artifact remains legacy-only. This source/package uses compiled `VERSION=0.3.4` and preserves the two exact reviewed profiles; valid unreviewed runtimes such as 0.3.5 remain incompatible. At the earlier PR #134 checkpoint, compiled `VERSION` was 0.3.3 and the added 0.3.4 row was exercised through explicit validator arguments. That checkpoint is historical; source support does not establish registry publication. Tests exercise exact profiles, mismatches and unreviewed runtimes. Every later runtime/profile row needs explicit review; minimum/full arithmetic does not replace this finite matrix.
 
 ## Limited grammar and results
 
@@ -81,4 +81,4 @@ The dated proposal/review above preceded publication. Public npm 0.3.3 uses sour
 
 Final metadata is skill `0.2.0`, implementation `typescript`, minimum `0.1.0`, full `0.3.2`, policy `probe-help`. Four-language guidance now pins that published source. This publication checkpoint does not turn `metadata_only` into instruction authenticity, execution authority, full platform qualification, consumption or ACK. Python metadata and the Python 1.0.2 parity/reference pin remain unchanged.
 
-The explicit 0.3.4 candidate row preserves both exact published profiles for a future patch version. The subsequent 0.3.4 release preparation bumps the candidate runtime version only. No skill metadata change, new skill publication, installation or future-range compatibility is included.
+The 0.3.4 source/package preserves both exact published profiles through its compiled default. PR #134 initially checked that row only through explicit validator arguments with compiled VERSION 0.3.3; the subsequent 0.3.4 preparation changed the runtime version. No skill metadata change, new skill publication, installation or future-range compatibility is included.
