@@ -15,7 +15,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**Documentation and source version: 0.3.3.** At the 2026-10-09 KST preparation checkpoint, 0.3.3 was unpublished, public npm `latest` was **0.3.2**, and `preview` was `0.1.0-preview.1`. Check the registry for current availability before using the 0.3.3 npm examples; if unavailable, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints need the same reviewed version; 0.3.2 and 0.3.3 refuse each other's SSH preflight.
+**Documentation and source version: 0.3.3.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.2 and 0.3.3 refuse each other’s SSH preflight.
 
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
@@ -74,7 +74,7 @@ never enabled automatically. See [explicit activation and collisions](docs/short
 
 Use npm for an npm-managed installation. Check the available tags and review
 the target version, then install that exact version; this example updates an
-older npm installation to 0.3.3 after approved publication. The CLI does not install updates;
+older npm installation to the published 0.3.3 release. The CLI does not install updates;
 `session-peer update --check` only reports them.
 
 ```sh

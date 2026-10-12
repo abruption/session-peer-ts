@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**文書・ソースのバージョン: 0.3.3。** 2026-10-09 KST の準備時点では 0.3.3 は未公開で、公開 npm `latest` は **0.3.2**、`preview` は `0.1.0-preview.1` でした。以下の 0.3.3 npm 例を使う前に、レジストリで現在の公開状況を確認してください。利用できない場合はレビュー済みソースまたはローカルビルド成果物を使います。ビルドと SSH の両端は同じレビュー済みバージョンが必要で、0.3.2 と 0.3.3 は互いの SSH 事前確認を拒否します。
+**文書・ソースのバージョン: 0.3.3。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](../VALIDATION.md)、リリース手順は [RELEASING.md](../RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.2 と 0.3.3 は互いの SSH 事前確認を拒否します。
 
 0.3.3 の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。以前の公開記録は [0.3.1 公開リリースの証拠](../VALIDATION.md#public-031--2026-10-04-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
@@ -310,18 +310,18 @@ stderr の 1 行を出します。ホストの数にかかわらず、更新は 
 
 ## エージェントスキルの明示的な導入
 
-別の `session-peer-ts` スキルを関連 PR で管理します。新しい npm 公開やスキルタグではありません。公開済み 0.1.0 の基本機能に対応し、TypeScript 表示とヘルプで開発機能を確認します。Python の `session-peer` スキルは別に維持します。
+別の `session-peer-ts` スキルは [スキル 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0) として公開されています。バージョンは npm ランタイムとは独立しており、一方をインストールしても他方はインストールされません。Python の `session-peer` スキルも別に維持します。
 
-[固定したスキルのソース](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts)を確認してから、エージェントと導入範囲を選択してください。
+[固定したスキルのソース](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts)を確認してから、エージェントと導入範囲を選択してください。
 以下の例は **Codex、現在のプロジェクト** を指定します。そのプロジェクトのディレクトリで実行してください。
 Claude Code では `--agent claude-code` を使用します。ユーザー単位の場合は add/list/remove の
 すべてに `--global` を付けてください。既存の `session-peer-ts` を置き換える前にローカルの変更を確認してください。
 Codex の `.agents/skills` は、このパスを探索する他のクライアントと共有されます。
 
-0.3.3 は production doctor 経路で、上限付き `metadata_only` ガードの提案を実行します。後継プロファイル（スキル `0.2.0` / 最小 `0.1.0` / 全機能の参照 `0.3.2`）は、厳密な #126 `ba18bb8` とリリース Draft #129 `bfb3d6f` に対する [companion Draft #20 の設計限定承認 `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md)を得ました。完全なコミットとレビュー対象の設計ハッシュは以下のガード設計に記録しています。ソース・テスト・文書の静的レビューと CI 状態の確認で、テストは再実行していません。2026-10-09 の承認時点ではランタイムと後継スキルは未公開でした。この承認はランタイムのマージ・公開や最終的な後継スキルのメタデータ・公開・導入・固定コミット変更を許可せず、公開互換性・配信・ACK を証明しません。ガードランタイムを実際に公開してから、後継スキルの確定・タグ・固定コミットを別途変更します。ランタイムとスキルの更新は各管理者が行い、postinstall は追加しません。[ガード提案](design/typescript-skill-compatibility.md)を参照してください。
+公開 TS 0.3.3 はスキル 0.2.0 の厳密なプロファイル（`typescript`、最小 `0.1.0`、文書化した機能の参照 `0.3.2`、`probe-help`）と旧 0.1.0 プロファイルを受け入れます。公開 0.3.2 は 0.2.0 プロファイルを拒否するため、新しいスキルを使う前に元の管理ツールでランタイムを更新してください。`verification:metadata_only` を伴う `compatible` は範囲を限定したメタデータ検査であり、内容の認証、送信許可、配信・ACK の証拠ではありません。最小バージョンは基本 CLI の互換下限、全機能の参照は文書が扱う公開機能の参照バージョンです。任意機能には実際の実行ファイルの version/help とプラットフォーム・ネイティブツールの前提条件が必要です。ランタイムとスキルはそれぞれの管理ツールで別々に更新し、postinstall は追加しません。[有限の判定表と読み取りの制限](design/typescript-skill-compatibility.md)を参照してください。
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```

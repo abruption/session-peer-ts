@@ -56,7 +56,8 @@ public static class Fixture {
       bool preflight = command.EndsWith("--version'") || command.EndsWith("--version");
       if (command.StartsWith("powershell.exe ")) {
         string encoded = command.Substring(command.LastIndexOf(' ') + 1);
-        preflight = Encoding.Unicode.GetString(Convert.FromBase64String(encoded)).EndsWith("--version");
+        string decoded = Encoding.Unicode.GetString(Convert.FromBase64String(encoded));
+        preflight = decoded.EndsWith("--version") || decoded.Contains(" --version;");
       }
       string input = Console.In.ReadToEnd();
       Record("FIXTURE_SSH_LOG", new { args = args, input = input });

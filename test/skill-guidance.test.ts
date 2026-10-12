@@ -9,6 +9,23 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+test('four language guides install the same published TS skill source', () => {
+  const pin = '8482cf644507c682915e35c85aa3384c53864906';
+  const source = `https://github.com/abruption/session-peer-skill/tree/${pin}/session-peer-ts`;
+  for (const suffix of ['', '.ko', '.ja', '.zh-CN']) {
+    const guide = readFileSync(new URL(`../docs/guide${suffix}.md`, import.meta.url), 'utf8');
+    assert.ok(guide.includes(`](${source})`), suffix);
+    assert.ok(guide.includes(`npx -y skills@1.7.0 add ${source} --skill session-peer-ts --agent codex --copy --yes`), suffix);
+    assert.ok(guide.includes('releases/tag/session-peer-ts-v0.2.0'), suffix);
+    assert.ok(guide.includes('verification:metadata_only'), suffix);
+    assert.equal(guide.includes('081cc3c1d16a394bd92824333f4bc61c36951799'), false, suffix);
+  }
+  for (const path of ['PARITY.md', 'docs/design/typescript-skill-compatibility.md']) {
+    const doc = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+    assert.ok(doc.includes(pin), path);
+    assert.ok(doc.includes('00c6fc343fdbeb8f6dc1b1ee1b730f04cef71bbfb08205a7be3559202f1d8804'), path);
+  }
+});
 test('TS skill baseline list and guarded Codex dry-run examples never submit', t => {
   const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-skill-example-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));

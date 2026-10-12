@@ -1,4 +1,78 @@
-# Validation record — updated 2026-10-09 KST
+# Validation record — updated 2026-10-12 KST
+
+## Public 0.3.3 checkpoint — rechecked 2026-10-12 KST
+
+The earlier candidate/preparation sections below are dated history, not the
+current publication state. npm `latest` is `0.3.3`, `preview` is
+`0.1.0-preview.1`, and the public 0.3.3 metadata exposes integrity
+`sha512-5OQ7eUlR5Oy3RHFRoR3FuBkV7LT72dfjfBEbWRCY5wYP7Dz8TmN2jlRPpo2SFHPAwosFc0WIt8Iis/vyHckxRg==`
+and its registry attestation URL. The existing publication workflow
+[37907833518](https://github.com/abruption/session-peer-ts/actions/runs/37907833518)
+completed successfully at source `c0ed30273b9e9c0049df86ae3c38486a94289527`.
+This follow-up read checks metadata/run identity; it does not redo signature or
+provenance authentication and does not publish anything.
+
+## Windows SSH patch verification — #133, 2026-10-12 KST
+
+An isolated patch checkout based on public 0.3.3 source
+`c0ed30273b9e9c0049df86ae3c38486a94289527` forwards the native
+`$LASTEXITCODE` from both encoded PowerShell commands. A missing native exit
+fails with 1. The strict response validator, version/host-key guards and
+one-request/no-resend behavior are unchanged. A separate explicit, unreleased
+0.3.4 skill matrix row is tested with validator arguments; package/compiled
+runtime version stays 0.3.3.
+
+Physical destination: Windows 10 x64 (10.0.19045), PowerShell 5.1.19041.6456,
+Node 24.16.0. The client was macOS arm64 / Node 24.16.0. Existing key/trust
+and fixed BatchMode/StrictHostKeyChecking were used, without configuration
+changes. All 24 SSH fixture scenarios passed:
+
+- Six synthetic native outcomes, each tested with a legacy launcher control,
+  explicit exit forwarding and the corrected complete local CLI: success/0,
+  refusal/1, refusal/2, complete success/255, malformed/2 and missing stdout/0.
+- Native refusal/2 now yields client exit2 with refused/submitted:false.
+  Complete success/255 retains queued/submitted:true and the fixture queueId,
+  with sshTransport failure, client exit1, consumptionConfirmed:false and
+  retryAllowed:false. Malformed/missing outputs remain unknown/submitted:null.
+- Nonzero exact-banner preflight (legacy/control/CLI) and mismatched-version
+  preflight make zero request calls. Mixed ordered results through two aliases
+  of the **same** destination retain success/refusal and call once per entry.
+- Missing native executable with no LASTEXITCODE returns1 rather than0.
+
+Raw legacy/forward controls produced identical decoded stdout for the six outcomes;
+only exit forwarding changed. Message data remained in stdin, not the encoded
+command or native argv. The disposable native executable emitted synthetic
+metadata: no actual agent session, Codex queue, model, injection or ACK was
+invoked. Only the owned remote test directory was written and removed;
+absence was independently verified. This is Windows-destination evidence,
+not Windows-client jump support or two-machine/native-agent qualification.
+
+The new portable command/framing regression passed 5/5 with the existing
+SSH-response CLI suite. Actual PowerShell regression coverage is also added
+to the existing Windows-native contract suite; CI results belong to the PR
+head. The first local full-suite attempt used the physical-harness temporary
+root, whose type:module package boundary invalidated CommonJS fixture scripts
+(149 passed, 36 failed, five skipped). That test-environment error was corrected
+by separating the test root; it is not reported as an all-green run.
+The next full run exposed two existing exact-command expectations that needed
+the new exit-forwarding suffix; those expectations still assert the complete
+quoted/hardened command. The final `npm test` passed 190 tests: 185 passed,
+zero failed, five Windows-only skips, including successful build and type
+checks. `test:package` passed reproducible packing, isolated installation and
+removal, and bash/zsh shorthand contract/lifecycle checks. Repository/link and
+diff checks passed, and npm audit reported zero vulnerabilities. Conformance
+used the existing Python 1.0.2 reference at
+`47c23713d0a2a3c11ebde6186afd8c43489b8b65`; the entrypoint, core and compatibility
+fixture (19 files) were byte-compared with the exact upstream archive before
+execution. No reference repin was made.
+
+Initial PR CI `38187131255` passed the added real-PowerShell exit regression on
+Windows Node 22 but failed the following existing SSH contract's absolute
+call-count assertion: it inherited the new subtest's log entries. The fixture
+now explicitly initializes that existing subtest's own SSH call log; its exact
+request-count assertions are preserved. This was test isolation, not a runtime
+failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
+results are recorded in the PR after the correction.
 
 ## 0.3.3 candidate preparation — 2026-10-09 KST
 

@@ -4,7 +4,7 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**Documentation and source version: 0.3.3.** At the 2026-10-09 KST preparation checkpoint, 0.3.3 was unpublished, public npm `latest` was **0.3.2**, and `preview` was `0.1.0-preview.1`. Check the registry for current availability before using the 0.3.3 npm examples; if unavailable, use a reviewed source checkout or its locally built artifact. Builds and SSH endpoints need the same reviewed version; 0.3.2 and 0.3.3 refuse each other's SSH preflight.
+**Documentation and source version: 0.3.3.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.2 and 0.3.3 refuse each other’s SSH preflight.
 
 This guide covers version 0.3.3 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
 
@@ -584,19 +584,19 @@ holds only public version data. `SESSION_PEER_UPDATE_REGISTRY` selects a mirror
 
 ## Agent skill: explicit installation
 
-The separate `session-peer-ts` companion skill is tracked in [companion PR #14](https://github.com/abruption/session-peer-skill/pull/14); it is not a new npm or skill-tag release. It supports the published 0.1.0 baseline, detects the TypeScript implementation marker, and checks help before using development capabilities. The Python `session-peer` skill remains separate.
+The separate `session-peer-ts` companion skill is published as [skill 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0). Its version is independent of npm; installing either does not install the other. The Python `session-peer` skill remains separate.
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts),
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts),
 then choose the agent and scope. This example selects **Codex, current project**;
 run from that project directory. For Claude Code use `--agent claude-code`.
 For user scope add `--global` consistently to add/list/remove. Inspect any existing
 `session-peer-ts` copy for local edits before approving its replacement. Codex's
 `.agents/skills` directory is shared with other clients that discover that path.
 
-Version 0.3.3 exercises the proposed bounded `metadata_only` guard on the production doctor path. The successor profile (skill `0.2.0` / minimum `0.1.0` / full `0.3.2`) has [companion Draft #20 design-only acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) for exact #126 `ba18bb8` and release Draft #129 `bfb3d6f`; full heads and reviewed design hashes are recorded in the guard design below. This was static source/test/document review with CI-status confirmation and no test rerun. At the 2026-10-09 acceptance checkpoint, runtime and successor skill were unpublished. Acceptance does not authorize runtime merge/release or final successor skill metadata, publication, installation or pin changes, and makes no public compatibility or delivery/ACK claim. The guard must actually publish before separate successor skill finalization/tag/pin changes. Managers own runtime and skill upgrades; no postinstall is introduced. See the [guard proposal](design/typescript-skill-compatibility.md).
+Public TS 0.3.3 accepts the exact skill 0.2.0 profile (`typescript`, minimum `0.1.0`, full `0.3.2`, `probe-help`) and the legacy 0.1.0 profile. Public 0.3.2 rejects the 0.2.0 profile; upgrade the runtime through its owner before using the newer skill. `compatible` with `verification:metadata_only` is a bounded metadata check, not content authentication, permission to send, or delivery/ACK evidence. Minimum is the baseline CLI compatibility floor; full is the documented published feature coverage reference. Optional operations still require the resolved executable’s version/help and platform/native prerequisites. Runtime and skill upgrades remain separate and manager-owned; no postinstall is introduced. See the [finite matrix and reader boundaries](design/typescript-skill-compatibility.md).
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/081cc3c1d16a394bd92824333f4bc61c36951799/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```

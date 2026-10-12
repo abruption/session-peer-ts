@@ -306,7 +306,7 @@ test('allowlisted options follow the fixed hardening options on POSIX and Window
   for (const call of preflights) {
     assert.deepEqual(call.args.slice(0, -1), [...fixed, '-l', 'win-user', '--', destination(call)]);
     const encoded = call.args.at(-1)!.match(/^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/)![1]!;
-    assert.equal(Buffer.from(encoded, 'base64').toString('utf16le'), "& 'C:\\Program Files\\sp\\session-peer.cmd' --version");
+    assert.equal(Buffer.from(encoded, 'base64').toString('utf16le'), "& 'C:\\Program Files\\sp\\session-peer.cmd' --version; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE");
   }
 });
 

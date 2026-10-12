@@ -15,7 +15,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**文档和源码版本：0.3.3。** 在 2026-10-09 KST 准备时点，0.3.3 尚未发布，公开 npm `latest` 为 **0.3.2**，`preview` 为 `0.1.0-preview.1`。使用以下 0.3.3 npm 示例前，请查询注册表中的当前可用性；如不可用，请使用已审核的源码或本地构建产物。构建和 SSH 两端必须使用相同的已审核版本；0.3.2 与 0.3.3 会拒绝彼此的 SSH 预检。
+**文档和源码版本：0.3.3。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](VALIDATION.md)，发布流程见 [RELEASING.md](RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.2 与 0.3.3 会拒绝彼此的 SSH 预检。
 
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
@@ -71,7 +71,7 @@ session-peer --version
 ### Update
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
-下面示例在批准发布后将旧 npm 安装更新至 0.3.3。CLI 不会安装更新，`session-peer update --check` 只做检查。
+下面示例将旧 npm 安装更新至已公开发布的 0.3.3。CLI 不会安装更新，`session-peer update --check` 只做检查。
 
 ```sh
 npm view session-peer dist-tags
