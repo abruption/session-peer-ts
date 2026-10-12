@@ -4,13 +4,13 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**Documentation and source version: 0.3.3.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.2 and 0.3.3 refuse each other’s SSH preflight.
+**Documentation and source version: 0.3.4.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.3 and 0.3.4 refuse each other’s SSH preflight.
 
-This guide covers version 0.3.3 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
+This guide covers version 0.3.4 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
 
 <a id="migration-boundaries-033-candidate"></a>
 
-## Migration boundaries (0.3.3)
+## Migration boundaries (0.3.4)
 
 The [public 0.3.2 record](../VALIDATION.md#public-032--2026-10-07-kst) fixes the
 release source and artifact. SSH preflight checks the exact TS version banner,
@@ -40,8 +40,7 @@ not a commit hash; operators must align reviewed source commits separately.
   omits identity; an unusable Claude name falls back to PID.
 - npm, Python, remote hosts and skills have separate owners. TS has no self- or
   remote updater; notices default off and opt-out wins. Explicit `update --check`
-  still queries the registry. The legacy skill metadata remains `0.1.0`;
-  #118's Draft successor is not an install pin or a compatible published guard.
+  still queries the registry. Public TS 0.3.3 accepts both exact reviewed legacy `0.1.0` and published `0.2.0` skill profiles; this 0.3.4 candidate preserves that finite matrix. The installation section pins the independently published skill source.
 - Windows qualification used published 0.3.1 on Windows 10 x64, an administrator
   account, PowerShell 5.1 and Node 24.16.0: offline provisioning, wrapper/native
   locking, operator doctor/nonexistent-target dry-run and 31 local fixtures.
@@ -74,7 +73,7 @@ Relay/MCP are outside this migration comparison.
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-This guide describes **version 0.3.3**. The npm package and CLI command are both **`session-peer`**. This
+This guide describes **version 0.3.4**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -82,12 +81,12 @@ project does not provide a Relay server or hosted service.
 Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
-**Version 0.3.3 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).
+**Version 0.3.4 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).
 
 ```sh
-npm view session-peer@0.3.3 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.3
-session-peer --version  # session-peer 0.3.3 (typescript)
+npm view session-peer@0.3.4 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.4
+session-peer --version  # session-peer 0.3.4 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -154,7 +153,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, both ends need the same TypeScript client version (0.3.3).
+On SSH, both ends need the same TypeScript client version (0.3.4).
 
 ## Requirements
 
@@ -178,11 +177,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.3.3.tgz
+npm install --global --ignore-scripts ./session-peer-0.3.4.tgz
 session-peer --version
 ```
 
-Expected for version 0.3.3: `session-peer 0.3.3 (typescript)`. Keep the `./...tgz` path to
+Expected for version 0.3.4: `session-peer 0.3.4 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -202,7 +201,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.3.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.4.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -465,7 +464,7 @@ separate approval. Licensed under [MIT](../LICENSE).
 
 ## Package release
 
-Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current 0.3.3 availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.
+Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current 0.3.4 availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.
 
 Version 0.2.1 was published and verified on 2026-09-29 KST and 0.2.0 on
 2026-09-28 KST; see the [0.2.1 public release record](../VALIDATION.md#public-021--2026-09-29-kst).
@@ -473,7 +472,7 @@ Later releases add their own dated records. Check the exact version and current
 tags before installing:
 
 ```sh
-npm view session-peer@0.3.3 version dist.integrity
+npm view session-peer@0.3.4 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -525,7 +524,7 @@ and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 installation's owner is positively identified from the running CLI's path:
 an npm global prefix whose own `session-peer` launcher points at this package
 (default, Homebrew, nvm, nvm-windows and fnm prefixes), for example
-`npm install --global --ignore-scripts session-peer@0.3.3`; a pnpm, Yarn or Bun
+`npm install --global --ignore-scripts session-peer@0.3.4`; a pnpm, Yarn or Bun
 global store whose manifest declares `session-peer`; Volta; or the npx cache.
 Project installs (`npm_project`, `pnpm_project`), source checkouts (`source`)
 and anything else (`unknown`) get `updateCommand: null` and a `guidance`

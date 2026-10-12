@@ -15,7 +15,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**文書・ソースのバージョン: 0.3.3。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.2 と 0.3.3 は互いの SSH 事前確認を拒否します。
+**文書・ソースのバージョン: 0.3.4。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.3 と 0.3.4 は互いの SSH 事前確認を拒否します。
 
 **実行中の Claude Code・Codex セッションを見つけ、ローカルまたは SSH でメッセージを送信します。**
 Python 不要の Node.js クライアントです。パッケージ名とコマンド名は `session-peer` です。
@@ -56,15 +56,15 @@ SSH は既存の鍵・ホスト信頼設定と両端の**同じバージョン�
 `Get-Command session-peer -All` で PATH を確認してください。利用する実装を選び、
 別の管理ツールのファイルを `--force` で上書きしないでください。
 
-**0.3.3 のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](docs/guide.ja.md#ソースからビルド)を使います。
+**0.3.4 のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](docs/guide.ja.md#ソースからビルド)を使います。
 
 ```sh
-npm view session-peer@0.3.3 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.3
+npm view session-peer@0.3.4 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.4
 session-peer --version
 ```
 
-期待する出力: `session-peer 0.3.3 (typescript)`。分離インストール・ソースビルド・
+期待する出力: `session-peer 0.3.4 (typescript)`。分離インストール・ソースビルド・
 Windows・削除の手順は以下の詳細ガイドを参照してください。
 
 任意の `sp` 短縮名は 0.3.0 以降に含まれ（0.2.1 以前にはありません）、自動では有効になりません。
@@ -73,12 +73,12 @@ Windows・削除の手順は以下の詳細ガイドを参照してください�
 ### Update
 
 npm で導入したクライアントは npm で更新します。タグと対象バージョンを確認してから
-正確なバージョンを指定してください。以下は古い npm 版を公開済みの 0.3.3 に更新する例です。
+正確なバージョンを指定してください。以下は古い npm 版を選択した 0.3.4 に更新する例です。
 CLI は更新をインストールせず、`session-peer update --check` は確認のみ行います。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.3
+npm install --global --ignore-scripts session-peer@0.3.4
 session-peer --version
 ```
 

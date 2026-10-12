@@ -81,4 +81,4 @@ The dated proposal/review above preceded publication. Public npm 0.3.3 uses sour
 
 Final metadata is skill `0.2.0`, implementation `typescript`, minimum `0.1.0`, full `0.3.2`, policy `probe-help`. Four-language guidance now pins that published source. This publication checkpoint does not turn `metadata_only` into instruction authenticity, execution authority, full platform qualification, consumption or ACK. Python metadata and the Python 1.0.2 parity/reference pin remain unchanged.
 
-The explicit 0.3.4 candidate row preserves both exact published profiles for a future patch version. No runtime version bump, skill metadata change, new skill publication, installation or future-range compatibility is included.
+The explicit 0.3.4 candidate row preserves both exact published profiles for a future patch version. The subsequent 0.3.4 release preparation bumps the candidate runtime version only. No skill metadata change, new skill publication, installation or future-range compatibility is included.

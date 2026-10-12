@@ -9,6 +9,24 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.3.4 stable preparation — 2026-10-12 KST
+
+The patch integrates [PR #134](https://github.com/abruption/session-peer-ts/pull/134), merged as `c210ee963741f77153df10038c28e228ea7a902f`: Windows native exit forwarding and independently published TS skill guidance. Draft #106–#109 and #82 are excluded. Preparation is not staging or publication approval.
+
+Read-only registry baseline at this checkpoint: `latest=0.3.3`, `preview=0.1.0-preview.1`, and 0.3.4 absent. Previous stable integrity:
+`sha512-5OQ7eUlR5Oy3RHFRoR3FuBkV7LT72dfjfBEbWRCY5wYP7Dz8TmN2jlRPpo2SFHPAwosFc0WIt8Iis/vyHckxRg==`.
+Previous stable attestation metadata: `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.3`.
+The immutable public 0.3.3 source is `c0ed30273b9e9c0049df86ae3c38486a94289527`. Historical records below are retained.
+
+1. Review and merge this preparation, then require successful exact-main CI/release gate, CodeQL and Windows Node 22/24 for the resulting 40-character main SHA.
+2. Fresh authenticated reads must verify ownership, pending npm stages, stage-only Trusted Publisher mapping/permissions, package MFA and protected GitHub npm environment/reviewer/main-only restrictions. Recheck registry tags, previous integrity, provenance content/source and target absence. This preparation performs no authenticated publication settings audit; prior approvals/exceptions do not carry forward.
+3. Build and validate the exact-source archive, reproducible packing, isolated installation/removal and every packaged Markdown document. Apply the [artifact documentation gate](#documentation-gate-for-the-next-release); installation examples and runtime/banner/archive must agree on 0.3.4. Preserve historical/fixture and real-effect evidence boundaries.
+4. Obtain separate approval naming the exact merged main SHA, `session-peer@0.3.4`, `stable-stage` and eventual `latest` promotion to 0.3.4.
+5. Only then dispatch `publish.yml` with `source_sha=<approved SHA>`, `version=0.3.4`, `mode=stable-stage`, `confirmation=session-peer@0.3.4 stable-stage`. Review the retained Actions artifact before protected environment approval. Verify staged bytes and provenance, then obtain separate final npm 2FA approval. Never retry an uncertain upload or broaden publisher permissions.
+6. After publication, verify public integrity/provenance/signatures and isolated version/install/removal, and append a dated public record. Leave preview unchanged. Tags/GitHub Releases/fleet installation require their own decisions.
+
+SSH endpoints must both use exactly 0.3.4 when testing this package; public 0.3.3 refuses its banner. Managers/operators own upgrades. No implicit provisioning, postinstall, automatic resend, delivery/ACK support or 0.4 feature promotion is introduced. TS skill metadata/full0.3.2, published pin8482cf6 and Python1.0.2 reference remain independent and unchanged.
+
 ## 0.3.3 candidate preparation — #128 (2026-10-09 KST)
 
 This dated checkpoint records preparation only. The candidate integrated reviewed

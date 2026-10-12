@@ -1,5 +1,21 @@
 # Validation record — updated 2026-10-12 KST
 
+## 0.3.4 preparation checkpoint — 2026-10-12 KST
+
+Base main: `c210ee963741f77153df10038c28e228ea7a902f`, merged [PR #134](https://github.com/abruption/session-peer-ts/pull/134). Exact base main CLI [38191285491](https://github.com/abruption/session-peer-ts/actions/runs/38191285491) and CodeQL [38191285293](https://github.com/abruption/session-peer-ts/actions/runs/38191285293) completed successfully, including Windows Node 22/24. Draft 0.4 PR #106–#109 and experimental #82 are excluded. This is preparation, not approval to stage or publish.
+
+Candidate source/package/banner/installation examples are 0.3.4. The registry read at this checkpoint was `latest=0.3.3`, `preview=0.1.0-preview.1`, 0.3.4 absent; previous stable integrity is the public value recorded below. This read does not establish authenticated pending stages, package MFA or Trusted Publisher settings.
+
+Local macOS arm64, Node 24.16.0/npm 11.15.0:
+
+- `npm ci --ignore-scripts`, `npm run build`, `npm run test:types`: PASS.
+- `npm test`: 190 total, 185 PASS, 0 FAIL, 5 Windows-only SKIP. The first preparation run had 183 PASS/2 FAIL/5 SKIP because two update-notice regexes retained the old current/latest pair. Updating those expectations to 0.3.4/0.3.5 produced the successful final run; no production logic was changed to satisfy them.
+- Python conformance uses the existing verified `47c23713d0a2a3c11ebde6186afd8c43489b8b65` reference. The Python1.0.2 parity pin is unchanged.
+- `npm run test:package`: PASS, reproducible package and isolated installation/removal, bash/zsh shorthand contract and lifecycle. No global installation.
+- `node scripts/check-repository.mjs`, `git diff --check`: PASS. `npm audit`: zero vulnerabilities.
+
+The physical Windows 24-case synthetic fixture evidence below belongs to the PR #134 correction at version 0.3.3, not to a new physical 0.3.4 installation, live queue/injection or ACK experiment. Preparation will additionally validate its exact committed artifact and current-head CI before review completion; their source/hash results belong in the PR record and are not fabricated here. Publication/environment approval/final npm2FA/tag/fleet operations are not performed by these checks.
+
 ## Public 0.3.3 checkpoint — rechecked 2026-10-12 KST
 
 The earlier candidate/preparation sections below are dated history, not the

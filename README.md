@@ -15,7 +15,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
 
-**Documentation and source version: 0.3.3.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.2 and 0.3.3 refuse each other’s SSH preflight.
+**Documentation and source version: 0.3.4.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.3 and 0.3.4 refuse each other’s SSH preflight.
 
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
@@ -56,15 +56,15 @@ Check `type -a session-peer` on macOS/Linux or `Get-Command session-peer -All`
 in PowerShell before installing. Choose the intended PATH entry; do not use
 `--force` to overwrite another manager’s files.
 
-**Version 0.3.3 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).
+**Version 0.3.4 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).
 
 ```sh
-npm view session-peer@0.3.3 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.3
+npm view session-peer@0.3.4 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.3.4
 session-peer --version
 ```
 
-Expected: `session-peer 0.3.3 (typescript)`. For isolated installation, source
+Expected: `session-peer 0.3.4 (typescript)`. For isolated installation, source
 builds, Windows and removal, see the detailed guide below.
 
 Optional `sp` shorthand ships with 0.3.0 and later (not 0.2.1 or earlier) and is
@@ -74,12 +74,12 @@ never enabled automatically. See [explicit activation and collisions](docs/short
 
 Use npm for an npm-managed installation. Check the available tags and review
 the target version, then install that exact version; this example updates an
-older npm installation to the published 0.3.3 release. The CLI does not install updates;
+older npm installation to the selected 0.3.4 release. The CLI does not install updates;
 `session-peer update --check` only reports them.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.3.3
+npm install --global --ignore-scripts session-peer@0.3.4
 session-peer --version
 ```
 
