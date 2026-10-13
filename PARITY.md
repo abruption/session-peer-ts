@@ -2,12 +2,12 @@
 
 Updated 2026-10-13 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes the **TS 0.3.5 candidate source/package contract**: the 0.2.0 unified listing, safe home selection,
+This matrix describes the **TS 0.3.5 source/package contract**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
 separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 [0.2.1 reliability and hardening](#021-reliability-and-hardening) changes, and the
 [0.3.0 remote usability and maintenance](#030-remote-usability-and-maintenance)
-changes with their known limitations, plus the [bounded ordinary SSH correction](#ordinary-ssh-response-correction--033-candidate) and [proposed skill guard](#typescript-skill-guard--033-candidate). At the 2026-10-09 KST preparation checkpoint, public npm `latest` was **0.3.2** and `preview` was `0.1.0-preview.1`. Historical **0.1.0**
+changes with their known limitations, plus the [bounded ordinary SSH correction](#ordinary-ssh-response-correction--033-candidate) and [finite skill guard](#typescript-skill-guard--033-candidate). At the 2026-10-09 KST preparation checkpoint, public npm `latest` was **0.3.2** and `preview` was `0.1.0-preview.1`. Historical **0.1.0**
 differences are called out explicitly. Public availability and tags must be
 checked in the registry; this document does not assert a publication outcome.
 SSH preflight enforces the exact same TS version banner. For builds from source
