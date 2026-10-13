@@ -1,4 +1,16 @@
-# Validation record — updated 2026-10-12 KST
+# Validation record — updated 2026-10-13 KST
+
+## 0.3.5 preparation boundary — 2026-10-13 KST
+
+Base main is `afed4a5a8945012faf1b23d52cffecb70470a5b3`, plus unmerged [Draft #140](https://github.com/abruption/session-peer-ts/pull/140), checkpoint `b917769047db41dedcb4aa1367a1b89915beb000`. The preparation changes candidate source/package/banner/current installation examples to 0.3.5 and makes its exact three-profile guard the compiled default. Immutable public 0.3.4 still supports only the two existing profiles; the proposed skill 0.2.1 tuple is not an agreed or published successor.
+
+Companion exact-profile and complete-final-bytes agreement remains pending. The initial inactive-session dry-run was refused without submission. After user activation, a stable-writer dry-run passed and one review request was queued under correlation `STS-035-SKILL-PROFILE-REVIEW-20261013-A`; consumption, review and agreement remain unconfirmed. #139 remains open. Published skill source `8482cf644507c682915e35c85aa3384c53864906` and SHA-256 `00c6fc343fdbeb8f6dc1b1ee1b730f04cef71bbfb08205a7be3559202f1d8804` remain unchanged. Python reference/parity 1.0.2, historical validation and native-effect boundaries remain intact. Draft #106–#109, #82 and #142 are excluded.
+
+Read-only registry verification found `latest=0.3.4`, `preview=0.1.0-preview.1`, 0.3.5 absent, and the exact previous stable integrity matching the release baseline. No authenticated publication-settings audit was performed.
+
+Local pre-commit checkpoint on macOS arm64 / Node 24.16.0 / npm 11.15.0: `npm ci --ignore-scripts`, `npm run build`, `npm run test:types`, `npm test`, `npm run test:package`, `node scripts/check-repository.mjs`, `npm audit` and `git diff --check` passed. Full tests: 191 total / 186 passed / 0 failed / 5 Windows-only skipped. Focused metadata/release/updates/integration tests passed 47/47 after correcting one notice-regex fixture from current→current to current→future. The verified Python oracle remains `47c23713d0a2a3c11ebde6186afd8c43489b8b65`; its vendored compatibility fixture matches byte-for-byte. Package smoke includes reproducible packing, isolated installation/removal and bash/zsh shorthand contract/lifecycle checks. Audit found zero vulnerabilities.
+
+Public registry read at this checkpoint confirmed latest 0.3.4, preview 0.1.0-preview.1, target 0.3.5 absent, and the pinned previous integrity/attestation metadata URL. This is not an authenticated stage/publisher/MFA audit or a new signature/provenance-content verification. Exact committed-source pack/artifact, all packaged Markdown byte comparisons and current-head CI results are recorded separately in preparation issue [#143](https://github.com/abruption/session-peer-ts/issues/143)'s linked PR, so local pre-commit checks are not substituted for those later gates. Windows native CI must be checked independently; skipped local tests and historical 0.3.4 Windows fixtures are not new 0.3.5 native steering/observation evidence. No live agent delivery/ACK, merge, staging, environment approval, npm 2FA, tag, publication or fleet installation was performed.
 
 ## 0.3.4 artifact documentation correction — 2026-10-12 KST
 

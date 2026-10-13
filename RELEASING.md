@@ -9,6 +9,23 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.3.5 candidate preparation — #143 (2026-10-13 KST)
+
+The candidate uses main `afed4a5a8945012faf1b23d52cffecb70470a5b3` plus unmerged [Draft #140](https://github.com/abruption/session-peer-ts/pull/140), checkpoint `b917769047db41dedcb4aa1367a1b89915beb000`. It changes candidate VERSION/banner/package/examples to 0.3.5 and supports a proposed exact skill 0.2.1 profile, preserving the two existing profiles. Companion agreement on the exact profile and complete final skill bytes remains pending; #139 stays open. No proposed profile is a published skill or approved installation pin. The existing 0.2.0 pin remains unchanged. Draft #106–#109, #82 and #142 are excluded.
+
+Read-only registry baseline verified during preparation: `latest=0.3.4`, `preview=0.1.0-preview.1`, 0.3.5 absent, and previous stable integrity matched the value below. Reverify before staging; this public read is not an authenticated stage/publisher/MFA audit. Previous stable integrity is:
+`sha512-O9Uwpa0x1NZ8MNZCk0a1Z4hj7S+v0F0QeOJa+rKfbwcAYzBCSMwqmEWQWZQMWM36SbxVu3RowTSvpwPiKd/BDA==`.
+Previous stable attestation metadata: `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.4`.
+
+1. Close the exact profile/fixture agreement gate, review the dependency and preparation, and obtain human merge approval. Require successful exact merged-main release gate, CodeQL and Windows Node 22/24 checks. Preparation alone authorizes no merge or publication.
+2. Fresh authenticated reads must verify ownership, pending npm stages, stage-only Trusted Publisher mapping, package MFA and protected GitHub npm environment/reviewer/main-only restrictions. Recheck registry tags, previous integrity, provenance content/source and target absence. Any exception requires an explicit current user decision; historical exceptions are not carried forward.
+3. Build and validate the exact-source archive, reproducible packing, isolated installation/removal and every packaged Markdown document under the [artifact documentation gate](#documentation-gate-for-the-next-release). Runtime/banner/archive/current examples must agree on 0.3.5; historical evidence and immutable public pins must remain intact.
+4. Obtain separate approval naming the exact merged 40-character main SHA, `session-peer@0.3.5`, `stable-stage` and eventual `latest` promotion to 0.3.5.
+5. Only then dispatch `publish.yml` with `source_sha=<approved SHA>`, `version=0.3.5`, `mode=stable-stage`, `confirmation=session-peer@0.3.5 stable-stage`. Review retained Actions bytes before protected environment approval, verify staged bytes/provenance, then obtain final npm 2FA approval. Never retry an uncertain upload or broaden permissions.
+6. After publication, verify public integrity/provenance/signatures and isolated install/removal and append dated evidence. Preview stays unchanged. Skill finalization/publication/pin updates, tags/GitHub Releases and fleet installs remain separate decisions.
+
+SSH endpoints require exactly the same TS client version. Public 0.3.4 and candidate 0.3.5 refuse each other. No postinstall, implicit provisioning, delivery/ACK support, auto-resend or 0.4 feature promotion is introduced.
+
 ## 0.3.4 stable preparation — 2026-10-12 KST
 
 The patch integrates [PR #134](https://github.com/abruption/session-peer-ts/pull/134), merged as `c210ee963741f77153df10038c28e228ea7a902f`: Windows native exit forwarding and independently published TS skill guidance. Draft #106–#109 and #82 are excluded. Preparation is not staging or publication approval.

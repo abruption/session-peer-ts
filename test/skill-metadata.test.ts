@@ -28,7 +28,7 @@ test('finite runtime/profile matrix preserves published 0.3.2 and 0.3.3 profiles
   const legacy = fixtureText(), successor = fixtureText({ ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' });
   assert.deepEqual(validateSkillMetadata(legacy, '0.3.2'), compatible);
   assert.deepEqual(validateSkillMetadata(successor, '0.3.2'), incompatible);
-  assert.equal(VERSION, '0.3.4');
+  assert.equal(VERSION, '0.3.5');
   for (const text of [legacy, successor]) {
     assert.deepEqual(validateSkillMetadata(text, '0.3.3'), compatible);
     assert.deepEqual(validateSkillMetadata(text), compatible);
@@ -42,7 +42,7 @@ test('finite runtime/profile matrix preserves published 0.3.2 and 0.3.3 profiles
 
 test('0.3.4 patch row permits only the two exact published profiles', () => {
   const successor = { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' };
-  assert.equal(VERSION, '0.3.4');
+  assert.equal(VERSION, '0.3.5');
   for (const values of [fields, successor]) {
     assert.deepEqual(validateSkillMetadata(fixtureText(values), '0.3.4'), compatible);
     for (const key of Object.keys(values)) {
@@ -58,11 +58,11 @@ test('0.3.4 patch row permits only the two exact published profiles', () => {
   assert.deepEqual(validateSkillMetadata(fixtureText({ ...successor, 'runtime-full-version': '0.1.0' }), '0.3.4'), incompatible);
 });
 
-test('Draft successor profile is finite and unavailable to the compiled public runtime', t => {
+test('0.3.5 release candidate accepts only the finite successor profile', t => {
   const { file } = fixture(t);
   const successor = { ...fields, version: '0.2.1', 'runtime-full-version': '0.3.2' };
   const text = fixtureText(successor);
-  assert.equal(VERSION, '0.3.4');
+  assert.equal(VERSION, '0.3.5');
   for (const values of [fields, { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' }, successor]) {
     assert.deepEqual(validateSkillMetadata(fixtureText(values), '0.3.5'), compatible);
     for (const runtime of ['0.3.6', '0.4.0', '9.9.9']) {
@@ -70,12 +70,11 @@ test('Draft successor profile is finite and unavailable to the compiled public r
     }
   }
   for (const runtime of ['0.3.2', '0.3.3', '0.3.4']) assert.deepEqual(validateSkillMetadata(text, runtime), incompatible);
-  assert.deepEqual(validateSkillMetadata(text), incompatible);
-  assert.deepEqual(validateSkillMetadata(text, undefined), incompatible);
+  assert.deepEqual(validateSkillMetadata(text), compatible);
+  assert.deepEqual(validateSkillMetadata(text, undefined), compatible);
   writeFileSync(file, text);
-  // Public doctor uses the compiled identity; an explicit test identity does
-  // not make the installed runtime accept the proposed revision.
-  assert.deepEqual(inspectSkill(file), { path: file, ...incompatible });
+  // The candidate doctor uses compiled 0.3.5; explicit historical rows remain unchanged.
+  assert.deepEqual(inspectSkill(file), { path: file, ...compatible });
   for (const runtime of [null, {}, 0, '', '0.3.5-preview.1', '00.3.5']) {
     assert.deepEqual(validateSkillMetadata(text, runtime), missing);
   }

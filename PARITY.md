@@ -1,8 +1,8 @@
 # Python compatibility and npm migration
 
-Updated 2026-10-12 KST. Python reference: **1.0.2**,
+Updated 2026-10-13 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes the **TS 0.3.4 source/package contract**: the 0.2.0 unified listing, safe home selection,
+This matrix describes the **TS 0.3.5 candidate source/package contract**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
 separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 [0.2.1 reliability and hardening](#021-reliability-and-hardening) changes, and the
@@ -14,6 +14,12 @@ SSH preflight enforces the exact same TS version banner. For builds from source
 between releases, operators should also align reviewed commits; the wire does not
 verify a source commit. `referenceVersion: "1.0.2"` identifies the comparison baseline,
 not complete parity. See [VALIDATION.md](VALIDATION.md) for dated evidence.
+
+## 0.3.5 candidate preparation — 2026-10-13 KST
+
+This preparation is based on public 0.3.4 source `afed4a5a8945012faf1b23d52cffecb70470a5b3` plus unmerged [Draft #140](https://github.com/abruption/session-peer-ts/pull/140), checkpoint `b917769047db41dedcb4aa1367a1b89915beb000`. Candidate compiled `VERSION=0.3.5` preserves exact legacy skill 0.1.0 and published skill 0.2.0 profiles and proposes exactly skill 0.2.1 / minimum 0.1.0 / full 0.3.2 / typescript / probe-help. Future versions remain incompatible; metadata-only compatibility is not instruction authenticity, CLI permission, delivery or ACK evidence.
+
+Companion agreement on the exact profile and complete final skill bytes is pending. The initial inactive-session dry-run was refused without submission. After user activation, a stable-writer dry-run passed and one review request was queued under correlation `STS-035-SKILL-PROFILE-REVIEW-20261013-A`; consumption, review and agreement remain unconfirmed. [#139](https://github.com/abruption/session-peer-ts/issues/139) remains open for that agreement and separate rollout. The four guides retain published skill source `8482cf644507c682915e35c85aa3384c53864906` and SHA-256 `00c6fc343fdbeb8f6dc1b1ee1b730f04cef71bbfb08205a7be3559202f1d8804`; no successor pin or skill publication is approved. Python reference 1.0.2 remains unchanged. Exact-version SSH requires both endpoints at 0.3.5 for candidate tests; public 0.3.4 refuses that banner. Draft #106–#109, #82 and #142 are excluded. Historical 0.3.4 preparation below remains dated evidence, not the current candidate description.
 
 ## 0.3.4 patch preparation — 2026-10-12 KST
 
@@ -822,7 +828,7 @@ Evidence recheck: 2026-10-12 KST. Public TS runtime 0.3.3 at `c0ed30273b9e9c0049
 
 `compatible / skill_contract_compatible / metadata_only` is a bounded metadata verdict, not a content signature, send permission or delivery/ACK result. Minimum is the baseline CLI compatibility floor; full is the documented published feature coverage reference. Optional operations still need actual version/help and platform/native prerequisites. Runtime and skill management remain separate, without postinstall. The Python 1.0.2 reference and Python skill are unchanged.
 
-This source/package uses compiled `VERSION=0.3.4` and accepts these same two exact profiles through the default inspector; valid unreviewed runtimes such as `0.3.5` remain incompatible. At the earlier PR #134 checkpoint, compiled `VERSION` was `0.3.3` and the 0.3.4 row was tested through explicit validator arguments. That checkpoint is historical. Source support neither broadens compatibility to arbitrary future versions nor establishes runtime or skill publication. See the [finite matrix and retained dated review](docs/design/typescript-skill-compatibility.md). The dated candidate checkpoint below remains historical.
+The immutable public 0.3.4 source/package uses compiled `VERSION=0.3.4` and accepts these same two exact profiles through its default inspector; its explicit helper rejects unreviewed runtimes such as `0.3.5`. This unpublished 0.3.5 candidate adds the exact proposed skill 0.2.1 tuple described in the preparation section above; it is not published compatibility or an approved skill pin. At the earlier PR #134 checkpoint, compiled `VERSION` was `0.3.3` and the 0.3.4 row was tested through explicit validator arguments. That checkpoint is historical. Source support neither broadens compatibility to arbitrary future versions nor establishes runtime or skill publication. See the [finite matrix and retained dated review](docs/design/typescript-skill-compatibility.md). The dated candidate checkpoint below remains historical.
 
 <a id="typescript-skill-guard--033-candidate"></a>
 
