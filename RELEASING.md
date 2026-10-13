@@ -9,6 +9,12 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.3.5 publication checkpoint — 2026-10-13 KST
+
+PR #144 is merged as `5409d0acd4b559c09920a63c5fd7f11fd10f5737`; its tree matches reviewed preparation `6fdf9d65fb0b62cca3801a3733af07add5fb6553`. Exact-main CLI and CodeQL runs passed. Publication has not started: artifact review found stale current-facing unmerged/candidate text, which requires a document-only correction, human merge and new exact-source/artifact approval. The dated preparation sections below retain their historical scope.
+
+**Current operator exception:** the user explicitly instructed skipping the fresh Trusted Publisher check and separately the web package publish-MFA policy check for this 0.3.5 publication. Neither current mapping/permissions nor package MFA policy is freshly confirmed. Historical stage-only evidence is not reclassified as a current audit. This task changed no publisher settings; the stage-only/OIDC workflow is unchanged, with no token or protection bypass introduced. Package ownership, pending stages, registry and GitHub environment checks remain separate. CLI authentication succeeded, package is public, the sole maintainer is abruption, and the pending-stage list was empty at this checkpoint. These settings-read exceptions apply only to this 0.3.5 publication. Protected GitHub environment approval and actual final npm 2FA remain mandatory separate steps.
+
 ## 0.3.5 candidate preparation — #143 (2026-10-13 KST)
 
 The candidate uses main `afed4a5a8945012faf1b23d52cffecb70470a5b3` plus unmerged [Draft #140](https://github.com/abruption/session-peer-ts/pull/140), checkpoint `b917769047db41dedcb4aa1367a1b89915beb000`. It changes candidate VERSION/banner/package/examples to 0.3.5 and supports a proposed exact skill 0.2.1 profile, preserving the two existing profiles. Companion agreement on the exact profile and complete final skill bytes remains pending; #139 stays open. No proposed profile is a published skill or approved installation pin. The existing 0.2.0 pin remains unchanged. Draft #106–#109, #82 and #142 are excluded.

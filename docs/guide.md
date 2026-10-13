@@ -6,8 +6,6 @@
 
 **Documentation and source version: 0.3.5.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.4 and 0.3.5 refuse each other’s SSH preflight.
 
-Version 0.3.5 is an unmerged preparation candidate, not a publication record.
-
 This guide covers version 0.3.5 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
 
 <a id="migration-boundaries-033-candidate"></a>
@@ -42,7 +40,7 @@ not a commit hash; operators must align reviewed source commits separately.
   omits identity; an unusable Claude name falls back to PID.
 - npm, Python, remote hosts and skills have separate owners. TS has no self- or
   remote updater; notices default off and opt-out wins. Explicit `update --check`
-  still queries the registry. Public TS 0.3.3 accepts both exact reviewed legacy `0.1.0` and published `0.2.0` skill profiles; this unpublished 0.3.5 candidate preserves those profiles and proposes one additional exact skill 0.2.1 profile; companion agreement and separate publication remain pending. The installation section pins the independently published skill source.
+  still queries the registry. Public TS 0.3.3 accepts both exact reviewed legacy `0.1.0` and published `0.2.0` skill profiles; TS 0.3.5 source/package preserves those profiles and adds the exact skill 0.2.1 profile. The complete candidate profile/content has been reviewed for guard preparation; final successor skill publication and immutable installation-pin adoption remain separate steps after actual supporting-runtime publication. The installation section pins the independently published skill source.
 - Windows qualification used published 0.3.1 on Windows 10 x64, an administrator
   account, PowerShell 5.1 and Node 24.16.0: offline provisioning, wrapper/native
   locking, operator doctor/nonexistent-target dry-run and 31 local fixtures.
