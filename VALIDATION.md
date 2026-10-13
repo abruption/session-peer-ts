@@ -2,7 +2,7 @@
 
 ## 0.3.5 pre-staging document correction — 2026-10-13 KST
 
-Merged source `5409d0acd4b559c09920a63c5fd7f11fd10f5737` has the same tree as reviewed `6fdf9d65fb0b62cca3801a3733af07add5fb6553`. Exact-main CLI38370116243 and CodeQL38370116569 passed. PR #144 automatic Code/Security reviews completed for the matching source tree without reported findings; no extra review mention was posted. The #140 implementation is included through #144 rather than a separate #140 merge.
+Merged source `5409d0acd4b559c09920a63c5fd7f11fd10f5737` has the same tree as reviewed `6fdf9d65fb0b62cca3801a3733af07add5fb6553`. Exact-main CLI38370116243 and CodeQL38370116569 passed. PR #144 automatic Code/Security reviews completed for the matching source tree. Code Review reported a P2 finding on the current unmerged README label; this correction addresses that finding across all four READMEs/guides. No Security Review finding was reported, and no extra review mention was posted. The #140 implementation is included through #144 rather than a separate #140 merge.
 
 Artifact-document review found current, undated README/guide lines calling 0.3.5 unmerged and current skill descriptions still referring to unagreed source proposals. This document-only correction removes those lines, states implemented 0.3.5 source/profile support without claiming registry publication, and preserves historical preparation records, skill publication/pin boundaries, exact-version SSH, Python reference and runtime behavior. Corrected-source/artifact and current-head checks are recorded in the linked correction PR. No staging, publication, native delivery/ACK or operations change is performed by this checkpoint.
 
