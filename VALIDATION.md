@@ -1,5 +1,11 @@
 # Validation record — updated 2026-10-13 KST
 
+## 0.3.5 pre-staging document correction — 2026-10-13 KST
+
+Merged source `5409d0acd4b559c09920a63c5fd7f11fd10f5737` has the same tree as reviewed `6fdf9d65fb0b62cca3801a3733af07add5fb6553`. Exact-main CLI38370116243 and CodeQL38370116569 passed. PR #144 automatic Code/Security reviews completed for the matching source tree without reported findings; no extra review mention was posted. The #140 implementation is included through #144 rather than a separate #140 merge.
+
+Artifact-document review found current, undated README/guide lines calling 0.3.5 unmerged and current skill descriptions still referring to unagreed source proposals. This document-only correction removes those lines, states implemented 0.3.5 source/profile support without claiming registry publication, and preserves historical preparation records, skill publication/pin boundaries, exact-version SSH, Python reference and runtime behavior. Corrected-source/artifact and current-head checks are recorded in the linked correction PR. No staging, publication, native delivery/ACK or operations change is performed by this checkpoint.
+
 ## 0.3.5 preparation boundary — 2026-10-13 KST
 
 Base main is `afed4a5a8945012faf1b23d52cffecb70470a5b3`, plus unmerged [Draft #140](https://github.com/abruption/session-peer-ts/pull/140), checkpoint `b917769047db41dedcb4aa1367a1b89915beb000`. The preparation changes candidate source/package/banner/current installation examples to 0.3.5 and makes its exact three-profile guard the compiled default. Immutable public 0.3.4 still supports only the two existing profiles; the proposed skill 0.2.1 tuple is not an agreed or published successor.

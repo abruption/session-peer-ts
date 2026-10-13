@@ -22,8 +22,6 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 **문서·소스 기준 버전: 0.3.5.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.4와 0.3.5는 서로의 SSH 사전 확인을 거부합니다.
 
-0.3.5는 아직 병합하지 않은 릴리스 준비 후보이며, 발행 완료를 뜻하지 않습니다.
-
 <a id="demo"></a>
 ## 시연
 

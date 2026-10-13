@@ -17,8 +17,6 @@
 
 **Documentation and source version: 0.3.5.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.4 and 0.3.5 refuse each other’s SSH preflight.
 
-Version 0.3.5 is an unmerged preparation candidate, not a publication record.
-
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
 

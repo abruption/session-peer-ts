@@ -83,19 +83,23 @@ Final metadata is skill `0.2.0`, implementation `typescript`, minimum `0.1.0`, f
 
 The 0.3.4 source/package preserves both exact published profiles through its compiled default. PR #134 initially checked that row only through explicit validator arguments with compiled VERSION 0.3.3; the subsequent 0.3.4 preparation changed the runtime version. No skill metadata change, new skill publication, installation or future-range compatibility is included.
 
-## Draft successor profile planning — #139
+<a id="draft-successor-profile-planning--139"></a>
 
-[#139](https://github.com/abruption/session-peer-ts/issues/139) proposes a separate successor profile for the updated TS skill documentation. The profile and inspecting runtime below are **Draft candidates**, not an agreed contract or published support. They do not replace the published matrix above. At the original [Draft #140 checkpoint `b917769`](https://github.com/abruption/session-peer-ts/tree/b917769047db41dedcb4aa1367a1b89915beb000), compiled `VERSION=0.3.4` rejected the proposed `0.2.1` skill profile by default and candidate `0.3.5` support was exercised only through explicit helper arguments. This 2026-10-13 preparation now uses candidate compiled `VERSION=0.3.5`; the candidate default inspector accepts the three exact profiles below. Neither dependency PR #140 nor this preparation is merged or published. Exact companion profile and complete final skill bytes remain unagreed, and no new skill installation pin is approved.
+## 0.3.5 source support and successor rollout — #139
 
-| Candidate inspecting runtime | Skill version | Implementation | Minimum | Full | Policy | Proposed verdict |
+[#139](https://github.com/abruption/session-peer-ts/issues/139) tracks the separate successor profile and rollout for updated TS skill documentation. The 0.3.5 source/package adds exactly the skill 0.2.1 profile below while retaining legacy 0.1.0 and published 0.2.0. Its complete candidate bytes/profile were reviewed for guard preparation as recorded below; final skill publication wording, immutable release and installation pin remain separate. Source/package support does not itself establish npm or skill publication.
+
+At the original [Draft #140 checkpoint `b917769`](https://github.com/abruption/session-peer-ts/tree/b917769047db41dedcb4aa1367a1b89915beb000), compiled VERSION was 0.3.4 and candidate 0.3.5 support was exercised only through helper arguments. [PR #144](https://github.com/abruption/session-peer-ts/pull/144) integrated that implementation and the compiled-default/full-file tests; its merge source is `5409d0acd4b559c09920a63c5fd7f11fd10f5737`. The current compiled VERSION is 0.3.5. Public 0.3.4 remains immutable, and no successor skill installation pin is approved.
+
+| Inspecting source/package runtime | Skill version | Implementation | Minimum | Full | Policy | Verdict |
 | --- | --- | --- | --- | --- | --- | --- |
-| `0.3.5` (unpublished compiled candidate / helper fixture) | `0.1.0` | `typescript` | `0.1.0` | `0.1.0` | `probe-help` | compatible / skill_contract_compatible / metadata_only |
-| `0.3.5` (unpublished compiled candidate / helper fixture) | `0.2.0` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | compatible / skill_contract_compatible / metadata_only |
-| `0.3.5` (unpublished compiled candidate / helper fixture) | `0.2.1` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | compatible / skill_contract_compatible / metadata_only |
+| `0.3.5` (source/package) | `0.1.0` | `typescript` | `0.1.0` | `0.1.0` | `probe-help` | compatible / skill_contract_compatible / metadata_only |
+| `0.3.5` (source/package) | `0.2.0` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | compatible / skill_contract_compatible / metadata_only |
+| `0.3.5` (source/package) | `0.2.1` | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | compatible / skill_contract_compatible / metadata_only |
 | Published `0.3.2`, `0.3.3`, or `0.3.4` | Proposed `0.2.1` profile above | `typescript` | `0.1.0` | `0.3.2` | `probe-help` | incompatible / skill_contract_mismatch / metadata_only |
 | Unreviewed `0.3.6`, `0.4.0`, or other future runtime | Any of these profiles | Any | Any | Any | Any | incompatible / skill_contract_mismatch / metadata_only |
 
-The proposed minimum/full values retain their existing meanings; neither implies acceptance by earlier inspectors or introduces a version range. Compatible results require the existing exact name, grammar and bounded stable-file evidence. Reader errors, malformed metadata and unavailable runtime identity retain their existing envelopes. An explicit runtime argument is test evidence, not evidence that that runtime was built, installed or published.
+The minimum/full values retain their existing meanings; neither implies acceptance by earlier inspectors or introduces a version range. Compatible results require the existing exact name, grammar and bounded stable-file evidence. Reader errors, malformed metadata and unavailable runtime identity retain their existing envelopes. An explicit runtime argument is test evidence, not evidence that that runtime was built, installed or published.
 
 Companion [PR #33](https://github.com/abruption/session-peer-skill/pull/33), merged at [`eb239fb358336d85b49bab2c80e4ea39037d1374`](https://github.com/abruption/session-peer-skill/tree/eb239fb358336d85b49bab2c80e4ea39037d1374), updates TS documentation for published runtime `0.3.4` while preserving the `0.2.0` frontmatter. Its newer main-file bytes are not a replacement for the immutable `session-peer-ts-v0.2.0` release or an approved new TS skill installation pin. Companion [issue #31](https://github.com/abruption/session-peer-skill/issues/31) concerns the distinct, unshipped `0.4` scope; this patch-profile proposal does not adopt or publish that feature scope.
 
