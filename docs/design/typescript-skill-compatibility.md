@@ -110,3 +110,15 @@ Until those steps complete, the existing skill source pin `8482cf644507c682915e3
 ## 0.3.5 preparation boundary — 2026-10-13 KST
 
 The candidate is based on main `afed4a5a8945012faf1b23d52cffecb70470a5b3` plus unmerged Draft #140 `b917769047db41dedcb4aa1367a1b89915beb000`. The initial companion inactive-session dry-run was refused without submission. After user activation, a stable-writer dry-run passed and one review request was queued under correlation `STS-035-SKILL-PROFILE-REVIEW-20261013-A`; consumption, review and agreement remain unconfirmed. Profile numbers and complete successor bytes require explicit companion agreement before the rollout can close. Issue #139 therefore remains open. Public skill 0.2.0 source `8482cf644507c682915e35c85aa3384c53864906`, SHA-256 `00c6fc343fdbeb8f6dc1b1ee1b730f04cef71bbfb08205a7be3559202f1d8804`, remains the installation pin. Draft #106–#109, Side Session #82 and steering #142 are excluded. Release preparation is not runtime or skill publication approval.
+
+## Conditional successor-profile review — 2026-10-13 KST
+
+The companion reply under `STS-035-SKILL-PROFILE-REVIEW-20261013-A` reported `conditional_profile_direction_accepted` for Draft #140 exact head `b917769047db41dedcb4aa1367a1b89915beb000`. Its reported source/test/document hashes were independently rechecked against that commit:
+
+| File at the reviewed dependency head | SHA-256 |
+| --- | --- |
+| `src/skill-metadata.ts` | `2a6e2a572d563cd57ebda825aca5d278dd786fbaea12a33caa258b8e436d4e60` |
+| `test/skill-metadata.test.ts` | `93b5c50a2da9df14939f404c67f9bb2dc07ea790816c4eee2bf1b759780f9052` |
+| `docs/design/typescript-skill-compatibility.md` | `cbda1b7038d32e8b0f948cdb2c57c7486cb7b37be6e5fd416a097615f5f743a5` |
+
+That review did not test the release candidate compiled default or accept full successor instruction bytes. The preparation now adds direct literal-result assertions for omitted runtime, explicit `undefined` and outer `inspectSkill` against each of the three profiles with compiled `VERSION=0.3.5`; it still requires exact-head companion review and complete SKILL candidate bytes/hash. This is conditional direction, not full design/content freeze, publication support or merge/release authorization. Existing published pin and runtime-first rollout requirements remain.

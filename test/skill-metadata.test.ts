@@ -64,7 +64,12 @@ test('0.3.5 release candidate accepts only the finite successor profile', t => {
   const text = fixtureText(successor);
   assert.equal(VERSION, '0.3.5');
   for (const values of [fields, { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' }, successor]) {
-    assert.deepEqual(validateSkillMetadata(fixtureText(values), '0.3.5'), compatible);
+    const profile = fixtureText(values);
+    assert.deepEqual(validateSkillMetadata(profile, '0.3.5'), compatible);
+    assert.deepEqual(validateSkillMetadata(profile), compatible);
+    assert.deepEqual(validateSkillMetadata(profile, undefined), compatible);
+    writeFileSync(file, profile);
+    assert.deepEqual(inspectSkill(file), { path: file, ...compatible });
     for (const runtime of ['0.3.6', '0.4.0', '9.9.9']) {
       assert.deepEqual(validateSkillMetadata(fixtureText(values), runtime), incompatible);
     }
