@@ -4,6 +4,7 @@ import fs, { closeSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { syncBuiltinESMExports } from 'node:module';
+import { createHash } from 'node:crypto';
 import childProcess, { execFileSync } from 'node:child_process';
 import { inspectSkill, SKILL_METADATA_LIMIT, validateSkillMetadata } from '../dist/skill-metadata.js';
 import { VERSION } from '../dist/protocol.js';
@@ -371,4 +372,24 @@ test('post-EOF growth is conflicting evidence and early descriptor rejection sti
     const info = (stat as any)(fd, ...args); return { ...info, isFile: () => false };
   }) as typeof fs.fstatSync); syncBuiltinESMExports();
   assert.deepEqual(withoutPath(inspectSkill(file)), unreadable); assert.equal(closed, 1);
+});
+
+// Exact companion Draft35 source9db5420 is a review fixture, never an install pin.
+test('complete companion 0.2.1 candidate bytes match the exact reviewed fixture and compiled guard', t => {
+  const bytes = readFileSync(new URL('./fixtures/ts-skill-0.2.1-candidate.md', import.meta.url));
+  assert.equal(bytes.length, 13930);
+  assert.ok(bytes.length <= SKILL_METADATA_LIMIT);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'),
+    '96d5a0d049f8a4d193703af3583b198a91079d44ae373de34e94a54e2296a4d6');
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  assert.equal(VERSION, '0.3.5');
+  assert.deepEqual(validateSkillMetadata(text), compatible);
+  assert.deepEqual(validateSkillMetadata(text, undefined), compatible);
+  assert.deepEqual(validateSkillMetadata(text, '0.3.5'), compatible);
+  for (const runtime of ['0.3.2', '0.3.3', '0.3.4', '0.3.6', '0.4.0']) {
+    assert.deepEqual(validateSkillMetadata(text, runtime), incompatible);
+  }
+  const { file } = fixture(t); writeFileSync(file, bytes);
+  assert.deepEqual(inspectSkill(file), { path: file, ...compatible });
+  // Full body remains inert: no interpreter/model/runtime or network is invoked.
 });

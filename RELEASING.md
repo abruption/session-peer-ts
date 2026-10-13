@@ -26,6 +26,10 @@ Previous stable attestation metadata: `https://registry.npmjs.org/-/npm/v1/attes
 
 SSH endpoints require exactly the same TS client version. Public 0.3.4 and candidate 0.3.5 refuse each other. No postinstall, implicit provisioning, delivery/ACK support, auto-resend or 0.4 feature promotion is introduced.
 
+### Exact successor candidate checkpoint — 2026-10-13 KST
+
+The earlier pending agreement statements above describe their initial preparation checkpoints. Companion [Draft #35](https://github.com/abruption/session-peer-skill/pull/35), source `9db5420b45568dd08fc43d406dbf9ad1952f7891`, now provides the complete 13,930-byte skill 0.2.1 candidate, SHA-256 `96d5a0d049f8a4d193703af3583b198a91079d44ae373de34e94a54e2296a4d6`. Independent full-content/hash comparison and compiled guard/default/undefined/outer-inspection tests support candidate-specific design/content acceptance; see [the exact review](docs/design/typescript-skill-compatibility.md#exact-complete-successor-candidate-review--2026-10-13-kst). This is a test fixture, not a published skill, approved installation pin or final joint publication freeze. Final skill wording/bytes after actual guard publication require another exact review and separate release approval. Published pin8482cf6 remains unchanged. Local scoped tests passed24/24; exact source/artifact/current-head CI and review status are recorded in PR #144. No instruction execution, live delivery/ACK, merge, staging or publication is claimed.
+
 ## 0.3.4 stable preparation — 2026-10-12 KST
 
 The patch integrates [PR #134](https://github.com/abruption/session-peer-ts/pull/134), merged as `c210ee963741f77153df10038c28e228ea7a902f`: Windows native exit forwarding and independently published TS skill guidance. Draft #106–#109 and #82 are excluded. Preparation is not staging or publication approval.
