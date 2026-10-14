@@ -18,7 +18,7 @@ The published bytes are retained as an offline guidance fixture, distinct from t
 
 The skill repository tag, Python skill revision, TS skill revision, and npm runtime version are independent. `runtime-min-version` describes the skill's baseline CLI compatibility floor; `runtime-full-version` describes its documented published CLI feature coverage reference. Neither is a security recommendation, a doctor-acceptance rule, permission to send, or evidence of platform/native compatibility. Optional operations still need their actual resolved TS executable's version/help and prerequisites.
 
-The published 0.3.4 checkpoint at [`afed4a5a8945012faf1b23d52cffecb70470a5b3`](https://github.com/abruption/session-peer-ts/tree/afed4a5a8945012faf1b23d52cffecb70470a5b3) has the following finite runtime/profile matrix. The current 0.3.5 source/package extension is documented in the successor-rollout section below; it does not change that immutable published artifact:
+The published 0.3.4 checkpoint at [`afed4a5a8945012faf1b23d52cffecb70470a5b3`](https://github.com/abruption/session-peer-ts/tree/afed4a5a8945012faf1b23d52cffecb70470a5b3) has the following finite runtime/profile matrix. The current 0.3.6 source/package row is documented above; the dated 0.3.5 successor rollout below is historical and does not change that immutable published artifact:
 
 | Inspecting runtime | Skill version | Implementation | Minimum | Full | Policy | Verdict |
 |---|---|---|---|---|---|---|
@@ -103,7 +103,7 @@ The preparation notes and rollout conditions in this section are retained from 2
 
 [#139](https://github.com/abruption/session-peer-ts/issues/139) tracks the separate successor profile and rollout for updated TS skill documentation. The 0.3.5 source/package adds exactly the skill 0.2.1 profile below while retaining legacy 0.1.0 and published 0.2.0. Its complete candidate bytes/profile were reviewed for guard preparation as recorded below; final skill publication wording, immutable release and installation pin remain separate. Source/package support does not itself establish npm or skill publication.
 
-At the original [Draft #140 checkpoint `b917769`](https://github.com/abruption/session-peer-ts/tree/b917769047db41dedcb4aa1367a1b89915beb000), compiled VERSION was 0.3.4 and candidate 0.3.5 support was exercised only through helper arguments. [PR #144](https://github.com/abruption/session-peer-ts/pull/144) integrated that implementation and the compiled-default/full-file tests; its merge source is `5409d0acd4b559c09920a63c5fd7f11fd10f5737`. The current compiled VERSION is 0.3.5. Public 0.3.4 remains immutable; at that preparation checkpoint, no successor skill installation pin was approved.
+At the original [Draft #140 checkpoint `b917769`](https://github.com/abruption/session-peer-ts/tree/b917769047db41dedcb4aa1367a1b89915beb000), compiled VERSION was 0.3.4 and candidate 0.3.5 support was exercised only through helper arguments. [PR #144](https://github.com/abruption/session-peer-ts/pull/144) integrated that implementation and the compiled-default/full-file tests; its merge source is `5409d0acd4b559c09920a63c5fd7f11fd10f5737`. At that release-preparation checkpoint, compiled VERSION was 0.3.5. Public 0.3.4 remains immutable; at that preparation checkpoint, no successor skill installation pin was approved.
 
 | Inspecting source/package runtime | Skill version | Implementation | Minimum | Full | Policy | Verdict |
 | --- | --- | --- | --- | --- | --- | --- |
