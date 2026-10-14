@@ -1,5 +1,15 @@
 # Validation record — updated 2026-10-14 KST
 
+## Public 0.3.6 — 2026-10-14 KST
+
+`session-peer@0.3.6` is public; verified `latest=0.3.6` with unchanged `preview=0.1.0-preview.1`. Publication source is `27fc741f7dabf075e3d6f19f48f3e71d7bdc27a6`, merged from [PR #148](https://github.com/abruption/session-peer-ts/pull/148). The prepared source tree matched reviewed head `526fc9aaa53e674a9bc6882a6dd207c67c402904`; exact-main CLI38495616148 and CodeQL38495616311 passed. [Stage-only run38496584629](https://github.com/abruption/session-peer-ts/actions/runs/38496584629) completed with protected GitHub npm environment and final user npm approval. Stage ID was `c6b468f1-6ac2-4301-80c6-03f16cb36038`.
+
+Reviewed local, retained Actions, staged and public tarballs are byte-identical. SHA-256: `510e06ea1e118ceadb4096ec2fe9e564b2832e133aa0a21614d8b12db1764181`; registry integrity: `sha512-8uR9/x9q2AWp/zfJox0CMgm919M7kxpAjR2vGd/ntuS2AAwQh4ohbDmAtyxLyLoEE8IPsZVEbPKHCChvIJBuoQ==`. Every packaged Markdown document (18) matched the reviewed source. Registry signatures and publish/provenance attestations share the archive's exact SHA-512 subject. SLSA provenance binds repository `abruption/session-peer-ts`, `refs/heads/main`, `.github/workflows/publish.yml`, source `27fc741f…` and run38496584629/attempt1. `npm audit signatures` and isolated version-specific install/list/uninstall passed on macOS arm64/Node24.16.0/npm11.15.0. These packaging checks do not qualify new native delivery or ACK behavior.
+
+The annotated `v0.3.6` tag object is `0b51f02e7fd19c132a550bcfac4ae795f914f0dd`; its peeled source is the publication commit above. [GitHub release v0.3.6](https://github.com/abruption/session-peer-ts/releases/tag/v0.3.6) is published as Latest. This verification record is a later documentation update; the immutable npm artifact/tag continue to point to the original publication source.
+
+The user explicitly skipped fresh Trusted Publisher mapping and web publish-MFA policy reads for this0.3.6publication. Neither setting is claimed as freshly audited. Ownership/pending stages, GitHub environment reviewer/main-only/no-admin-bypass/zero-secret gates were checked; protected environment and final npm approval were completed. No token fallback, settings change or protection bypass was introduced. Runtime and published skill0.2.1 remain separately managed; Python1.0.2 reference and preview are unchanged. SSH still requires identical TS versions on both ends. No fleet/global installation, actual native/model send/consumption/ACK test or unshipped0.4feature was added.
+
 ## 0.3.6 preparation checks — 2026-10-14 KST
 
 This patch starts from merged PR #146/main `602cfc09b31ce8aad23e1dd9382a2448a61143f9`, whose exact-main CLI38493362484 and CodeQL38493362496 passed. Source/package/banner/current examples are 0.3.6 and its explicit finite row carries the same three skill profiles as public 0.3.5; the published skill0.2.1 source/hash and Python1.0.2 oracle remain unchanged. Draft #106–#109, #82 and #142 are excluded.
