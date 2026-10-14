@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
-import { Rpc, Refused, Unknown, RpcRejected, loadedIds, send, ownedSocket } from './side_session.ts';
+import { Rpc, Refused, Unknown, RpcRejected, loadedIds, send, ownedSocket, main } from './side_session.ts';
 
 const ID = '00000000-0000-4000-8000-000000000001';
 class Fake {
@@ -121,4 +121,49 @@ test('insecure socket directory refused before connecting', async () => {
     chmodSync(join(path, '..'), 0o755);
     await assert.rejects(Rpc.connect(path), /private_socket_directory/);
   });
+});
+
+// Exercise actual wire parsing and the CLI envelope, not just thrown Fake errors.
+// Each case has its own server/attempt count; no native Codex or provider runs.
+for (const [name, outcome, response] of [
+  ['result plus rejection -32600', 'unknown', { result: { turn: { id: 'accepted-turn' } }, error: { code: -32600 } }],
+  ['result plus rejection -32601', 'unknown', { result: { turn: { id: 'accepted-turn' } }, error: { code: -32601 } }],
+  ['null result plus rejection', 'unknown', { result: null, error: { code: -32600 } }],
+  ['missing result and error', 'unknown', {}],
+  ['malformed error object', 'unknown', { error: '-32600' }],
+  ['string error code', 'unknown', { error: { code: '-32600' } }],
+  ['boolean error code', 'unknown', { error: { code: false } }],
+  ['fractional error code', 'unknown', { error: { code: -32600.5 } }],
+  ['out-of-safe-range error code', 'unknown', { error: { code: Number.MAX_SAFE_INTEGER + 1 } }],
+  ['clean rejection -32600', 'refused', { error: { code: -32600 } }],
+  ['clean rejection -32601', 'refused', { error: { code: -32601 } }],
+  ['clean internal error', 'unknown', { error: { code: -32603 } }],
+] as const) test('post-attempt wire ' + name + ' preserves ' + outcome + ' without replay', async () => {
+  const methods: string[] = [], output: string[] = [];
+  await server((method, id, respond) => {
+    methods.push(method);
+    if (method === 'thread/loaded/list') respond({ id, result: { data: [ID], nextCursor: null } });
+    else if (method === 'thread/read') respond({ id, result: { thread: { id: ID, ephemeral: true, status: { type: 'idle' }, canAcceptDirectInput: true } } });
+    else if (method === 'turn/start') respond({ id, ...response });
+    else assert.fail('unexpected RPC: ' + method);
+  }, async path => {
+    const originalLog = console.log;
+    let code: number;
+    try {
+      console.log = (value: unknown) => { output.push(String(value)); };
+      code = await main(['send', '--experimental-side-session', '--exclusive-test-session', '--socket', path, '--to', ID, '--message', 'fixture-only input']);
+    } finally { console.log = originalLog; }
+    assert.equal(code!, 1);
+  });
+  assert.equal(output.length, 1);
+  const result = JSON.parse(output[0]!);
+  assert.equal(result.ok, false);
+  assert.equal(result.status, outcome);
+  assert.equal(result.submitted, outcome === 'unknown' ? null : false);
+  assert.equal(result.consumptionConfirmed, false);
+  assert.equal(result.retryAllowed, false);
+  if (outcome === 'unknown') assert.equal(result.reason, 'submission_outcome_unknown');
+  assert.equal(JSON.stringify(result).includes('fixture-only input'), false);
+  assert.deepEqual(methods, ['thread/loaded/list', 'thread/read', 'turn/start']);
+  assert.equal(methods.filter(method => method === 'turn/start').length, 1);
 });

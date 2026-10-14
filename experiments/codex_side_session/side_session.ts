@@ -48,12 +48,19 @@ export class Rpc implements Caller {
         if (!object(message)) throw new Refused('invalid_rpc_response');
         if ('id' in message) {
           if (message.id !== this.pending?.id || 'method' in message) throw new Refused('server_interaction_required');
-          const p = this.pending!; clearTimeout(p.timer); this.pending = undefined;
+          // Conflicting or malformed envelopes cannot establish a native refusal.
+          // Keep pending until validation so fail() closes this connection and
+          // send() preserves an uncertain post-attempt outcome without replay.
+          if (('result' in message) === ('error' in message)) throw new Refused('invalid_rpc_response');
+          const p = this.pending!;
           if ('error' in message) {
-            if (!object(message.error)) { p.reject(new Refused('invalid_rpc_response')); return; }
+            if (!object(message.error) || !Number.isSafeInteger(message.error.code)) throw new Refused('invalid_rpc_response');
+            clearTimeout(p.timer); this.pending = undefined;
             p.reject(new RpcRejected('response', message.error.code));
-          } else if (object(message.result)) p.resolve(message.result);
-          else p.reject(new Refused('invalid_rpc_response'));
+          } else {
+            if (!object(message.result)) throw new Refused('invalid_rpc_response');
+            clearTimeout(p.timer); this.pending = undefined; p.resolve(message.result);
+          }
         } else {
           if (typeof message.method !== 'string' || ++this.notifications > 100) throw new Refused('notification_limit');
           // Discard notifications immediately: no transcript retention or generic ACK detection.

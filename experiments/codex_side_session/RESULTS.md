@@ -84,3 +84,24 @@ References: [App Server](https://learn.chatgpt.com/docs/app-server),
 [Python experiment at its reviewed head](https://github.com/abruption/session-peer/blob/a0dea84396181426082e7467f113db111ab49b68/experiments/codex_side_session/RESULTS.md),
 [pinned native turn handler](https://github.com/openai/codex/blob/ff6aec96948b70d94983af2641a6b67c94faeff5/codex-rs/app-server/src/request_processors/turn_processor.rs#L652),
 [native ephemeral queue refusal](https://github.com/openai/codex/blob/ff6aec96948b70d94983af2641a6b67c94faeff5/codex-rs/app-server/src/request_processors/thread_queue_processor.rs#L259).
+
+## Response-classification correction — 2026-10-14
+
+- Matching RPC responses must contain exactly one of `result` and `error`.
+  A rejection is trusted only when its error is an object with a safe integer
+  code. Contradictory/malformed envelopes close the experiment connection;
+  after `turn/start` may have begun they remain `unknown` / `submitted:null` /
+  `retryAllowed:false`, not a definite refusal or acceptance.
+- Added 12 actual WebSocket-over-Unix/CLI-envelope controls: result plus
+  `-32600`/`-32601`, null result plus error, absent outcome fields, malformed
+  error object and string/boolean/fractional/unsafe codes, clean `-32600`/
+  `-32601` refusals, and clean internal error. Each observes exactly one
+  `turn/start`, with no queue, fallback, replay, policy change or body in output.
+- macOS arm64, Node 24.16.0: strict typecheck and all **32 scoped tests passed**.
+  With only the original adapter source restored, the three contradictory
+  result/error regressions failed (29 passed / 3 failed); the fixed source was
+  then restored. Dependencies installed with scripts disabled; audit: zero
+  vulnerabilities. This is a private fake owner, not a native/model test.
+- The earlier 0.159.2 native observations above are historical and were not
+  repeated. Existing UI-lifetime/admission/concurrency/owner-generation and
+  platform/SSH limitations remain; this correction does not qualify support.
