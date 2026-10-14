@@ -1,4 +1,12 @@
-# Validation record — updated 2026-10-13 KST
+# Validation record — updated 2026-10-14 KST
+
+## 0.3.6 preparation checks — 2026-10-14 KST
+
+This patch starts from merged PR #146/main `602cfc09b31ce8aad23e1dd9382a2448a61143f9`, whose exact-main CLI38493362484 and CodeQL38493362496 passed. Source/package/banner/current examples are 0.3.6 and its explicit finite row carries the same three skill profiles as public 0.3.5; the published skill0.2.1 source/hash and Python1.0.2 oracle remain unchanged. Draft #106–#109, #82 and #142 are excluded.
+
+Local macOS arm64 / Node24.16.0 validation: npm test193total/188passed/0failed/5Windows-onlyskips; build/types, metadata/guidance, release baseline, repository links/anchors and diff checks passed. The archived Python oracle was verified byte-for-byte against public1.0.2 source `47c23713d0a2a3c11ebde6186afd8c43489b8b65` before conformance tests. Package smoke passed reproducible packing and isolated install/uninstall plus bash/zsh shorthand contract/lifecycle. npm audit reported0vulnerabilities. An initial scoped run had two stale expected update-banner regex failures; both were corrected before the passing final full run. Package hashes before this record was added are not final release artifacts. Exact candidate-source/retained artifact hashes and final CI/review gates are recorded in the preparation PR; this record itself is not publication evidence.
+
+Read-only registry baseline was latest0.3.5, preview0.1.0-preview.1 and target0.3.6absent. Public0.3.5 bytes/integrity/provenance source/run matched the historical publication; those are not fresh publisher/MFA-setting audits. After npm login, pending-stage list was empty and sole maintainer was abruption. The user explicitly skipped the TrustedPublisher lookup for this0.3.6 release. The user separately skipped the fresh web package publish-MFA policy read for this 0.3.6 publication; neither skipped setting is freshly confirmed. Protected environment approval and actual final npm stage 2FA remain required. GitHub npm environment required reviewer abruption, disallowed administrator bypass, allowed main only and held zero secrets, as did repository Actions. No settings/token/protection change, native/model input, actual delivery/ACK, fleet/global install or publication occurred in these preparation checks.
 
 ## 0.3.5 pre-staging document correction — 2026-10-13 KST
 
