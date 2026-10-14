@@ -19,7 +19,7 @@
 - 重复 `--host` 返回按请求顺序排列的数组。主机分别执行期间发生的失败汇总为退出码 1；执行前的命令整体拒绝（如主机重复或消息为空）在数组输出中仍保持退出码 2。公开 0.3.2 在 SSH 退出 255 或超时后，也可能丢失完整响应的证据。0.3.3 保留与请求匹配的完整事实，并返回本地退出码 1 和 `sshTransport`。不完整或无效证据仍为 unknown。unknown 时不得自动重发。
 - 0.2.0 引入的基础 doctor 不执行 Codex，也不向 inbox 提交。0.3.0 起，显式 `--check-return-route` 仅对可用的非本地目标执行有时间限制的反向 SSH 无操作命令。同机自身路由无需 SSH 即返回 `verified`、`transport:local`、`self_route_normalized`；缺少主机时在任何探测前失败。`--check-reply-to` 不受支持。verified 表示本地路由归一化或一次 SSH 无操作命令成功，不是 ACK 认证或通用反向访问保证。
 - 将同机 Reply-To 归一化为本地路径，必须明确指定匹配的 OS 用户、使用可识别的准确本机名称，且没有显式 SSH 选项。发送者证据冲突时省略身份；Claude 名称不可用时使用 PID。
-- npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。公开 TS 0.3.3 接受经过审核的旧 `0.1.0` 和已发布 `0.2.0` 技能的精确配置；TS 0.3.5 的源码和软件包保留这些配置，并增加一个精确的技能 0.2.1 配置。完整候选技能的配置和内容已为该接受检查的准备工作完成审核。后续技能的最终发布和源码固定将在支持它的运行时实际公开后单独进行。安装部分固定了独立发布的技能源码。
+- npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。公开 TS 0.3.5 接受公开技能 `0.2.1` 及旧 `0.1.0`、`0.2.0` 的精确配置；此前的公开运行时拒绝 `0.2.1`。安装部分固定了独立发布的技能源码。
 - Windows 验证使用公开 0.3.1、Windows 10 x64、管理员账号、PowerShell 5.1 和 Node 24.16.0。验证范围包括离线安装、包装器与原生锁、操作端 doctor 和不存在目标的 dry-run，以及 31 项本地 fixture。Node 22 仅确认版本标识和原生锁。非管理员、其他架构、F6 运行时校验、此前 Linux 实验的最新规则仍未验证。这不是 0.3.2 实机 ACK 或部署辅助工具的验证。
 
 请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。Python 1.0.2 测试基准保持不变。对比的两个公开 CLI 都没有通用原生 ACK/wait、端到端去重或 Side Session 支持。Relay/MCP 不在此次迁移对比范围内。
@@ -295,18 +295,18 @@ npm 版本，Python 版 `session-peer` 的发布是独立的版本序列，从�
 
 ## 显式安装代理技能
 
-独立的 `session-peer-ts` 技能已发布为[技能 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0)。技能版本与 npm 运行时独立，安装其中一个不会安装另一个。Python 的 `session-peer` 技能也独立保留。
+独立的 `session-peer-ts` 技能已发布为[技能 0.2.1](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.1)。技能版本与 npm 运行时独立，安装其中一个不会安装另一个。Python 的 `session-peer` 技能也独立保留。
 
-先检查[固定提交的技能源码](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts)，再选择代理和安装范围。
+先检查[固定提交的技能源码](https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts)，再选择代理和安装范围。
 以下示例选择 **Codex、当前项目**；请在该项目目录中运行。
 Claude Code 使用 `--agent claude-code`。用户范围安装应在 add/list/remove 中一致添加 `--global`。
 批准替换已有的 `session-peer-ts` 副本前，请检查本地修改。
 Codex 的 `.agents/skills` 目录与其他扫描该路径的客户端共享。
 
-公开 TS 0.3.3 接受技能 0.2.0 的精确配置（`typescript`、最低 `0.1.0`、文档功能参考 `0.3.2`、`probe-help`）以及旧 0.1.0 配置。公开 0.3.2 拒绝 0.2.0 配置，因此使用新技能前，应通过原安装管理工具升级运行时。带有 `verification:metadata_only` 的 `compatible` 仅表示有界元数据检查，不代表内容认证、发送授权、投递或 ACK 证据。最低版本是基础 CLI 兼容下限，完整功能版本是文档所涵盖的公开功能参考版本。可选操作仍需检查实际执行文件的 version/help 以及平台和原生工具条件。运行时与技能由各自管理工具独立升级，不引入 postinstall。请参阅[有限判定表与读取边界](design/typescript-skill-compatibility.md)。
+公开 TS 0.3.5 接受技能 0.2.1 的精确配置（`typescript`、最低 `0.1.0`、文档功能参考 `0.3.2`、`probe-help`）以及旧 0.1.0 和 0.2.0 配置。公开 TS 0.3.2、0.3.3 和 0.3.4 拒绝 0.2.1 配置，因此使用此技能前，应通过原安装管理工具升级运行时。带有 `verification:metadata_only` 的 `compatible` 仅表示有界元数据检查，不代表内容认证、发送授权、投递或 ACK 证据。最低版本是基础 CLI 兼容下限，完整功能版本是文档所涵盖的公开功能参考版本。可选操作仍需检查实际执行文件的 version/help 以及平台和原生工具条件。运行时与技能由各自管理工具独立升级，不引入 postinstall。请参阅[有限判定表与读取边界](design/typescript-skill-compatibility.md)。
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```
