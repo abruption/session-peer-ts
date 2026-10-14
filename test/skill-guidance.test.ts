@@ -1,4 +1,6 @@
 // Companion session-peer-ts skill examples, using isolated state and zero sends.
+import { createHash } from 'node:crypto';
+import { inspectSkill, validateSkillMetadata } from '../dist/skill-metadata.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -10,20 +12,38 @@ import { fileURLToPath } from 'node:url';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 test('four language guides install the same published TS skill source', () => {
-  const pin = '8482cf644507c682915e35c85aa3384c53864906';
+  const pin = '0f494cabd05901c03161dc91792dcf89f8e96631';
   const source = `https://github.com/abruption/session-peer-skill/tree/${pin}/session-peer-ts`;
   for (const suffix of ['', '.ko', '.ja', '.zh-CN']) {
     const guide = readFileSync(new URL(`../docs/guide${suffix}.md`, import.meta.url), 'utf8');
     assert.ok(guide.includes(`](${source})`), suffix);
     assert.ok(guide.includes(`npx -y skills@1.7.0 add ${source} --skill session-peer-ts --agent codex --copy --yes`), suffix);
-    assert.ok(guide.includes('releases/tag/session-peer-ts-v0.2.0'), suffix);
+    assert.ok(guide.includes('releases/tag/session-peer-ts-v0.2.1'), suffix);
     assert.ok(guide.includes('verification:metadata_only'), suffix);
     assert.equal(guide.includes('081cc3c1d16a394bd92824333f4bc61c36951799'), false, suffix);
   }
   for (const path of ['PARITY.md', 'docs/design/typescript-skill-compatibility.md']) {
     const doc = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
     assert.ok(doc.includes(pin), path);
-    assert.ok(doc.includes('00c6fc343fdbeb8f6dc1b1ee1b730f04cef71bbfb08205a7be3559202f1d8804'), path);
+    assert.ok(doc.includes('8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3'), path);
+  }
+});
+test('published skill 0.2.1 complete bytes match the recorded release and finite guard', () => {
+  const url = new URL('./fixtures/ts-skill-0.2.1-published.md', import.meta.url);
+  const bytes = readFileSync(url);
+  assert.equal(bytes.length, 13996);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), '8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3');
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  const expected = { status: 'compatible', code: 'skill_contract_compatible', verification: 'metadata_only' };
+  assert.deepEqual(validateSkillMetadata(text), expected);
+  assert.deepEqual(validateSkillMetadata(text, undefined), expected);
+  assert.deepEqual(validateSkillMetadata(text, '0.3.5'), expected);
+  const path = fileURLToPath(url);
+  assert.deepEqual(inspectSkill(path), { ...expected, path });
+  for (const runtime of ['0.3.2', '0.3.3', '0.3.4', '0.3.6', '0.4.0']) {
+    assert.deepEqual(validateSkillMetadata(text, runtime), {
+      status: 'incompatible', code: 'skill_contract_mismatch', verification: 'metadata_only'
+    });
   }
 });
 test('TS skill baseline list and guarded Codex dry-run examples never submit', t => {

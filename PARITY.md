@@ -1,6 +1,6 @@
 # Python compatibility and npm migration
 
-Updated 2026-10-13 KST. Python reference: **1.0.2**,
+Updated 2026-10-14 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
 This matrix describes the **TS 0.3.5 source/package contract**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
@@ -15,7 +15,17 @@ between releases, operators should also align reviewed commits; the wire does no
 verify a source commit. `referenceVersion: "1.0.2"` identifies the comparison baseline,
 not complete parity. See [VALIDATION.md](VALIDATION.md) for dated evidence.
 
+## Published skill 0.2.1 adoption — 2026-10-14 KST
+
+The four guides now pin the independently published [TS skill 0.2.1 release](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.1) to immutable source [`0f494cabd05901c03161dc91792dcf89f8e96631`](https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts). Annotated tag object `4e7df7d8f99863e86b477eacce958033d7280246` peels to that source. The complete `SKILL.md` is **13,996 raw UTF-8 bytes**, SHA-256 `8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3`. The tag, source and file identities were independently rechecked after publication; the reviewed PR head `dc303b513d9da862f2ce21d648e168fdd847ae95` and published source have identical SKILL bytes.
+
+Public npm TS 0.3.5, source `a2057940ba19056fcaaa5551a7820f7414bd3bfa`, accepts the exact profile: skill `0.2.1`, implementation `typescript`, minimum `0.1.0`, documented feature reference `0.3.2`, policy `probe-help`. It retains legacy skill 0.1.0 and 0.2.0 acceptance. Public 0.3.2/0.3.3/0.3.4 reject skill 0.2.1; future runtime/profile combinations are not inferred from version ranges. The published 0.3.5 tarball's validator accepted these exact complete bytes with compiled default, explicit `undefined`, explicit 0.3.5 and outer `inspectSkill`; supplied historical/future identities were rejected. These helper checks are not executions of historical CLIs.
+
+The published bytes are retained as an offline guidance fixture, distinct from the earlier candidate fixture. `compatible / skill_contract_compatible / metadata_only` is a bounded metadata result, not content authentication, send permission, delivery or ACK. Runtime and skill installation/update remain separate and manager-owned; no postinstall, global installation or implicit update was performed. Python reference 1.0.2 and Python skill pins remain unchanged; unshipped 0.4 handoff/observer/ACK and experiments are excluded. Earlier candidate, pending-publication and 0.2.0 pin records below are dated history, not the current installation guidance.
+
 ## 0.3.5 candidate preparation — 2026-10-13 KST
+
+Historical preparation record; the current published skill and installation pin are recorded in [the 2026-10-14 checkpoint](#published-skill-021-adoption--2026-10-14-kst).
 
 This preparation is based on public 0.3.4 source `afed4a5a8945012faf1b23d52cffecb70470a5b3` plus unmerged [Draft #140](https://github.com/abruption/session-peer-ts/pull/140), checkpoint `b917769047db41dedcb4aa1367a1b89915beb000`. Candidate compiled `VERSION=0.3.5` preserves exact legacy skill 0.1.0 and published skill 0.2.0 profiles and proposes exactly skill 0.2.1 / minimum 0.1.0 / full 0.3.2 / typescript / probe-help. Future versions remain incompatible; metadata-only compatibility is not instruction authenticity, CLI permission, delivery or ACK evidence.
 
@@ -225,12 +235,13 @@ for migration guidance, not byte/shape parity or a runtime-reference repin.
   end-to-end deduplication and Side Session support are not public ordinary-CLI
   features in either compared release. Historical wake tests for native Codex
   0.154.0 do not qualify a current native CLI.
-- The separately pinned TS companion retains legacy metadata `0.1.0`.
+- The separately pinned TS companion uses published skill metadata `0.2.1`.
   Its repository tag and the Python skill version are different version trains.
-  [#118](https://github.com/abruption/session-peer-ts/issues/118) requires a
-  reviewed metadata profile, an actually published runtime guard, then separate
-  skill approval/publication before replacing the install pin. A Draft content
-  candidate is not an approved install source or proof of doctor compatibility.
+  Public TS 0.3.5 accepts this exact profile; public 0.3.2/0.3.3/0.3.4 reject it.
+  The runtime-first, separately approved skill rollout in #118/#139 is recorded
+  in [the published checkpoint](#published-skill-021-adoption--2026-10-14-kst).
+  A Draft content candidate is not an approved installation source; use the
+  reviewed immutable release pin in the guides, not a moving branch.
 
 ## Transport, size and failure boundaries
 
@@ -828,7 +839,9 @@ See [the response contract and fixture limits](docs/design/ordinary-ssh-response
 
 ## Published TypeScript companion skill — #118 follow-up
 
-Evidence recheck: 2026-10-12 KST. Public TS runtime 0.3.3 at `c0ed30273b9e9c0049df86ae3c38486a94289527` accepts the legacy skill 0.1.0 profile and the exact published skill 0.2.0 profile (`typescript`, minimum `0.1.0`, full `0.3.2`, `probe-help`). Public 0.3.2 remains legacy-only. The companion [release `session-peer-ts-v0.2.0`](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0) is pinned by the four guides to source [`8482cf644507c682915e35c85aa3384c53864906`](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts). The annotated tag object `de7d619aebdfb4a8fe86893dc70728f646032e8d` peels to that source; its 12,835-byte `SKILL.md` has SHA-256 `00c6fc343fdbeb8f6dc1b1ee1b730f04cef71bbfb08205a7be3559202f1d8804`. Those tag/file identities were independently rechecked for this follow-up.
+Historical 0.2.0 evidence; current 0.2.1 guidance is recorded in [the 2026-10-14 checkpoint](#published-skill-021-adoption--2026-10-14-kst).
+
+Evidence recheck: 2026-10-12 KST. Public TS runtime 0.3.3 at `c0ed30273b9e9c0049df86ae3c38486a94289527` accepts the legacy skill 0.1.0 profile and the exact published skill 0.2.0 profile (`typescript`, minimum `0.1.0`, full `0.3.2`, `probe-help`). Public 0.3.2 remains legacy-only. The companion [release `session-peer-ts-v0.2.0`](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0) was pinned by the four guides at that checkpoint to source [`8482cf644507c682915e35c85aa3384c53864906`](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts). The annotated tag object `de7d619aebdfb4a8fe86893dc70728f646032e8d` peels to that source; its 12,835-byte `SKILL.md` has SHA-256 `00c6fc343fdbeb8f6dc1b1ee1b730f04cef71bbfb08205a7be3559202f1d8804`. Those tag/file identities were independently rechecked for this follow-up.
 
 `compatible / skill_contract_compatible / metadata_only` is a bounded metadata verdict, not a content signature, send permission or delivery/ACK result. Minimum is the baseline CLI compatibility floor; full is the documented published feature coverage reference. Optional operations still need actual version/help and platform/native prerequisites. Runtime and skill management remain separate, without postinstall. The Python 1.0.2 reference and Python skill are unchanged.
 

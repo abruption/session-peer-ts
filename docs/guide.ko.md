@@ -19,7 +19,7 @@
 - 반복 `--host`는 요청 순서대로 배열을 반환합니다. 호스트별 실행 단계의 실패는 종료코드 1로 집계하지만, 실행 전 명령 전체 거부(호스트 중복이나 빈 메시지 등)는 배열 출력에서도 종료코드 2를 유지합니다. 공개 0.3.2는 SSH 종료 255나 시간 초과 후 완전한 응답의 근거도 잃을 수 있습니다. 0.3.3은 요청에 맞는 완전한 사실을 보존하며 로컬 종료코드 1과 `sshTransport`를 반환합니다. 불완전하거나 잘못된 근거는 unknown으로 남습니다. unknown이면 자동 재전송하지 않습니다.
 - 0.2.0에 도입된 기본 doctor는 Codex를 실행하거나 inbox에 제출하지 않습니다. 0.3.0부터 명시적 `--check-return-route`는 사용할 수 있는 비로컬 대상에 한해 제한된 역방향 SSH 무동작 명령을 실행합니다. 자기 경로는 SSH 없이 `verified`, `transport:local`, `self_route_normalized`를 반환하며, 호스트가 없으면 접속 확인 전에 실패합니다. `--check-reply-to`는 지원하지 않습니다. verified는 로컬 경로 정규화 또는 한 번의 SSH 무동작 명령 성공을 의미하며, ACK 인증이나 일반적인 역방향 접근 보장이 아닙니다.
 - 같은 기기의 Reply-To를 로컬로 바꾸려면 명시된 OS 사용자가 일치하고 정확한 로컬 이름으로 확인되며 명시적 SSH 옵션이 없어야 합니다. 발신자 근거가 충돌하면 신원을 생략하고, Claude 이름을 사용할 수 없으면 PID를 사용합니다.
-- npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 공개 TS 0.3.3은 검토된 기존 `0.1.0` 및 공개된 `0.2.0` 스킬의 정확한 프로필을 허용하며, TS 0.3.5 소스·패키지는 이 프로필을 유지하면서 정확한 스킬 0.2.1 프로필을 추가합니다. 전체 후보의 프로필과 내용은 검토했으며, 후속 스킬의 최종 발행과 고정 설치 pin 적용은 지원 런타임이 실제 공개된 뒤 별도로 진행합니다. 설치 절에는 별도로 공개된 스킬 소스를 고정했습니다.
+- npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 공개 TS 0.3.5는 공개 스킬 `0.2.1`과 기존 `0.1.0`·`0.2.0`의 정확한 프로필을 허용하며, 공개 TS 0.3.2·0.3.3·0.3.4는 `0.2.1`을 거부합니다. 설치 절에는 별도로 공개된 스킬 소스를 고정했습니다.
 - Windows 검증은 공개 0.3.1, Windows 10 x64, 관리자 계정, PowerShell 5.1, Node 24.16.0에서 수행했습니다. 오프라인 설치, 래퍼·네이티브 잠금, 운영자의 doctor·없는 대상 dry-run과 로컬 fixture 31개가 검증됐습니다. Node 22는 버전 표시·네이티브 잠금 확인만 수행했습니다. 비관리자, 다른 아키텍처, F6 런타임 검사, 이전 Linux 실험의 최신 규칙 검증은 남아 있습니다. 이는 0.3.2 실기 ACK나 배포 도우미 검증이 아닙니다.
 
 [마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. Python 1.0.2 테스트 기준은 유지합니다. 비교 대상 공개 CLI 모두 일반 네이티브 ACK/wait, 종단 간 중복 방지, Side Session을 제공하지 않습니다. Relay/MCP는 이 비교 범위에서 제외합니다.
@@ -562,18 +562,18 @@ HTTP, 자격 증명 불가). npm 설정과 `.npmrc`는 읽지 않습니다.
 <a id="agent-skill-explicit-installation"></a>
 ## 에이전트 스킬: 명시적 설치
 
-별도 `session-peer-ts` 스킬은 [스킬 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0)으로 공개되었습니다. 스킬 버전은 npm 런타임과 독립적이며, 어느 한쪽을 설치해도 다른 쪽은 설치되지 않습니다. Python의 `session-peer` 스킬도 별도로 유지합니다.
+별도 `session-peer-ts` 스킬은 [스킬 0.2.1](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.1)로 공개되었습니다. 스킬 버전은 npm 런타임과 독립적이며, 어느 한쪽을 설치해도 다른 쪽은 설치되지 않습니다. Python의 `session-peer` 스킬도 별도로 유지합니다.
 
-[고정된 스킬 소스](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts)를 검토한 뒤 에이전트와 설치 범위를 선택하세요.
+[고정된 스킬 소스](https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts)를 검토한 뒤 에이전트와 설치 범위를 선택하세요.
 아래 예시는 **Codex, 현재 프로젝트**를 선택합니다. 해당 프로젝트 디렉터리에서 실행하세요.
 Claude Code는 `--agent claude-code`를 사용합니다. 사용자 범위는 add/list/remove 모두에
 `--global`을 동일하게 추가하세요. 기존 `session-peer-ts` 사본을 교체하기 전에 로컬 수정 사항을
 확인하세요. Codex의 `.agents/skills` 디렉터리는 이 경로를 탐색하는 다른 클라이언트와 공유됩니다.
 
-공개 TS 0.3.3은 스킬 0.2.0의 정확한 프로필(`typescript`, 최소 `0.1.0`, 문서화된 기능 기준 `0.3.2`, `probe-help`)과 기존 0.1.0 프로필을 허용합니다. 공개 0.3.2는 0.2.0 프로필을 거부하므로 새 스킬을 사용하기 전에 기존 설치 관리자로 런타임을 업데이트하세요. `verification:metadata_only`를 포함한 `compatible`은 제한된 메타데이터 검사 결과이며, 내용 인증·전송 허가·전달 또는 ACK의 근거가 아닙니다. 최소 버전은 기본 CLI 호환 하한이고, 전체 기능 기준은 문서가 다루는 공개 기능의 참조 버전입니다. 선택 기능은 실제 실행 파일의 version/help와 플랫폼·네이티브 도구 조건을 따로 확인해야 합니다. 런타임과 스킬은 각 관리자로 별도 업데이트하며 postinstall은 추가하지 않습니다. [유한 판정표와 읽기 제한](design/typescript-skill-compatibility.md)을 참고하세요.
+공개 TS 0.3.5는 스킬 0.2.1의 정확한 프로필(`typescript`, 최소 `0.1.0`, 문서화된 기능 기준 `0.3.2`, `probe-help`)과 기존 0.1.0·0.2.0 프로필을 허용합니다. 공개 TS 0.3.2·0.3.3·0.3.4는 0.2.1 프로필을 거부하므로 이 스킬을 사용하기 전에 기존 설치 관리자로 런타임을 업데이트하세요. `verification:metadata_only`를 포함한 `compatible`은 제한된 메타데이터 검사 결과이며, 내용 인증·전송 허가·전달 또는 ACK의 근거가 아닙니다. 최소 버전은 기본 CLI 호환 하한이고, 전체 기능 기준은 문서가 다루는 공개 기능의 참조 버전입니다. 두 값 모두 doctor의 허용 기준은 아니며, 허용 여부는 검토된 유한 판정표를 따릅니다. 선택 기능은 실제 실행 파일의 version/help와 플랫폼·네이티브 도구 조건을 따로 확인해야 합니다. 런타임과 스킬은 각 관리자로 별도 업데이트하며 postinstall은 추가하지 않습니다. [유한 판정표와 읽기 제한](design/typescript-skill-compatibility.md)을 참고하세요.
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```

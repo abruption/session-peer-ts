@@ -19,7 +19,7 @@
 - `--host` を繰り返すと要求順の配列を返します。ホスト別の実行中の失敗は終了コード 1 に集約しますが、実行前のコマンド全体の拒否（重複ホストや空のメッセージなど）は配列出力でも終了コード 2 を維持します。公開 0.3.2 は SSH の終了 255 やタイムアウト後に完全な応答の証拠も失う場合があります。0.3.3 は要求に一致する完全な事実を保持し、ローカル終了コード 1 と `sshTransport` を返します。不完全・不正な証拠は unknown のままです。unknown の場合は自動再送しません。
 - 0.2.0 で導入した基本 doctor は Codex を実行せず inbox に提出しません。0.3.0 以降の明示的な `--check-return-route` は、利用できる非ローカル宛先に対してのみ、時間を制限した逆方向 SSH の無操作コマンドを実行します。自分自身への経路は SSH なしで `verified`、`transport:local`、`self_route_normalized` を返し、ホストがない場合は接続確認前に失敗します。`--check-reply-to` は未対応です。verified はローカル経路の正規化または 1 回の SSH 無操作コマンドの成功であり、ACK の認証や一般的な逆方向アクセスの保証ではありません。
 - 同じ端末の Reply-To をローカルに正規化するには、明示した OS ユーザーの一致、認識できる正確なローカル名、明示的な SSH オプションがないことが必要です。送信者の証拠が競合した場合は識別情報を省き、Claude の名前が使えない場合は PID を使います。
-- npm、Python、リモートホスト、スキルは別管理です。TS は自己更新やリモート更新を提供しません。通知は既定で無効で、無効化指定が優先します。明示的な `update --check` はレジストリを照会します。公開 TS 0.3.3 は、レビュー済みの旧 `0.1.0` と公開済み `0.2.0` スキルの厳密なプロファイルを受け入れます。TS 0.3.5 のソース・パッケージはこれらを維持し、厳密なスキル 0.2.1 プロファイルを一つ追加します。完全な候補スキルのプロファイルと内容は、この受け入れ検査の準備としてレビュー済みです。後継スキルの最終的な公開とソース固定は、対応するランタイムの実際の公開後に別途行います。インストール節では、別途公開されたスキルのソースを固定しています。
+- npm、Python、リモートホスト、スキルは別管理です。TS は自己更新やリモート更新を提供しません。通知は既定で無効で、無効化指定が優先します。明示的な `update --check` はレジストリを照会します。公開 TS 0.3.5 は公開スキル `0.2.1` と旧 `0.1.0`・`0.2.0` の厳密なプロファイルを受け入れます。公開 TS 0.3.2・0.3.3・0.3.4 は `0.2.1` を拒否します。導入の節には独立して公開されたスキルのソースを固定しています。
 - Windows の検証は公開 0.3.1、Windows 10 x64、管理者アカウント、PowerShell 5.1、Node 24.16.0 で行いました。オフライン導入、ラッパー・ネイティブロック、運用者の doctor・存在しない宛先の dry-run、ローカル fixture 31 件を検証しました。Node 22 はバージョン表示とネイティブロックの確認のみです。非管理者、他のアーキテクチャ、F6 のランタイム検査、以前の Linux 実験の最新規則は未検証です。0.3.2 の実機 ACK やデプロイ補助ツールの検証ではありません。
 
 [移行の詳細](../PARITY.md#ordinary-cli-migration-notes--117)と [Windows の検証記録](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)を参照してください。Python 1.0.2 のテスト基準は維持します。比較対象の公開 CLI はどちらも一般のネイティブ ACK/wait、エンドツーエンドの重複防止、Side Session を提供しません。Relay/MCP はこの比較の対象外です。
@@ -310,18 +310,18 @@ stderr の 1 行を出します。ホストの数にかかわらず、更新は 
 
 ## エージェントスキルの明示的な導入
 
-別の `session-peer-ts` スキルは [スキル 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0) として公開されています。バージョンは npm ランタイムとは独立しており、一方をインストールしても他方はインストールされません。Python の `session-peer` スキルも別に維持します。
+別の `session-peer-ts` スキルは [スキル 0.2.1](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.1) として公開されています。バージョンは npm ランタイムとは独立しており、一方をインストールしても他方はインストールされません。Python の `session-peer` スキルも別に維持します。
 
-[固定したスキルのソース](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts)を確認してから、エージェントと導入範囲を選択してください。
+[固定したスキルのソース](https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts)を確認してから、エージェントと導入範囲を選択してください。
 以下の例は **Codex、現在のプロジェクト** を指定します。そのプロジェクトのディレクトリで実行してください。
 Claude Code では `--agent claude-code` を使用します。ユーザー単位の場合は add/list/remove の
 すべてに `--global` を付けてください。既存の `session-peer-ts` を置き換える前にローカルの変更を確認してください。
 Codex の `.agents/skills` は、このパスを探索する他のクライアントと共有されます。
 
-公開 TS 0.3.3 はスキル 0.2.0 の厳密なプロファイル（`typescript`、最小 `0.1.0`、文書化した機能の参照 `0.3.2`、`probe-help`）と旧 0.1.0 プロファイルを受け入れます。公開 0.3.2 は 0.2.0 プロファイルを拒否するため、新しいスキルを使う前に元の管理ツールでランタイムを更新してください。`verification:metadata_only` を伴う `compatible` は範囲を限定したメタデータ検査であり、内容の認証、送信許可、配信・ACK の証拠ではありません。最小バージョンは基本 CLI の互換下限、全機能の参照は文書が扱う公開機能の参照バージョンです。任意機能には実際の実行ファイルの version/help とプラットフォーム・ネイティブツールの前提条件が必要です。ランタイムとスキルはそれぞれの管理ツールで別々に更新し、postinstall は追加しません。[有限の判定表と読み取りの制限](design/typescript-skill-compatibility.md)を参照してください。
+公開 TS 0.3.5 はスキル 0.2.1 の厳密なプロファイル（`typescript`、最小 `0.1.0`、文書化した機能の参照 `0.3.2`、`probe-help`）と旧 0.1.0・0.2.0 プロファイルを受け入れます。公開 TS 0.3.2・0.3.3・0.3.4 は 0.2.1 プロファイルを拒否するため、このスキルを使う前に元の管理ツールでランタイムを更新してください。`verification:metadata_only` を伴う `compatible` は範囲を限定したメタデータ検査であり、内容の認証、送信許可、配信・ACK の証拠ではありません。最小バージョンは基本 CLI の互換下限、全機能の参照は文書が扱う公開機能の参照バージョンです。いずれも doctor の受け入れ基準ではなく、受け入れはレビュー済みの有限の判定表に従います。任意機能には実際の実行ファイルの version/help とプラットフォーム・ネイティブツールの前提条件が必要です。ランタイムとスキルはそれぞれの管理ツールで別々に更新し、postinstall は追加しません。[有限の判定表と読み取りの制限](design/typescript-skill-compatibility.md)を参照してください。
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```

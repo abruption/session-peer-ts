@@ -40,7 +40,7 @@ not a commit hash; operators must align reviewed source commits separately.
   omits identity; an unusable Claude name falls back to PID.
 - npm, Python, remote hosts and skills have separate owners. TS has no self- or
   remote updater; notices default off and opt-out wins. Explicit `update --check`
-  still queries the registry. Public TS 0.3.3 accepts both exact reviewed legacy `0.1.0` and published `0.2.0` skill profiles; TS 0.3.5 source/package preserves those profiles and adds the exact skill 0.2.1 profile. The complete candidate profile/content has been reviewed for guard preparation; final successor skill publication and immutable installation-pin adoption remain separate steps after actual supporting-runtime publication. The installation section pins the independently published skill source.
+  still queries the registry. Public TS 0.3.5 accepts the exact published skill `0.2.1` profile alongside `0.1.0` and `0.2.0`; public TS 0.3.2, 0.3.3 and 0.3.4 reject `0.2.1`. The installation section pins the independently published skill source.
 - Windows qualification used published 0.3.1 on Windows 10 x64, an administrator
   account, PowerShell 5.1 and Node 24.16.0: offline provisioning, wrapper/native
   locking, operator doctor/nonexistent-target dry-run and 31 local fixtures.
@@ -583,19 +583,19 @@ holds only public version data. `SESSION_PEER_UPDATE_REGISTRY` selects a mirror
 
 ## Agent skill: explicit installation
 
-The separate `session-peer-ts` companion skill is published as [skill 0.2.0](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.0). Its version is independent of npm; installing either does not install the other. The Python `session-peer` skill remains separate.
+The separate `session-peer-ts` companion skill is published as [skill 0.2.1](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.1). Its version is independent of npm; installing either does not install the other. The Python `session-peer` skill remains separate.
 
-Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts),
+Review the [exact skill source](https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts),
 then choose the agent and scope. This example selects **Codex, current project**;
 run from that project directory. For Claude Code use `--agent claude-code`.
 For user scope add `--global` consistently to add/list/remove. Inspect any existing
 `session-peer-ts` copy for local edits before approving its replacement. Codex's
 `.agents/skills` directory is shared with other clients that discover that path.
 
-Public TS 0.3.3 accepts the exact skill 0.2.0 profile (`typescript`, minimum `0.1.0`, full `0.3.2`, `probe-help`) and the legacy 0.1.0 profile. Public 0.3.2 rejects the 0.2.0 profile; upgrade the runtime through its owner before using the newer skill. `compatible` with `verification:metadata_only` is a bounded metadata check, not content authentication, permission to send, or delivery/ACK evidence. Minimum is the baseline CLI compatibility floor; full is the documented published feature coverage reference. Optional operations still require the resolved executable’s version/help and platform/native prerequisites. Runtime and skill upgrades remain separate and manager-owned; no postinstall is introduced. See the [finite matrix and reader boundaries](design/typescript-skill-compatibility.md).
+Public TS 0.3.5 accepts the exact published skill 0.2.1 profile (`typescript`, minimum `0.1.0`, full `0.3.2`, `probe-help`) alongside legacy 0.1.0 and 0.2.0. Public TS 0.3.2, 0.3.3 and 0.3.4 reject the 0.2.1 profile; upgrade the runtime through its owner before adopting this skill. `compatible` with `verification:metadata_only` is a bounded metadata check, not content authentication, permission to send, or delivery/ACK evidence. Minimum is the baseline CLI compatibility floor; full is the documented published feature coverage reference. Neither value defines doctor acceptance; acceptance follows the reviewed finite matrix. Optional operations still require the resolved executable’s version/help and platform/native prerequisites. Runtime and skill upgrades remain separate and manager-owned; no postinstall is introduced. See the [finite matrix and reader boundaries](design/typescript-skill-compatibility.md).
 
 ```sh
-npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/8482cf644507c682915e35c85aa3384c53864906/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
+npx -y skills@1.7.0 add https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts --skill session-peer-ts --agent codex --copy --yes
 npx -y skills@1.7.0 list --agent codex --json
 npx -y skills@1.7.0 remove session-peer-ts --agent codex --yes
 ```

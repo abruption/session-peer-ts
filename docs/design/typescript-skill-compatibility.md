@@ -2,6 +2,14 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## Published skill 0.2.1 adoption — 2026-10-14 KST
+
+The four guides now pin the independently published [TS skill 0.2.1 release](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.1) to immutable source [`0f494cabd05901c03161dc91792dcf89f8e96631`](https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts). Annotated tag object `4e7df7d8f99863e86b477eacce958033d7280246` peels to that source. The complete `SKILL.md` is **13,996 raw UTF-8 bytes**, SHA-256 `8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3`. The tag, source and file identities were independently rechecked after publication; the reviewed PR head `dc303b513d9da862f2ce21d648e168fdd847ae95` and published source have identical SKILL bytes.
+
+Public npm TS 0.3.5, source `a2057940ba19056fcaaa5551a7820f7414bd3bfa`, accepts the exact profile: skill `0.2.1`, implementation `typescript`, minimum `0.1.0`, documented feature reference `0.3.2`, policy `probe-help`. It retains legacy skill 0.1.0 and 0.2.0 acceptance. Public 0.3.2/0.3.3/0.3.4 reject skill 0.2.1; future runtime/profile combinations are not inferred from version ranges. The published 0.3.5 tarball's validator accepted these exact complete bytes with compiled default, explicit `undefined`, explicit 0.3.5 and outer `inspectSkill`; supplied historical/future identities were rejected. These helper checks are not executions of historical CLIs.
+
+The published bytes are retained as an offline guidance fixture, distinct from the earlier candidate fixture. `compatible / skill_contract_compatible / metadata_only` is a bounded metadata result, not content authentication, send permission, delivery or ACK. Runtime and skill installation/update remain separate and manager-owned; no postinstall, global installation or implicit update was performed. Python reference 1.0.2 and Python skill pins remain unchanged; unshipped 0.4 handoff/observer/ACK and experiments are excluded. Earlier candidate, pending-publication and 0.2.0 pin records below are dated history, not the current installation guidance.
+
 ## Separate version meanings
 
 The skill repository tag, Python skill revision, TS skill revision, and npm runtime version are independent. `runtime-min-version` describes the skill's baseline CLI compatibility floor; `runtime-full-version` describes its documented published CLI feature coverage reference. Neither is a security recommendation, a doctor-acceptance rule, permission to send, or evidence of platform/native compatibility. Optional operations still need their actual resolved TS executable's version/help and prerequisites.
@@ -87,9 +95,11 @@ The 0.3.4 source/package preserves both exact published profiles through its com
 
 ## 0.3.5 source support and successor rollout — #139
 
+The preparation notes and rollout conditions in this section are retained from 2026-10-13. Publication and current pin adoption are recorded in [the 2026-10-14 checkpoint](#published-skill-021-adoption--2026-10-14-kst).
+
 [#139](https://github.com/abruption/session-peer-ts/issues/139) tracks the separate successor profile and rollout for updated TS skill documentation. The 0.3.5 source/package adds exactly the skill 0.2.1 profile below while retaining legacy 0.1.0 and published 0.2.0. Its complete candidate bytes/profile were reviewed for guard preparation as recorded below; final skill publication wording, immutable release and installation pin remain separate. Source/package support does not itself establish npm or skill publication.
 
-At the original [Draft #140 checkpoint `b917769`](https://github.com/abruption/session-peer-ts/tree/b917769047db41dedcb4aa1367a1b89915beb000), compiled VERSION was 0.3.4 and candidate 0.3.5 support was exercised only through helper arguments. [PR #144](https://github.com/abruption/session-peer-ts/pull/144) integrated that implementation and the compiled-default/full-file tests; its merge source is `5409d0acd4b559c09920a63c5fd7f11fd10f5737`. The current compiled VERSION is 0.3.5. Public 0.3.4 remains immutable, and no successor skill installation pin is approved.
+At the original [Draft #140 checkpoint `b917769`](https://github.com/abruption/session-peer-ts/tree/b917769047db41dedcb4aa1367a1b89915beb000), compiled VERSION was 0.3.4 and candidate 0.3.5 support was exercised only through helper arguments. [PR #144](https://github.com/abruption/session-peer-ts/pull/144) integrated that implementation and the compiled-default/full-file tests; its merge source is `5409d0acd4b559c09920a63c5fd7f11fd10f5737`. The current compiled VERSION is 0.3.5. Public 0.3.4 remains immutable; at that preparation checkpoint, no successor skill installation pin was approved.
 
 | Inspecting source/package runtime | Skill version | Implementation | Minimum | Full | Policy | Verdict |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -109,7 +119,7 @@ The required rollout order remains:
 2. Obtain separate skill approval, finalize its metadata and content, and publish an immutable TS skill tag/source. A runtime helper fixture alone cannot authorize this step.
 3. Update the four-language TS guides and PARITY together to the reviewed, published immutable skill source.
 
-Until those steps complete, the existing skill source pin `8482cf644507c682915e35c85aa3384c53864906` and its published metadata remain unchanged. The original Draft #140 did not change the runtime version. The 0.3.5 source/package activates the reviewed finite profile through its compiled version; Python skill/runtime/reference/parity, installation, PATH, postinstall behavior, delivery/ACK support and operational settings remain unchanged. It does not authorize merge, tags, runtime/skill publication or a live experiment.
+At that preparation checkpoint, until those steps completed, the existing skill source pin `8482cf644507c682915e35c85aa3384c53864906` and its published metadata remain unchanged. The original Draft #140 did not change the runtime version. The 0.3.5 source/package activates the reviewed finite profile through its compiled version; Python skill/runtime/reference/parity, installation, PATH, postinstall behavior, delivery/ACK support and operational settings remain unchanged. It does not authorize merge, tags, runtime/skill publication or a live experiment.
 
 ## 0.3.5 preparation boundary — 2026-10-13 KST
 
