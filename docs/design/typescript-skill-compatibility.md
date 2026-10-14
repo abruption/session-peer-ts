@@ -2,6 +2,10 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## 0.3.6 finite row
+
+TS source/package 0.3.6 explicitly carries the same three reviewed skill profiles as public 0.3.5: 0.1.0, 0.2.0 and published 0.2.1. The immutable 0.2.1 source/hash below are unchanged. Default/undefined/outer inspection use compiled VERSION=0.3.6; an explicit 0.3.5 helper still returns its historical reviewed verdict. 0.3.7 and other unreviewed identities remain incompatible. Parser/reader behavior and all malformed/unsupported envelopes remain unchanged; this is an explicit finite row, not a SemVer range or a new skill release.
+
 ## Published skill 0.2.1 adoption — 2026-10-14 KST
 
 The four guides now pin the independently published [TS skill 0.2.1 release](https://github.com/abruption/session-peer-skill/releases/tag/session-peer-ts-v0.2.1) to immutable source [`0f494cabd05901c03161dc91792dcf89f8e96631`](https://github.com/abruption/session-peer-skill/tree/0f494cabd05901c03161dc91792dcf89f8e96631/session-peer-ts). Annotated tag object `4e7df7d8f99863e86b477eacce958033d7280246` peels to that source. The complete `SKILL.md` is **13,996 raw UTF-8 bytes**, SHA-256 `8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3`. The tag, source and file identities were independently rechecked after publication; the reviewed PR head `dc303b513d9da862f2ce21d648e168fdd847ae95` and published source have identical SKILL bytes.

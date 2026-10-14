@@ -2,7 +2,7 @@
 
 Updated 2026-10-14 KST. Python reference: **1.0.2**,
 [`47c2371`](https://github.com/abruption/session-peer/tree/47c23713d0a2a3c11ebde6186afd8c43489b8b65/session_peer_core).
-This matrix describes the **TS 0.3.5 source/package contract**: the 0.2.0 unified listing, safe home selection,
+This matrix describes the **TS 0.3.6 source/package contract**: the 0.2.0 unified listing, safe home selection,
 read-only doctor, text/help/positional input, Unicode 14.0.0 name matching and
 separately managed TS skill guidance (#16/#17/#18/#19/#25), the
 [0.2.1 reliability and hardening](#021-reliability-and-hardening) changes, and the
@@ -14,6 +14,12 @@ SSH preflight enforces the exact same TS version banner. For builds from source
 between releases, operators should also align reviewed commits; the wire does not
 verify a source commit. `referenceVersion: "1.0.2"` identifies the comparison baseline,
 not complete parity. See [VALIDATION.md](VALIDATION.md) for dated evidence.
+
+## 0.3.6 documentation patch
+
+This source/package carries the [published skill 0.2.1 guidance](#published-skill-021-adoption--2026-10-14-kst) adopted in PR #146, merge source `602cfc09b31ce8aad23e1dd9382a2448a61143f9`. All four guides use immutable skill source `0f494cabd05901c03161dc91792dcf89f8e96631`; skill metadata/full-version and Python reference remain unchanged. TS 0.3.6 adds only its explicitly reviewed finite row with the same skill 0.1.0/0.2.0/0.2.1 acceptance as public 0.3.5. Historical rows stay unchanged and unreviewed future versions remain incompatible.
+
+The patch updates package/banner/current examples and the stable release baseline to previous public 0.3.5. SSH still requires exact matching TS versions; 0.3.5 and 0.3.6 refuse each other. No native delivery behavior, platform qualification, automatic ACK/wait, retry, installation manager, skill publication or 0.4 experiment is added. Public availability must be checked in the registry; this source description is not publication evidence. Dated preparation and publication checks belong in VALIDATION.md and release notes.
 
 ## Published skill 0.2.1 adoption — 2026-10-14 KST
 

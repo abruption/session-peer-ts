@@ -38,9 +38,10 @@ test('published skill 0.2.1 complete bytes match the recorded release and finite
   assert.deepEqual(validateSkillMetadata(text), expected);
   assert.deepEqual(validateSkillMetadata(text, undefined), expected);
   assert.deepEqual(validateSkillMetadata(text, '0.3.5'), expected);
+  assert.deepEqual(validateSkillMetadata(text, '0.3.6'), expected);
   const path = fileURLToPath(url);
   assert.deepEqual(inspectSkill(path), { ...expected, path });
-  for (const runtime of ['0.3.2', '0.3.3', '0.3.4', '0.3.6', '0.4.0']) {
+  for (const runtime of ['0.3.2', '0.3.3', '0.3.4', '0.3.7', '0.4.0']) {
     assert.deepEqual(validateSkillMetadata(text, runtime), {
       status: 'incompatible', code: 'skill_contract_mismatch', verification: 'metadata_only'
     });

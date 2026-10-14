@@ -9,6 +9,23 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.3.6 stable release procedure
+
+This patch carries PR #146's published TS skill 0.2.1 pin and multilingual guidance from main `602cfc09b31ce8aad23e1dd9382a2448a61143f9`. It preserves the skill's immutable source/hash and all historical release evidence. Package/banner/examples use 0.3.6; its finite metadata row accepts the same three profiles as public 0.3.5. Draft #106–#109, #82 and #142 remain excluded.
+
+Read-only preparation baseline on 2026-10-14 KST: latest=0.3.5, preview=0.1.0-preview.1, target 0.3.6 absent. Previous stable integrity: `sha512-EJc2B5tcruzHXiHDd7tyJjv2DBLYE7IHJiPVHBzLY9fSVasEQRdwx+ZZmiyBF8WHpQ7+pI3SO2VXwsQTgOWP+Q==`; attestation metadata https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.5. Recheck before staging. Historical settings-read exceptions do not carry forward.
+
+At the 2026-10-14 preparation checkpoint, the user explicitly skipped the fresh Trusted Publisher lookup for this 0.3.6 publication. The current mapping/permissions are therefore not freshly confirmed; prior stage-only evidence is historical. Pending stages and ownership were checked after npm login. The separate package publish-MFA lookup remains unconfirmed until authenticated read or a separate current user exception. GitHub environment protection and actual final npm stage 2FA approval remain required. No settings, secrets, tokens or protections were changed.
+
+1. Review/merge the release preparation and require exact merged-main CLI/release gate, Windows Node 22/24 and CodeQL success.
+2. Fresh authenticated reads verify ownership, pending stages, stage-only Trusted Publisher mapping, package publish-MFA and GitHub npm environment reviewer/main-only protections. Any unread gate remains incomplete unless the user explicitly grants a current exception; settings/protections are never bypassed.
+3. Verify exact-source reproducible packing, isolated installation/removal and every packaged Markdown document under the [artifact documentation gate](#documentation-gate-for-the-next-release). Historical and public skill pins remain intact.
+4. Obtain separate approval naming the exact merged 40-character main SHA, `session-peer@0.3.6`, `stable-stage` and eventual latest promotion to 0.3.6.
+5. Dispatch publish.yml only with that approved SHA/version/mode/confirmation. Review retained Actions bytes before protected environment approval; verify staged bytes/provenance and obtain separate final npm 2FA approval. Never retry an uncertain upload.
+6. Verify public bytes/integrity/provenance/signatures and isolated version/install/removal. Preserve preview. Append dated evidence and create the user-requested GitHub v0.3.6 tag/release against the verified publication source, with exact-version SSH and separate skill/runtime lifecycle notes. No fleet install is authorized.
+
+The historical 0.3.5 preparation and settings exceptions below apply to that completed publication only.
+
 ## 0.3.5 publication checkpoint — 2026-10-13 KST
 
 PR #144 is merged as `5409d0acd4b559c09920a63c5fd7f11fd10f5737`; its tree matches reviewed preparation `6fdf9d65fb0b62cca3801a3733af07add5fb6553`. Exact-main CLI and CodeQL runs passed. Publication has not started: artifact review found stale current-facing unmerged/candidate text, which requires a document-only correction, human merge and new exact-source/artifact approval. The dated preparation sections below retain their historical scope.
