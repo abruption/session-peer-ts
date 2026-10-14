@@ -11,9 +11,9 @@ and permits deployments from `main` only.
 
 ## Public release checkpoint — 0.3.6 (2026-10-14 KST)
 
-Public `session-peer@0.3.6` was verified with latest0.3.6 and unchanged preview0.1.0-preview.1. Source `27fc741f7dabf075e3d6f19f48f3e71d7bdc27a6`, stage-only run38496584629, reviewed/Actions/staged/public tarball identity, provenance/signature audit and isolated install/removal are recorded in [the public validation checkpoint](VALIDATION.md#public-036--2026-10-14-kst). [GitHub v0.3.6](https://github.com/abruption/session-peer-ts/releases/tag/v0.3.6) and its annotated tag use that same publication source.
+Public `session-peer@0.3.6` was verified with latest=0.3.6 and unchanged preview=0.1.0-preview.1. Source `27fc741f7dabf075e3d6f19f48f3e71d7bdc27a6`, stage-only run 38496584629, reviewed/Actions/staged/public tarball identity, provenance/signature audit and isolated install/removal are recorded in [the public validation checkpoint](VALIDATION.md#public-036--2026-10-14-kst). [GitHub v0.3.6](https://github.com/abruption/session-peer-ts/releases/tag/v0.3.6) and its annotated tag use that same publication source.
 
-The user-approved settings-read exceptions below apply only to this completed0.3.6publication. Actual protected environment and final npm approvals were completed; skipped settings are not newly audited. The following0.3.6procedure is historical. Do not replay approvals, stage0.3.6again or republish this immutable version. A later release requires a new baseline, reviewed source and its own approval.
+The user-approved settings-read exceptions below apply only to this completed 0.3.6 publication. Actual protected environment and final npm approvals were completed; skipped settings are not newly audited. The following 0.3.6 procedure is historical. Do not replay approvals, stage 0.3.6 again or republish this immutable version. A later release requires a new baseline, reviewed source and its own approval.
 
 ## 0.3.6 stable release procedure
 
