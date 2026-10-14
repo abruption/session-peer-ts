@@ -235,12 +235,13 @@ for migration guidance, not byte/shape parity or a runtime-reference repin.
   end-to-end deduplication and Side Session support are not public ordinary-CLI
   features in either compared release. Historical wake tests for native Codex
   0.154.0 do not qualify a current native CLI.
-- The separately pinned TS companion retains legacy metadata `0.1.0`.
+- The separately pinned TS companion uses published skill metadata `0.2.1`.
   Its repository tag and the Python skill version are different version trains.
-  [#118](https://github.com/abruption/session-peer-ts/issues/118) requires a
-  reviewed metadata profile, an actually published runtime guard, then separate
-  skill approval/publication before replacing the install pin. A Draft content
-  candidate is not an approved install source or proof of doctor compatibility.
+  Public TS 0.3.5 accepts this exact profile; public 0.3.2/0.3.3/0.3.4 reject it.
+  The runtime-first, separately approved skill rollout in #118/#139 is recorded
+  in [the published checkpoint](#published-skill-021-adoption--2026-10-14-kst).
+  A Draft content candidate is not an approved installation source; use the
+  reviewed immutable release pin in the guides, not a moving branch.
 
 ## Transport, size and failure boundaries
 
