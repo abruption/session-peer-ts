@@ -9,6 +9,12 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## Public release checkpoint — 0.3.6 (2026-10-14 KST)
+
+Public `session-peer@0.3.6` was verified with latest=0.3.6 and unchanged preview=0.1.0-preview.1. Source `27fc741f7dabf075e3d6f19f48f3e71d7bdc27a6`, stage-only run 38496584629, reviewed/Actions/staged/public tarball identity, provenance/signature audit and isolated install/removal are recorded in [the public validation checkpoint](VALIDATION.md#public-036--2026-10-14-kst). [GitHub v0.3.6](https://github.com/abruption/session-peer-ts/releases/tag/v0.3.6) and its annotated tag use that same publication source.
+
+The user-approved settings-read exceptions below apply only to this completed 0.3.6 publication. Actual protected environment and final npm approvals were completed; skipped settings are not newly audited. The following 0.3.6 procedure is historical. Do not replay approvals, stage 0.3.6 again or republish this immutable version. A later release requires a new baseline, reviewed source and its own approval.
+
 ## 0.3.6 stable release procedure
 
 This patch carries PR #146's published TS skill 0.2.1 pin and multilingual guidance from main `602cfc09b31ce8aad23e1dd9382a2448a61143f9`. It preserves the skill's immutable source/hash and all historical release evidence. Package/banner/examples use 0.3.6; its finite metadata row accepts the same three profiles as public 0.3.5. Draft #106–#109, #82 and #142 remain excluded.
