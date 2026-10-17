@@ -8,6 +8,7 @@
 // effect receipt separately; it does not read other requests or thread history.
 // A fresh app-server process is never evidence that it owns an existing writer.
 import { spawn } from 'node:child_process';
+import { lstatSync, realpathSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
@@ -305,6 +306,10 @@ export class BoundedAppServerClient implements AppServerPort {
         }), ['codexHome', 'platformFamily', 'platformOs', 'userAgent']);
         if (hello.codexHome !== original.codexHome || hello.platformFamily !== 'unix' || hello.platformOs !== 'macos' ||
             !safeId(hello.userAgent, 4096)) throw new AppServerFault('owner_changed', false);
+        // The queue process itself reports its compiled build; the earlier
+        // pathname's --version process cannot qualify a replacement process.
+        if (!(hello.userAgent as string).startsWith(`session-peer-native-queue/${nativeVersion} (`))
+          throw new AppServerFault('unsupported_version', false);
         client.notification('initialized');
       } else {
         const hello = object(await client.request('session-peer/metadata/initialize', { scope: original }), ['scope', 'metadataOnly']);
@@ -492,22 +497,38 @@ async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, d
   // An exact managed requirement can override both env and CLI sqlite_home.
   // initialize.codexHome does not attest to effective SQLite storage; require
   // actual opened state/queue paths before authorizing the root effect guard.
-  const result = await run('/usr/sbin/lsof', ['-a', '-p', String(pid), '-F0n'], {
-    timeout: Math.max(1, deadlineMs - performance.now()), limit: 65536,
+  const remaining = deadlineMs - performance.now();
+  if (remaining <= 0) throw new AppServerFault('deadline', false);
+  const result = await run('/usr/sbin/lsof', ['-a', '-p', String(pid), '-F0fDin'], {
+    timeout: remaining, limit: 65536,
     env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LC_ALL: 'C', LANG: 'C' },
   });
   if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
   if (result.code !== 0 || result.interrupted) throw new AppServerFault('storage_binding_unverified', false);
   const required = ['state_5.sqlite', 'queue_1.sqlite'];
-  const names = result.stdout.split('\0').filter(field => field.startsWith('n')).map(field => field.slice(1))
-    .filter(name => required.some(file => [file, file + '-wal', file + '-shm'].includes(basename(name))))
-    .map(lsofFilename);
+  const files: { name?: string; dev?: bigint; ino?: bigint }[] = [];
+  let current: typeof files[number] | undefined;
+  for (const raw of result.stdout.split('\0')) {
+    const field = raw.replace(/^\n/, '');
+    if (field.startsWith('f')) { current = {}; files.push(current); }
+    else if (current && field.startsWith('n')) current.name = lsofFilename(field.slice(1));
+    else if (current && /^D0x[0-9a-f]+$/i.test(field)) current.dev = BigInt(field.slice(1));
+    else if (current && /^i[0-9]+$/.test(field)) current.ino = BigInt(field.slice(1));
+  }
   for (const file of required) {
     const expected = join(home, file);
-    if (!names.includes(expected) || names.some(name =>
-      (basename(name) === file || basename(name) === file + '-wal' || basename(name) === file + '-shm') &&
-      ![expected, expected + '-wal', expected + '-shm'].includes(name))) throw new AppServerFault('storage_binding_unverified', false);
+    const opened = files.filter(row => row.name && [file, file + '-wal', file + '-shm'].includes(basename(row.name)));
+    if (!opened.some(row => row.name === expected)) throw new AppServerFault('storage_binding_unverified', false);
+    for (const row of opened) {
+      if (![expected, expected + '-wal', expected + '-shm'].includes(row.name!)) throw new AppServerFault('storage_binding_unverified', false);
+      try {
+        const canonical = lstatSync(row.name!, { bigint: true });
+        if (!canonical.isFile() || canonical.isSymbolicLink() || row.dev !== canonical.dev || row.ino !== canonical.ino)
+          throw new Error('storage identity changed');
+      } catch { throw new AppServerFault('storage_binding_unverified', false); }
+    }
   }
+
 }
 // lsof field output escapes backslashes and non-ASCII bytes even with NUL field
 // delimiters. Decode the protected system tool's filename representation, then
@@ -529,6 +550,16 @@ function lsofFilename(raw: string): string {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(bytes)); }
   catch { throw new AppServerFault('storage_binding_unverified', false); }
 }
+function executableIdentity(binary: string): string {
+  try {
+    const path = realpathSync(binary), info = statSync(path, { bigint: true });
+    if (!info.isFile()) throw new Error('not a file');
+    return JSON.stringify([path, info.dev.toString(), info.ino.toString(), info.size.toString(), info.mtimeNs.toString(), info.ctimeNs.toString()]);
+  } catch { throw new AppServerFault('unsupported_version', false); }
+}
+function verifyExecutableIdentity(binary: string, expected: string): void {
+  if (executableIdentity(binary) !== expected) throw new AppServerFault('unsupported_version', false);
+}
 // Queue mechanics were verified only for the exact listed versions/platform
 // in a network-denied synthetic home. This is not a live delivery/ACK claim.
 // Root integration owns generation, canonical home, storage and writer guards.
@@ -548,20 +579,37 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
   const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env), CODEX_HOME: original.codexHome,
     CODEX_SQLITE_HOME: original.codexHome };
   if (!await beforeDeadline(options.deadlineMs, () => options.verifyOwner(original), 'owner_changed')) throw new AppServerFault('owner_changed', false);
+  if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  const binaryIdentity = executableIdentity(options.binary);
+  const probeRemaining = options.deadlineMs - performance.now();
+  if (probeRemaining <= 0) throw new AppServerFault('deadline', false);
   const version = await run(options.binary, ['--version'], {
-    env, timeout: Math.max(1, options.deadlineMs - performance.now()), limit: 4096,
+    env, timeout: probeRemaining, limit: 4096,
   });
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
   const nativeVersion = version.stdout.trim().slice('codex-cli '.length);
   if (version.interrupted || version.code !== 0 || !queueEvidence(nativeVersion) || version.stdout.trim() !== `codex-cli ${nativeVersion}`) {
     throw new AppServerFault('unsupported_version', false);
   }
+  verifyExecutableIdentity(options.binary, binaryIdentity);
+  if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
   const transport: NativeQueueTransport = { qualification: 'native_queue_only_stdio',
     ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false',
       '-c', `sqlite_home=${JSON.stringify(original.codexHome)}`], env, original.codexHome) };
   let client: NativeQueuePort | undefined;
   try {
-    client = await BoundedAppServerClient.connectNativeQueueWire(original, transport, options.deadlineMs, options.verifyOwner, options.beforeEffect, nativeVersion);
+    verifyExecutableIdentity(options.binary, binaryIdentity);
+    let effectGuarded = false;
+    client = await BoundedAppServerClient.connectNativeQueueWire(original, transport, options.deadlineMs, async scope => {
+      const valid = await options.verifyOwner(scope);
+      if (valid && effectGuarded) {
+        // Run after the LAST asynchronous owner verification. The durable guard
+        // and owner probe can both await I/O and change canonical file bindings.
+        verifyExecutableIdentity(options.binary, binaryIdentity);
+        await verifyOwnedSqliteBinding(transport.pid, original.codexHome, options.deadlineMs);
+      }
+      return valid;
+    }, async () => { await options.beforeEffect(); effectGuarded = true; }, nativeVersion);
     await verifyOwnedSqliteBinding(transport.pid, original.codexHome, options.deadlineMs);
     return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
   } finally { if (client) await client.close(); else await disposeTransport(transport); }

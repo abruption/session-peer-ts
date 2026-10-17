@@ -4,7 +4,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
-import { mkdtempSync, realpathSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, mkdirSync, readFileSync, rmSync, writeFileSync, renameSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import childProcess from 'node:child_process';
@@ -349,7 +349,7 @@ test('closing an owned POSIX fixture also kills its owned process-group descenda
 
 function nativeFixture(t: TestContext, queueReply?: (r: any, reply: (v: unknown) => void) => void, nativeVersion = '0.160.1') {
   const f = fixture(t, (r, reply) => {
-    if (r.method === 'initialize') reply({ id: r.id, result: { codexHome: scope.codexHome, platformFamily: 'unix', platformOs: 'macos', userAgent: 'fixture-native' } });
+    if (r.method === 'initialize') reply({ id: r.id, result: { codexHome: scope.codexHome, platformFamily: 'unix', platformOs: 'macos', userAgent: `session-peer-native-queue/${nativeVersion} (fixture)` } });
     else if (r.method === 'initialized') return;
     else if (queueReply) queueReply(r, reply);
     else reply({ id: r.id, result: { queuedSubmission: { id: 'fixture-native-q', input: r.params.input, clientUserMessageId: r.params.clientUserMessageId } } });
@@ -501,7 +501,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
   const script = `#!${process.execPath}\n
     const fs=require('node:fs'),log=${JSON.stringify(log)};
     fs.appendFileSync(log,JSON.stringify({argv:process.argv.slice(2),pid:process.pid,home:process.env.CODEX_HOME,sqliteHome:process.env.CODEX_SQLITE_HOME})+'\\n');
-    if(process.argv.includes('--version')){console.log('codex-cli '+(process.env.FIXTURE_VERSION||'0.160.1'));process.exit(0);}
+    if(process.argv.includes('--version')){if(process.env.FIXTURE_REPLACE_BINARY)fs.renameSync(process.env.FIXTURE_REPLACE_BINARY,__filename);if(process.env.FIXTURE_RETARGET_LINK){fs.unlinkSync(process.env.FIXTURE_RETARGET_LINK);fs.symlinkSync(process.env.FIXTURE_LINK_TARGET,process.env.FIXTURE_RETARGET_LINK);}console.log('codex-cli '+(process.env.FIXTURE_VERSION||'0.160.1'));process.exit(0);}
     // Synthetic descriptors model the service's already resolved SQLite home;
     // the negative case represents an exact policy overriding CLI/env pins.
     const storage=process.env.FIXTURE_STORAGE_HOME||process.env.CODEX_SQLITE_HOME;
@@ -510,7 +510,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     let buffer='';setInterval(()=>{},1000);process.stderr.write('PRIVATE-STDERR-NOT-RETURNED');
     process.stdin.on('data',chunk=>{buffer+=chunk;let end;while((end=buffer.indexOf('\\n'))>=0){const r=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);
       fs.appendFileSync(log,JSON.stringify({method:r.method,guardExists:fs.existsSync(${JSON.stringify(join(root, 'guard'))})})+'\\n');
-      if(r.method==='initialize')process.stdout.write(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'fixture'}})+'\\n');
+      if(r.method==='initialize')process.stdout.write(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'session-peer-native-queue/'+(process.env.FIXTURE_RUNTIME_VERSION||'0.160.1')+' (fixture)'}})+'\\n');
       if(r.method==='thread/queue/add')process.stdout.write(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'fixture-q',clientUserMessageId:r.params.clientUserMessageId,input:r.params.input}}})+'\\n');
     }});`;
   writeFileSync(binary, script, { mode: 0o700 });
@@ -532,7 +532,76 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
   await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
     env: { ...options.env, FIXTURE_STORAGE_HOME: other } }), fault('storage_binding_unverified', false));
   assert.equal(guards, 1);
+  const guardsBefore = guards;
+  await t.test('storage replaced during durable guard cannot reach queue', async () => {
+    await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+      beforeEffect: async () => {
+        guards++; renameSync(join(selected, 'state_5.sqlite'), join(selected, 'detached-state.sqlite'));
+        writeFileSync(join(selected, 'state_5.sqlite'), 'replacement');
+      } }), fault('owner_changed', false));
+  });
+  assert.equal(guards, guardsBefore + 1);
+  await t.test('same canonical descriptor paths with wrong inode are refused after the guard', async () => {
+    const originalSpawn = childProcess.spawn; let guarded = false;
+    t.mock.method(childProcess, 'spawn', (binary: string, args: string[], options: any) => {
+      if (binary === '/usr/sbin/lsof' && guarded) {
+        // Model unchanged reported paths while opened inode identities differ.
+        const output = ['state_5.sqlite', 'queue_1.sqlite'].map((file, index) =>
+          `f${index + 3}\0D0x1\0i1\0n${join(selected, file)}\0\n`).join('');
+        return originalSpawn(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', output], options);
+      }
+      return originalSpawn(binary, args, options);
+    });
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { guarded = true; } }), fault('owner_changed', false));
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  });
+  await t.test('storage replacement during final async owner verification is checked before queue', async () => {
+    let fenced = false;
+    await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+      beforeEffect: async () => { fenced = true; },
+      verifyOwner: async () => {
+        if (fenced) {
+          renameSync(join(selected, 'queue_1.sqlite'), join(selected, 'detached-queue.sqlite'));
+          writeFileSync(join(selected, 'queue_1.sqlite'), 'replacement');
+        }
+        return true;
+      } }), fault('owner_changed', false));
+  });
+  await t.test('queue process actual build must equal the probed qualified build', async () => {
+    await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+      env: { ...options.env, FIXTURE_RUNTIME_VERSION: '0.160.2' } }), fault('unsupported_version', false));
+  });
+  await t.test('atomic binary replacement after version probe is refused', async () => {
+    const replacement = join(root, 'replacement-codex'); writeFileSync(replacement, script, { mode: 0o700 });
+    await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+      env: { ...options.env, FIXTURE_REPLACE_BINARY: replacement } }), fault('unsupported_version', false));
+  });
+  await t.test('symlink retarget after version probe cannot select a replacement queue binary', async () => {
+    const link = join(root, 'codex-link'), target = join(root, 'replacement-target');
+    writeFileSync(target, script, { mode: 0o700 }); symlinkSync(binary, link);
+    await assert.rejects(nativeQueueOnce({ ...options, binary: link, deadlineMs: performance.now() + 2000,
+      env: { ...options.env, FIXTURE_RETARGET_LINK: link, FIXTURE_LINK_TARGET: target } }), fault('unsupported_version', false));
+  });
   const allRows = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
   assert.equal(allRows.filter(r => r.method === 'thread/queue/add').length, 1);
   for (const row of allRows.filter(r => r.pid)) assert.throws(() => process.kill(row.pid, 0), (e: any) => e.code === 'ESRCH');
+});
+
+test('expired initial owner verification cannot launch even a version probe', {
+  skip: process.platform !== 'darwin' || process.arch !== 'arm64',
+}, async t => {
+  let now = 0, spawned = 0;
+  t.mock.method(performance, 'now', () => now);
+  const originalSpawn = childProcess.spawn;
+  t.mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
+    spawned++; return originalSpawn(...args);
+  });
+  syncBuiltinESMExports(); t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  await assert.rejects(nativeQueueOnce({ binary: process.execPath,
+    scope: { ...scope, threadId: '01950000-0000-7000-8000-000000000071' }, message: 'fixture', clientUserMessageId: id,
+    deadlineMs: 100, verifyOwner: async () => { now = 100; return true; }, beforeEffect: async () => {} }), fault('deadline', false));
+  assert.equal(spawned, 0);
 });
