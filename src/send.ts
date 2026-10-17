@@ -69,13 +69,16 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     if (options.hooks) {
       // Bind the identity already captured by selection, not a second sample
       // which could belong to a different incarnation between A -> B -> A.
-      const proof = JSON.parse(selection.evidence) as { fingerprints: { home: string; writer: string }[] };
-      const identity = proof.fingerprints.find(item => item.home === home)?.writer;
+      const proof = JSON.parse(selection.evidence) as { fingerprints: { home: string; database: string; writer: string }[] };
+      const selected = proof.fingerprints.find(item => item.home === home);
+      const identity = selected?.writer;
       const live = selection.resolution.candidates.find(item => item.codexHome === home)?.activity === 'live_writer';
       if (!identity) throw new HomeRefusal('active_writer_unverified', selection.resolution);
       const generation = live ? createHash('sha256').update(identity).digest('hex') : null;
       const body = await options.hooks.resolved({ agent: 'codex', target: id, home, generation,
-        ...(generation ? { writerIdentity: generation } : {}) }, result);
+        // Inactive evidence still binds a prepared intent across invocations. This
+        // private fingerprint is not a native incarnation or public generation.
+        writerIdentity: generation ?? createHash('sha256').update(JSON.stringify(selected)).digest('hex') }, result);
       if (body !== undefined) { checkMessage(body, true); options = { ...options, message: body }; result.chars = [...body].length; }
     }
     if (options.dryRun) return result;

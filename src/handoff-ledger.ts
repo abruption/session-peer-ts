@@ -285,12 +285,15 @@ export class HandoffLedger {
       h.observation = { status: 'observed', injectionObserved: true, clientUserMessageId: observation.clientUserMessageId,
         ...(observation.turn ? { turn: structuredClone(observation.turn) } : h.observation.turn ? { turn: h.observation.turn } : {}) };
       if (h.ack.status !== 'acknowledged') h.state = 'delivered';
-      const latest = item.waits.at(-1);
-      if (latest?.public.status === 'pending' && latest.public.for === 'delivered') {
-        if (latest.clockId !== this.clockId) { latest.public.status = 'failed'; latest.public.reason = 'history_unavailable'; }
-        else latest.public.status = this.clock.monotonic() < latest.cutoff ? 'satisfied' : 'timed_out_unknown';
-        h.wait = structuredClone(latest.public);
+      // All delivery operations share this evidence instant, but keep their own
+      // cutoff and terminal result. A newer ACK wait cannot hide older waits.
+      const observedAt = this.clock.monotonic();
+      for (const wait of item.waits) {
+        if (wait.public.status !== 'pending' || wait.public.for !== 'delivered') continue;
+        if (wait.clockId !== this.clockId) { wait.public.status = 'failed'; wait.public.reason = 'history_unavailable'; }
+        else wait.public.status = observedAt < wait.cutoff ? 'satisfied' : 'timed_out_unknown';
       }
+      if (item.waits.length) h.wait = structuredClone(item.waits.at(-1)!.public);
       h.nextActions = ['reconcile']; this.write(data); return this.snapshot(item);
     });
   }

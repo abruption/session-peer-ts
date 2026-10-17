@@ -57,6 +57,38 @@ test('all pinned negative handoff schema fixtures fail closed', () => {
     assert.throws(() => validateHandoff(h), /invalid_handoff/, sample.name);
   }
 });
+test('keep_waiting requires the selected goal evidence channel to remain pending', () => {
+  const ackPending = structuredClone(fixture.accepted.find((item: any) => item.name === 'queued_explicit_ack_timeout').result.handoff);
+  // An expired/stopped wait may suggest a new wait while its evidence channel is
+  // still pending; the frozen positive fixtures retain that distinction.
+  assert.deepEqual(validateHandoff(ackPending), ackPending);
+  for (const status of ['not_requested', 'unsupported']) {
+    const invalid = structuredClone(ackPending);
+    invalid.state = 'submitted'; invalid.wait.status = 'pending';
+    invalid.ack = { status }; invalid.nextActions = ['keep_waiting'];
+    assert.throws(() => validateHandoff(invalid), /invalid_handoff/, `ACK ${status}`);
+  }
+  const alreadyAcknowledged = structuredClone(fixture.accepted.find((item: any) => item.name === 'receipt_satisfies_wait_without_injection_claim').result.handoff);
+  alreadyAcknowledged.wait.status = 'pending'; alreadyAcknowledged.nextActions = ['keep_waiting'];
+  assert.throws(() => validateHandoff(alreadyAcknowledged), /invalid_handoff/, 'ACK already committed');
+  const noGoal = structuredClone(ackPending);
+  noGoal.state = 'submitted'; noGoal.wait = { for: 'none', status: 'not_requested' }; noGoal.nextActions = ['keep_waiting'];
+  assert.throws(() => validateHandoff(noGoal), /invalid_handoff/, 'no selected evidence goal');
+});
+test('keep_waiting permits pending delivery evidence but rejects an observed channel', () => {
+  const pending = structuredClone(fixture.accepted.find((item: any) => item.name === 'queued_explicit_ack_timeout').result.handoff);
+  pending.state = 'submitted'; pending.wait.for = 'delivered'; pending.wait.status = 'pending';
+  pending.observation = { status: 'pending', injectionObserved: false }; pending.ack = { status: 'not_requested' };
+  pending.nextActions = ['keep_waiting'];
+  assert.deepEqual(validateHandoff(pending), pending);
+  for (const status of ['not_requested', 'failed', 'unsupported']) {
+    const invalid = structuredClone(pending); invalid.observation.status = status;
+    assert.throws(() => validateHandoff(invalid), /invalid_handoff/, `delivery ${status}`);
+  }
+  const observed = structuredClone(fixture.accepted.find((item: any) => item.name === 'delivered_wait_satisfied').result.handoff);
+  observed.wait.status = 'pending'; observed.nextActions = ['keep_waiting'];
+  assert.throws(() => validateHandoff(observed), /invalid_handoff/, 'delivery already observed');
+});
 test('raw strict JSON rejects duplicate keys, lossy integer tokens, invalid UTF-8 and trailing data', () => {
   for (const sample of fixture.wireRejected) assert.throws(() => parseStrictJson(sample.raw ?? Buffer.from(sample.bytesHex, 'hex')), /invalid_handoff_json/, sample.name);
   assert.throws(() => parseStrictJson('{"schemaVersion":-0}'));

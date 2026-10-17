@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync, readFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ async function fixture(t: TestContext) {
   t.after(async () => { await new Promise<void>(ok => server.close(() => ok())); rmSync(path, { recursive: true }); });
   writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: null, messagingSocketPath: socket }));
   const file = join(path, 'message'); writeFileSync(file, 'fixture body', { mode: 0o600 });
-  const env = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_UPDATE_NOTICE: '', SESSION_PEER_HANDOFF_HOME: join(path, 'state', 'handoff') };
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_UPDATE_NOTICE: '', SESSION_PEER_HANDOFF_HOME: join(path, 'state', 'handoff') };
   async function invoke(args: string[], input = '', closeInput = true, timeout = 10000) { const child = spawn(process.execPath, [cli, ...args, '--json'], { env }); let stdout = ''; child.stdout.on('data', c => stdout += c); child.stderr.resume(); if (closeInput) child.stdin.end(input); else child.stdin.write(input); const timer = setTimeout(() => child.kill('SIGKILL'), timeout); const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null); return { code, value: JSON.parse(stdout) }; }
   return { path, env, messages, file, invoke, send: ['send', '--to', String(process.pid), '--message-file', file, '--no-from', '--no-reply-to'] };
 }
@@ -101,4 +101,32 @@ test('message-file dash is literal with stdin open, while --message dash keeps s
  const [code,signal]=await once(receiver,'close');clearTimeout(timer);assert.equal(signal,null);assert.equal(code,0,stdout);
  assert.equal(JSON.parse(f.messages[3]!).message.content,'-');
 
+});
+
+
+test('prepared inactive Codex binding retains lock and saved-home evidence without claiming generation', {skip:process.platform==='win32'}, async t=>{
+ const {DatabaseSync}=await import('node:sqlite');
+ const {inspectWriter,resolveWriter}=await import('../dist/writer.js');
+ const id='11111111-1111-4111-8111-111111111111';
+ for (const change of ['unchanged','lock','database'] as const) await t.test(change, async t=>{
+  const f=await fixture(t),home=join(f.path,'codex-home'),locks=join(home,'thread-writer-locks');mkdirSync(locks,{recursive:true});
+  const dbPath=join(home,'state_5.sqlite');
+  const database=()=>{const db=new DatabaseSync(dbPath);try{db.exec('CREATE TABLE threads(id TEXT)');db.prepare('INSERT INTO threads VALUES (?)').run(id);}finally{db.close();}};database();
+  const log=join(f.path,'queue-calls');writeFileSync(log,'');f.env.FIXTURE_QUEUE_LOG=log;f.env.SESSION_PEER_CODEX_HOMES='[]';
+  const binary=join(f.path,'fake-codex');writeFileSync(binary,`#!${process.execPath}\nrequire('node:fs').appendFileSync(process.env.FIXTURE_QUEUE_LOG,'call\\n');console.log('Queued message inactive-queue for thread '+process.argv[4]+'.');`,{mode:0o700});
+  const target=['--to','codex:'+id,'--codex-home',home,'--codex-bin',binary,'--allow-inactive-codex-home','--message-file',f.file];
+  const before=await inspectWriter(home,id);assert.equal(before.activity,'inactive');assert.equal(before.writerLock,'absent');
+  assert.equal((await f.invoke(['handoff','init'])).code,0);
+  const prepared=await f.invoke(['handoff','prepare',...target]);assert.equal(prepared.code,0);assert.equal((await resolveWriter(home,id,true)).resolution.candidates.find(c=>c.codexHome===home)?.savedThread,true);
+  const correlation=prepared.value.handoff.correlationId;assert.equal(prepared.value.handoff.targetGeneration,null);assert.equal(readFileSync(log,'utf8'),'');
+  if(change==='lock')writeFileSync(join(locks,id+'.lock'),'');
+  if(change==='database'){renameSync(dbPath,dbPath+'.previous');database();}
+  const current=await inspectWriter(home,id);assert.equal(current.activity,'inactive');assert.equal(current.writerLock,change==='lock'?'free':'absent');
+  const sent=await f.invoke(['send',...target,'--correlation-id',correlation,'--request-ack','--no-from','--no-reply-to']);
+  if(change==='unchanged'){
+   assert.equal(sent.code,0);assert.equal(sent.value.status,'queued');assert.equal(sent.value.submitted,true);assert.equal(sent.value.queueId,'inactive-queue');assert.equal(sent.value.handoff.targetGeneration,null);assert.equal(sent.value.handoff.retry.allowed,false);assert.equal(sent.value.handoff.ack.status,'unsupported');assert.equal(readFileSync(log,'utf8'),'call\n');
+  }else{
+   assert.equal(sent.code,1);assert.equal(sent.value.error,'handoff_binding_conflict');assert.equal(sent.value.submitted,false);assert.equal(readFileSync(log,'utf8'),'');
+  }
+ });
 });

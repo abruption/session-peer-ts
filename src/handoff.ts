@@ -148,7 +148,7 @@ export function validateHandoff(value: unknown): Handoff {
   if (wait.status === 'stopped' && wait.reason !== 'stopped_by_operator') fail();
   if (wait.status === 'satisfied' && (wait.for === 'delivered' ? !obs.injectionObserved : ack.status !== 'acknowledged')) fail();
   if (row.nextActions.includes('keep_waiting') && (row.targetGeneration === null || wait.status === 'unsupported' ||
-      (wait.for === 'delivered' ? !['pending', 'observed'].includes(obs.status as string) : ack.status === 'unsupported') ||
+      (wait.for === 'delivered' ? obs.status !== 'pending' : wait.for !== 'acknowledged' || ack.status !== 'pending') ||
       !['submitted', 'unknown'].includes(sub.status as string))) fail();
   if (row.nextActions.includes('stop_waiting') && wait.status !== 'pending') fail();
   if (Buffer.byteLength(JSON.stringify(row), 'utf8') > HANDOFF_LIMITS.publicFrame) fail('handoff_frame_too_large');
