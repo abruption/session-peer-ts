@@ -128,6 +128,8 @@ session-peer --version
 
 - [0.4.0 handoff 설계(공동 확정·미구현)](PARITY.md#handoff-v1-design-candidate--69).
 
+- [개발 중인 private handoff CLI와 지원 한계](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
+
 <a id="license"></a>
 ## 라이선스
 
