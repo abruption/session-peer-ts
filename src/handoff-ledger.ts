@@ -382,9 +382,10 @@ export class HandoffLedger {
       // cutoff and terminal result. A newer ACK wait cannot hide older waits.
       const observedAt = this.clock.monotonic();
       for (const wait of item.waits) {
-        if (wait.public.status !== 'pending' || wait.public.for !== 'delivered') continue;
-        if (wait.clockId !== this.clockId) { wait.public.status = 'failed'; wait.public.reason = 'history_unavailable'; }
-        else wait.public.status = observedAt < wait.cutoff ? 'satisfied' : 'timed_out_unknown';
+        // A resumed or concurrent observer owns its own monotonic cutoff. Keep
+        // foreign operations unclassified so their live owner can resolve them.
+        if (wait.public.status !== 'pending' || wait.public.for !== 'delivered' || wait.clockId !== this.clockId) continue;
+        wait.public.status = observedAt < wait.cutoff ? 'satisfied' : 'timed_out_unknown';
       }
       if (item.waits.length) h.wait = structuredClone(item.waits.at(-1)!.public);
       h.nextActions = ['reconcile']; this.write(data); return this.snapshot(item);

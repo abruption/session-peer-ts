@@ -50,7 +50,7 @@ test('injection preserves terminal delivery waits and never resets their deadlin
   assert.equal(observed[2].operationId, pending.wait.operationId); assert.equal(observed[2].status, 'satisfied');
   f.advance(1000); f.observe(); assert.deepEqual(f.waits(), observed);
 });
-test('restarted observer retains injection but fails every unorderable delivery wait conservatively', posix, t => {
+test('independent observer retains injection without classifying another owner delivery deadlines', posix, t => {
   const f = fixture(t);
   f.ledger.beginWait(f.h.correlationId, 'delivered', new HandoffBudget(6, f.clock));
   f.ledger.beginWait(f.h.correlationId, 'delivered', new HandoffBudget(30, f.clock));
@@ -58,8 +58,10 @@ test('restarted observer retains injection but fails every unorderable delivery 
   const result = f.observe(new HandoffLedger(f.ledger.path, { clock: f.clock }));
   assert.equal(result.state, 'delivered'); assert.equal(result.observation.injectionObserved, true);
   assert.notEqual(result.ack.status, 'acknowledged'); assert.equal(result.wait.operationId, ack.wait.operationId);
+  // Resumed/concurrent observation is introduced by #72. Another observer
+  // cannot prove these owners stopped or compare their monotonic cutoffs.
   assert.deepEqual(f.waits().slice(0, 2).map((w: any) => [w.status, w.reason]), [
-    ['failed', 'history_unavailable'], ['failed', 'history_unavailable'],
+    ['pending', undefined], ['pending', undefined],
   ]);
   assert.equal(f.waits()[2].status, 'pending');
 });
@@ -89,4 +91,19 @@ test('explicit wait selection rejects unknown IDs and cannot timeout a foreign m
   assert.throws(() => f.ledger.recordWait(f.h.correlationId, 'stopped', 'stopped_by_operator', 'not-a-uuid'), /invalid_wait_operation_id/);
   assert.throws(() => f.ledger.recordWait(f.h.correlationId, 'stopped', 'stopped_by_operator', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'), /handoff_wait_unknown/);
   assert.equal(f.waits()[0].status, 'pending');
+});
+test('same-owner delivery cutoffs resolve while a newer unsupported foreign ACK wait stays terminal', posix, t => {
+  const f = fixture(t);
+  const first = f.ledger.beginWait(f.h.correlationId, 'delivered', new HandoffBudget(6, f.clock));
+  f.advance(500);
+  const second = f.ledger.beginWait(f.h.correlationId, 'delivered', new HandoffBudget(6, f.clock));
+  const foreign = new HandoffLedger(f.ledger.path, { clock: f.clock });
+  const newest = foreign.beginWait(f.h.correlationId, 'acknowledged', new HandoffBudget(30, f.clock));
+  // This unqualified foreign ACK operation is terminal unsupported; it must not
+  // hide the earlier delivery operations or become ACK through injection.
+  assert.equal(newest.wait.status, 'unsupported');
+  f.advance(500); f.observe();
+  assert.deepEqual(f.waits().map((w: any) => [w.operationId, w.status]), [
+    [first.wait.operationId, 'timed_out_unknown'], [second.wait.operationId, 'satisfied'], [newest.wait.operationId, 'unsupported'],
+  ]);
 });
