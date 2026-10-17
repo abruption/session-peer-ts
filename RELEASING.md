@@ -9,6 +9,29 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## Public release checkpoint — 0.4.0 (2026-10-18 KST)
+
+`session-peer@0.4.0` is public with latest=0.4.0 and unchanged
+preview=0.1.0-preview.1. Publication source is
+`dde3923efe116f87f38b1639b29b889d2b832e44`; stage-only workflow
+[39077096491](https://github.com/abruption/session-peer-ts/actions/runs/39077096491)
+completed once after exact-source approval, protected GitHub npm environment
+approval and final user npm approval. Reviewed, merged-source, retained Actions,
+staged and public archives are byte-identical. Public signature/provenance and
+isolated installation/removal checks passed; see the
+[public validation record](VALIDATION.md#public-040--2026-10-18-kst).
+[GitHub v0.4.0](https://github.com/abruption/session-peer-ts/releases/tag/v0.4.0)
+and its annotated tag point to that same immutable source.
+
+The Trusted Publisher mapping was freshly checked as stage-only. The user
+explicitly skipped the separate web package publish-2FA policy read for this
+publication; that policy is not freshly audited. Actual environment and final
+npm approvals were completed. This exception applies only to the completed
+0.4.0 release. The procedure below is historical: do not replay its approvals,
+repeat its stage or republish this immutable version. Future releases require
+their own baseline, reviewed source and approvals. Runtime publication does not
+publish or install the separately managed companion skill.
+
 ## 0.4.0 scoped release preparation — 2026-10-18 KST
 
 This candidate includes #106–#109: the frozen design, private sender fencing,

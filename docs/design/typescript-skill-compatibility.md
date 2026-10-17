@@ -2,6 +2,28 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## Public 0.4.0 guard verification — 2026-10-18 KST
+
+The public 0.4.0 tarball from source
+`dde3923efe116f87f38b1639b29b889d2b832e44` has verified registry integrity
+`sha512-mMNJ118atoflhpFTkf2+DtO7MRf7FQnPK3lKWbq/vd8Xvb5DsjUtAgydIBOcd3Xj9BCYGqM50aFhzUr4dDGHSw==`.
+An isolated, version-specific npm installation ran its actual bundled pure
+validator against published skill 0.2.1 and the complete companion Draft #37
+candidate at `a969260cd511b7b81631884ff856edaf0d0d457b` (22,973 raw UTF-8 bytes,
+SHA-256 `7571c79fb7ac164002daf0bf3aa7c5ba40ca8d99f5610a04d7860eee7b27df68`).
+Compiled default, explicit undefined, explicit 0.4.0 and outer `inspectSkill`
+returned exactly compatible/skill_contract_compatible/metadata_only. Historical
+0.3.2–0.3.6 identities rejected the new profile, and unreviewed 0.3.7/0.4.1
+identities remained incompatible. Supplying a historical identity to this new
+helper is not execution of a historical CLI.
+
+These are bounded metadata checks: candidate instructions were not executed,
+and no native delivery, model or ACK test was added. The isolated installation
+was removed. The candidate remains a separately approved skill-publication
+step, not an installed skill or adopted pin. Existing published 0.2.1 source
+and hash remain unchanged. The earlier fixture/checkpoint records below retain
+their original exact bytes and scope.
+
 ## 0.4.0 finite row
 
 TS source/package 0.4.0 preserves the three reviewed profiles accepted by public 0.3.6 (skill 0.1.0, 0.2.0 and published 0.2.1) and adds exactly `0.3.0 / typescript / min 0.1.0 / full 0.4.0 / probe-help` for runtime 0.4.0 only. Compiled default, explicit `undefined`, explicit 0.4.0 and outer `inspectSkill` use this finite row. All historical runtime/profile verdicts remain unchanged; old runtime identities reject the new profile, and 0.3.7, 0.4.1 and other unreviewed runtime identities remain incompatible. Parser/reader behavior and malformed/unsupported envelopes are unchanged. This is a finite row, not a SemVer range or a skill publication.
