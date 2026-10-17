@@ -22,7 +22,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', li
   const request = JSON.parse(line);
   if (request.method === 'initialize') {
     console.log(JSON.stringify({ id: request.id, result: {
-      codexHome: process.env.CODEX_HOME, platformFamily: 'unix', platformOs: 'macos', userAgent: 'fixture',
+      codexHome: process.env.CODEX_HOME, platformFamily: 'unix', platformOs: 'macos', userAgent: 'session-peer-native-queue/' + config.version + ' (fixture)',
     } }));
   } else if (request.method === 'thread/queue/add') {
     fs.appendFileSync(config.queueLog, JSON.stringify({ method: request.method,

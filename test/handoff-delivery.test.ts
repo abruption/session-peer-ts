@@ -41,7 +41,7 @@ if(process.argv[2]==='queue'){fs.appendFileSync(log,JSON.stringify({method:'lega
 const {DatabaseSync:Sql}=require('node:sqlite');globalThis.keptDatabases=[new Sql(path.join(process.env.CODEX_HOME,'state_5.sqlite'),{readOnly:true}),new Sql(path.join(process.env.CODEX_SQLITE_HOME,'queue_1.sqlite'))];
 readline.createInterface({input:process.stdin}).on('line',async line=>{const r=JSON.parse(line);if(r.method==='initialize'){
 if(mode==='concurrent-stop'){fs.writeFileSync(initializeReady,'ready');await new Promise(resolve=>{const timer=setInterval(()=>{if(fs.existsSync(initializeRelease)){clearInterval(timer);resolve();}},10);});}
-console.log(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'fixture'}}));}else if(r.method==='thread/queue/add'){
+console.log(JSON.stringify({id:r.id,result:{codexHome:process.env.CODEX_HOME,platformFamily:'unix',platformOs:'macos',userAgent:'session-peer-native-queue/'+version+' (fixture)'}}));}else if(r.method==='thread/queue/add'){
 fs.appendFileSync(log,JSON.stringify({method:r.method,clientId:r.params.clientUserMessageId})+'\\n');
 if(mode==='concurrent-stop')return;
 if(mode==='loss'){process.exit(0);return;}
