@@ -10,6 +10,27 @@ merged. The release PR records final merged dependency/source SHAs and its own
 current-head CI/reviews. Later rebases must preserve the verified runtime/test
 tree or rerun affected checks.
 
+The dependencies were subsequently merged in authorized order with exact-head
+squash binding and no protection bypass: #106 `81d1aece70b414b6aef00641076bd2716f630f6e`,
+#107 `1e788be6b02c414b3c7de5bbad37afc7e293c2ff`,
+#108 `d645a692f8e402dd224691410fa89be502e45383`,
+#109 `be6adb26f844e7158362a8fcd6d379fbe8d46864`. Each merged tree matched its
+reviewed head. Release preparation was rebased onto that final main; its tree
+was unchanged before this documentation addition.
+
+#109 CI39045571298 first failed one macOS Node22 SSH fixture with a pre-queue
+`app_server_owner_changed`; other matrix jobs passed. Local Node24 focused and
+parallel diagnostics passed, followed by official Node22.23.3 arm64 focused/full
+387/382/0/5 passing checks. The local Node22 path contains spaces, so a private
+test-only POSIX/JS shebang adapter preserved exact binary/filename/arguments;
+this was not an unmodified CI-environment reproduction or a runtime guard change.
+The initial unadapted local run failed because of those invalid fixture
+shebangs and is excluded from product diagnosis. The original CI cause remains
+unconfirmed. Only failed macOS22/release-gate jobs were rerun once on the same
+source; attempt2 passed. Both current-head automatic reviews completed without
+findings. The initial failure is not reclassified as an all-green first run.
+Final main and preparation-head CI/review results are recorded in the release PR.
+
 On macOS arm64 / Node 24.16.0, `npm test` (including build and type checking)
 passed **389 total / 384 passed / 0 failed / 5 Windows-only skipped**. The oracle
 is the hash-checked isolated published Python 1.1.0 source

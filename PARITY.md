@@ -1184,8 +1184,9 @@ evaluate body-bearing cells internally; bodies/errors do not cross into JS or
 ordinary output. Required unsupported goals refuse before effect; after any
 possible submission no fallback/resend is permitted.
 
-The four development issues stay open until their scoped acceptance and human
-PR review/merge are complete. Platform/collector follow-ups are not completion
+The four development PRs were merged in the authorized order #106→#107→#108→#109.
+Scoped evidence and separate release acceptance are tracked in their issues and
+[#150](https://github.com/abruption/session-peer-ts/issues/150). Platform/collector follow-ups are not completion
 conditions for this limited release. Companion skill candidate guidance and
 version/profile rollout is tracked in [companion #31](https://github.com/abruption/session-peer-skill/issues/31)
 and [Draft #37](https://github.com/abruption/session-peer-skill/pull/37).
