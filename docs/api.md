@@ -57,6 +57,13 @@ never submit again. Retention/quota limits preserve epoch-bound fences rather
 than evicting old authority. Clone/rollback protection assumes intact, retained,
 non-rolled-back history. Native local/SSH retry permission remains false.
 
+Keep `ledger.key` with the private ledger: the journal stores an authenticated
+encrypted message-binding digest, using that separate mode-0600 key. The raw
+digest is not stored in the journal. Missing, changed or untrusted keys and old
+plaintext journals fail closed; commands do not regenerate a key or migrate
+history automatically. This does not protect against a same-user reader who
+can obtain both files. Lost history never authorizes resubmission.
+
 `--request-ack`, `--observe-delivery` and `--wait-for delivered|acknowledged`
 select separate evidence goals. A required unsupported goal refuses before
 submission; best-effort mode may submit while reporting the channel unsupported.

@@ -1052,3 +1052,10 @@ bootstrap, Windows private ACL support and original-sender SSH coordination are
 still implementation gates. Fixture passes are not live receipt/injection
 qualification. Default output and the historical Python runtime parity pin stay
 unchanged; no future Python runtime is claimed shipped.
+
+The journal encrypts its private message-binding digest with a separate
+mode-0600 `ledger.key`; missing/changed/untrusted keys and plaintext journals
+are refused without automatic key recovery or history migration. This is an
+at-rest journal boundary, not protection against a reader of both private
+files. Duplicate committed operator confirmation returns the original receipt
+without rewriting its wait classification or journal.

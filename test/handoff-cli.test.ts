@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync, readFileSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync, readFileSync, renameSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -128,5 +128,31 @@ test('prepared inactive Codex binding retains lock and saved-home evidence witho
   }else{
    assert.equal(sent.code,1);assert.equal(sent.value.error,'handoff_binding_conflict');assert.equal(sent.value.submitted,false);assert.equal(readFileSync(log,'utf8'),'');
   }
+ });
+});
+
+
+test('prepared Claude binding refuses same-PID registry or inbox replacement', {skip:process.platform==='win32'}, async t=>{
+ for(const change of ['unchanged','record','socket','socket-same-path'] as const)await t.test(change,async t=>{
+  const f=await fixture(t);await f.invoke(['handoff','init']);
+  const prepared=await f.invoke(['handoff','prepare','--to',String(process.pid),'--message-file',f.file]);assert.equal(prepared.code,0);
+  const correlation=prepared.value.handoff.correlationId;assert.equal(prepared.value.handoff.targetGeneration,null);
+  const replacementMessages:string[]=[];
+  if(change==='record'){
+   const record=join(f.path,'.claude/sessions',`${process.pid}.json`);renameSync(record,record+'.old');
+   writeFileSync(record,JSON.stringify({pid:process.pid,name:null,messagingSocketPath:join(f.path,'sock')}));
+  }
+  if(change==='socket'||change==='socket-same-path'){
+   const socket=join(f.path,change==='socket'?'replacement-sock':'sock');if(change==='socket-same-path')unlinkSync(socket);const server=createServer(s=>{let data='';s.on('data',c=>data+=c);s.on('end',()=>{replacementMessages.push(data);s.end();});});
+   server.listen(socket);await once(server,'listening');t.after(()=>new Promise<void>(ok=>server.close(()=>ok())));
+   if(change==='socket')writeFileSync(join(f.path,'.claude/sessions',`${process.pid}.json`),JSON.stringify({pid:process.pid,name:null,messagingSocketPath:socket}));
+  }
+  const sent=await f.invoke([...f.send,'--correlation-id',correlation,'--request-ack']);
+  if(change==='unchanged'){
+   assert.equal(sent.code,0);assert.equal(sent.value.status,'posted');assert.equal(sent.value.submitted,true);assert.equal(sent.value.handoff.targetGeneration,null);assert.equal(sent.value.handoff.ack.status,'unsupported');assert.equal(sent.value.handoff.retry.allowed,false);assert.equal(f.messages.length,1);
+  }else{
+   assert.equal(sent.code,1);assert.equal(sent.value.error,'handoff_binding_conflict');assert.equal(sent.value.submitted,false);assert.equal(f.messages.length,0);
+  }
+  assert.equal(replacementMessages.length,0);
  });
 });

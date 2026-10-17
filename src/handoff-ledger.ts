@@ -1,7 +1,7 @@
 // Private POSIX ledger. No native submission or transcript access occurs here.
 // Fencing assumes intact retained history: unmarked clones/rollbacks cannot be
 // detected by a local-only ledger. Windows ACL/bootstrap support is not claimed.
-import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, createHash, timingSafeEqual, createCipheriv, createDecipheriv } from 'node:crypto';
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -19,7 +19,7 @@ type RecordIntent = { binding: HandoffBinding; preparedUtc: number; clockId: str
   phase: 'prepared' | 'attempted' | 'finished' | 'refused'; handoff: Handoff; waits: StoredWait[];
   reserve: number; capabilityHash?: string; capabilityClockId?: string; receiptId?: string; revoked?: boolean; expired?: boolean;
   deliverySupported?: boolean; clientUserMessageId?: string };
-type Ledger = { version: 1; epoch: string; quarantined: boolean; records: Record<string, RecordIntent> };
+type Ledger = { version: 1; epoch: string; keyId: string; quarantined: boolean; records: Record<string, RecordIntent> };
 export type HandoffQueryError = { schemaVersion: 1; correlationId: string; status: 'unknown';
   context: 'ledger_missing' | 'ledger_corrupt' | 'id_unknown'; retry: { allowed: false; reason: 'history_unavailable' } };
 export type HandoffStatus = { handoff: Handoff } | { reason: 'handoff_history_unavailable'; handoffQuery: HandoffQueryError };
@@ -52,6 +52,37 @@ export class HandoffLedger {
     this.path = resolve(path); this.clock = options.clock ?? systemClock;
   }
   private filename(): string { return join(this.path, 'ledger.json'); }
+  // The separate private key is created only by fresh explicit init. A missing,
+  // changed or untrusted key cannot authorize migration or new submission.
+  private key(): Buffer {
+    const path = join(this.path, 'ledger.key'), before = privateStat(path, false);
+    if (before.size !== 32) fail('handoff_ledger_corrupt');
+    const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const opened = fstatSync(fd), bytes = Buffer.alloc(33);
+      if (opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== 32 || opened.nlink !== 1 || opened.uid !== before.uid || (opened.mode & 0o777) !== 0o600) fail('handoff_storage_untrusted');
+      let length = 0;
+      while (length < bytes.length) { const count = readSync(fd, bytes, length, bytes.length - length, length); if (!count) break; length += count; }
+      const after = fstatSync(fd), current = privateStat(path, false);
+      if (length !== 32 || after.size !== 32 || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs ||
+          after.nlink !== 1 || after.uid !== opened.uid || after.mode !== opened.mode || current.dev !== opened.dev || current.ino !== opened.ino ||
+          current.size !== after.size || current.mtimeMs !== after.mtimeMs || current.ctimeMs !== after.ctimeMs) fail('handoff_storage_untrusted');
+      return Buffer.from(bytes.subarray(0, 32));
+    } finally { closeSync(fd); }
+  }
+  private protectDigest(digest: string, key: Buffer, epoch: string, id: string): string {
+    const nonce = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, nonce);
+    cipher.setAAD(Buffer.from(JSON.stringify(['handoff-binding-v1', epoch, id])));
+    const ciphertext = Buffer.concat([cipher.update(Buffer.from(digest, 'hex')), cipher.final()]);
+    return `sealed-v1:${nonce.toString('hex')}:${ciphertext.toString('hex')}:${cipher.getAuthTag().toString('hex')}`;
+  }
+  private revealDigest(value: unknown, key: Buffer, epoch: string, id: string): string {
+    if (typeof value !== 'string' || !/^sealed-v1:[a-f0-9]{24}:[a-f0-9]{64}:[a-f0-9]{32}$/.test(value)) fail('handoff_ledger_corrupt');
+    const [, nonce, ciphertext, tag] = (value as string).split(':');
+    const cipher = createDecipheriv('aes-256-gcm', key, Buffer.from(nonce!, 'hex'));
+    cipher.setAAD(Buffer.from(JSON.stringify(['handoff-binding-v1', epoch, id]))); cipher.setAuthTag(Buffer.from(tag!, 'hex'));
+    return Buffer.concat([cipher.update(Buffer.from(ciphertext!, 'hex')), cipher.final()]).toString('hex');
+  }
   private lock<T>(operation: () => T, create = false): T {
     try { privateStat(this.path, true); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') fail('handoff_history_unavailable'); throw error; }
     const path = join(this.path, 'ledger.lock');
@@ -85,12 +116,16 @@ export class HandoffLedger {
     try {
       const wrapper = closed(parseStrictJson(bytes, { scope: 'outer', maxBytes: HANDOFF_LIMITS.journal }), ['digest', 'data']);
       if (typeof wrapper.digest !== 'string' || wrapper.digest !== payloadDigest(JSON.stringify(wrapper.data))) fail();
-      const data = closed(wrapper.data, ['version', 'epoch', 'quarantined', 'records']);
+      const data = closed(wrapper.data, ['version', 'epoch', 'keyId', 'quarantined', 'records']);
       if (data.version !== 1 || !canonicalId(data.epoch) || typeof data.quarantined !== 'boolean' || !data.records || typeof data.records !== 'object' || Array.isArray(data.records)) fail();
+      const key = this.key();
+      if (data.keyId !== payloadDigest(key)) fail();
       const records = data.records as Record<string, RecordIntent>;
       if (Object.keys(records).length > HANDOFF_LIMITS.intents) fail();
       for (const [id, item] of Object.entries(records)) {
         closed(item, ['binding', 'preparedUtc', 'clockId', 'preparedMono', 'phase', 'handoff', 'waits', 'reserve'], ['capabilityHash', 'capabilityClockId', 'receiptId', 'revoked', 'expired', 'deliverySupported', 'clientUserMessageId']);
+        if (!canonicalId(id)) fail();
+        item.binding = { ...item.binding, payloadDigest: this.revealDigest(item.binding?.payloadDigest, key, data.epoch as string, id) };
         checkBinding(item.binding);
         if (!canonicalId(id) || !canonicalId(item.clockId) || !safeInteger(item.preparedUtc) || typeof item.preparedMono !== 'number' || item.preparedMono < 0 ||
             !['prepared', 'attempted', 'finished', 'refused'].includes(item.phase) || !Array.isArray(item.waits) || item.waits.length > HANDOFF_LIMITS.waits ||
@@ -114,8 +149,17 @@ export class HandoffLedger {
   }
   private write(data: Ledger): void {
     for (const item of Object.values(data.records)) validateHandoff(item.handoff);
-    const text = JSON.stringify({ digest: payloadDigest(JSON.stringify(data)), data });
-    const reserves = Object.values(data.records).reduce((sum, item) => sum + Math.max(0, item.reserve - Buffer.byteLength(JSON.stringify(item))), 0);
+    const key = this.key();
+    if (data.keyId !== payloadDigest(key)) fail('handoff_ledger_corrupt');
+    const stored = structuredClone(data);
+    for (const [id, item] of Object.entries(stored.records)) {
+      checkBinding(item.binding);
+      item.binding = { ...item.binding, payloadDigest: this.protectDigest(item.binding.payloadDigest, key, data.epoch, id) };
+    }
+    // Both quota accounting and the corruption checksum use only ciphertext.
+    // A checksum over transient plaintext would itself permit payload guessing.
+    const text = JSON.stringify({ digest: payloadDigest(JSON.stringify(stored)), data: stored });
+    const reserves = Object.values(stored.records).reduce((sum, item) => sum + Math.max(0, item.reserve - Buffer.byteLength(JSON.stringify(item))), 0);
     if (Buffer.byteLength(text) + reserves > HANDOFF_LIMITS.journal) fail('handoff_ledger_full');
     const temporary = join(this.path, `.ledger-${randomUUID()}.tmp`);
     const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -132,7 +176,11 @@ export class HandoffLedger {
     try { mkdirSync(this.path, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
     return this.lock(() => {
       try { lstatSync(this.filename()); fail('handoff_ledger_exists'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-      const epoch = randomUUID(); this.write({ version: 1, epoch, quarantined: false, records: {} });
+      const key = randomBytes(32), keyPath = join(this.path, 'ledger.key');
+      const keyFd = openSync(keyPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      try { writeFileSync(keyFd, key); fsyncSync(keyFd); } finally { closeSync(keyFd); }
+      const directory = openSync(this.path, constants.O_RDONLY); try { fsyncSync(directory); } finally { closeSync(directory); }
+      const epoch = randomUUID(); this.write({ version: 1, epoch, keyId: payloadDigest(key), quarantined: false, records: {} });
       return { ledgerEpoch: epoch, storage: 'private_posix', cloneRollbackProtection: 'intact_retained_history_only' };
     }, true);
   }
@@ -321,16 +369,32 @@ export class HandoffLedger {
       this.write(data); return this.snapshot(item);
     });
   }
-  recordWait(id: string, status: Exclude<WaitStatus, 'pending' | 'not_requested'>, reason?: WaitReason): Handoff {
+  private selectWait(item: RecordIntent, operationId?: string): StoredWait {
+    if (operationId !== undefined && !canonicalId(operationId)) fail('invalid_wait_operation_id', 2);
+    const wait = operationId === undefined ? item.waits.at(-1) : item.waits.find(value => value.public.operationId === operationId);
+    if (!wait) fail('handoff_wait_unknown');
+    return wait;
+  }
+  private operationSnapshot(item: RecordIntent, wait: StoredWait): Handoff {
+    const h = this.snapshot(item); h.wait = structuredClone(wait.public);
+    // Actions of the newest operation cannot authorize an older operation.
+    h.nextActions = ['reconcile']; return validateHandoff(h);
+  }
+  operationStatus(id: string, operationId: string): Handoff {
+    const data = this.read(), item = this.usable(data, id);
+    return this.operationSnapshot(item, this.selectWait(item, operationId));
+  }
+  recordWait(id: string, status: Exclude<WaitStatus, 'pending' | 'not_requested'>, reason?: WaitReason, operationId?: string): Handoff {
     return this.lock(() => {
-      const data = this.read(), item = this.usable(data, id), wait = item.waits.at(-1);
-      if (!wait || wait.public.status !== 'pending') fail('handoff_wait_terminal');
+      const data = this.read(), item = this.usable(data, id), wait = this.selectWait(item, operationId);
+      if (wait.public.status !== 'pending') fail('handoff_wait_terminal');
       if (status === 'timed_out_unknown' && (wait.clockId !== this.clockId || this.clock.monotonic() < wait.cutoff)) fail('receipt_order_unprovable');
-      item.handoff.wait.status = status; if (reason) item.handoff.wait.reason = reason;
-      if (status === 'timed_out_unknown') item.handoff.state = 'timed_out_unknown';
+      wait.public.status = status; if (reason) wait.public.reason = reason;
+      if (status === 'timed_out_unknown' && !item.handoff.observation.injectionObserved && item.handoff.ack.status !== 'acknowledged') item.handoff.state = 'timed_out_unknown';
       item.handoff.nextActions = ['reconcile'];
-      wait.public = structuredClone(item.handoff.wait); validateHandoff(item.handoff);
-      this.write(data); return this.snapshot(item);
+      item.handoff.wait = structuredClone(item.waits.at(-1)!.public);
+      validateHandoff({ ...item.handoff, wait: wait.public });
+      this.write(data); return operationId !== undefined ? this.operationSnapshot(item, wait) : this.snapshot(item);
     });
   }
   private commitAck(item: RecordIntent, assurance: 'operator_confirmed' | 'token_possession'): void {
@@ -356,7 +420,8 @@ export class HandoffLedger {
     return this.lock(() => {
       const data = this.read(), item = this.usable(data, proof.correlationId);
       if (data.epoch !== proof.ledgerEpoch || item.binding.generation !== proof.targetGeneration || item.handoff.submission.status !== 'submitted') fail('confirmation_binding_invalid');
-      if (item.handoff.ack.status !== 'acknowledged') this.commitAck(item, 'operator_confirmed');
+      if (item.handoff.ack.status === 'acknowledged') return this.snapshot(item);
+      this.commitAck(item, 'operator_confirmed');
       this.write(data); return this.snapshot(item);
     });
   }

@@ -1,6 +1,6 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createRequire } from 'node:module';
@@ -35,6 +35,16 @@ function confirmation(h: Handoff) {
 }
 function submit(f: ReturnType<typeof fixtureLedger>, h: Handoff) {
   f.ledger.commitEffect(h.correlationId, f.binding); return f.ledger.recordSubmission(h.correlationId, 'submitted');
+}
+// Build large, valid quota fixtures without O(n²) durable API writes. Each
+// synthetic record still needs the real ID/epoch-authenticated encrypted field;
+// copying one ciphertext to another ID must remain invalid (privacy regression).
+function sealedQuotaDigest(path: string, epoch: string, id: string, digest: string): string {
+  const key = readFileSync(join(path, 'ledger.key')), nonce = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  cipher.setAAD(Buffer.from(JSON.stringify(['handoff-binding-v1', epoch, id])));
+  const encrypted = Buffer.concat([cipher.update(Buffer.from(digest, 'hex')), cipher.final()]);
+  return `sealed-v1:${nonce.toString('hex')}:${encrypted.toString('hex')}:${cipher.getAuthTag().toString('hex')}`;
 }
 const bootstrap = { privateConsumerValidated: true, compatibleProducerValidated: true } as const;
 
@@ -438,6 +448,7 @@ test('byte admission reserves terminal/wait/receipt room and never evicts an exi
   const template = wrapper.data.records[h.correlationId];
   for (let i = 1; i < 511; i++) {
     const id = randomUUID(), item = structuredClone(template); item.handoff.correlationId = id;
+    item.binding.payloadDigest = sealedQuotaDigest(f.ledger.path, wrapper.data.epoch, id, f.binding.payloadDigest);
     wrapper.data.records[id] = item;
   }
   writeFileSync(file, JSON.stringify({ digest: payloadDigest(JSON.stringify(wrapper.data)), data: wrapper.data }));
@@ -454,6 +465,7 @@ test('retained tombstones count toward the 10,000 intent limit with no LRU repla
   const template = wrapper.data.records[h.correlationId]; template.reserve = 0; template.expired = true;
   for (let i = 1; i < HANDOFF_LIMITS.intents; i++) {
     const id = randomUUID(), item = structuredClone(template); item.handoff.correlationId = id;
+    item.binding.payloadDigest = sealedQuotaDigest(f.ledger.path, wrapper.data.epoch, id, f.binding.payloadDigest);
     wrapper.data.records[id] = item;
   }
   writeFileSync(file, JSON.stringify({ digest: payloadDigest(JSON.stringify(wrapper.data)), data: wrapper.data }));

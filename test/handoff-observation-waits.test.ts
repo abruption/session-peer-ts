@@ -63,3 +63,30 @@ test('restarted observer retains injection but fails every unorderable delivery 
   ]);
   assert.equal(f.waits()[2].status, 'pending');
 });
+test('explicit operation timeout resolves the older cutoff without changing a newer pending wait', posix, t => {
+  const f = fixture(t);
+  const first = f.ledger.beginWait(f.h.correlationId, 'delivered', new HandoffBudget(6, f.clock));
+  f.advance(500);
+  const second = f.ledger.beginWait(f.h.correlationId, 'delivered', new HandoffBudget(6, f.clock));
+  f.advance(500);
+  const settled = f.ledger.recordWait(f.h.correlationId, 'timed_out_unknown', undefined, first.wait.operationId);
+  assert.equal(settled.wait.operationId, first.wait.operationId); assert.equal(settled.wait.status, 'timed_out_unknown');
+  assert.deepEqual(f.waits().map((w: any) => [w.operationId, w.status]), [
+    [first.wait.operationId, 'timed_out_unknown'], [second.wait.operationId, 'pending'],
+  ]);
+  const status = f.ledger.status(f.h.correlationId); assert.ok('handoff' in status);
+  assert.deepEqual(status.handoff.wait, second.wait);
+  const before = f.waits();
+  assert.throws(() => f.ledger.recordWait(f.h.correlationId, 'stopped', 'stopped_by_operator', first.wait.operationId), /handoff_wait_terminal/);
+  assert.deepEqual(f.waits(), before);
+});
+test('explicit wait selection rejects unknown IDs and cannot timeout a foreign monotonic clock', posix, t => {
+  const f = fixture(t);
+  const first = f.ledger.beginWait(f.h.correlationId, 'delivered', new HandoffBudget(6, f.clock));
+  f.advance(1000);
+  const foreign = new HandoffLedger(f.ledger.path, { clock: f.clock });
+  assert.throws(() => foreign.recordWait(f.h.correlationId, 'timed_out_unknown', undefined, first.wait.operationId), /receipt_order_unprovable/);
+  assert.throws(() => f.ledger.recordWait(f.h.correlationId, 'stopped', 'stopped_by_operator', 'not-a-uuid'), /invalid_wait_operation_id/);
+  assert.throws(() => f.ledger.recordWait(f.h.correlationId, 'stopped', 'stopped_by_operator', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'), /handoff_wait_unknown/);
+  assert.equal(f.waits()[0].status, 'pending');
+});
