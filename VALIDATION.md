@@ -142,6 +142,311 @@ request-count assertions are preserved. This was test isolation, not a runtime
 failure or a CI rerun treated as an unchanged-head success. Final PR-head CI
 results are recorded in the PR after the correction.
 
+## 0.4.0 scoped acceptance follow-up — 2026-10-11 KST
+
+The user approved qualified macOS arm64 Codex observation and explicit operator
+confirmation as the limited 0.4.0 scope. #69/#70/#71/#72 remain together. Linux
+client-ID observation #130, Windows observation/private handoff storage #131
+and voluntary receipt producer/authenticated collector bootstrap #132 are
+Future extensions, not mandatory platforms/collectors for this release. Required
+unsupported goals still refuse before effect; ordinary queues/manual receipts
+do not qualify native observation or automated receipt authentication.
+
+The source follow-up updates four-language README/guide scope, API and PARITY
+without changing runtime or the frozen contract/pin bytes. Dated 0.3.3 preparation
+evidence is retained; installation examples and explicitly unreleased handoff
+sections are distinguished. SQLite may evaluate body-bearing cells internally;
+body/error values are not returned to JavaScript or ordinary output.
+
+Pure-validator cross-runtime checks invoke exact published Python 1.1.0
+`8ca77cf31254c8287a2593fe484bb30a7dba2727` standalone and canonical handoff
+module hashes, never its main/ledger/native CLI/collector. Five tests/45 data
+cases passed: 19 accepted examples spanning all seven states, 12 schema/privacy/
+ACK/retry negatives, four Python unsupported-observation state projections,
+four Claude optional-absence/native-profile cases and six Codex native-profile
+cases. Python UUID reason names remain distinct from TS. The first launch lacked
+the reference environment (ENOENT), and the next run exposed an incorrect
+expected Python UUID reason; both were corrected before the final pass. This is
+actual pure-function comparison, not native delivery/receipt/runtime parity.
+
+Focused ACK core/CLI checks passed 55/55 after adding wrong correlation/epoch/
+generation and malformed/private-input negatives, byte-identical ledger
+preservation and positive/duplicate operator confirmation with no native queue.
+The companion guidance candidate is tracked in session-peer-skill #31. Its named
+session was inactive at dry-run, so no message was queued and no wake/resume was
+used. Existing skill metadata/immutable pin are not upgraded by this work.
+
+The SSH handoff suite passed 14/14 on macOS arm64. Three destination-side Codex
+fixtures cover exact-ID injection, no injection before deadline and queue-response
+loss, with original preparation binding and at most one queue RPC. These use fake
+SSH and a scripted native peer, not a new remote/native qualification. The request
+budget is 15 seconds; the harness has a separate 20-second cleanup limit.
+
+Integrated `npm test` (including build and type checks) passed 347 tests:
+342 pass, zero fail, five Windows-only skips on macOS arm64 / Node 24.16.0.
+Packaging and exact-head CI are recorded in PR #109. Tests are separate from the
+earlier KR/US real ordinary queues and local native qualification. Issue checklists
+and publication approval are separate gates; no merge/release/tag operation is
+included here.
+
+## 0.4.0 owner-probe fixture follow-up — 2026-10-11 KST
+
+CI run `38110140277` at test/docs checkpoint
+`60895b46d8758c7427b90bc154414bd4d01487e7` failed the macOS Node 22
+positive-acceptance/ledger-failure regression: it returned
+`app_server_owner_changed` before the intended persistence failure.
+The other platform jobs passed; the release gate failed, so this run is not
+all green. CodeQL run `38110137845` passed with no open branch alerts.
+The holder remains alive until test cleanup; no holder expiry was found.
+The bounded owner probe had four extra Node starts for its fake lsof/ps tools,
+in addition to the production 250ms sample interval. This is a fixture startup
+burden consistent with the failure, not proof of its precise timing cause.
+
+The fixture now uses static POSIX scripts for lsof/ps and keeps owner evidence
+as separate raw NUL-delimited data. PID, UID, start identity, changed-owner
+checks, real lock holder and cleanup are preserved. Production 800ms probe
+budget, 250ms recheck, refusal behavior and regression assertions are unchanged.
+No runtime, native qualification or platform-support change is part of this fix.
+The focused macOS arm64 / Node 24.16.0 delivery suite passed 16/16, including
+the intended persistence failure and changed-owner refusal. Follow-up full
+validation and exact-head CI are recorded in PR #109.
+
+## 0.4.0 real Linux SSH submission checks — 2026-10-11 KST
+
+The unpublished development checkpoint `e83fcffa2dbee33de0694e30b6420d83a128fc5e`
+was copied explicitly to fresh, private marked test prefixes on two Linux
+arm64 hosts. Both ends used that candidate, rather than the public npm package
+whose version label is also 0.3.3. Candidate/dependency archive SHA-256 was
+`aadfd3630b67d905a8f474e305f972c7bf670a99365c62dd53fa83d1e04764da`;
+each destination verified the hash before extraction. No global installation,
+profile, service, SSH trust, native configuration or authentication change was
+made. SSH used strict host-key checking, batch authentication and no control
+socket. Each private destination ledger was explicitly initialized.
+
+On the first host, Node 24.16.0 / native Codex 0.162.1, the user-authorized
+existing session passed saved-thread and unique stable live-writer dry-run
+checks. One best-effort correlated send exited 0 with `queued`,
+`submitted=true`, an optional native `queueId` and handoff `submitted`.
+Observation and automatic ACK remained `unsupported`; a later status query
+preserved those facts. A requested voluntary reply was not yet received at
+this checkpoint; no transcript or queue polling was used to infer receipt.
+
+On the second host, Node 24.18.0 / native Codex 0.159.2, the existing saved
+session was inactive and dry-run correctly refused with `inactive_writer`.
+It was neither resumed nor queued through inactive opt-in. A separately owned
+read-only test TUI in an already trusted working directory produced READY,
+passed unique live-writer dry-run, and received exactly one candidate SSH
+submission. The original terminal displayed its requested identification
+response. An explicit operator confirmation bound to the original correlation,
+ledger epoch and generation was recorded before any separate wait: confirmation
+and status exited 0 with `acknowledged`, `assurance=operator_confirmed`,
+`late=false`; a subsequent acknowledged wait exited 0 with `satisfied` and
+performed no submission. This is operator attestation, not automated receipt
+authentication or native client-ID observation. The test TUI closed and
+`inspectWriter` then reported inactive/absent. Its native test record remains;
+no existing native record was deleted.
+
+On both hosts, required `--wait-for delivered` refused before effect with
+`evidence_unsupported`, `submitted=false` and retry disallowed. Best-effort
+results retained `consumptionConfirmed=false`; neither queue receipt nor
+terminal response changed that field. These are real SSH/native ordinary-queue
+checks, not Linux observation qualification: Linux native app-server/client-ID
+projection and automatic original-sender SSH ACK bootstrap remain unsupported.
+Both marked remote prefixes and their test ledgers were removed with ownership
+checks, and their absence was verified. Local evidence retains only the test
+results; public descriptions omit host/account paths and session identifiers.
+
+## 0.4.0 integrated SSH review checkpoint — 2026-10-11 KST
+
+Independent read-only review used Claude Code 2.1.296 with tools disabled and
+no session persistence. The first 163,540-byte input timed out after 240 seconds
+(exit 143, no response), so it supplied no review evidence. One narrower
+104,671-byte retry completed in 268.508 seconds with exit 0, `is_error=false`
+and actual model `claude-opus-5-5` (first-party). Its input SHA-256 was
+`69169aacf2c7f02d6606aebbdb23961e2694a0845e86875f2848469ea97a1718`,
+unchanged before/after the call. Neither call edited files or ran tests.
+
+The review identified two required corrections: a complete successful
+preparation followed by SSH failure must refuse the actual send, and a
+post-submission persistence failure must preserve a verified pending wait
+instead of losing its identifiers or inventing a terminal record. A stopped
+wait with the wrong process exit is also discarded without discarding separate
+native acceptance facts. These fixes and the earlier partial/no-EOF input
+deadline correction have focused regression tests; subsequent integrated
+test results are recorded separately. The review input predates those final
+corrections and is not a whole-final-commit external verification.
+
+A subsequent internal source audit found that failed-wait normalization could
+discard the original malformed/missing `error` before envelope validation. The
+regression now rejects that handoff while retaining independently valid native
+acceptance facts. The first integrated full run recorded 337 total / 331 pass /
+1 failure / 5 skips: a sub-millisecond early probe cutoff attempted to commit a
+timeout before its exact monotonic deadline and therefore retained pending
+state. The fix waits out only that fractional tail within the existing budget;
+it neither extends the deadline nor invents a persisted terminal result. The
+corrected run is recorded below.
+
+The corrected integrated macOS arm64 / Node 24.16.0 run used the exact published
+Python 1.1.0 export as `SESSION_PEER_PYTHON_ROOT` and
+`PYTHONDONTWRITEBYTECODE=1`: `npm test` (build, test:types and all test files)
+passed **337 total / 332 passed / zero failed / five Windows-only skipped**.
+The preceding focused SSH/delivery run passed 27/27. Repository/link/anchor and
+diff checks passed; `npm audit` reported zero vulnerabilities. These fixture
+results do not widen the native/platform or actual Windows evidence above.
+
+The first packaging invocation failed its reproducibility check because this
+validation document was edited between its two packs. That invocation is not a
+successful package check. Source/document edits were then stopped before the
+repeat packaging check; its result and the exact-commit artifact are reported
+in the PR checkpoint separately.
+
+The apparent fanout deadline extension follows the frozen **per-destination**
+budget, rather than one aggregate invocation deadline. Each destination keeps
+one setup/preparation/effect/observation budget with its cleanup reserve;
+sequential fanout can take their sum. Independent clocks cannot measure SSH
+transit delay, and an unknown source result may precede a delayed destination
+effect. No retry is authorized. A rejected dry-run timeout example lacked the
+required prepared correlation and already fails option validation; it did not
+require a runtime change.
+
+## 0.4.0 additional native verification — 2026-10-11 KST
+
+These are unpublished development checks on isolated, newly created test
+sessions. They do not establish final whole-commit/full-suite CI or authorize
+publication. Existing working sessions received no test message. Evidence is
+bounded to the tested compiled components; later integrated checks are separate.
+
+### Codex: exact metadata observation and manual confirmation
+
+On macOS arm64 / Node 24.16.0, native Codex **0.162.1**, upstream source
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`, was checked against the
+version/platform/source and live evidence in
+[`metadata-observation-native-evidence.json`](test/fixtures/metadata-observation-native-evidence.json).
+The production reader matched the original exact client message ID, original
+thread and generation before/after observation, and a positively linked
+completed turn. Native item ID differed from client ID; neither that turn
+completion nor the queue receipt was treated as ACK. The probe returned
+bounded IDs/status only, with no body or history API output. SQLite internally
+projects metadata from a body-bearing cell; this is not a promise that SQLite
+never accesses body bytes.
+
+Actual CLI checks used two additional fresh test threads, **one native queue
+attempt per thread**, with no fallback or resubmission. Both observe-send
+commands exited 0 with `status=queued`, `submitted=true`,
+`consumptionConfirmed=false` and retry disallowed. A separate delivered wait
+on the first thread was satisfied with exact injection evidence; status query
+exited 0. Starting that wait before manual confirmation lost provable ordering:
+confirmation correctly exited 1 with `receipt_order_unprovable`, retaining
+original delivery facts and performing no requeue.
+
+On the second thread, the operator verified the test-only voluntary response
+against the original correlation, then confirmed **before starting another
+wait**. Confirmation and status exited 0 with `state=acknowledged`,
+`assurance=operator_confirmed`, `late=false`; a subsequent acknowledged wait
+was satisfied and exited 0. This is an explicit operator attestation, not an
+automated receipt collector or model identity proof. Automated receipt
+capability remains unsupported. All owned test terminals were closed. Native
+home test records were retained; no existing native record was deleted.
+
+The fixture records exact compiled component hashes, including
+`dist/metadata-observation.js` SHA-256
+`4d01dae9a90f4cda3c7b45bf0c126067bff403f345d0d23bc593cc57363e0f83`
+and `dist/handoff-ledger.js`
+`efb46bcd1892ba9eb843a4ae603987f15ce535d942938dfe2c0e98a1343edcb9`.
+These identify the tested components, not a final integrated commit.
+
+### Claude: correlated submission and unsupported required ACK
+
+A separate test-only Claude Code **2.1.296 / Opus 5.5** session on macOS
+arm64 / Node 24.16.0 produced a READY response. Its launch identity, PID and
+fresh private working directory were checked before each submission. Native
+Claude assigned a non-null name; nullable names remain synthetic fixture
+coverage. No tools, commands, file tasks or external messages were requested.
+
+A prepared-ID correlated send and a separate best-effort `--request-ack`
+send each submitted exactly once and exited 0 with `status=posted`,
+`submitted=true`, `consumptionConfirmed=false`, handoff state `submitted`
+and retry disallowed. Each produced its own identification-marker response
+in the owned terminal. Subsequent status queries retained state `submitted`,
+`injectionObserved=false` and ACK `not_requested`/`unsupported`: a plain
+assistant response was not promoted to machine ACK or native observation.
+Required `--wait-for acknowledged` instead exited 1 before effect with
+`evidence_unsupported`, `status=refused`, `submitted=false` and unsupported
+ACK/wait. Its marker never appeared in the owned terminal. Zero effect is
+supported by the pre-effect code/result contract and terminal check, not socket
+instrumentation. The terminal closed; its PID and native registry record were
+absent. Private workspace, message files and sender ledger were removed.
+
+The tested Claude compiled `dist/cli.js` SHA-256 was
+`7195f5bd049bdba7ffbffd1d69473d9b90f9a42646851697e1df149054dc5d1f`;
+`dist/handoff-operations.js` was
+`99e15fbd8ad04e5f28490512b61bf0296b21d96ee787d63d1b8293e905f8665e`.
+This earlier build differs from the subsequent Codex build; these results
+must not be presented as a single final whole-commit run. Default native CLI
+authentication was used without reading, copying or recording credentials.
+
+### Windows: separate failed real-host fixture gate
+
+The actual Windows 10 x64 / Node 24.16.0 suite recorded **266 total,
+155 passed, 2 failed, 109 skipped**. The child failure and enclosing failure
+refer to one underlying fake-SSH path, not two independent runtime defects.
+The unsupported native-platform qualification guard selection separately
+passed 3/3; it does not qualify observation on Windows.
+
+Additional strict/batch SSH diagnostics compiled the repository C# fixture.
+Twelve minimal Node/PowerShell child-launch controls passed across standard
+stream redirection and window settings; encoded PowerShell `exit 0` also
+passed. The owned test `.cmd --version` command instead reproduced
+`Win32Exception: Access is denied` in `Process.StartWithCreateProcess`, with
+both ordinary and isolated HOME/USERPROFILE, including a failure followed by
+a successful `exit 0` control in the same executable. General process creation
+worked; the exact host cause remains unverified. A recent Defender event query
+with no matches neither identifies nor excludes a security product/policy.
+The **real-host SSH fixture gate remains unpassed**; fixture CI is distinct
+and cannot erase this result. No policy, permission, service, guard or execution
+bypass was applied. No real agent/native queue was invoked by these Windows
+fixtures. The marked remote diagnostic directory was deleted and its absence
+confirmed. No private hostnames, account paths or session identifiers are
+included here. Windows native observation, SSH handoff, automated ACK,
+restart/crash continuity and other native versions/platforms remain outside
+these successful macOS checks.
+
+### Windows follow-up: alternate test launcher
+
+Further controls on the same Windows 10 x64 / Node 24.16.0 host separated
+launcher behavior without changing policies, permissions, services or production
+guards. C#/.NET Framework launching PowerShell 5.1 `-EncodedCommand` reproduced
+AccessDenied for both the owned `.cmd` wrapper and a direct Node version command.
+The same PowerShell 5.1 encoded command launched by Node succeeded, as did
+PowerShell 5.1 `-File`, direct `cmd.exe /d /s /c`, and the already installed
+PowerShell 7 alternatives. This identifies a tested launcher-dependent difference;
+it does not establish which security product or host setting caused the failure.
+
+The test-only C# fake SSH now delegates to a fixed Node helper, preserving
+PowerShell 5.1, `-NoProfile -NonInteractive -EncodedCommand`, the encoded request,
+stdin, stdout/stderr and exit behavior. No execution-policy option or production
+fallback was added. The helper's 55-second child limit remains inside the fake
+SSH parent's 60-second limit; harness timeout returns 254, not native success.
+
+An isolated copy of checkpoint `e83fcffa2dbee33de0694e30b6420d83a128fc5e`
+with only those three test-file changes passed build/types, the Windows native
+contract **9/9**, and `npm run test:windows`: **295 total / 165 passed / zero
+failed / 130 skipped**. Unsupported native-platform guards separately passed
+3/3. This replaces the failed fixture execution path with a validated alternate
+test launcher; the original failure record above remains historical evidence.
+It neither qualifies Windows native observation/ACK nor proves a real remote
+agent send. The final C# fixture additionally requires the exact production
+PowerShell prefix and one base64 token. Three real-host controls passed: exact
+version command exits 0, a changed option is refused with exit 2, and trailing
+whitespace is refused with exit 2. The C# file SHA-256 was
+`b7845190939d4d915c56d1d072f23f5eeac3447a9994791d0b06ea2f0f147c38`.
+The final guarded contract repeat and ownership-checked cleanup are reported
+in the PR checkpoint. The integrated macOS arm64 / Node 24.16.0 run after these
+test-file changes passed build/types and all tests: **337 total / 332 passed /
+zero failed / five Windows-only skipped**, using the same exact Python 1.1.0
+reference export. Repository/diff checks passed and audit reported zero
+vulnerabilities. No runtime source or package metadata changed in this follow-up.
+
 ## Python 1.1.0 ordinary comparison — 2026-10-11 KST
 
 Unpublished 0.4.0 development checkpoint: an isolated `git archive` export of

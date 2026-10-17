@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { handoffCommand, handoffSend, privateMessage } from './handoff-operations.js';
-import { canonicalId, HandoffBudget, parseWaitTimeout } from './handoff.js';
+import { handoffCommand, handoffSend, prepareHandoff, privateMessage } from './handoff-operations.js';
+import { canonicalId, closed, HANDOFF_LIMITS, HandoffBudget, parseStrictJson, parseWaitTimeout, safeInteger, systemClock, type Handoff } from './handoff.js';
 import { doctor } from './diagnostics.js';
 import { help } from './help.js';
 import { renderOutput, type OutputFormat } from './output.js';
@@ -80,8 +80,6 @@ export function parse(args: string[]): Options {
       if (!values.has('--correlation-id') && !values.has('--wait-for') && !flags.has('--request-ack') && !flags.has('--observe-delivery')) throw new Refusal('inapplicable_wait_timeout');
     }
     if (flags.has('--dry-run') && (flags.has('--request-ack') || flags.has('--observe-delivery') || values.has('--wait-for'))) throw new Refusal('incompatible_handoff_dry_run');
-    // The original-sender ledger/receipt route is not yet qualified over SSH.
-    if (hosts.length) throw new Refusal('remote_handoff_unsupported', 1);
   }
   if (values.has('--message-file') && (command !== 'send' || values.has('--message'))) throw new Refusal('conflicting_message_sources');
   if (command === 'update') {
@@ -118,9 +116,12 @@ export function parse(args: string[]): Options {
       values.set('--to', route.to);
     }
   }
-  // Reply-To URI parsing can introduce an SSH destination after the early
-  // flag check. Never let that route bypass the original sender's ledger.
-  if (handoff && hosts.length) throw new Refusal('remote_handoff_unsupported', 1);
+  if (handoff && hosts.length) {
+    if (hosts.length > HANDOFF_LIMITS.fanout) throw new Refusal('handoff_fanout_too_large');
+    if (values.has('--correlation-id') && hosts.length > 1) throw new Refusal('handoff_correlation_fanout_forbidden');
+    // Owned SSH descendant cleanup has only been qualified on POSIX origins.
+    if (process.platform === 'win32' || values.get('--remote-platform') === 'win32') throw new Refusal('remote_handoff_unsupported', 1);
+  }
   if (command === 'send' && flags.has('--allow-inactive-codex-home')) {
     if (!values.get('--to')!.startsWith('codex:')) throw new Refusal('inapplicable_option');
     if (!values.get('--codex-home')) throw new Refusal('inactive_opt_in_requires_explicit_home');
@@ -196,7 +197,7 @@ export function sshPreflightFailure(result: Done, expected: string): string | un
   if (result.code !== 0) return 'ssh_preflight_failed';
   return undefined;
 }
-async function remote(options: Options, ssh: string, target: string, resolved: { canonical: string; options: string[] }, message?: string, returnTo?: string): Promise<{ value: Record<string, unknown>; exitCode: number }> {
+async function remote(options: Options, ssh: string, target: string, resolved: { canonical: string; options: string[] }, message?: string, returnTo?: string, budget?: HandoffBudget): Promise<{ value: Record<string, unknown>; exitCode: number }> {
   const { values, flags, command } = options;
   const binary = values.get('--remote-bin') ?? 'session-peer';
   const windows = values.get('--remote-platform') === 'win32';
@@ -213,7 +214,8 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10',
     ...(options.jump ? jumpOptions(ssh, options.jump) : []),
     ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), ...resolved.options, ...options.ssh.args, '--', target];
-  const preflight = await run(ssh, [...base, invoke('--version')], { timeout: 15000 });
+  budget?.beforeEffect();
+  const preflight = await run(ssh, [...base, invoke('--version')], { timeout: budget ? Math.max(1, Math.min(15000, budget.observationRemainingMs())) : 15000 });
   const preflightError = sshPreflightFailure(preflight, VERSION_LINE);
   if (preflightError) throw new Refusal(preflightError, 1);
   const args = [command, '--json'];
@@ -224,19 +226,55 @@ async function remote(options: Options, ssh: string, target: string, resolved: {
   if (command === 'send') args.push(`--message=${message!}`, '--no-from', '--no-reply-to');
   // The destination probes back to this machine; the request carries only the host.
   if (returnTo) args.push('--return-route-host', returnTo);
-  const done = await run(ssh, [...base, invoke('--stdio-request')], {
-    timeout: 90000, rawStdout: true, input: JSON.stringify({ schemaVersion: 1, args })
-  });
+  const context = budget ? { correlationId: values.get('--correlation-id'), requestAck: flags.has('--request-ack'),
+    observeDelivery: flags.has('--observe-delivery'), waitFor: values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined } : undefined;
+  if (context) {
+    for (const key of ['--correlation-id', '--wait-for', '--wait-timeout']) if (values.has(key)) args.push(key, values.get(key)!);
+    for (const key of ['--request-ack', '--observe-delivery']) if (flags.has(key)) args.push(key);
+  }
+  const execute = (requestArgs: string[], preparation = false) => {
+    budget?.beforeEffect();
+    const remainingMs = budget ? Math.floor(budget.remainingMs()) : undefined;
+    if (remainingMs !== undefined && (remainingMs < 1 || remainingMs > 60000)) throw new Refusal('invalid_handoff_budget', 1);
+    return run(ssh, [...base, invoke(`--stdio-request${remainingMs === undefined ? '' : ` --handoff-remaining-ms=${remainingMs}`}`)], {
+      timeout: budget ? Math.max(1, budget.remainingMs() - 200) : 90000, rawStdout: true,
+      input: JSON.stringify({ schemaVersion: 1, args: requestArgs,
+        ...(remainingMs !== undefined ? { handoff: { schemaVersion: 1, remainingMs, ...(preparation ? { preparation: true } : {}) } } : {}) })
+    });
+  };
+  let prepared: Pick<Handoff, 'correlationId' | 'ledgerEpoch' | 'targetGeneration'> | undefined;
+  let destinationHost: string | undefined;
+  let boundTo = values.get('--to'), boundHome = values.get('--codex-home');
+  if (budget) {
+    // This round reserves a destination-owned intent and performs zero native
+    // submissions. An incomplete response is never replayed or guessed into send.
+    const preparation = await execute(args, true);
+    let checked: ReturnType<typeof responseOutcome>;
+    try { checked = responseOutcome(preparation, { command, to: boundTo, home: boundHome, dryRun: true,
+      allowInactive: flags.has('--allow-inactive-codex-home'), handoff: { ...context, preparation: true } }); }
+    catch { throw new Refusal('remote_preparation_unverified', 1); }
+    if (checked.value.ok === true && checked.exitCode !== 0) throw new Refusal('remote_preparation_unverified', 1);
+    if (checked.exitCode !== 0 || checked.value.ok !== true) return { value: { ...checked.value, host: resolved.canonical, sshHost: target }, exitCode: checked.exitCode || 1 };
+    const h = checked.value.handoff as Handoff | undefined;
+    if (!h) throw new Refusal('remote_preparation_unverified', 1);
+    prepared = { correlationId: h.correlationId, ledgerEpoch: h.ledgerEpoch, targetGeneration: h.targetGeneration };
+    destinationHost = checked.value.host as string;
+    const nativeTarget = checked.value.target as { id?: string; pid?: number };
+    boundTo = boundTo!.startsWith('codex:') ? `codex:${nativeTarget.id!}` : `claude:${nativeTarget.pid!}`;
+    if (boundTo.startsWith('codex:')) boundHome = checked.value.codexHome as string;
+    const replace = (key: string, value: string) => { const index = args.indexOf(key); if (index >= 0) args[index + 1] = value; else args.push(key, value); };
+    replace('--to', boundTo); replace('--correlation-id', h.correlationId);
+    if (boundHome !== undefined) replace('--codex-home', boundHome);
+  }
+  const done = await execute(args);
   const uncertain = () => { if (command === 'send' && !flags.has('--dry-run') && done.spawned) throw new UnknownOutcome(); throw new Refusal('remote_response_unverified', 1); };
   let verified: ReturnType<typeof responseOutcome>;
-  try { verified = responseOutcome(done, { command, to: values.get('--to'), dryRun: flags.has('--dry-run'), returnTo,
-    home: values.get('--codex-home'), allowInactive: flags.has('--allow-inactive-codex-home') }); }
+  try { verified = responseOutcome(done, { command, to: boundTo, dryRun: flags.has('--dry-run'), returnTo,
+    home: boundHome, allowInactive: flags.has('--allow-inactive-codex-home'), ...(context ? { handoff: { ...context, correlationId: prepared!.correlationId, prepared, destinationHost } } : {}) }); }
   catch { return uncertain(); }
   const { value } = verified;
   // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
   delete value.clientUpdate;
-  // Ordinary SSH responses cannot opt into peer-supplied handoff evidence.
-  delete value.handoff; delete value.handoffQuery; delete value.handoffWarning;
   return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: verified.exitCode };
 }
 function failure(error: unknown, command: string, where: string): { value: Record<string, unknown>; exitCode: number } {
@@ -251,13 +289,15 @@ function failure(error: unknown, command: string, where: string): { value: Recor
 }
 // Destinations run in order, one attempt each. A failure or unknown outcome is
 // reported for that destination only; it is never retried or failed over.
-async function remotes(options: Options, status: Tailnet | undefined, message?: string, returnTo?: string): Promise<{ value: Record<string, unknown>[]; exitCode: number }> {
+async function remotes(options: Options, status: Tailnet | undefined, message?: string, returnTo?: string, firstBudget?: HandoffBudget): Promise<{ value: Record<string, unknown>[]; exitCode: number }> {
   const ssh = executable('ssh'), results: Record<string, unknown>[] = [];
   let exitCode = 0;
   for (const requestedHost of options.hosts) {
     const target = host(requestedHost);
     let outcome: { value: Record<string, unknown>; exitCode: number }, user: Partial<Awaited<ReturnType<typeof sshUser>>> = {}, canonical = target;
     try {
+      const budget = firstBudget ? results.length === 0 ? firstBudget : new HandoffBudget(parseWaitTimeout(options.values.get('--wait-timeout') ?? '30')) : undefined;
+      budget?.beforeEffect();
       // A known offline or ambiguous tailnet peer is refused before any SSH process.
       const resolved = route(target, status); canonical = resolved.canonical;
       const hostName = resolved.hostName ? ['-o', `HostName=${resolved.hostName}`] : [];
@@ -271,7 +311,7 @@ async function remotes(options: Options, status: Tailnet | undefined, message?: 
         if (resolved.hostKeyAlias && config.read && !config.hostKeyAlias) alias = ['-o', `HostKeyAlias=${resolved.hostKeyAlias}`];
       } catch { user = { sshUser: null, sshUserSource: 'unknown' }; }
       // Metadata never blocks or aborts a destination; earlier results are kept.
-      outcome = await remote(options, ssh, target, { canonical, options: [...hostName, ...alias] }, message, returnTo);
+      outcome = await remote(options, ssh, target, { canonical, options: [...hostName, ...alias] }, message, returnTo, budget);
     }
     // One destination keeps the existing flat local-host failure shape.
     catch (error) { outcome = failure(error, options.command, options.hosts.length === 1 ? hostname() : canonical !== target ? canonical : requestedHost); }
@@ -285,6 +325,7 @@ async function remotes(options: Options, status: Tailnet | undefined, message?: 
 let command = 'unknown';
 let format: OutputFormat = 'json';
 let wire = false;
+let wireWatchdog: ReturnType<typeof setTimeout> | undefined;
 try {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (!((major === 22 && minor! >= 13) || major === 24)) throw new Refusal('unsupported_node_version');
@@ -301,18 +342,56 @@ try {
     process.exitCode = operation.exitCode;
   }
   else {
-    wire = args.length === 1 && args[0] === '--stdio-request';
+    wire = args[0] === '--stdio-request';
+    let wireContext: { remainingMs: number; preparation?: true } | undefined;
+    let wireBudget: HandoffBudget | undefined;
+    let wireRemainingMs: number | undefined;
     if (wire) {
+      if (args.length !== 1) {
+        if (args.length !== 2 || !/^--handoff-remaining-ms=[1-9][0-9]{0,4}$/.test(args[1]!)) throw new Refusal('invalid_remote_request');
+        wireRemainingMs = Number(args[1]!.slice('--handoff-remaining-ms='.length));
+        if (wireRemainingMs > 60000) throw new Refusal('invalid_remote_request');
+        // Charge Node startup and imports before module execution. The same
+        // duration then covers input, preparation/effect and owned cleanup.
+        const wireStartedAt = systemClock.monotonic() - process.uptime() * 1000;
+        wireBudget = HandoffBudget.fromRemainingMs(wireRemainingMs, systemClock, wireStartedAt);
+        wireBudget.beforeEffect();
+        wireWatchdog = setTimeout(() => process.kill(process.pid, 'SIGTERM'), Math.max(1, wireBudget.remainingMs()));
+      }
       let request: unknown;
-      try { request = JSON.parse(await input()); } catch { throw new Refusal('invalid_remote_request'); }
-      const record = request as { schemaVersion?: unknown; args?: unknown };
+      let raw: string;
+      try { raw = await input(4_100_000, false, wireBudget?.observationRemainingMs()); request = JSON.parse(raw); }
+      catch (error) {
+        if (wireBudget && error instanceof Refusal && error.code === 'deadline_before_effect') throw error;
+        throw new Refusal('invalid_remote_request');
+      }
+      const record = request as { schemaVersion?: unknown; args?: unknown; handoff?: unknown };
       if (!record || record.schemaVersion !== 1 || !Array.isArray(record.args) || record.args.some(a => typeof a !== 'string')) throw new Refusal('invalid_remote_request');
+      if (record.handoff !== undefined) {
+        try {
+          parseStrictJson(raw, { scope: 'outer', maxBytes: 4_100_000 });
+          closed(record, ['schemaVersion', 'args', 'handoff']);
+          const context = closed(record.handoff, ['schemaVersion', 'remainingMs'], ['preparation']);
+          if (context.schemaVersion !== 1 || !safeInteger(context.remainingMs) || context.remainingMs < 1 || context.remainingMs > 60000 ||
+              (context.preparation !== undefined && context.preparation !== true)) throw new Error('invalid');
+          wireContext = { remainingMs: context.remainingMs, ...(context.preparation ? { preparation: true } : {}) };
+          if (wireContext.remainingMs !== wireRemainingMs) throw new Error('duration_mismatch');
+        } catch { throw new Refusal('invalid_remote_request'); }
+      }
       args = record.args;
     }
     command = ['list', 'send', 'doctor', 'update'].includes(args[0] ?? '') ? args[0]! : 'unknown';
     const options = parse(args);
     const handoffEnabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
-    const handoffBudget = handoffEnabled ? new HandoffBudget(parseWaitTimeout(options.values.get('--wait-timeout') ?? '30')) : undefined;
+    if (wire && (handoffEnabled !== !!wireContext || handoffEnabled !== !!wireBudget)) throw new Refusal('remote_handoff_context_required', 1);
+    if (wireContext && (command !== 'send' || process.platform === 'win32')) throw new Refusal('remote_handoff_unsupported', 1);
+    if (wireContext && wireContext.remainingMs > parseWaitTimeout(options.values.get('--wait-timeout') ?? '30') * 1000) throw new Refusal('invalid_remote_request');
+    if (wireContext && !wireContext.preparation && !options.values.has('--correlation-id')) throw new Refusal('remote_preparation_required', 1);
+    const handoffBudget = handoffEnabled ? wireContext ? wireBudget : new HandoffBudget(parseWaitTimeout(options.values.get('--wait-timeout') ?? '30')) : undefined;
+    if (wireContext && handoffBudget) {
+      handoffBudget.beforeEffect();
+      // The input-side watchdog remains installed; do not renew it here.
+    }
     format = !wire && options.values.get('--output-format') === 'text' ? 'text' : 'json';
     if (wire && options.values.get('--output-format') === 'text') throw new Refusal('remote_json_required');
     if (wire && command === 'update') throw new Refusal('remote_update_unsupported');
@@ -377,12 +456,12 @@ try {
     }
     let result: Record<string, unknown> = {}, exitCode: number | undefined, results: Record<string, unknown>[] | undefined;
     // Propagate the verified remote exit code so SSH and local refusals match.
-    if (options.hosts.length) ({ value: results, exitCode } = await remotes(options, await tailnetStatus(), message, returnTo));
+    if (options.hosts.length) ({ value: results, exitCode } = await remotes(options, await tailnetStatus(), message, returnTo, handoffBudget));
     else if (command === 'send') {
       const settings = { to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') };
       const enabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
-      if (wire && enabled) throw new Refusal('remote_handoff_unsupported', 1);
-      if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget, resultOverhead: Buffer.byteLength(JSON.stringify(routing)) + 1024 }));
+      if (wireContext?.preparation) ({ value: result, exitCode } = await prepareHandoff(settings, undefined, options.values.get('--correlation-id'), handoffBudget));
+      else if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget, resultOverhead: Buffer.byteLength(JSON.stringify(routing)) + 1024 }));
       else result = await send(settings);
     }
     else if (command === 'update') result = options.flags.has('--check') ? await checkUpdate(options.values.get('--channel')) : refuseSelfUpdate(options.values.get('--channel'));
@@ -422,4 +501,4 @@ try {
   console.log(renderOutput(!wire && requested.length > 1 ? requested.map(item => ({ ...value, host: item })) : value, format));
   process.exitCode = exitCode;
   }
-}
+} finally { if (wireWatchdog) clearTimeout(wireWatchdog); }

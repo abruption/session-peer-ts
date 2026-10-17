@@ -126,7 +126,7 @@ session-peer --version
 - [개발·기여 안내](CONTRIBUTING.md).
 - [릴리스 절차](RELEASING.md).
 
-- [0.4.0 handoff 설계(공동 확정·미구현)](PARITY.md#handoff-v1-design-candidate--69).
+- [0.4.0 handoff 설계와 미발행 구현 범위](PARITY.md#handoff-v1-design-candidate--69).
 
 - [개발 중인 private handoff CLI와 지원 한계](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
 

@@ -84,6 +84,52 @@ explicitly labeled and must match retained original context. No arbitrary
 message/transcript scan manufactures ACK. Ordinary generated Reply-To stays v1.
 
 
+### Unreleased destination-side SSH handoff
+
+POSIX opt-in `send --host HOST` performs an exact-version preflight and a
+no-effect preparation before one destination-side send. Both ends must contain
+this reviewed candidate: the public 0.3.3 banner alone does not establish new
+capability. Initialize the destination's private ledger explicitly; no command
+auto-installs a handler or initializes missing history. The origin does not
+create a local receipt collector. Reconcile with `handoff status`/`wait` on the
+destination that owns the retained intent, without another send.
+
+Preparation fixes the canonical destination target/home, original generation,
+epoch and correlation ID. A supplied ID must already be unattempted/prepared
+there. Fanout uses a distinct ID per destination, is limited to 32 destinations,
+and rejects one caller-supplied ID for multiple hosts. An incomplete preparation
+refuses before effect. After a possible effect, partial/malformed/oversized
+responses remain unknown and are never replayed. Complete request-matched native
+facts survive SSH 255/timeout; malformed optional handoff cannot create ACK or
+erase separately valid submission facts. Ordinary opt-out discards unsolicited
+handoff/query/warning fields.
+
+The origin retains its original monotonic deadline. Each private request carries
+only remaining duration, repeated in a private numeric argv selector. The
+destination establishes its input timeout and owned-process cleanup watchdog
+before reading the frame, requires the two durations to match, and charges
+normal Node bootstrap/frame-read time to the same budget. An indefinitely blocked
+static import before handler startup is outside this in-process watchdog; the
+origin still has its own hard transport deadline. Transit delay is
+not measurable across independent monotonic clocks: this is not a synchronized
+cross-host cutoff guarantee. The source deadline is never renewed, and 5 seconds
+of cleanup reserve remain inside each per-destination budget. Fake-SSH fixtures
+exercise the actual destination handler and a recording socket, including the
+watchdog's group cleanup; they do not constitute an actual network SSH or remote
+native-agent qualification.
+
+Each fanout destination starts its own total budget; sequential fanout can take
+up to the sum of those budgets (at most 32 × 60 seconds), rather than one shared
+invocation deadline. No setup, preparation or wait renews a destination's
+deadline. Transport loss can return unknown before a delayed destination effect
+has finished; it is not evidence of non-delivery and never authorizes a retry.
+
+Original-sender ACK collector/bootstrap and Windows SSH handoff remain
+unsupported. Required acknowledged wait refuses before submission; best-effort
+request-ack reports unsupported. Destination-native observation retains the
+same exact Codex version/platform/home/generation gates as local observation.
+
+
 ## Unreleased bounded app-server mechanics — 0.4.0 work
 
 `dist/app-server.js` is an internal opt-in module, not a new public package
@@ -126,3 +172,95 @@ native binaries are qualified; launcher wrappers without this PID/storage proof
 remain unsupported. Native bootstrap may create state/cache files according to
 managed policy before binding refusal; zero queue is the guarantee, not zero
 bootstrap filesystem activity. Observers still open only read-only warm stores.
+
+
+## Unreleased local delivery observation — #72
+
+A narrower qualified source path combines #71 queue mechanics with a warm
+Codex 0.160.1 or 0.162.1 metadata store on macOS arm64. `--observe-delivery` checks once
+(best effort); `--wait-for delivered` polls within the original remaining
+budget. The native client ID is the reserved correlation ID. A positive native
+receipt remains `status: queued`, `submitted: true`, `consumptionConfirmed:
+false` even when the explicit wait fails. The separate handoff describes the
+requested evidence goal. After any possible RPC write, no legacy fallback or
+second submission occurs.
+
+Before an opted-in native effect, original saved thread/home/writer evidence,
+default SQLite storage, exact native version and a warm supported metadata
+schema are checked. Required unsupported observation refuses before effect.
+Best-effort chooses legacy queue only if qualification failed before any native
+app-server attempt. The sender fences its intent durably before queue/add.
+A fresh queue transport is not treated as the owner of another process's thread.
+
+The observer never reads rollouts or calls history, queue/list, thread/resume,
+turn/start or full item/turn notification APIs. SQLite itself projects only
+`clientId`, thread/turn IDs and an allowlisted status. Recent row keys are bounded
+to 256; cells over 256 KiB are excluded before JSON extraction. Temporary SQLite
+storage is memory-only and materializes keys/bounded scalars. Body/error columns
+are never returned to JavaScript. SQLite internally evaluates body-bearing
+`item_json` cells to project metadata; this is not a guarantee that message-body
+bytes are never accessed inside the SQLite engine. Only an already-warm original store is used;
+there is no migration, warm-up/backfill, new model turn or wake. Existing WAL/SHM
+must already be trusted; SQLite read-only readers can participate in transient
+SHM read locks. DB/WAL bytes and sidecar creation remain unchanged in fixtures.
+
+File/schema/inode checks and queries run in owned deadline-bounded children.
+An inherited-group owner verifier compares the ORIGINAL selected fingerprint
+before/after each read. Wrong client ID, schema drift, owner restart or an
+ambiguous row cannot advance delivery. Unknown native turn statuses remain
+unknown. Queue deletion or turn completion alone never creates injection/ACK.
+Each wait keeps its own operation ID/cutoff and immutable terminal record;
+concurrent later waits do not replace the originating send's result. An explicit
+SIGINT-stopped wait returns exit 130 when its matching stopped record is proven,
+retaining independently known submission facts and never retracting/resending.
+
+`handoff wait --correlation-id UUID --wait-for delivered` starts a new read-only
+operation over a retained, positively submitted intent. It preserves the original
+home/thread/writer generation and private, exact version/source/platform
+qualification. Missing qualification is unsupported; today's PATH or matching
+schema never reconstructs it. A new wait has its own cutoff and never rewrites
+an old terminal wait. Other processes' pending waits remain untouched and each
+owner classifies its own deadline. No native executable, queue request, transcript
+API or model turn is started by status/wait. Ledger contention is retried only
+inside the existing total budget. A persistence failure returns the last verified
+operation and known submission facts with `handoff_persistence_failed`; it does
+not claim that a terminal record was written.
+
+Qualification boundaries: the combined native CLI route is macOS arm64/Codex
+0.160.1 or 0.162.1, each with an exact pinned source profile. Dedicated new
+0.162.1 TUI sessions demonstrated one native queue attempt and exact client-ID
+injection in the original thread/home using bounded metadata projections.
+Synthetic tests separately cover independent-process resume, timeout, SIGINT,
+concurrent waits, owner change and persistence failure. Neither completion nor
+visible response establishes machine ACK. A separate voluntary matching reply
+was explicitly recorded with `handoff confirm --receipt -` before any wait:
+`operator_confirmed`, retained ACK and a later acknowledged wait succeeded.
+A prior test that started a delivered wait before confirmation correctly refused
+unprovable cross-process ordering; its intent was not resubmitted. This is manual
+operator attestation, not automatic token-possession receipt collection. Dedicated Claude Code 2.1.296 tests
+confirmed correlated socket delivery and best-effort ACK remaining unsupported;
+a required unsupported ACK refused before posting.
+
+The qualified native app-server queue/observation route is unsupported on
+Linux/Windows. Ordinary Codex queue submission and explicit operator confirmation
+on supported POSIX ledgers are separate capabilities, demonstrated by the KR/US
+checks in VALIDATION. Windows private ledger and automated receipt
+collector/bootstrap remain unsupported. Other native versions are not
+inferred from a minor range. The original-sender SSH collector is not provided.
+No package/version publication or completed milestone is implied by these
+source-only checks. Exact evidence and limits are in [VALIDATION](../VALIDATION.md).
+
+
+
+
+
+## 0.4.0 candidate scope
+
+The release candidate includes the qualified macOS arm64 observer and explicit
+`operator_confirmed` receipts on supported POSIX ledgers. Other platforms do not
+inherit that qualification. Linux observation [#130](https://github.com/abruption/session-peer-ts/issues/130),
+Windows observation/private storage [#131](https://github.com/abruption/session-peer-ts/issues/131) and
+voluntary receipt producer/authenticated collector bootstrap [#132](https://github.com/abruption/session-peer-ts/issues/132)
+are future extensions. An automatic collector would still require an explicit
+receiver receipt; it must never infer ACK from messages or turn completion.
+Unsupported required goals refuse before effect; no post-attempt fallback or resend.

@@ -45,6 +45,7 @@ async function fixture(t: TestContext) {
     CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', FIXTURE_QUEUE_LOG: join(root, 'queue.jsonl'),
     FIXTURE_QUEUE_MODE: '', FIXTURE_SSH_LOG: join(root, 'ssh.jsonl'), FIXTURE_SSH_MODE: '',
     FIXTURE_REMOTE_PROFILE: '', FIXTURE_REMOTE_HOMES: '',
+    FIXTURE_NODE: process.execPath, FIXTURE_SSH_CHILD: resolve('test/fixtures/windows-ssh-child.mjs'),
     PATH: root + ';' + (process.env.PATH ?? '') });
   const home = join(root, 'selected');
   function database(path: string) {

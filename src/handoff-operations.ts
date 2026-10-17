@@ -5,9 +5,13 @@ import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync } from 'node:fs';
 import { HandoffLedger, payloadDigest, type HandoffBinding } from './handoff-ledger.js';
 import { canonicalId, HANDOFF_LIMITS, HandoffBudget, parseWaitTimeout, type Handoff, type WaitFor } from './handoff.js';
-import { checkMessage, send, type SendContext, type SendOptions } from './send.js';
+import { fileURLToPath } from 'node:url';
+import { nativeQueueCapability, nativeQueueOnce, AppServerFault, type AppServerScope } from './app-server.js';
+import { metadataCapability, observeMetadata, resumeMetadataObservation, metadataQualification, type MetadataQualification, type MetadataScope } from './metadata-observation.js';
+import { checkMessage, queueId, send, type SendContext, type SendOptions } from './send.js';
 import { Refusal } from './discovery.js';
-import { UnknownOutcome } from './process.js';
+import { HomeRefusal } from './writer.js';
+import { executable, run, UnknownOutcome } from './process.js';
 
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
@@ -41,11 +45,30 @@ export function correlationEnvelope(message: string, id: string): string {
   // A dedicated inert metadata line, not an executable Reply-To extension.
   return message + '\n\n---\nHandoff: ' + JSON.stringify({ schemaVersion: 1, correlationId: id });
 }
+// Nonblocking ledger locks can contend across independent waiters. Retry only
+// within the caller's existing total budget; never replay a native operation.
+async function persistWithinBudget<T>(budget: HandoffBudget, action: () => T): Promise<T> {
+  for (;;) {
+    try { return action(); } catch (error) {
+      if (!(error instanceof Refusal) || error.code !== 'handoff_ledger_busy' || budget.remainingMs() < 1) throw error;
+      await new Promise<void>(resolve => setTimeout(resolve, Math.min(20, budget.remainingMs())));
+    }
+  }
+}
+// Probes stop when less than one millisecond remains, but a durable timeout
+// still requires reaching the exact monotonic cutoff. Charge this fractional
+// tail to the existing budget, never label an early wake as expiry.
+async function settleCutoffEdge(budget: HandoffBudget): Promise<void> {
+  while (budget.observationRemainingMs() > 0 && budget.observationRemainingMs() < 1) {
+    await new Promise<void>(resolve => setTimeout(resolve, 1));
+  }
+}
 class BeforeEffectRefused extends Error {}
-export async function prepareHandoff(options: SendOptions, path = ledgerPath()): Promise<OperationResult> {
+export async function prepareHandoff(options: SendOptions, path = ledgerPath(), correlationId?: string, budget?: HandoffBudget): Promise<OperationResult> {
   const ledger = new HandoffLedger(path); let handoff: Handoff | undefined;
   const value = await send({ ...options, dryRun: true, hooks: { resolved(context) {
-    handoff = ledger.prepare(binding(context, options.message));
+    budget?.beforeEffect();
+    handoff = ledger.prepare(binding(context, options.message), { correlationId });
   } } });
   return { value: { ...value, handoff }, exitCode: 0 };
 }
@@ -53,51 +76,207 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
   const ledger = new HandoffLedger(handoffOptions.ledgerPath ?? ledgerPath());
   const budget = handoffOptions.budget ?? new HandoffBudget(handoffOptions.seconds ?? 30);
   let handoff: Handoff | undefined, snapshot: Record<string, unknown> | undefined;
+  let scope: MetadataScope | undefined, queueScope: AppServerScope | undefined, deliverySupported = false, stopped = false, operationId: string | undefined;
+  let qualification: MetadataQualification | undefined;
   let original: HandoffBinding | undefined, fenced = false, knownNative: Record<string, unknown> | undefined;
+  const ownWait = () => {
+    if (handoff && operationId) {
+      const operation = ledger.operationStatus(handoff.correlationId, operationId);
+      // Keep independently known native facts, while projecting actions and the
+      // exact originating wait rather than the ledger's most recently added wait.
+      handoff = { ...handoff, wait: operation.wait, nextActions: operation.nextActions };
+    } else if (handoff) handoff = { ...handoff, wait: { for: 'none', status: 'not_requested' }, nextActions: ['reconcile'] };
+  };
+  const stop = () => {
+    stopped = true;
+    try {
+      ownWait();
+      if (handoff?.wait.status === 'pending') handoff = ledger.recordWait(handoff.correlationId, 'stopped', 'stopped_by_operator', operationId);
+      ownWait();
+    } catch { /* No fabricated terminal evidence after persistence failure. */ }
+  };
+  const persist = <T>(action: () => T) => persistWithinBudget(budget, action);
+  const authorize = async () => { if (stopped) throw new Refusal('stopped_by_operator', 130); budget.beforeEffect(); handoff = await persist(() => { if (stopped) throw new Refusal('stopped_by_operator', 130); return ledger.commitEffect(handoff!.correlationId, original!, budget); }); fenced = true; ownWait(); };
+  const verifyOwner = async (target: MetadataScope, signal?: AbortSignal) => {
+    if (stopped || signal?.aborted || budget.observationRemainingMs() < 1) return false;
+    const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
+    const result = await run(process.execPath, [worker, target.home, target.threadId], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
+    if (signal?.aborted || stopped || result.code !== 0 || result.interrupted) return false;
+    try { const value = JSON.parse(result.stdout); return value.schemaVersion === 1 && value.ok === true && Object.keys(value).every(key => ['schemaVersion','ok','generation'].includes(key)) && /^[0-9a-f]{64}$/.test(value.generation) && value.generation === target.generation; } catch { return false; }
+  };
   const finish = (value: Record<string, unknown>, exitCode: number): OperationResult => ({ value: { ...value, ...(handoff ? { handoff } : {}) }, exitCode });
+  if (handoffOptions.waitFor) process.on('SIGINT', stop);
   try {
     const value = await send({ ...options, hooks: {
-      resolved(context, native) {
+      async resolved(context, native) {
         snapshot = native; original = binding(context, handoffOptions.payload ?? options.message);
         if (Buffer.byteLength(JSON.stringify(native)) + HANDOFF_LIMITS.publicFrame + (handoffOptions.resultOverhead ?? 1024) > HANDOFF_LIMITS.outerFrame) throw new Refusal('handoff_result_too_large',1);
         // Account for the fixed correlation envelope before allocating an intent.
         checkMessage(correlationEnvelope(options.message, '00000000-0000-4000-8000-000000000000'), context.agent === 'codex');
-        handoff = ledger.prepare(original, { correlationId: handoffOptions.correlationId,
+        const wantsDelivery = handoffOptions.observeDelivery || handoffOptions.waitFor === 'delivered';
+        if (wantsDelivery && context.agent === 'codex' && context.home && context.generation && budget.observationRemainingMs() > 0) {
+          scope = { home: context.home, threadId: context.target, generation: context.generation };
+          queueScope = { codexHome: context.home, threadId: context.target, generation: context.generation, ownerIdentity: context.writerIdentity! };
+          const version = await run(executable(options.codexBin ?? 'codex'), ['--version'], { timeout: Math.min(1000, budget.observationRemainingMs()), limit: 4096 });
+          const nativeVersion = !version.interrupted && version.code === 0 ? version.stdout.trim().replace(/^codex-cli /, '') : '';
+          qualification = metadataQualification(nativeVersion);
+          if (qualification && nativeQueueCapability({version:nativeVersion,platform:`${process.platform}-${process.arch}`,scope:queueScope}).queueSupported) deliverySupported = (await metadataCapability(scope, nativeVersion, budget, verifyOwner)).supported;
+        }
+        handoff = await persist(() => ledger.prepare(original!, { correlationId: handoffOptions.correlationId,
           requestAck: handoffOptions.requestAck || handoffOptions.waitFor === 'acknowledged',
           observeDelivery: handoffOptions.observeDelivery || handoffOptions.waitFor === 'delivered',
-          waitFor: handoffOptions.waitFor ?? 'none', budget, dryRun: options.dryRun });
+          waitFor: handoffOptions.waitFor ?? 'none', budget, dryRun: options.dryRun, observationSupported: deliverySupported,
+          ...(deliverySupported ? { observationQualification: qualification! } : {}) }));
+        operationId = handoff.wait.operationId;
         if (handoff.state === 'refused') throw new BeforeEffectRefused();
         return correlationEnvelope(options.message, handoff.correlationId);
       },
-      beforeEffect() { budget.beforeEffect(); handoff = ledger.commitEffect(handoff!.correlationId, original!, budget); fenced = true; },
+      beforeEffect: authorize,
+      async submitCodex(context, message) {
+        if (!deliverySupported) {
+          // Best-effort unsupported is chosen before ANY app-server attempt.
+          await authorize();
+          const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'CODEX_SQLITE_HOME'));
+          const done = await run(executable(options.codexBin ?? 'codex'), ['queue','--thread',context.target,`--message=${message}`], {env:{...inherited,CODEX_HOME:context.home},timeout:Math.max(1,budget.observationRemainingMs())});
+          if (!done.spawned) throw new Refusal('native_spawn_failed',1);
+          if (done.interrupted || done.code !== 0) throw new UnknownOutcome();
+          const receipt = queueId(done.stdout,context.target);
+          return {queueId:receipt,clientUserMessageId:handoff!.correlationId};
+        }
+        try { return await nativeQueueOnce({binary:executable(options.codexBin ?? 'codex'),scope:queueScope!,message,clientUserMessageId:handoff!.correlationId,deadlineMs:budget.cutoff,verifyOwner: async () => verifyOwner(scope!),beforeEffect: authorize}); }
+        catch(error) { if (error instanceof AppServerFault && error.attempted) throw new UnknownOutcome(); if(error instanceof AppServerFault) throw new Refusal(`app_server_${error.code}`,1); throw error; }
+      },
       timeoutMs() { budget.beforeEffect(); return Math.max(1, Math.floor(budget.observationRemainingMs())); },
     } });
     knownNative = value;
-    if (!options.dryRun) handoff = ledger.recordSubmission(handoff!.correlationId, 'submitted');
+    if (!options.dryRun) { handoff = await persist(() => ledger.recordSubmission(handoff!.correlationId, 'submitted')); ownWait(); }
+    if (!options.dryRun && deliverySupported && scope && handoff) {
+      do {
+        if (stopped) break;
+        const observed = await observeMetadata({...scope,clientUserMessageId:handoff.correlationId}, budget, verifyOwner);
+        if (!observed.supported) {
+          if (budget.observationRemainingMs() < 1) break;
+          if (['metadata_deadline', 'metadata_probe_failed'].includes(observed.reason!)) {
+            await new Promise<void>(resolve => setTimeout(resolve, Math.min(100, budget.observationRemainingMs())));
+            continue;
+          }
+          handoff = await persist(() => ledger.recordObservationFailure(handoff!.correlationId, original!, observed.reason === 'metadata_owner_changed' ? 'unsupported' : 'failed', operationId)); ownWait();
+          break;
+        }
+        if (observed.injectionObserved) { handoff = await persist(() => ledger.recordObservation(handoff!.correlationId,{clientUserMessageId:observed.clientUserMessageId!,injectionObserved:true,...(observed.turn ? {turn:observed.turn} : {})},original!)); ownWait(); break; }
+        if (!handoffOptions.waitFor) break;
+        await new Promise<void>(resolve => setTimeout(resolve, Math.min(100,budget.observationRemainingMs())));
+      } while(budget.observationRemainingMs() > 0);
+      if (handoffOptions.waitFor && handoff.wait.status === 'pending') {
+        if (!stopped) await settleCutoffEdge(budget);
+        handoff = await persist(() => stopped ? ledger.recordWait(handoff!.correlationId,'stopped','stopped_by_operator',operationId) : ledger.recordWait(handoff!.correlationId,'timed_out_unknown',undefined,operationId));
+      }
+      ownWait();
+      if (handoffOptions.waitFor && handoff.wait.status !== 'satisfied') return finish({...value,ok:false,error:handoff.wait.reason ?? 'timed_out_unknown',retryAllowed:false},handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator' ? 130 : 1);
+    }
     return finish(value, 0);
   } catch (error) {
     if (!handoff || !snapshot) throw error;
+    try { ownWait(); } catch { /* Preserve the last verified original operation. */ }
     if (knownNative) {
       // An I/O failure after positive native acceptance cannot erase that fact.
-      handoff = { ...handoff, state: 'submitted', submission: { status: 'submitted' }, nextActions: ['reconcile'] };
+      handoff = { ...handoff, state: handoff.ack.status === 'acknowledged' ? 'acknowledged' : handoff.observation.injectionObserved ? 'delivered' : 'submitted', submission: { status: 'submitted' }, nextActions: ['reconcile'] };
       if (handoffOptions.waitFor) {
-        if (handoff.wait.status === 'pending') handoff.wait = { ...handoff.wait, status: 'failed', reason: 'evidence_failed' };
-        return finish({ ...knownNative, ok: false, error: 'handoff_persistence_failed', retryAllowed: false }, 1);
+        // Preserve the last verified operation; a failed write cannot create
+        // a durable terminal wait in the returned evidence.
+        const interrupted = handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator';
+        return finish({ ...knownNative, ok: false, error: interrupted ? 'stopped_by_operator' : 'handoff_persistence_failed', handoffWarning: 'persistence_failed', retryAllowed: false }, interrupted ? 130 : 1);
       }
       return finish({ ...knownNative, handoffWarning: 'persistence_failed', retryAllowed: false }, 0);
     }
     const uncertain = error instanceof UnknownOutcome;
     if (fenced) {
-      try { handoff = ledger.recordSubmission(handoff.correlationId, uncertain ? 'unknown' : 'refused'); }
-      catch { const state = ledger.status(handoff.correlationId); if ('handoff' in state) handoff = state.handoff; }
+      try { handoff = ledger.recordSubmission(handoff.correlationId, uncertain ? 'unknown' : 'refused'); ownWait(); }
+      catch {
+        try {
+          const state = operationId ? { handoff: ledger.operationStatus(handoff.correlationId, operationId) } : ledger.status(handoff.correlationId);
+          if ('handoff' in state) handoff = state.handoff;
+          ownWait();
+        } catch { /* Keep the last verified original wait, never another operation's terminal outcome. */ }
+      }
+    }
+    try { ownWait(); } catch { /* A latest-operation snapshot is never proof of this wait's terminal outcome. */ }
+    if (handoffOptions.waitFor && handoff.wait.status === 'pending') {
+      try { handoff = ledger.recordWait(handoff.correlationId, budget.observationRemainingMs() <= 0 ? 'timed_out_unknown' : 'failed', budget.observationRemainingMs() <= 0 ? undefined : 'evidence_failed', operationId); ownWait(); }
+      catch { handoff.wait = {...handoff.wait,status:'failed',reason:'evidence_failed'}; }
     }
     if (!fenced && original && handoff.state !== 'refused') {
-      try { handoff = ledger.refusePrepared(handoff.correlationId, original); } catch { /* Keep the last verified facts; never retry. */ }
+      try { handoff = ledger.refusePrepared(handoff.correlationId, original); ownWait(); } catch { /* Keep the last verified facts; never retry. */ }
     }
     const code = error instanceof BeforeEffectRefused ? handoff.wait.reason ?? 'evidence_unsupported' : error instanceof Refusal ? error.code : uncertain ? 'outcome_unknown' : 'handoff_operation_failed';
     return finish({ ...snapshot, ok: false, error: code, status: uncertain ? 'unknown' : 'refused', submitted: uncertain ? null : false,
-      consumptionConfirmed: false, retryAllowed: false }, error instanceof Refusal ? error.exitCode : 1);
-  }
+      consumptionConfirmed: false, retryAllowed: false, ...(error instanceof HomeRefusal ? {codexHomeResolution:error.codexHomeResolution} : {}) }, handoffOptions.waitFor && handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator' ? 130 : error instanceof Refusal && error.exitCode !== 130 ? error.exitCode : 1);
+  } finally { process.removeListener('SIGINT',stop); }
+}
+
+// Start a new read-only operation on retained original submission evidence.
+// Never reopen a queue client, adopt a successor owner or reset an old deadline.
+export async function waitForHandoff(ledger: HandoffLedger, id: string, goal: 'delivered' | 'acknowledged', budget: HandoffBudget): Promise<OperationResult> {
+  const retained = goal === 'delivered' ? ledger.observationContext(id) : undefined;
+  const context = retained?.binding.destination === hostname() ? retained : undefined;
+  // Register before the first durable wait write; the signal handler only marks
+  // intent. Persistence remains serialized in this operation, never its callback.
+  let stopped = false, handoff: Handoff | undefined, operationId: string | undefined;
+  const stop = () => { stopped = true; };
+  const persist = <T>(action: () => T) => persistWithinBudget(budget, action);
+  const ownWait = () => { if (operationId) handoff = ledger.operationStatus(id, operationId); };
+  const verifyOwner = async (scope: MetadataScope, signal: AbortSignal) => {
+    if (stopped || signal.aborted || budget.observationRemainingMs() < 1) return false;
+    const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
+    const result = await run(process.execPath, [worker, scope.home, scope.threadId], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
+    if (stopped || signal.aborted || result.code !== 0 || result.interrupted) return false;
+    try {
+      const value = JSON.parse(result.stdout);
+      return value.schemaVersion === 1 && value.ok === true && Object.keys(value).every(key => ['schemaVersion','ok','generation'].includes(key)) &&
+        /^[0-9a-f]{64}$/.test(value.generation) && value.generation === scope.generation;
+    } catch { return false; }
+  };
+  process.on('SIGINT', stop);
+  try {
+    handoff = await persist(() => ledger.beginWait(id, goal, budget, { observationSupported: context !== undefined }));
+    operationId = handoff.wait.operationId!;
+    while (context && handoff.wait.status === 'pending' && !stopped && budget.observationRemainingMs() >= 1) {
+      const observed = await resumeMetadataObservation({ home: context.binding.home!, threadId: context.binding.target,
+        generation: context.binding.generation, clientUserMessageId: context.clientUserMessageId }, context.qualification, budget, verifyOwner);
+      ownWait();
+      if (stopped || handoff.wait.status !== 'pending') break;
+      if (!observed.supported) {
+        if (budget.observationRemainingMs() < 1) break;
+        if (!['metadata_deadline', 'metadata_probe_failed'].includes(observed.reason!)) {
+          handoff = await persist(() => ledger.recordObservationFailure(id, context.binding,
+            ['metadata_owner_changed', 'metadata_version_unsupported', 'metadata_platform_unsupported'].includes(observed.reason!) ? 'unsupported' : 'failed', operationId));
+          break;
+        }
+      } else if (observed.injectionObserved) {
+        await persist(() => ledger.recordObservation(id, { clientUserMessageId: observed.clientUserMessageId!, injectionObserved: true,
+          ...(observed.turn ? { turn: observed.turn } : {}) }, context.binding));
+        ownWait(); break;
+      }
+      await new Promise<void>(resolve => setTimeout(resolve, Math.min(100, budget.observationRemainingMs())));
+      ownWait();
+    }
+    ownWait();
+    if (handoff.wait.status === 'pending') {
+      if (!stopped) await settleCutoffEdge(budget);
+      handoff = await persist(() => stopped ? ledger.recordWait(id, 'stopped', 'stopped_by_operator', operationId) :
+        budget.observationRemainingMs() < 1 ? ledger.recordWait(id, 'timed_out_unknown', undefined, operationId) :
+        ledger.recordWait(id, 'unsupported', 'evidence_unsupported', operationId));
+    }
+    const success = handoff.wait.status === 'satisfied', interrupted = handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator';
+    return { value: { handoff, ok: success }, exitCode: success ? 0 : interrupted ? 130 : 1 };
+  } catch (error) {
+    if (!handoff) throw error;
+    // Failure to write is not a committed terminal result. Keep the last valid
+    // original-operation snapshot and its known submission/injection evidence.
+    try { ownWait(); } catch { /* Retain independently verified facts. */ }
+    const interrupted = handoff.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator';
+    return { value: { handoff, ok: false, error: 'handoff_persistence_failed', handoffWarning: 'persistence_failed', retryAllowed: false }, exitCode: interrupted ? 130 : 1 };
+  } finally { process.removeListener('SIGINT', stop); }
 }
 
 // New commands are local owner operations; forwarding them through native send
@@ -148,13 +327,10 @@ export async function handoffCommand(args: string[], readInput: (limit: number) 
     return { value: { handoff: operation === 'confirm' ? ledger.confirm(raw) : ledger.acceptReceipt(raw) }, exitCode: 0 };
   }
   const id = values.get('--correlation-id'); if (!canonicalId(id)) throw new Refusal('invalid_correlation_id', 2);
+  const budget = operation === 'wait' ? new HandoffBudget(parseWaitTimeout(values.get('--wait-timeout') ?? '30')) : undefined;
   const result = ledger.status(id);
   if ('handoffQuery' in result) return { value: { ok: false, ...result }, exitCode: 1 };
   if (operation === 'status') return { value: result, exitCode: 0 };
   const goal = values.get('--wait-for'); if (!['delivered', 'acknowledged'].includes(goal ?? '')) throw new Refusal('invalid_wait_for', 2);
-  const budget = new HandoffBudget(parseWaitTimeout(values.get('--wait-timeout') ?? '30'));
-  const handoff = ledger.beginWait(id, goal as 'delivered' | 'acknowledged', budget);
-  // No qualified observer/receipt bootstrap exists yet. This path never polls
-  // transcripts, opens a native client or repeats a prior submission.
-  return { value: { handoff, ok: handoff.wait.status === 'satisfied' }, exitCode: handoff.wait.status === 'satisfied' ? 0 : 1 };
+  return waitForHandoff(ledger, id, goal as 'delivered' | 'acknowledged', budget!);
 }

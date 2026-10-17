@@ -4,9 +4,11 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync, readFileSync, renameSync, unlinkSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { HandoffLedger, payloadDigest } from '../dist/handoff-ledger.js';
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 async function fixture(t: TestContext) {
   const path = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-hc-')));
@@ -18,7 +20,7 @@ async function fixture(t: TestContext) {
   writeFileSync(join(path, '.claude/sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: null, messagingSocketPath: socket }));
   const file = join(path, 'message'); writeFileSync(file, 'fixture body', { mode: 0o600 });
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: path, USERPROFILE: path, CLAUDE_CONFIG_DIR: join(path, '.claude'), CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_UPDATE_NOTICE: '', SESSION_PEER_HANDOFF_HOME: join(path, 'state', 'handoff') };
-  async function invoke(args: string[], input = '', closeInput = true, timeout = 10000) { const child = spawn(process.execPath, [cli, ...args, '--json'], { env }); let stdout = ''; child.stdout.on('data', c => stdout += c); child.stderr.resume(); if (closeInput) child.stdin.end(input); else child.stdin.write(input); const timer = setTimeout(() => child.kill('SIGKILL'), timeout); const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null); return { code, value: JSON.parse(stdout) }; }
+  async function invoke(args: string[], input = '', closeInput = true, timeout = 10000) { const child = spawn(process.execPath, [cli, ...args, '--json'], { env }); let stdout = ''; child.stdout.on('data', c => stdout += c); child.stderr.resume(); let stdinError: NodeJS.ErrnoException | undefined; child.stdin.on('error', error => { stdinError = error; }); if (closeInput) { if (input) child.stdin.end(input); else child.stdin.end(); } else child.stdin.write(input); const timer = setTimeout(() => child.kill('SIGKILL'), timeout); const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null); if (stdinError) { assert.equal(stdinError.code, 'EPIPE'); assert.ok(code !== 0 || input === '', 'successful stdin consumption must not lose input'); } return { code, value: JSON.parse(stdout) }; }
   return { path, env, messages, file, invoke, send: ['send', '--to', String(process.pid), '--message-file', file, '--no-from', '--no-reply-to'] };
 }
 test('opt-out untouched; explicit init/prepare/status/dry-run/single effect fence', { skip: process.platform === 'win32' }, async t => {
@@ -42,12 +44,51 @@ test('syntax/private inputs reject without minting authority or submitting', { s
  const f = await fixture(t); await f.invoke(['handoff','init']);
  for (const seconds of ['01','1.0','1e0','+1','61']) { const r = await f.invoke([...f.send,'--wait-timeout',seconds]); assert.equal(r.code,2); assert.equal(r.value.error,'invalid_wait_timeout'); }
  const small = await f.invoke([...f.send,'--request-ack','--wait-timeout','5']); assert.equal(small.code,1); assert.equal(small.value.submitted,false);
- const remote = await f.invoke([...f.send,'--request-ack','--host','fixture']); assert.equal(remote.code,1); assert.equal(remote.value.error,'remote_handoff_unsupported');
- const uri = await f.invoke(['send','--to','session-peer://v1/reply?agent=claude&session=fixture&transport=ssh&host=worker','--request-ack','--message','fixture','--no-from','--no-reply-to']); assert.equal(uri.code,1); assert.equal(uri.value.error,'remote_handoff_unsupported');
+ const remote = await f.invoke([...f.send,'--request-ack','--host','fixture','--remote-platform','win32']); assert.equal(remote.code,1); assert.equal(remote.value.error,'remote_handoff_unsupported');
+ const uri = await f.invoke(['send','--to','session-peer://v1/reply?agent=claude&session=fixture&transport=ssh&host=worker','--request-ack','--remote-platform','win32','--message','fixture','--no-from','--no-reply-to']); assert.equal(uri.code,1); assert.equal(uri.value.error,'remote_handoff_unsupported');
  const receipt = await f.invoke(['ack','--receipt','-'], ' '.repeat(4097)); assert.equal(receipt.code,2); assert.equal(receipt.value.error,'input_too_large'); assert.equal(receipt.value.submitted,undefined);
  const bomReceipt = {schemaVersion:1,kind:'receipt',ledgerEpoch:'11111111-1111-4111-8111-111111111111',correlationId:'11111111-1111-4111-8111-111111111111',targetGeneration:'fixture',receiptId:'22222222-2222-4222-8222-222222222222',capability:Buffer.alloc(32).toString('base64url')};
  const bom = await f.invoke(['ack','--receipt','-'], '\ufeff'+JSON.stringify(bomReceipt));assert.equal(bom.value.error,'invalid_handoff_json');
  assert.equal(f.messages.length,0);
+});
+
+test('operator confirmation accepts only a matching private frame and never queues or infers injection', { skip: process.platform === 'win32' }, async t => {
+ const f = await fixture(t), path = join(f.path, 'state', 'handoff');
+ // Seed known submission evidence in an isolated ledger; no native send occurs.
+ const initialized = await f.invoke(['handoff', 'init']); assert.equal(initialized.code, 0);
+ const ledger = new HandoffLedger(path);
+ const binding = { agent: 'codex' as const, destination: 'fixture', target: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  home: f.path, writerIdentity: 'fixture-writer', generation: 'fixture-generation', payloadDigest: payloadDigest('fixture body') };
+ const prepared = ledger.prepare(binding); ledger.commitEffect(prepared.correlationId, binding);
+ const submitted = ledger.recordSubmission(prepared.correlationId, 'submitted');
+ const proof = { schemaVersion: 1, ledgerEpoch: submitted.ledgerEpoch, correlationId: submitted.correlationId,
+  targetGeneration: submitted.targetGeneration, confirmed: true };
+ const raw = JSON.stringify(proof), file = join(path, 'ledger.json'), before = readFileSync(file);
+ const command = ['handoff', 'confirm', '--receipt', '-'];
+ for (const [input, error] of [
+  [JSON.stringify({ ...proof, correlationId: randomUUID() }), 'handoff_id_unknown'],
+  [JSON.stringify({ ...proof, ledgerEpoch: randomUUID() }), 'confirmation_binding_invalid'],
+  [JSON.stringify({ ...proof, targetGeneration: 'successor' }), 'confirmation_binding_invalid'],
+  [JSON.stringify({ ...proof, confirmed: false }), 'invalid_confirmation'],
+  [JSON.stringify({ ...proof, body: 'a model reply is not an ACK' }), 'invalid_handoff'],
+  [raw.replace('"confirmed":true', '"confirmed":true,"confirmed":true'), 'invalid_handoff_json'],
+  ['\ufeff' + raw, 'invalid_handoff_json'],
+  [raw + ' '.repeat(4097 - Buffer.byteLength(raw)), 'input_too_large'],
+ ] as const) {
+  const result = await f.invoke(command, input);
+  assert.notEqual(result.code, 0); assert.equal(result.value.ok, false); assert.equal(result.value.error, error);
+  assert.equal(result.value.handoff, undefined); assert.equal(result.value.submitted, undefined);
+  assert.deepEqual(readFileSync(file), before); assert.deepEqual(ledger.status(submitted.correlationId), { handoff: submitted });
+  assert.equal(f.messages.length, 0);
+ }
+ const argv = await f.invoke(['handoff', 'confirm', '--receipt', raw]);
+ assert.equal(argv.code, 2); assert.equal(argv.value.error, 'private_receipt_stdin_required'); assert.deepEqual(readFileSync(file), before);
+ const accepted = await f.invoke(command, raw);
+ assert.equal(accepted.code, 0); assert.equal(accepted.value.handoff.ack.assurance, 'operator_confirmed');
+ assert.equal(accepted.value.handoff.observation.injectionObserved, false); assert.equal(accepted.value.handoff.submission.status, 'submitted');
+ const confirmed = readFileSync(file), duplicate = await f.invoke(command, raw);
+ assert.equal(duplicate.code, 0); assert.deepEqual(duplicate.value.handoff, accepted.value.handoff);
+ assert.deepEqual(readFileSync(file), confirmed); assert.equal(f.messages.length, 0);
 });
 
 test('init refuses a symlinked parent before creating a directory through it', { skip: process.platform === 'win32' }, async t => {

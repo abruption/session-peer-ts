@@ -241,7 +241,7 @@ test('exact injection evidence survives observer restart without inventing old w
   const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding, { waitFor: 'delivered', observationSupported: true }); submit(f, h);
   const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
   const observed = restarted.recordObservation(h.correlationId, { clientUserMessageId: h.correlationId, injectionObserved: true }, f.binding);
-  assert.equal(observed.state, 'delivered'); assert.equal(observed.wait.status, 'failed'); assert.equal(observed.wait.reason, 'history_unavailable');
+  assert.equal(observed.state, 'delivered'); assert.deepEqual(observed.wait, h.wait);
   assert.equal(observed.ack.status, 'not_requested'); assert.equal(observed.observation.injectionObserved, true);
 });
 test('late final resolution refusal consumes only a valid bound prepared reservation and fences restart', posix, t => {
@@ -290,6 +290,31 @@ test('operator confirmation is metadata-only, correlated and never manufactures 
   assert.equal(acknowledged.observation.injectionObserved, false);
   const restarted = new HandoffLedger(f.ledger.path, { clock: { monotonic: () => 0, utc: () => 1 } });
   assert.deepEqual(handoff(restarted, h.correlationId).ack, acknowledged.ack);
+});
+test('invalid operator confirmation cannot acknowledge another intent or change retained evidence', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding); submit(f, h);
+  const otherBinding = { ...f.binding, generation: 'different-original-generation' };
+  const other = f.ledger.prepare(otherBinding);
+  f.ledger.commitEffect(other.correlationId, otherBinding); f.ledger.recordSubmission(other.correlationId, 'submitted');
+  const raw = confirmation(h), proof = JSON.parse(raw);
+  const file = join(f.ledger.path, 'ledger.json'), before = readFileSync(file);
+  const original = handoff(f.ledger, h.correlationId), unrelated = handoff(f.ledger, other.correlationId);
+  for (const [invalid, error] of [
+    [confirmation({ ...h, correlationId: randomUUID() }), /handoff_id_unknown/],
+    [confirmation({ ...h, correlationId: other.correlationId }), /confirmation_binding_invalid/],
+    [confirmation({ ...h, ledgerEpoch: randomUUID() }), /confirmation_binding_invalid/],
+    [confirmation({ ...h, targetGeneration: 'successor' }), /confirmation_binding_invalid/],
+    [JSON.stringify({ ...proof, confirmed: false }), /invalid_confirmation/],
+    [JSON.stringify({ ...proof, body: 'ordinary reply is not confirmation' }), /invalid_handoff/],
+    [raw.replace('"schemaVersion":1', '"schemaVersion":1.0'), /invalid_handoff_json/],
+    [raw.replace('"confirmed":true', '"confirmed":true,"confirmed":true'), /invalid_handoff_json/],
+  ] as const) {
+    assert.throws(() => f.ledger.confirm(invalid), error);
+    assert.deepEqual(readFileSync(file), before);
+    assert.deepEqual(handoff(f.ledger, h.correlationId), original);
+    assert.deepEqual(handoff(f.ledger, other.correlationId), unrelated);
+    assert.equal(handoff(f.ledger, h.correlationId).ack.status, 'not_requested');
+  }
 });
 test('private receipt authority is hash-only, bound to original tuple and first receipt', posix, t => {
   const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
@@ -426,6 +451,49 @@ test('wait quota exhaustion and insufficient new-wait budget preserve native sub
   assert.throws(() => f.ledger.beginWait(h.correlationId, 'acknowledged'), /handoff_wait_quota/);
   assert.equal(handoff(f.ledger, h.correlationId).state, 'submitted');
 });
+test('an original wait can stop after another process adds a newer terminal wait', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding, { waitFor:'delivered',observationSupported:true }); submit(f,h);
+  const originalId=h.wait.operationId!;
+  const other=new HandoffLedger(f.ledger.path,{clock:f.clock});
+  const newer=other.beginWait(h.correlationId,'delivered',new HandoffBudget(6,f.clock));
+  assert.equal(newer.wait.status,'unsupported');
+  const stopped=f.ledger.recordWait(h.correlationId,'stopped','stopped_by_operator',originalId);
+  assert.equal(stopped.wait.operationId,originalId); assert.equal(stopped.wait.status,'stopped');
+  assert.equal(f.ledger.operationStatus(h.correlationId,newer.wait.operationId!).wait.status,'unsupported');
+  assert.equal(handoff(f.ledger,h.correlationId).wait.operationId,newer.wait.operationId);
+  assert.throws(()=>f.ledger.recordWait(h.correlationId,'timed_out_unknown',undefined,originalId),/handoff_wait_terminal/);
+});
+test('delivery classifies every same-clock pending operation by its own original cutoff', posix, t => {
+  const f=fixtureLedger(t);f.ledger.init();const h=f.ledger.prepare(f.binding,{waitFor:'delivered',observationSupported:true,budget:new HandoffBudget(6,f.clock)});submit(f,h);
+  const newer=f.ledger.beginWait(h.correlationId,'delivered',new HandoffBudget(7,f.clock));f.advance(1000);
+  f.ledger.recordObservation(h.correlationId,{clientUserMessageId:h.correlationId,injectionObserved:true},f.binding);
+  assert.equal(f.ledger.operationStatus(h.correlationId,h.wait.operationId!).wait.status,'timed_out_unknown');
+  assert.equal(f.ledger.operationStatus(h.correlationId,newer.wait.operationId!).wait.status,'satisfied');
+  assert.equal(handoff(f.ledger,h.correlationId).wait.operationId,newer.wait.operationId);
+});
+test('targeted observation failure preserves a newer operation and rejects unknown IDs without writes', posix, t => {
+  const f=fixtureLedger(t);f.ledger.init();const h=f.ledger.prepare(f.binding,{waitFor:'delivered',observationSupported:true});submit(f,h);
+  const newer=f.ledger.beginWait(h.correlationId,'delivered',new HandoffBudget(6,f.clock));
+  const failed=f.ledger.recordObservationFailure(h.correlationId,f.binding,'failed',h.wait.operationId);
+  assert.equal(failed.wait.status,'failed');assert.equal(failed.wait.operationId,h.wait.operationId);
+  assert.equal(f.ledger.operationStatus(h.correlationId,newer.wait.operationId!).wait.status,'pending');
+  const file=join(f.ledger.path,'ledger.json'),before=readFileSync(file,'utf8'),unknown=randomUUID();
+  assert.throws(()=>f.ledger.operationStatus(h.correlationId,unknown),/handoff_wait_unknown/);
+  assert.throws(()=>f.ledger.recordWait(h.correlationId,'stopped','stopped_by_operator',unknown),/handoff_wait_unknown/);
+  assert.throws(()=>f.ledger.recordObservationFailure(h.correlationId,f.binding,'unsupported',unknown),/handoff_wait_unknown/);
+  assert.equal(readFileSync(file,'utf8'),before);
+});
+test('delivery leaves terminal operations intact and does not guess a different clock deadline', posix, t => {
+  const f=fixtureLedger(t);f.ledger.init();const h=f.ledger.prepare(f.binding,{waitFor:'delivered',observationSupported:true});submit(f,h);
+  const stopped=f.ledger.recordWait(h.correlationId,'stopped','stopped_by_operator',h.wait.operationId);
+  const pending=f.ledger.beginWait(h.correlationId,'delivered',new HandoffBudget(6,f.clock));
+  const restarted=new HandoffLedger(f.ledger.path,{clock:{monotonic:()=>0,utc:f.clock.utc}});
+  restarted.recordObservation(h.correlationId,{clientUserMessageId:h.correlationId,injectionObserved:true},f.binding);
+  assert.deepEqual(restarted.operationStatus(h.correlationId,h.wait.operationId!).wait,stopped.wait);
+  const foreign=restarted.operationStatus(h.correlationId,pending.wait.operationId!);
+  assert.deepEqual(foreign.wait,pending.wait);
+  assert.equal(foreign.observation.injectionObserved,true);assert.equal(foreign.ack.status,'not_requested');
+});
 test('expired details compact to an epoch-bound fence, never restoring send or receipt authority', posix, t => {
   const f = fixtureLedger(t); f.ledger.init(); const h = f.ledger.prepare(f.binding);
   const capability = f.ledger.mintCapability(h.correlationId, bootstrap); submit(f, h);
@@ -480,4 +548,112 @@ test('private receipt rejects incorrect capability encoding, extra fields and le
   for (const capability of ['x'.repeat(42), 'x'.repeat(44), sample.capability + '=', 'A'.repeat(42) + 'B']) assert.throws(() => validateReceipt(JSON.stringify({ ...sample, capability })));
   assert.throws(() => validateReceipt(JSON.stringify({ ...sample, receivedAtUtcMs: 1 })));
   assert.throws(() => validateReceipt(JSON.stringify(sample).replace('"schemaVersion":1', '"schemaVersion":1.0')));
+});
+
+
+test('resumed delivery requires retained original qualification and never rewrites old terminal waits', posix, t => {
+  const f = fixtureLedger(t); f.ledger.init();
+  const binding = { ...f.binding, generation: 'a'.repeat(64), writerIdentity: 'a'.repeat(64) };
+  const qualification = { version: '0.160.1', commit: 'd27764b82f7118f674371e6d6e76271d9d606edb', platform: 'darwin-arm64' };
+  const original = f.ledger.prepare(binding, { waitFor: 'delivered', observationSupported: true,
+    observationQualification: qualification, budget: new HandoffBudget(6, f.clock) });
+  f.ledger.commitEffect(original.correlationId, binding); f.ledger.recordSubmission(original.correlationId, 'submitted');
+  f.advance(1000); f.ledger.recordWait(original.correlationId, 'timed_out_unknown', undefined, original.wait.operationId);
+  const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
+  const context = restarted.observationContext(original.correlationId)!;
+  assert.deepEqual(context, { binding, clientUserMessageId: original.correlationId, qualification });
+  (context.binding as {home:string}).home = '/changed';
+  assert.equal(restarted.observationContext(original.correlationId)!.binding.home, binding.home);
+  const prior = restarted.operationStatus(original.correlationId, original.wait.operationId!);
+  const pending = restarted.beginWait(original.correlationId, 'delivered', new HandoffBudget(6,f.clock), { observationSupported:true });
+  assert.equal(pending.wait.status,'pending'); assert.equal(pending.observation.status,'pending');
+  assert.notEqual(pending.wait.operationId,original.wait.operationId);
+  const observed = restarted.recordObservation(original.correlationId,
+    {clientUserMessageId:original.correlationId,injectionObserved:true},binding);
+  assert.equal(observed.state,'delivered'); assert.equal(observed.ack.status,'not_requested');
+  assert.equal(restarted.operationStatus(original.correlationId,pending.wait.operationId!).wait.status,'satisfied');
+  assert.deepEqual(restarted.operationStatus(original.correlationId,original.wait.operationId!).wait,prior.wait);
+  assert.equal(JSON.stringify(observed).includes('observationQualification'),false);
+  assert.equal(JSON.stringify(observed).includes('payloadDigest'),false);
+  assert.throws(()=>restarted.commitEffect(original.correlationId,binding),/handoff_already_attempted/);
+});
+
+test('restart cannot invent observation qualification for historical, attempted or refused intents', posix, t => {
+  const f=fixtureLedger(t);f.ledger.init();
+  const binding={...f.binding,generation:'a'.repeat(64),writerIdentity:'a'.repeat(64)};
+  const old=f.ledger.prepare(binding,{observeDelivery:true,observationSupported:true});
+  f.ledger.commitEffect(old.correlationId,binding);f.ledger.recordSubmission(old.correlationId,'submitted');
+  const restarted=new HandoffLedger(f.ledger.path,{clock:f.clock});
+  assert.equal(restarted.observationContext(old.correlationId),undefined);
+  assert.equal(restarted.beginWait(old.correlationId,'delivered',new HandoffBudget(6,f.clock),{observationSupported:true}).wait.status,'unsupported');
+  const qualification={version:'0.160.1',commit:'d27764b82f7118f674371e6d6e76271d9d606edb',platform:'darwin-arm64'};
+  const pending=f.ledger.prepare(binding,{observeDelivery:true,observationSupported:true,observationQualification:qualification});
+  assert.equal(restarted.observationContext(pending.correlationId),undefined);
+  f.ledger.commitEffect(pending.correlationId,binding);
+  assert.equal(restarted.observationContext(pending.correlationId),undefined);
+  f.ledger.recordSubmission(pending.correlationId,'refused');
+  assert.equal(restarted.observationContext(pending.correlationId),undefined);
+  assert.throws(()=>f.ledger.prepare(binding,{observeDelivery:true,observationSupported:true,
+    observationQualification:{...qualification,commit:'bad'}}),/invalid_observation_qualification/);
+});
+
+test('independent delivery observers preserve foreign operations and project their own pending wait', posix, t => {
+  for (const firstObserver of ['original', 'resumed'] as const) {
+    const f = fixtureLedger(t); f.ledger.init();
+    const binding = { ...f.binding, generation: 'a'.repeat(64), writerIdentity: 'a'.repeat(64) };
+    const qualification = { version: '0.160.1', commit: 'd27764b82f7118f674371e6d6e76271d9d606edb', platform: 'darwin-arm64' };
+    const original = f.ledger.prepare(binding, { waitFor: 'delivered', observationSupported: true,
+      observationQualification: qualification, budget: new HandoffBudget(6, f.clock) });
+    f.ledger.commitEffect(original.correlationId, binding); f.ledger.recordSubmission(original.correlationId, 'submitted');
+    const resumed = new HandoffLedger(f.ledger.path, { clock: f.clock });
+    const resumedWait = resumed.beginWait(original.correlationId, 'delivered', new HandoffBudget(6, f.clock), { observationSupported: true });
+    const newer = new HandoffLedger(f.ledger.path, { clock: f.clock });
+    const newerWait = newer.beginWait(original.correlationId, 'delivered', new HandoffBudget(6, f.clock), { observationSupported: true });
+    // The newer operation belongs to another observer, but does not invalidate
+    // the earlier resumed operation's ability to observe its own deadline.
+    assert.equal(resumed.operationStatus(original.correlationId, resumedWait.wait.operationId!).observation.status, 'pending');
+    const observers = firstObserver === 'original'
+      ? [[f.ledger, original], [resumed, resumedWait], [newer, newerWait]] as const
+      : [[resumed, resumedWait], [f.ledger, original], [newer, newerWait]] as const;
+    f.advance(999);
+    const evidence = { clientUserMessageId: original.correlationId, injectionObserved: true };
+    const [first, firstWait] = observers[0]; first.recordObservation(original.correlationId, evidence, binding);
+    assert.deepEqual(first.operationStatus(original.correlationId, firstWait.wait.operationId!).wait, { ...firstWait.wait, status: 'satisfied' });
+    for (const [observer, wait] of observers.slice(1)) {
+      assert.deepEqual(observer.operationStatus(original.correlationId, wait.wait.operationId!).wait, wait.wait);
+      observer.recordObservation(original.correlationId, evidence, binding);
+    }
+    for (const [observer, wait] of observers) {
+      assert.deepEqual(observer.operationStatus(original.correlationId, wait.wait.operationId!).wait, { ...wait.wait, status: 'satisfied' });
+    }
+  }
+});
+
+test('reconfiguring prepared delivery cannot retain qualification for a different submission path', posix, t => {
+  for (const mode of ['not_requested', 'unsupported', 'unqualified'] as const) {
+    const f = fixtureLedger(t); f.ledger.init();
+    const binding = { ...f.binding, generation: 'a'.repeat(64), writerIdentity: 'a'.repeat(64) };
+    const qualification = { version: '0.160.1', commit: 'd27764b82f7118f674371e6d6e76271d9d606edb', platform: 'darwin-arm64' };
+    const original = f.ledger.prepare(binding, { observeDelivery: true, observationSupported: true, observationQualification: qualification });
+    const file = join(f.ledger.path, 'ledger.json'), before = readFileSync(file, 'utf8');
+    assert.throws(() => f.ledger.prepare(binding, { correlationId: original.correlationId,
+      observeDelivery: true, observationSupported: true, observationQualification: { ...qualification, version: 'other' } }), /handoff_binding_conflict/);
+    assert.equal(readFileSync(file, 'utf8'), before);
+    const configured = f.ledger.prepare(binding, { correlationId: original.correlationId,
+      ...(mode === 'not_requested' ? {} : { observeDelivery: true, observationSupported: mode === 'unqualified' }) });
+    assert.equal(configured.observation.status, mode === 'unqualified' ? 'pending' : mode);
+    const stored = JSON.parse(readFileSync(file, 'utf8')).data.records[original.correlationId];
+    assert.equal(stored.observationQualification, undefined);
+    assert.equal(stored.deliverySupported, mode === 'unqualified');
+    const { payloadDigest: sealed, ...publicBinding } = stored.binding;
+    const { payloadDigest: privateDigest, ...expectedBinding } = binding;
+    assert.deepEqual(publicBinding, expectedBinding);
+    assert.match(sealed, /^sealed-v1:/); assert.notEqual(sealed, privateDigest);
+    // Successful effect fencing below proves the decrypted private digest still
+    // matches; randomized at-rest encryption must not be compared as plaintext.
+    f.ledger.commitEffect(original.correlationId, binding); f.ledger.recordSubmission(original.correlationId, 'submitted');
+    const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
+    assert.equal(restarted.observationContext(original.correlationId), undefined);
+    assert.equal(restarted.beginWait(original.correlationId, 'delivered', new HandoffBudget(6, f.clock), { observationSupported: true }).wait.status, 'unsupported');
+  }
 });

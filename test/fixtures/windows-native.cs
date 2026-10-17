@@ -64,8 +64,19 @@ public static class Fixture {
       if (preflight && modeSsh == "mismatch") { Console.WriteLine("session-peer 1.0.2"); return 0; }
       if (preflight && modeSsh == "auth") { Console.Error.WriteLine("Permission denied (publickey). SECRET-SENTINEL"); return 255; }
       if (!preflight && modeSsh == "loss") return 255;
-      if (!command.StartsWith("powershell.exe ")) throw new Exception("expected_windows_remote_command");
-      var start = new ProcessStartInfo("powershell.exe", command.Substring("powershell.exe ".Length));
+      const string remotePrefix = "powershell.exe -NoProfile -NonInteractive -EncodedCommand ";
+      if (!command.StartsWith(remotePrefix, StringComparison.Ordinal))
+        throw new Exception("expected_windows_remote_command");
+      // Test-only bridge: preserve the production PowerShell command, but
+      // use Node's native child launcher rather than .NET Framework's launcher.
+      string fixtureNode = Environment.GetEnvironmentVariable("FIXTURE_NODE");
+      string fixtureChild = Environment.GetEnvironmentVariable("FIXTURE_SSH_CHILD");
+      if (String.IsNullOrEmpty(fixtureNode) || String.IsNullOrEmpty(fixtureChild))
+        throw new Exception("fixture_node_bridge_missing");
+      string encodedCommand = command.Substring(remotePrefix.Length);
+      if (!System.Text.RegularExpressions.Regex.IsMatch(encodedCommand, "^[A-Za-z0-9+/]+={0,2}$"))
+        throw new Exception("invalid_fixture_encoded_command");
+      var start = new ProcessStartInfo(fixtureNode, "\"" + fixtureChild + "\" " + encodedCommand);
       // A distinct simulated destination environment for discovery tests. These
       // are fixture controls, not SSH SendEnv/AcceptEnv or application options.
       string remoteProfile = Environment.GetEnvironmentVariable("FIXTURE_REMOTE_PROFILE");

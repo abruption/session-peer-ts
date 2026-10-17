@@ -54,12 +54,12 @@ The dated migration comparison above uses the historical public versions.
 The unpublished 0.4.0 source candidate now uses Python 1.1.0 as its development
 comparison baseline; public npm 0.3.3 retains its historical 1.0.2 marker.
 Python 1.1.0 includes an experimental local Claude receipt-only ACK path.
-That does not provide automated ACK, SSH handoff or Windows handoff in this TS
+That does not establish automated ACK or original-sender SSH collectors in this TS
 candidate. Neither baseline provides an end-to-end consumption guarantee;
 Side Session remains experimental. Relay/MCP are outside this comparison.
 
 
-[0.4.0 handoff design (jointly agreed, unimplemented)](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff design and unreleased implementation scope](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## Contents
 
@@ -622,6 +622,13 @@ never enabled automatically. See [explicit activation and collisions](shorthand.
 
 ## Unreleased handoff
 
-Unreleased 0.4.0 source adds an opt-in private POSIX handoff ledger. Published 0.3.1 has no handoff commands. Required unsupported evidence refuses before submission; best-effort unsupported evidence never proves ACK. Automated receipt bootstrap, Windows ledger and SSH handoff remain unsupported.
+Unreleased 0.4.0 source adds an opt-in private POSIX handoff ledger. Published 0.3.3 has no handoff commands. Required unsupported evidence refuses before submission; best-effort unsupported evidence never proves ACK. Automated receipt bootstrap, Windows ledger and original-sender SSH collectors remain unsupported. POSIX SSH opt-in uses an explicitly initialized destination ledger: no-effect preparation pins target/home/generation before one send. See [destination-side SSH details](api.md#unreleased-destination-side-ssh-handoff); fake-SSH fixtures are distinct from real network qualification.
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+
+
+The source candidate supports exact Codex 0.160.1/0.162.1 on macOS arm64 with an already-warm metadata store. Retained qualified intents can start an independent read-only `handoff wait`; no native submission is repeated. Each operation owns its cutoff and preserves other pending or terminal waits. Dedicated new 0.162.1 Codex and Claude Code 2.1.296 sessions supplied local evidence; synthetic tests remain separate. Queued/posted, injection, turn completion and plain reply are distinct from receipt ACK. Automated ACK and Windows handoff remain unsupported.
+
+[Observation](api.md#unreleased-local-delivery-observation--72)
+
+Native delivery observation is unsupported on Linux and Windows. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 candidate scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).

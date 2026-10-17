@@ -356,7 +356,9 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
 
 ## Handoff v1 design candidate — #69
 
-**Status: jointly approved, frozen DESIGN v0.2; runtime unimplemented and unshipped.** All four issues
+**Design-freeze checkpoint: jointly approved, frozen DESIGN v0.2; runtime was
+unimplemented and unshipped at that checkpoint.** The current source implementation
+and its limited, unreleased scope are described below. All four issues
 [#69](https://github.com/abruption/session-peer-ts/issues/69),
 [#70](https://github.com/abruption/session-peer-ts/issues/70),
 [#71](https://github.com/abruption/session-peer-ts/issues/71) and
@@ -386,7 +388,7 @@ runtime publication and the bounded ordinary comparison.
 | Axis | Candidate meaning / TS boundary |
 | --- | --- |
 | Submission | Preserve native status, target, queueId, submitted and optional-field absence; an observer failure must not pass through a catch that erases known submission evidence. |
-| Observation | Opt-in, body-free metadata for an exact native message ID/home/original generation. Queue deletion or turn completion is not receipt ACK. |
+| Observation | Opt-in metadata-only output for an exact native message ID/home/original generation. SQLite may evaluate body-bearing cells internally; this is not a blanket no-body-access promise. Queue deletion or turn completion is not receipt ACK. |
 | Receipt ACK | Receipt-only capability or explicitly recorded operator attestation; never generic reply parsing, a new model prompt, wake or permission to act. |
 | Wait | Separate immutable wait operation/results; a late receipt can add current evidence without changing the original timeout result. |
 | Retry | Native local/SSH replay remains forbidden. Sender fences do not implement receiver dedup or a universal exactly-once guarantee. |
@@ -394,8 +396,9 @@ runtime publication and the bounded ordinary comparison.
 
 The candidate adds a nested `handoff` object only in opted-in mode. Its proposed
 init/prepare/status/wait/confirm/ack commands, epoch IDs, private collector,
-30-second per-destination budget and 5-second cleanup reserve are **not current
-CLI capabilities**. Budgets 1–5 seconds are syntactically valid in the proposal
+30-second per-destination budget and 5-second cleanup reserve were **not CLI
+capabilities at the design-freeze checkpoint**. The source subset is described
+in the unreleased implementation sections below. Budgets 1–5 seconds are syntactically valid in the proposal
 but refuse before effect. Source-streamed SSH without a compatible receipt handler
 remains ACK-unsupported under this candidate. No transcript/body-returning observer
 or fallback after a possible submission is authorized.
@@ -450,8 +453,9 @@ authorize merge, implementation, live effects, operational changes or publicatio
 Python's exact-candidate documentation tests and CodeQL passed; its optional
 Control dependency audit and required release gate failed. That CI status is
 separate from this static design review. No bypass, dependency repair or claim of
-a fully passing upstream PR is made here. Runtime producer/collector/bootstrap,
-platform cleanup, metadata-only observation and live acceptance remain future gates.
+a fully passing upstream PR is made by this historical review. At that checkpoint,
+runtime producer/collector/bootstrap, platform cleanup, metadata-only observation
+and live acceptance were future gates; current implementation evidence appears below.
 
 `handoff-contract.test.ts` checks exact pins, synthetic status and selected golden
 safety invariants. It does not implement or test a collector, native receipt,
@@ -1035,9 +1039,10 @@ historical Python 1.0.3 design baseline and the historical Python 1.0.2 ordinary
 oracle. The current candidate's ordinary source pin is recorded separately in
 `python-reference.pin.json`.
 The Python release's experimental local Claude receipt path does not establish
-automated ACK support in the TS implementation. Cross-runtime execution,
-receipt bootstrap, original generation and platform acceptance remain #69–72
-implementation gates. This design-identity record alone does not repin a runtime
+automated ACK support in the TS implementation. The pure-validator comparisons
+below do not establish native execution parity.
+Receipt bootstrap and additional native platforms are deferred to #130–#132;
+original binding/generation guards remain mandatory in the included scope. This design-identity record alone does not repin a runtime
 reference or establish runtime conformance.
 
 
@@ -1048,10 +1053,17 @@ strict protocol helpers now implement prepare, at-most-once sender fencing,
 status, bounded wait records and explicit receipt/operator-confirmation
 validation. [CLI details](docs/api.md#unreleased-opt-in-handoff-cli--040-work)
 separate current source support from the published 0.3.5 runtime. Automated ACK
-bootstrap, Windows private ACL support and original-sender SSH coordination are
-still implementation gates. Fixture passes are not live receipt/injection
-qualification. Default output and the historical Python runtime parity pin stay
-unchanged; no future Python runtime is claimed shipped.
+bootstrap, Windows private ACL support and original-sender SSH collector
+coordination are deferred extensions (#131/#132), not prerequisites of the
+user-approved limited 0.4.0 scope. Fixture passes are not live receipt/injection
+qualification. Default ordinary output stays unchanged. The ordinary conformance oracle is
+published Python 1.1.0; experimental receipt implementation parity is not claimed.
+`handoff-cross-runtime.test.ts` also invokes the pinned published Python pure
+validators/projection helpers and the TS validators on 45 data cases: all seven
+shared states, schema/privacy/ACK/retry negatives, unsupported observation and
+agent-specific native field absence. Standalone and canonical module hashes are
+pinned. No native CLI, ledger/collector, model or network is invoked by that
+comparison; equal validator decisions are not end-to-end handoff parity.
 
 The journal encrypts its private message-binding digest with a separate
 mode-0600 `ledger.key`; missing/changed/untrusted keys and plaintext journals
@@ -1072,16 +1084,55 @@ The client bounds frames, RPCs, traffic, owner verification, monotonic deadlines
 and owned process-group cleanup. An authorized caller supplies a durable
 before-effect fence; at most one queue RPC follows it. After a possible write,
 disconnect, timeout, schema error or remote refusal never enables fallback or
-resend. initialize opts out all 83 notifications in the exact qualified native
-schema; queue/add's own input echo is validated but only IDs are returned.
+resend. initialize opts out the exact profile notification set (83 for 0.160.1,
+84 for 0.162.1); queue/add's own input echo is validated but only IDs are returned.
 queue/list, history, full item/turn notifications, resume/start and model turns
 are excluded. The separate synthetic metadata protocol is explicitly fixture
-only. Other platforms/versions and native observation remain unsupported.
+only. Other platforms/versions and native app-server observation remain unsupported.
 
 Generated schema hashes and the fixed official source commit are recorded in
 `test/fixtures/app-server-schema-evidence.json`; tests use hermetic streams and
-owned Node children. These facts do not re-pin the shipped Python runtime parity
-reference or implement automatic ACK.
+owned Node children. These mechanics do not establish Python runtime delivery parity
+or implement automatic ACK.
+
+
+## Unreleased local observation integration — #72
+
+[Source-only runtime details](docs/api.md#unreleased-local-delivery-observation--72)
+cover bounded one-shot/explicit-wait observation, native CID queueing, original
+writer generation checks, per-operation terminal waits and positive native fact
+preservation. Generated schema/native queue mechanics are distinct from
+synthetic metadata/wait integration and live consumption evidence. The combined
+CLI path is restricted to Codex 0.160.1 or 0.162.1/macOS arm64; POSIX SQL fixtures alone do
+not qualify other native platforms. No rollout/transcript API is queried, no ACK is inferred
+and no post-attempt fallback/resend occurs.
+
+Dedicated 0.162.1 Codex and Claude Code 2.1.296 test sessions supplied additional
+local evidence; native client ID injection is separate from plain model response
+or ACK. Retained qualified intents support independent read-only waits with no
+new native submission. Each process owns its wait cutoff; foreign pending and
+old terminal waits are preserved. A separate voluntary matching reply was
+explicitly confirmed before any wait with `operator_confirmed`; ACK status and
+a later acknowledged wait succeeded. Confirmation after an earlier independent
+wait correctly refused `receipt_order_unprovable`, without replay. This is manual
+operator attestation, not an automated token-possession collector.
+
+POSIX SSH opt-in now prepares an unattempted intent at an explicitly initialized
+destination ledger, pins resolved target/home/generation/epoch/CID, then sends
+once. Strict request-aware native facts survive complete failed-transport
+responses; unsolicited/malformed handoff cannot create ACK. Source deadlines
+are not renewed; destination remaining-duration watchdogs reap owned groups.
+Transit delay cannot be synchronized across independent monotonic clocks.
+Destination-handler/recording-socket fixtures use fake SSH. Separate real
+KR/US Linux checks established ordinary native queue acceptance and a US manual
+operator receipt; they did not qualify native client-ID observation on Linux. See [SSH details](docs/api.md#unreleased-destination-side-ssh-handoff).
+
+Open capabilities include original-sender SSH collector coordination, Windows
+ACL/native observation and automated receipt producer/collector bootstrap. Other
+platform/version tuples and arbitrary blocking-filesystem deadlines are not
+qualified by these tests.
+#69/#70/#71/#72 remain together in 0.4.0 and open. Ordinary runtime parity and
+published version markers are unchanged.
 
 
 Storage binding is checked on the owned queue transport before its effect:
@@ -1102,3 +1153,30 @@ fixture refused the durable effect guard and left zero queue rows. No version
 range, Linux/Windows qualification, live delivery or ACK follows from these
 queue-only fixtures. Initial harness failures are recorded separately and were
 never retried with an already-attempted intent.
+
+## 0.4.0 candidate release scope
+
+On 2026-10-11 the user approved keeping #69/#70/#71/#72 together in 0.4.0,
+with the following explicit qualification boundaries. This is source-candidate
+scope, not a publication claim or blanket Python runtime parity.
+
+| Capability | Included candidate scope | Deferred extension |
+| --- | --- | --- |
+| Native client-ID injection observation | Exact Codex 0.160.1/0.162.1 on macOS arm64; warm original metadata store and unchanged writer generation | Linux [#130](https://github.com/abruption/session-peer-ts/issues/130), Windows [#131](https://github.com/abruption/session-peer-ts/issues/131); no inherited profile support |
+| Explicit receipt ACK | Operator attestation on supported POSIX ledgers, with original binding/order validated; `operator_confirmed` is not model authentication | Voluntary receipt producer, authenticated collector/bootstrap and original-sender SSH collector [#132](https://github.com/abruption/session-peer-ts/issues/132) |
+| Windows handoff storage | Required capability reports unsupported; ordinary published Windows send/SSH are separate | Private DACL/reparse storage and owned cleanup qualification [#131](https://github.com/abruption/session-peer-ts/issues/131) |
+| SSH handoff | Explicit same-version destination preparation/ledger, strict binding and one send; unsupported goals refuse before effect | Real remote native client-ID observation remains unqualified; actual Linux queues/manual ACK do not establish it |
+
+An automatic receipt collector, if later implemented, still records only a
+receiver's explicit receipt. Visible replies, arbitrary message text, queue
+deletions and turn completion never authorize ACK promotion. The frozen design
+bytes and historical approval metadata remain unchanged. SQLite projections may
+evaluate body-bearing cells internally; bodies/errors do not cross into JS or
+ordinary output. Required unsupported goals refuse before effect; after any
+possible submission no fallback/resend is permitted.
+
+The four development issues stay open until their scoped acceptance and human
+PR review/merge are complete. Platform/collector follow-ups are not completion
+conditions for this limited release. Companion skill candidate guidance and
+version/profile rollout is tracked in [companion #31](https://github.com/abruption/session-peer-skill/issues/31); an unreviewed new runtime
+version is not automatically compatible with the published skill metadata.

@@ -2,6 +2,7 @@
 import { casefold } from './casefold.js';
 import { uuid } from './writer.js';
 import type { Done } from './process.js';
+import { parseStrictJson, validateHandoff, type Handoff } from './handoff.js';
 
 export const RESPONSE_BYTES = 1024 * 1024;
 export const RESPONSE_DEPTH = 64;
@@ -62,7 +63,10 @@ export function parseResponse(bytes: Uint8Array): Record<string, unknown> {
   try { return JSON.parse(text) as Record<string, unknown>; } catch { return invalid(); }
 }
 
-export type ResponseRequest = { command: string; to?: string; dryRun?: boolean; returnTo?: string; home?: string; allowInactive?: boolean };
+export type PreparedResponse = Pick<Handoff, 'correlationId' | 'ledgerEpoch' | 'targetGeneration'>;
+export type ResponseRequest = { command: string; to?: string; dryRun?: boolean; returnTo?: string; home?: string; allowInactive?: boolean;
+  handoff?: { preparation?: boolean; correlationId?: string; requestAck?: boolean; observeDelivery?: boolean;
+    waitFor?: 'delivered' | 'acknowledged'; prepared?: PreparedResponse; destinationHost?: string } };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
 // Bind supported native facts to the original command, dry-run and exact
@@ -114,11 +118,63 @@ export function validateResponse(value: Record<string, unknown>, request: Respon
 // failure. Overflow never establishes a complete frame, even with a prefix.
 export function responseOutcome(done: Done, request: ResponseRequest): { value: Record<string, unknown>; exitCode: number } {
   if (!done.spawned || done.stopReason === 'output_limit' || !done.stdoutBytes) return invalid();
-  const value = parseResponse(done.stdoutBytes); validateResponse(value, request);
+  const value = parseResponse(done.stdoutBytes), context = request.handoff;
+  if (context?.destinationHost !== undefined && value.host !== context.destinationHost) invalid();
+  // The native profile is selected by the caller, never by returned metadata.
+  // Validate a positive native snapshot independently of a failed explicit wait.
+  const positive = request.command === 'send' && !request.dryRun && value.submitted === true;
+  const waitException = context?.waitFor !== undefined && positive && value.ok === false;
+  const native = waitException ? { ...value, ok: true } : value;
+  if (waitException) delete native.error;
+  validateResponse(native, request);
+  let accepted: Handoff | undefined;
+  if (context) {
+    try {
+      // The independently valid positive native snapshot does not make a
+      // malformed failed-wait envelope valid. Reject only its handoff evidence.
+      if (waitException && typeof value.error !== 'string') invalid();
+      // The outer scanner preserved native facts; this second parser applies
+      // integer lexemes only to protocol subtrees before any lossy JSON values.
+      parseStrictJson(done.stdoutBytes, { scope: 'outer' });
+      const h = validateHandoff(value.handoff);
+      if (context.correlationId !== undefined && h.correlationId !== context.correlationId) invalid();
+      if (context.preparation) {
+        if (!request.dryRun || !value.ok || h.state !== 'validated' || h.submission.status !== 'not_attempted' ||
+            h.wait.for !== 'none' || h.ack.status !== 'not_requested' || h.observation.status !== 'not_requested') invalid();
+      } else {
+        const expected = context.prepared;
+        if (!expected || (context.destinationHost !== undefined && value.host !== context.destinationHost) || h.correlationId !== expected.correlationId || h.ledgerEpoch !== expected.ledgerEpoch || h.targetGeneration !== expected.targetGeneration ||
+            h.wait.for !== (context.waitFor ?? 'none') || h.ack.status !== (context.requestAck || context.waitFor === 'acknowledged' ? 'unsupported' : 'not_requested') ||
+            (h.observation.injectionObserved && h.observation.clientUserMessageId !== expected.correlationId)) invalid();
+        if (positive && h.submission.status !== 'submitted') invalid();
+        if (request.dryRun && h.submission.status !== 'not_attempted') invalid();
+        if (!positive && !request.dryRun && h.submission.status !== (value.submitted === null ? 'unknown' : 'refused')) invalid();
+        if (context.waitFor) {
+          const success = h.wait.status === 'satisfied';
+          const pendingPersistence = positive && h.wait.status === 'pending' &&
+            value.error === 'handoff_persistence_failed' && value.handoffWarning === 'persistence_failed';
+          if (value.ok !== success || (!success && !pendingPersistence && !['timed_out_unknown', 'unsupported', 'failed', 'stopped'].includes(h.wait.status)) ||
+              (h.wait.status === 'stopped' && (h.wait.reason !== 'stopped_by_operator' || done.interrupted || done.code !== 130))) invalid();
+        }
+      }
+      accepted = h;
+    } catch { /* Retain the separately validated native snapshot below. */ }
+  }
+  const persistenceWarning = value.handoffWarning === 'persistence_failed';
+  delete value.handoff; delete value.handoffQuery; delete value.handoffWarning;
+  if (accepted) { value.handoff = accepted; if (persistenceWarning) value.handoffWarning = 'persistence_failed'; }
+  else if (context && positive) {
+    value.handoffWarning = 'invalid_handoff';
+    if (context.waitFor) { value.ok = false; value.error = 'invalid_handoff'; }
+  }
   // Reserved client-owned diagnosis; retain unrelated additive native fields.
   delete value.sshTransport; delete value.requestedCodexHome;
   const ordinary = !done.interrupted && [0, 1, 2].includes(done.code ?? -1);
+  const stopped = accepted?.wait.status === 'stopped' && !!context?.waitFor && positive && value.ok === false;
+  if (!done.interrupted && done.code === 130 && stopped) return { value, exitCode: 130 };
   if (ordinary) {
+    if (context && !accepted && positive && context.waitFor) return { value, exitCode: 1 };
+    if (accepted?.wait.status === 'stopped') return invalid();
     if (value.ok !== (done.code === 0)) return invalid();
     return { value, exitCode: done.code! };
   }

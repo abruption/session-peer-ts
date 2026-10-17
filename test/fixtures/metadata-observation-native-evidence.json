@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "nativeProfile": {
+    "version": "0.162.1",
+    "commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+    "platform": "darwin-arm64"
+  },
+  "qualificationScope": "Exact native version/platform with a newly created dedicated test thread; no existing working session received a message.",
+  "officialSources": [
+    {
+      "path": "codex-rs/app-server-protocol/src/protocol/thread_history_projection.rs",
+      "sha256": "164f88345aebc0922b30243f6df26414bc1a8c19da8663d609332ef2ba8dc756"
+    },
+    {
+      "path": "codex-rs/thread-store/src/local/thread_history_materialization.rs",
+      "sha256": "07ff19e7aa152dd3e80640526bdae3d7227238bdada8a8bb1ffa51f10e84a70e"
+    },
+    {
+      "path": "codex-rs/thread-store/src/local/thread_history.rs",
+      "sha256": "3dbb26bde497ce88068c83e936bb638614cda1c5e40222af91e3bc83c2474a1e"
+    },
+    {
+      "path": "codex-rs/state/thread_history_migrations/0001_thread_history.sql",
+      "sha256": "9e92130a3cefcaa4e8350241f4b92e9433314560ade6dc78a8cecf9e5c17f2a6"
+    },
+    {
+      "path": "codex-rs/app-server-protocol/src/protocol/v2/item.rs",
+      "sha256": "e3ca6b9b880d815a16ff956b701beb9690abc222fb70a5b7e697e1c0ff91e099"
+    },
+    {
+      "path": "codex-rs/protocol/src/items.rs",
+      "sha256": "5ca7f804a77dc8f132bb1eda4045e693d2d9b595cf70fc0877ca0cc98c5b621c"
+    }
+  ],
+  "unchangedMigration0002": true,
+  "metadataMapping": {
+    "client": "ThreadItem::UserMessage.client_id serializes as clientId; conversion preserves CoreTurnItem::UserMessage.client_id independently of item.id",
+    "storage": "thread_items item_type=userMessage; thread_turns joined by original thread_id+turn_id; projection SQL returns bounded IDs/status only",
+    "sourceFilesNotByteIdenticalAcrossVersions": [
+      "app-server-protocol/src/protocol/v2/item.rs",
+      "thread-store/src/local/thread_history.rs"
+    ]
+  },
+  "liveFixture": {
+    "date": "2026-10-11",
+    "nativeVersion": "0.162.1",
+    "platform": "darwin-arm64",
+    "newDedicatedThread": true,
+    "oneQueueAttempt": true,
+    "ownerChecks": 4,
+    "beforeEffectCalls": 1,
+    "positiveNativeReceipt": true,
+    "matchingClientIdRows": 1,
+    "nativeItemIdEqualsClientId": false,
+    "generationUnchanged": true,
+    "injectionObserved": true,
+    "linkedTurnStatus": "completed",
+    "acknowledged": false,
+    "terminalCleanup": "owned test terminal closed; native writer subsequently inactive/free",
+    "bodyOrTranscriptReturned": false,
+    "nativeHomeTestFilesDeleted": false
+  },
+  "limits": [
+    "One controlled macOS arm64 native test is not cross-platform qualification.",
+    "Queue receipt alone, queue deletion, turn completion and visible reply are not ACK.",
+    "Observation projects metadata inside SQLite from the body-bearing item_json cell; it does not promise that body bytes are never accessed internally by SQLite.",
+    "Existing user authentication was used by the native CLI without reading, copying or recording credentials.",
+    "Production reader qualification does not authorize automatic retry, new turns, native history APIs or schema warming."
+  ],
+  "unchangedMigration0001": true,
+  "productionReader": {
+    "exactQualification": {
+      "version": "0.162.1",
+      "commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+      "platform": "darwin-arm64"
+    },
+    "capabilitySupported": true,
+    "injectionObserved": true,
+    "linkedTurnStatus": "completed",
+    "ownerChecks": 4,
+    "originalGenerationProvedBeforeAndAfter": true,
+    "noBodyOrHistoryApiOutput": true
+  },
+  "actualCli": {
+    "freshThreads": 2,
+    "queueAttemptsPerThread": 1,
+    "observeSendExitCodes": [
+      0,
+      0
+    ],
+    "submitted": true,
+    "nativeStatus": "queued",
+    "consumptionConfirmed": false,
+    "retryAllowed": false,
+    "deliveredWaitOnFirstThread": {
+      "operationStatus": "satisfied",
+      "statusQueryExitCode": 0,
+      "injectionObserved": true
+    },
+    "harnessOrderDeviation": {
+      "description": "A separate delivered wait was started before manual confirmation; lost clock ordering correctly refused confirmation. No requeue.",
+      "manualConfirmationExitCode": 1,
+      "error": "receipt_order_unprovable",
+      "originalDeliveryFactsPreserved": true
+    },
+    "secondThreadOperatorConfirmation": {
+      "ownVoluntaryReplyMatchedCorrelationId": true,
+      "confirmExitCode": 0,
+      "assurance": "operator_confirmed",
+      "state": "acknowledged",
+      "late": false,
+      "statusExitCode": 0,
+      "acknowledgedWaitExitCode": 0,
+      "waitStatus": "satisfied"
+    },
+    "automatedReceiptCapability": false,
+    "allOwnedTestTerminalsClosed": true,
+    "nativeHomeFilesDeleted": false
+  },
+  "testedCompiledComponentHashes": {
+    "dist/app-server.js": "4207937bb25fb1f42d97922d55ebdadcc9cb295dbe0a92bebd9d35f171204b6e",
+    "dist/metadata-observation.js": "4d01dae9a90f4cda3c7b45bf0c126067bff403f345d0d23bc593cc57363e0f83",
+    "dist/handoff-observer-probe.js": "ac43875de9ceb06cd6f4ce9ca9e836c97a83a396f2a301d0aa78ee43d606ce34",
+    "dist/handoff-operations.js": "60d201351269da031785a6c6c5fbe14120b132c514372b5b3921f528b96e82ea",
+    "dist/handoff-ledger.js": "efb46bcd1892ba9eb843a4ae603987f15ce535d942938dfe2c0e98a1343edcb9",
+    "dist/cli.js": "05c83306e9418acfdd2e64dad905a9a9797500e01914a0ef6b76ec145ed2ab23"
+  }
+}

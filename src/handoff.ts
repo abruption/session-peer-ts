@@ -43,6 +43,16 @@ export class HandoffBudget {
     this.cutoff = this.deadline - HANDOFF_LIMITS.cleanupMs;
     this.deadlineAtUtcMs = Math.max(0, Math.floor(clock.utc() + Math.max(0, seconds * 1000 - HANDOFF_LIMITS.cleanupMs)));
   }
+  // Private SSH frames carry a remaining duration, never a renewed CLI budget
+  // or a UTC authorization deadline. Charge frame-reading time to that duration.
+  static fromRemainingMs(remainingMs: number, clock: Clock = systemClock, startedAt = clock.monotonic()): HandoffBudget {
+    if (!safeInteger(remainingMs) || remainingMs < 1 || remainingMs > 60000 || !Number.isFinite(startedAt) || startedAt > clock.monotonic()) fail('invalid_handoff_budget', 2);
+    const budget = new HandoffBudget(Math.ceil(remainingMs / 1000), clock);
+    const deadline = startedAt + remainingMs, cutoff = deadline - HANDOFF_LIMITS.cleanupMs;
+    Object.assign(budget, { startedAt, deadline, cutoff,
+      deadlineAtUtcMs: Math.max(0, Math.floor(clock.utc() + Math.max(0, cutoff - clock.monotonic()))) });
+    return budget;
+  }
   remainingMs(): number { return Math.max(0, this.deadline - this.clock.monotonic()); }
   observationRemainingMs(): number { return Math.max(0, this.cutoff - this.clock.monotonic()); }
   beforeEffect(): void {
