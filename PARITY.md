@@ -1059,3 +1059,46 @@ are refused without automatic key recovery or history migration. This is an
 at-rest journal boundary, not protection against a reader of both private
 files. Duplicate committed operator confirmation returns the original receipt
 without rewriting its wait classification or journal.
+
+## Unreleased bounded app-server foundation — #71
+
+The opt-in internal client is qualified only for queue mechanics on Codex
+0.160.1 and 0.162.1 / macOS arm64, using separate isolated network-denied synthetic homes. One
+native queue/add, original client message ID persistence and no loaded/resumed
+thread were observed. This is not live delivery, general owner-route or receipt
+ACK qualification. Legacy Codex queue remains the default CLI path.
+
+The client bounds frames, RPCs, traffic, owner verification, monotonic deadlines
+and owned process-group cleanup. An authorized caller supplies a durable
+before-effect fence; at most one queue RPC follows it. After a possible write,
+disconnect, timeout, schema error or remote refusal never enables fallback or
+resend. initialize opts out all 83 notifications in the exact qualified native
+schema; queue/add's own input echo is validated but only IDs are returned.
+queue/list, history, full item/turn notifications, resume/start and model turns
+are excluded. The separate synthetic metadata protocol is explicitly fixture
+only. Other platforms/versions and native observation remain unsupported.
+
+Generated schema hashes and the fixed official source commit are recorded in
+`test/fixtures/app-server-schema-evidence.json`; tests use hermetic streams and
+owned Node children. These facts do not re-pin the shipped Python runtime parity
+reference or implement automatic ACK.
+
+
+Storage binding is checked on the owned queue transport before its effect:
+env/CLI pins plus exact opened state/queue paths. Managed-policy redirection or
+missing direct-native PID proof refuses with zero queue RPC. An additional
+network-denied initialization-only fixture verified config/CLI/env precedence
+with zero queued rows and no model/thread effect. Bootstrap policy files are
+not promised unchanged by the native tool; no managed requirement is bypassed.
+
+### Exact 0.162.1 queue profile qualification
+
+The internal queue client also pins Codex 0.162.1/source
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d` on macOS arm64. The source/schema
+fixture records the exact notification opt-out set (84 methods, compared with
+83 in 0.160.1). An unloaded, isolated thread received one queue request with its
+exact supplied client ID and native queue receipt; a separate owned-descriptor
+fixture refused the durable effect guard and left zero queue rows. No version
+range, Linux/Windows qualification, live delivery or ACK follows from these
+queue-only fixtures. Initial harness failures are recorded separately and were
+never retried with an already-attempted intent.
