@@ -1,5 +1,16 @@
 # Python compatibility and npm migration
 
+## Public 0.4.0 checkpoint — 2026-10-18 KST
+
+[Version 0.4.0](https://github.com/abruption/session-peer-ts/releases/tag/v0.4.0)
+is public from source `dde3923efe116f87f38b1639b29b889d2b832e44`.
+The [dated verification](VALIDATION.md#public-040--2026-10-18-kst) records identical
+reviewed/Actions/staged/public bytes, signature/provenance checks and isolated
+installation/removal. The release includes the approved limited macOS Codex
+observation and explicit operator-confirmed receipt scope below; #130–#132
+remain separate platform/collector extensions. Published skill 0.2.1 remains
+the installation pin; runtime publication is not companion-skill publication.
+
 ## Current comparison — Python 1.1.0 / TypeScript 0.4.0
 
 Updated 2026-10-18 KST. TypeScript 0.4.0 uses published

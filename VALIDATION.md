@@ -1,5 +1,81 @@
 # Validation record — updated 2026-10-18 KST
 
+
+## Public 0.4.0 — 2026-10-18 KST
+
+`session-peer@0.4.0` is public. Registry checks confirmed `latest=0.4.0` and
+unchanged `preview=0.1.0-preview.1`. The publication source is
+`dde3923efe116f87f38b1639b29b889d2b832e44`, merged from
+[PR #151](https://github.com/abruption/session-peer-ts/pull/151). Its complete tree
+matched reviewed head `bfbadfa42513791899fc8d2b5441238bbe5b2c4e`.
+Exact-main [CLI run 39076708873](https://github.com/abruption/session-peer-ts/actions/runs/39076708873)
+and [CodeQL run 39076708830](https://github.com/abruption/session-peer-ts/actions/runs/39076708830)
+passed.
+
+[Publication workflow 39077096491](https://github.com/abruption/session-peer-ts/actions/runs/39077096491)
+completed successfully on attempt 1 for that exact source. Its Ubuntu preparation
+job passed **383 total / 355 passed / 0 failed / 28 skipped**; these are the
+actual platform-scoped counts, not the macOS preparation counts below. Build,
+types, repository checks, reproducible package smoke, isolated installation and
+removal, and npm audit passed. The uploaded artifact ID was `12117507059`, with
+ZIP SHA-256 `b4eb62a6c68be0319d5d7013f11d11e9b438866f3a63359cc1808c91cbe61494`.
+The ZIP digest identifies the artifact container, not the package tarball.
+
+The reviewed, local, Actions, staged and public `session-peer-0.4.0.tgz` bytes
+matched. The public tarball is 321,256 bytes and contains the exact 71-file
+allowlist. All 18 packaged Markdown documents matched the publication source.
+The release helper validated the exact downloaded artifact rather than a later
+rebuild. Package hashes are:
+
+- SHA-256: `84adc8b50ef8f03a2c2170e3c36a97b573f28a6bcbeb7dbc965e16c3b37a57c9`.
+- npm integrity: `sha512-mMNJ118atoflhpFTkf2+DtO7MRf7FQnPK3lKWbq/vd8Xvb5DsjUtAgydIBOcd3Xj9BCYGqM50aFhzUr4dDGHSw==`.
+
+Registry signature audit passed. Public attestation subjects matched the exact
+tarball SHA-512, and the SLSA payload bound the repository, `refs/heads/main`,
+`.github/workflows/publish.yml`, source `dde3923efe116f87f38b1639b29b889d2b832e44`,
+`workflow_dispatch`, and run `39077096491/attempts/1`. This was also verified
+cryptographically with npm 11.15.0's bundled Sigstore verifier, including the
+certificate/transparency material and the exact workflow identity
+`https://github.com/abruption/session-peer-ts/.github/workflows/publish.yml@refs/heads/main`
+with issuer `https://token.actions.githubusercontent.com`. These cryptographic
+checks are distinct from merely decoding and comparing the payload. A separate
+fresh isolated package installation, CLI/list check and removal passed; no user
+installation was replaced.
+
+Fresh authenticated checks confirmed no conflicting pending stage and the
+Trusted Publisher's stage-only permission. The user explicitly waived this
+release's separate web **publish 2FA policy inspection**; that policy was not
+freshly audited. The protected GitHub `npm` environment required reviewer
+`abruption`, disallowed administrator bypass, and allowed only `main`; environment
+and repository Actions secret counts were both zero. The environment approval
+and final npm 2FA approval were completed by the user. The approved stage was
+`414547b1-1b55-45dc-a0a4-9ca40407beec`. OIDC staging used no token fallback or
+protection bypass. Staging success was not treated as publication before registry
+verification.
+
+The annotated `v0.4.0` tag object is
+`7aad7bc6400499fbc1c323bd62f2210b3507fc9a`, peeled to the exact publication source
+`dde3923efe116f87f38b1639b29b889d2b832e44`.
+[GitHub release v0.4.0](https://github.com/abruption/session-peer-ts/releases/tag/v0.4.0)
+was published as the latest release. No replacement source was assigned to the
+published package or tag.
+
+Publication added no new native/model, remote-host delivery or ACK qualification.
+Native observation retains the previously recorded exact Codex 0.160.1/0.162.1
+and macOS arm64 scope; explicit `operator_confirmed` receipts on supported POSIX
+ledgers remain separate from automatic ACK collection. Linux observation,
+Windows observation/private storage, and authenticated automatic receipt
+producer/collector bootstrap remain follow-ups #130, #131 and #132. Queue
+acceptance, injection, turn completion and plain replies do not automatically
+establish receipt ACK; unknown outcomes never authorize a resend.
+
+The published TS skill remains 0.2.1 at immutable source
+`0f494cabd05901c03161dc91792dcf89f8e96631`, with SKILL SHA-256
+`8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3`.
+The separate skill 0.3.0 candidate and finite runtime/profile review do not
+publish, install or adopt a new skill pin. Skill finalization and publication
+require their separate approval and exact artifact checks.
+
 ## 0.4.0 preparation checks — 2026-10-18 KST
 
 Preparation source checkpoint `2fc936fa1557fd59ce561446d5239c7030df3d56`
