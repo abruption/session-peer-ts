@@ -9,6 +9,47 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.4.0 scoped release preparation — 2026-10-18 KST
+
+This candidate includes #106–#109: the frozen design, private sender fencing,
+bounded app-server integration and qualified delivery observation. It preserves
+ordinary opt-out results. Native observation is qualified only for the recorded
+macOS arm64 Codex versions/topology; explicit operator confirmation is separate
+from automatic receipt ACK. Linux/Windows native observation and automated
+receipt producer/collector remain follow-ups #130–#132. Experiments #82/#142 are
+excluded. Preparation does not publish the package or complete those follow-ups.
+
+Read-only registry baseline: latest=0.3.6, preview=0.1.0-preview.1; 0.4.0 must
+remain absent before staging. Previous stable integrity:
+`sha512-8uR9/x9q2AWp/zfJox0CMgm919M7kxpAjR2vGd/ntuS2AAwQh4ohbDmAtyxLyLoEE8IPsZVEbPKHCChvIJBuoQ==`.
+Previous attestation metadata:
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.6`.
+Recheck tags, exact integrity and provenance source before staging. Historical
+settings-read exceptions and publication approvals do not carry forward.
+
+1. Review and merge the release preparation; require successful exact merged-main
+   release gate, Windows Node 22/24 and CodeQL checks, plus current-head reviews.
+2. Fresh authenticated reads verify ownership, pending stages, stage-only Trusted
+   Publisher mapping, package publish-MFA and protected GitHub npm environment.
+   Any unread gate needs a current explicit user exception; no protections change.
+3. Validate exact-source reproducible packing, isolated version/install/removal,
+   skill metadata defaults and every packaged Markdown file under the
+   [documentation gate](#documentation-gate-for-the-next-release).
+4. Obtain separate approval naming the exact merged 40-character main SHA,
+   `session-peer@0.4.0`, `stable-stage` and eventual latest promotion to 0.4.0.
+5. Dispatch only the approved source/version/mode; review retained Actions bytes
+   before environment approval, then verify staged bytes/provenance and obtain
+   separate final npm 2FA approval. Never repeat an uncertain upload.
+6. Verify public integrity/provenance/signatures and isolated install/removal;
+   preserve preview and record publication source before creating an authorized
+   tag/GitHub Release. No fleet/global install is authorized.
+
+Both SSH endpoints require exactly 0.4.0. The published skill 0.2.1 pin remains
+unchanged. The exact proposed skill 0.3.0 tuple has candidate-specific design/content
+review and a test-only complete-file fixture; it is not a released skill or
+approved installation pin. Supporting-runtime publication precedes separately approved
+skill finalization/publication and later guidance-pin adoption.
+
 ## Public release checkpoint — 0.3.6 (2026-10-14 KST)
 
 Public `session-peer@0.3.6` was verified with latest=0.3.6 and unchanged preview=0.1.0-preview.1. Source `27fc741f7dabf075e3d6f19f48f3e71d7bdc27a6`, stage-only run 38496584629, reviewed/Actions/staged/public tarball identity, provenance/signature audit and isolated install/removal are recorded in [the public validation checkpoint](VALIDATION.md#public-036--2026-10-14-kst). [GitHub v0.3.6](https://github.com/abruption/session-peer-ts/releases/tag/v0.3.6) and its annotated tag use that same publication source.
