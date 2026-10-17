@@ -645,7 +645,12 @@ test('reconfiguring prepared delivery cannot retain qualification for a differen
     const stored = JSON.parse(readFileSync(file, 'utf8')).data.records[original.correlationId];
     assert.equal(stored.observationQualification, undefined);
     assert.equal(stored.deliverySupported, mode === 'unqualified');
-    assert.deepEqual(stored.binding, binding);
+    const { payloadDigest: sealed, ...publicBinding } = stored.binding;
+    const { payloadDigest: privateDigest, ...expectedBinding } = binding;
+    assert.deepEqual(publicBinding, expectedBinding);
+    assert.match(sealed, /^sealed-v1:/); assert.notEqual(sealed, privateDigest);
+    // Successful effect fencing below proves the decrypted private digest still
+    // matches; randomized at-rest encryption must not be compared as plaintext.
     f.ledger.commitEffect(original.correlationId, binding); f.ledger.recordSubmission(original.correlationId, 'submitted');
     const restarted = new HandoffLedger(f.ledger.path, { clock: f.clock });
     assert.equal(restarted.observationContext(original.correlationId), undefined);

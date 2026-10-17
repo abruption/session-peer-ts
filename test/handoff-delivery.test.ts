@@ -8,7 +8,7 @@ import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmS
 import {join,delimiter,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateHandoff} from '../dist/handoff.js';
-import {payloadDigest} from '../dist/handoff-ledger.js';
+import {HandoffLedger,payloadDigest} from '../dist/handoff-ledger.js';
 const qualified={skip:process.platform!=='darwin'||process.arch!=='arm64'};
 const thread='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',cli=resolve('dist/cli.js');
 const schema=`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
@@ -163,6 +163,7 @@ test('independent wait resumes exact submitted scope and observes later injectio
  assert.equal(sent.code,0,sent.stdout);assert.equal(sent.value.status,'queued');assert.equal(sent.value.submitted,true);
  const original=validateHandoff(sent.value.handoff);assert.equal(original.observation.status,'pending');
  const before=f.ledger().data.records[original.correlationId],nativeBefore=f.nativeCalls();
+ const contextBefore=new HandoffLedger(f.env.SESSION_PEER_HANDOFF_HOME!).observationContext(original.correlationId);assert.ok(contextBefore);
  assert.ok(before.observationQualification);assert.equal(f.calls().length,1);
  assert.equal(f.calls()[0].clientId,original.correlationId);
  const active=f.start(['handoff','wait','--correlation-id',original.correlationId,'--wait-for','delivered','--wait-timeout','10']);
@@ -176,7 +177,9 @@ test('independent wait resumes exact submitted scope and observes later injectio
  assert.equal(observed.ack.status,'not_requested');assert.equal(observed.retry.allowed,false);
  const after=f.ledger().data.records[original.correlationId];
  assert.equal(after.clockId,before.clockId);assert.equal(after.preparedMono,before.preparedMono);
- assert.deepEqual(after.binding,before.binding);assert.deepEqual(f.calls().map(call=>call.method),['thread/queue/add']);assert.deepEqual(f.nativeCalls(),nativeBefore);
+ assert.deepEqual(new HandoffLedger(f.env.SESSION_PEER_HANDOFF_HOME!).observationContext(original.correlationId),contextBefore);
+ assert.match(after.binding.payloadDigest,/^sealed-v1:/);assert.notEqual(after.binding.payloadDigest,contextBefore.binding.payloadDigest);
+ assert.deepEqual(f.calls().map(call=>call.method),['thread/queue/add']);assert.deepEqual(f.nativeCalls(),nativeBefore);
  for(const privateField of ['PRIVATE_BODY_SENTINEL','observationQualification','payloadDigest'])assert.equal(result.stdout.includes(privateField),false);
 });
 
