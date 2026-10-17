@@ -4,13 +4,15 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**문서·소스 기준 버전: 0.3.6.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.5와 0.3.6는 서로의 SSH 사전 확인을 거부합니다.
+**문서·소스 기준 버전: 0.4.0.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6과 0.4.0은 서로의 SSH 사전 확인을 거부합니다.
 
-이 가이드는 0.3.6를 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
+**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다.
+
+이 가이드는 0.4.0을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
 
 <a id="마이그레이션-경계-033-후보"></a>
 
-## 마이그레이션 경계 (0.3.6)
+## 마이그레이션 경계 (0.4.0)
 
 [0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)은 릴리스 소스와 산출물을 고정합니다. SSH 사전 확인은 정확히 같은 TS 버전 표시를 검사하며 커밋 해시는 검사하지 않습니다. 소스 빌드의 검토 커밋 일치는 운영자가 별도로 확인해야 합니다.
 
@@ -22,10 +24,10 @@
 - npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 공개 TS 0.3.5는 공개 스킬 `0.2.1`과 기존 `0.1.0`·`0.2.0`의 정확한 프로필을 허용하며, 공개 TS 0.3.2·0.3.3·0.3.4는 `0.2.1`을 거부합니다. 설치 절에는 별도로 공개된 스킬 소스를 고정했습니다.
 - Windows 검증은 공개 0.3.1, Windows 10 x64, 관리자 계정, PowerShell 5.1, Node 24.16.0에서 수행했습니다. 오프라인 설치, 래퍼·네이티브 잠금, 운영자의 doctor·없는 대상 dry-run과 로컬 fixture 31개가 검증됐습니다. Node 22는 버전 표시·네이티브 잠금 확인만 수행했습니다. 비관리자, 다른 아키텍처, F6 런타임 검사, 이전 Linux 실험의 최신 규칙 검증은 남아 있습니다. 이는 0.3.2 실기 ACK나 배포 도우미 검증이 아닙니다.
 
-[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 미발행 0.4.0 소스 후보는 개발 비교 기준을 Python 1.1.0으로 갱신하며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 후보의 자동 ACK·원래 발신자의 SSH 수신 확인 수집기·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
+[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 0.4.0 소스의 개발 비교 기준은 Python 1.1.0이며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 구현의 자동 ACK·원래 발신자의 SSH 수신 확인 수집기·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
 
 
-[0.4.0 handoff 설계와 미발행 구현 범위](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff 설계와 구현 범위](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 목차
 
@@ -94,7 +96,7 @@ JSON에는 정제된 `codexHomeResolution`이 포함되며, 네이티브 응답�
 `queueId`도 포함됩니다. 둘 다 메시지를 읽거나 처리했음을 확인하지 않습니다.
 [홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
 공개 **0.1.0**은 여전히 실행 중인 홈을 명시해야 하며 비활성 세션 허용 옵션이 없습니다.
-SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.3.6)을 설치해야
+SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.4.0)을 설치해야
 합니다.
 
 <a id="020-cli-사용성"></a>
@@ -134,20 +136,20 @@ Claude Code에는 받은 메시지함에 접근할 수 있는 실행 중 TUI(터
 
 Node 22.x의 22.13 이상 또는 24.x를 사용하세요. Python CLI도 같은 `session-peer`
 명령 이름을 쓰므로, 설치 전에 PATH(명령 검색 경로)에서 어떤 실행 파일을 찾는지
-확인하세요. 아래 명령은 선택한 0.3.6를 npm으로 설치하는 예입니다.
+확인하세요. 아래 명령은 선택한 0.4.0을 npm으로 설치하는 예입니다.
 CLI 자체는 패키지를 설치하거나 업데이트하지 않습니다.
 
-**0.3.6 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.
+**0.4.0 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.
 
 ```sh
-npm view session-peer@0.3.6 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.6
-session-peer --version  # session-peer 0.3.6 (typescript)
+npm view session-peer@0.4.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.4.0
+session-peer --version  # session-peer 0.4.0 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-예상 결과는 `session-peer 0.3.6 (typescript)`입니다.
+예상 결과는 `session-peer 0.4.0 (typescript)`입니다.
 
 1. 세션을 조회하고 `CLAUDE_PID`를 대상으로 선택한 정확한 PID로 바꾸세요.
 2. `--dry-run`으로 검증합니다. 이 단계에서는 메시지를 제출하지 않습니다.
@@ -175,11 +177,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.3.6.tgz
+npm install --global --ignore-scripts ./session-peer-0.4.0.tgz
 session-peer --version
 ```
 
-0.3.6에서 예상되는 결과는 `session-peer 0.3.6 (typescript)`입니다. 로컬 빌드
+0.4.0에서 예상되는 결과는 `session-peer 0.4.0 (typescript)`입니다. 로컬 빌드
 산출물을 선택하려면 `./...tgz` 경로를 그대로 두세요. 이후 버전에 이 명령을 사용할
 때는 먼저 체크아웃한 소스의 버전을 확인하세요.
 
@@ -200,7 +202,7 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.6.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.4.0.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -444,7 +446,7 @@ Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증
 <a id="package-release"></a>
 ## npm 릴리스
 
-아래 레지스트리 조회로 0.3.6의 현재 제공 여부와 npm 태그를 확인하세요. 날짜가 기록된 준비 근거는 이후 발행 결과를 입증하지 않습니다.
+아래 레지스트리 조회로 0.4.0의 현재 제공 여부와 npm 태그를 확인하세요. 날짜가 기록된 준비 근거는 이후 발행 결과를 입증하지 않습니다.
 
 0.3.2는 2026-10-07 KST에, 0.3.1은 2026-10-04 KST에 공개·검증했습니다.
 [0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)과
@@ -455,7 +457,7 @@ Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증
 설치 전에는 정확한 버전과 현재 npm 태그를 확인하세요.
 
 ```sh
-npm view session-peer@0.3.6 version dist.integrity
+npm view session-peer@0.4.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -510,7 +512,7 @@ session-peer update --check --channel preview --output-format text
 `updateCommand`는 실행 중인 CLI 경로로 설치 주체를 확인할 수 있을 때 사용자에게 안내합니다.
 해당하는 경우는
 자체 `session-peer` 실행기가 이 패키지를 가리키는 npm 전역 prefix(기본, Homebrew, nvm,
-nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.3.6`),
+nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.4.0`),
 매니페스트에 `session-peer`가 선언된 pnpm·Yarn·Bun 전역 저장소, Volta, npx 캐시입니다.
 프로젝트 설치(`npm_project`, `pnpm_project`), 소스 체크아웃(`source`), 그 밖의
 경우(`unknown`)에는 `updateCommand: null`과 `guidance` 문장만 돌려주므로, 관련 없는 현재
@@ -593,15 +595,17 @@ npm `--ignore-scripts`로 설치해도 되며, 설치 후 Skills CLI를 호출�
 선택적 `sp` 단축 이름은 0.3.0 이상에 포함되며(0.2.1 이하에는 없음) 자동으로 켜지지 않습니다.
 [명시적 활성화와 이름 충돌 안내(영문)](shorthand.md)를 참고하세요.
 
-## Unreleased handoff
+<a id="unreleased-handoff"></a>
 
-개발 중인 0.4.0 소스에는 opt-in private POSIX handoff ledger가 추가됩니다. 공개 0.3.3에는 이 명령이 없습니다. 필수 증거 채널이 unsupported이면 제출 전에 거절하며, best-effort 제출은 ACK를 증명하지 않습니다. 자동 수신 확인 연결 설정, Windows ledger 및 원래 발신자의 SSH 수신 확인 수집기는 미지원입니다. POSIX SSH opt-in은 명시적으로 초기화한 목적지 ledger에서 전송 없는 준비 단계로 대상·home·generation을 고정한 뒤 한 번만 전송합니다. [목적지 SSH 설명](api.md#unreleased-destination-side-ssh-handoff)을 참고하세요. 가짜 SSH fixture는 실제 네트워크 검증과 구분합니다.
+## 비공개 handoff와 전송 관측 (0.4.0)
+
+0.4.0에는 opt-in private POSIX handoff ledger가 포함됩니다. 필수 증거 채널이 unsupported이면 제출 전에 거절하며, best-effort 제출은 ACK를 증명하지 않습니다. 자동 수신 확인 연결 설정, Windows ledger 및 원래 발신자의 SSH 수신 확인 수집기는 미지원입니다. POSIX SSH opt-in은 명시적으로 초기화한 목적지 ledger에서 전송 없는 준비 단계로 대상·home·generation을 고정한 뒤 한 번만 전송합니다. [목적지 SSH 설명](api.md#unreleased-destination-side-ssh-handoff)을 참고하세요. 가짜 SSH fixture는 실제 네트워크 검증과 구분합니다.
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
-미발행 소스 후보의 전송 관찰은 macOS arm64의 정확한 Codex 0.160.1/0.162.1과 이미 생성된 메타데이터 저장소에 한정됩니다. 검증 근거가 보존된 전송은 별도 `handoff wait`로 읽기 전용 관찰을 다시 시작할 수 있으며, native 전송을 반복하지 않습니다. 각 대기는 자신의 마감 시각으로만 판단하고 다른 대기와 기존 종료 결과를 보존합니다. 새로 만든 Codex 0.162.1·Claude Code 2.1.296 테스트 세션의 실기 근거와 합성 테스트는 구분합니다. queued/posted, 실제 주입, 턴 종료, 일반 응답은 수령 확인 ACK와 다릅니다. 자동 ACK와 Windows handoff는 미지원입니다.
+native 전송 관찰은 macOS arm64의 정확한 Codex 0.160.1/0.162.1과 이미 생성된 메타데이터 저장소에 한정됩니다. 검증 근거가 보존된 전송은 별도 `handoff wait`로 native 상태를 읽기 전용으로 관찰할 수 있습니다. 이 작업은 비공개 ledger에 대기·종료 기록을 저장하며, native 전송을 반복하지 않습니다. 각 대기는 자신의 마감 시각으로만 판단하고 다른 대기와 기존 종료 결과를 보존합니다. 새로 만든 Codex 0.162.1·Claude Code 2.1.296 테스트 세션의 실기 근거와 합성 테스트는 구분합니다. queued/posted, 실제 주입, 턴 종료, 일반 응답은 수령 확인 ACK와 다릅니다. 자동 ACK와 Windows handoff는 미지원입니다.
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
 
-Linux·Windows의 native 주입 관측은 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 후보 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.
+Linux·Windows의 native 주입 관측은 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.

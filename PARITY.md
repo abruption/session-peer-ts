@@ -1,14 +1,14 @@
 # Python compatibility and npm migration
 
-## Current development comparison — Python 1.1.0 / 0.4.0 candidate
+## Current comparison — Python 1.1.0 / TypeScript 0.4.0
 
-Updated 2026-10-11 KST. The unpublished 0.4.0 source candidate uses published
+Updated 2026-10-18 KST. TypeScript 0.4.0 uses published
 Python **1.1.0**, commit
 [`8ca77cf`](https://github.com/abruption/session-peer/tree/8ca77cf31254c8287a2593fe484bb30a7dba2727),
-as the ordinary list/discovery comparison baseline. Candidate JSON reports
+as the ordinary list/discovery comparison baseline. JSON reports
 `referenceVersion: "1.1.0"`; this identifies a comparison source, not complete
-runtime parity. The rebased candidate keeps published `VERSION=0.3.6`; its handoff features
-remain unpublished until a separately reviewed release. It does not change
+runtime parity. The source reports `VERSION=0.4.0`; publication evidence belongs
+to the dated validation and release records. This source does not change
 immutable public npm artifacts or their historical comparison markers.
 
 - The exact-release `compatibility-v1.json` and compatibility document are
@@ -30,7 +30,7 @@ immutable public npm artifacts or their historical comparison markers.
   were inspected statically; the 21 tests are not coverage of every new path.
 - Python 1.1.0 has an experimental local Claude receipt-only ACK path. This
   does not establish automated ACK, SSH handoff or Windows handoff support in
-  the TS 0.4.0 drafts. Receipt bootstrap, original generation, body-free native
+  the scoped TS 0.4.0 implementation. Receipt bootstrap, original generation, body-free native
   observation, cleanup and platform qualification remain separate gates.
   Neither a native queue result nor turn completion establishes ACK or safe
   retry; no end-to-end consumption/exactly-once guarantee is introduced.
@@ -358,7 +358,7 @@ Windows support, WSL/POSIX SSH and TS native Windows SSH are separate paths.
 
 **Design-freeze checkpoint: jointly approved, frozen DESIGN v0.2; runtime was
 unimplemented and unshipped at that checkpoint.** The current source implementation
-and its limited, unreleased scope are described below. All four issues
+and its limited 0.4.0 scope are described below. All four issues
 [#69](https://github.com/abruption/session-peer-ts/issues/69),
 [#70](https://github.com/abruption/session-peer-ts/issues/70),
 [#71](https://github.com/abruption/session-peer-ts/issues/71) and
@@ -372,7 +372,8 @@ and [synthetic fixture](https://github.com/abruption/session-peer/blob/99d8ec385
 Exact copies are retained in `test/fixtures/handoff-v1.md` and
 `test/fixtures/handoff-v1.json`; `handoff-v1.pin.json` records their SHA-256 hashes,
 review status and separate runtime/design references. These test-only files are
-excluded from the npm package; the existing 51-file package allowlist is unchanged.
+excluded from the npm package. The design-only checkpoint retained its then-current
+51-file allowlist; the implementation adds its runtime modules explicitly.
 
 The design review uses published Python 1.0.3 at
 `0d252550ab40c26d1ac4a19193df6ca2f84d830b` as its compatibility baseline.
@@ -398,7 +399,7 @@ The candidate adds a nested `handoff` object only in opted-in mode. Its proposed
 init/prepare/status/wait/confirm/ack commands, epoch IDs, private collector,
 30-second per-destination budget and 5-second cleanup reserve were **not CLI
 capabilities at the design-freeze checkpoint**. The source subset is described
-in the unreleased implementation sections below. Budgets 1–5 seconds are syntactically valid in the proposal
+in the scoped implementation sections below. Budgets 1–5 seconds are syntactically valid in the proposal
 but refuse before effect. Source-streamed SSH without a compatible receipt handler
 remains ACK-unsupported under this candidate. No transcript/body-returning observer
 or fallback after a possible submission is authorized.
@@ -1046,13 +1047,15 @@ original binding/generation guards remain mandatory in the included scope. This 
 reference or establish runtime conformance.
 
 
-## Unreleased handoff implementation — #70
+<a id="unreleased-handoff-implementation--70"></a>
 
-The frozen #69 design pin is unchanged. Source-only private POSIX ledger and
+## 0.4.0 private handoff implementation — #70
+
+The frozen #69 design pin is unchanged. The private POSIX ledger and
 strict protocol helpers now implement prepare, at-most-once sender fencing,
 status, bounded wait records and explicit receipt/operator-confirmation
 validation. [CLI details](docs/api.md#unreleased-opt-in-handoff-cli--040-work)
-separate current source support from the published 0.3.5 runtime. Automated ACK
+describe the opt-in 0.4.0 scope; earlier 0.3.x packages lack these commands. Automated ACK
 bootstrap, Windows private ACL support and original-sender SSH collector
 coordination are deferred extensions (#131/#132), not prerequisites of the
 user-approved limited 0.4.0 scope. Fixture passes are not live receipt/injection
@@ -1072,7 +1075,9 @@ at-rest journal boundary, not protection against a reader of both private
 files. Duplicate committed operator confirmation returns the original receipt
 without rewriting its wait classification or journal.
 
-## Unreleased bounded app-server foundation — #71
+<a id="unreleased-bounded-app-server-foundation--71"></a>
+
+## 0.4.0 bounded app-server foundation — #71
 
 The opt-in internal client is qualified only for queue mechanics on Codex
 0.160.1 and 0.162.1 / macOS arm64, using separate isolated network-denied synthetic homes. One
@@ -1096,9 +1101,11 @@ owned Node children. These mechanics do not establish Python runtime delivery pa
 or implement automatic ACK.
 
 
-## Unreleased local observation integration — #72
+<a id="unreleased-local-observation-integration--72"></a>
 
-[Source-only runtime details](docs/api.md#unreleased-local-delivery-observation--72)
+## 0.4.0 local observation integration — #72
+
+[Scoped runtime details](docs/api.md#unreleased-local-delivery-observation--72)
 cover bounded one-shot/explicit-wait observation, native CID queueing, original
 writer generation checks, per-operation terminal waits and positive native fact
 preservation. Generated schema/native queue mechanics are distinct from
@@ -1109,8 +1116,9 @@ and no post-attempt fallback/resend occurs.
 
 Dedicated 0.162.1 Codex and Claude Code 2.1.296 test sessions supplied additional
 local evidence; native client ID injection is separate from plain model response
-or ACK. Retained qualified intents support independent read-only waits with no
-new native submission. Each process owns its wait cutoff; foreign pending and
+or ACK. Retained qualified intents support independent waits with no
+new native submission. Observation is read-only against native state; each wait
+persists its private operation and terminal record in the sender ledger. Each process owns its wait cutoff; foreign pending and
 old terminal waits are preserved. A separate voluntary matching reply was
 explicitly confirmed before any wait with `operator_confirmed`; ACK status and
 a later acknowledged wait succeeded. Confirmation after an earlier independent
@@ -1131,8 +1139,9 @@ Open capabilities include original-sender SSH collector coordination, Windows
 ACL/native observation and automated receipt producer/collector bootstrap. Other
 platform/version tuples and arbitrary blocking-filesystem deadlines are not
 qualified by these tests.
-#69/#70/#71/#72 remain together in 0.4.0 and open. Ordinary runtime parity and
-published version markers are unchanged.
+#69/#70/#71/#72 remain together in the scoped 0.4.0 milestone. The ordinary
+comparison is pinned to Python 1.1.0; version 0.4.0 does not claim broader
+runtime parity.
 
 
 Storage binding is checked on the owned queue transport before its effect:
@@ -1178,5 +1187,10 @@ possible submission no fallback/resend is permitted.
 The four development issues stay open until their scoped acceptance and human
 PR review/merge are complete. Platform/collector follow-ups are not completion
 conditions for this limited release. Companion skill candidate guidance and
-version/profile rollout is tracked in [companion #31](https://github.com/abruption/session-peer-skill/issues/31); an unreviewed new runtime
-version is not automatically compatible with the published skill metadata.
+version/profile rollout is tracked in [companion #31](https://github.com/abruption/session-peer-skill/issues/31)
+and [Draft #37](https://github.com/abruption/session-peer-skill/pull/37).
+The 0.4.0 finite row preserves the three reviewed published profiles and accepts
+the exact proposed skill 0.3.0/min0.1.0/full0.4.0/probe-help tuple after design/content
+review of the complete Draft #37 fixture. That fixture is not a published skill
+or installation pin; final skill bytes require renewed exact review. A new runtime
+version is never automatically compatible by numerical ordering.

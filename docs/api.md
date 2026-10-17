@@ -1,18 +1,18 @@
 # API reference
 
-This reference describes source/package version **0.3.6**. Check registry availability and review the selected release before installation. Dated release evidence is recorded in [VALIDATION.md](../VALIDATION.md); before publication use a reviewed source artifact.
+This reference describes source/package version **0.4.0**. Check registry availability and review the selected release before installation. Dated release evidence is recorded in [VALIDATION.md](../VALIDATION.md); before publication use a reviewed source artifact.
 
 [Back to README](../README.md) · [User guide](guide.md)
 
 The package exposes a small ESM API with TypeScript declarations. Install it
-locally with `npm install --ignore-scripts session-peer@0.3.6` before importing it.
+locally with `npm install --ignore-scripts session-peer@0.4.0` before importing it.
 Importing the package does not execute the CLI or submit a message.
 
 ```js
 import { VERSION, VERSION_LINE, reply, envelope } from 'session-peer';
 
-console.log(VERSION);      // 0.3.6
-console.log(VERSION_LINE); // session-peer 0.3.6 (typescript)
+console.log(VERSION);      // 0.4.0
+console.log(VERSION_LINE); // session-peer 0.4.0 (typescript)
 const address = 'session-peer://v1/reply?agent=claude&session=12345&transport=local';
 console.log(reply(address)); // { to: '12345' }
 console.log(envelope('Please review and reply.', true, address));
@@ -34,11 +34,12 @@ not package subpath exports. Use the [CLI guide](guide.md#use) for sending and
 
 The ordinary SSH response correction is documented separately as the [0.3.3 ordinary SSH response correction](design/ordinary-ssh-responses.md); its internal parser is not a package-root export.
 
-## Unreleased opt-in handoff CLI — 0.4.0 work
+<a id="unreleased-opt-in-handoff-cli--040-work"></a>
 
-This source adds an explicit private POSIX sender ledger. The published 0.3.5
-package does not contain these commands. Default sends retain their native
-status, optional fields and exit behavior. The frozen design is tracked in #69;
+## Opt-in handoff CLI — 0.4.0
+
+0.4.0 includes an explicit private POSIX sender ledger. Default sends retain
+their native status, optional fields and exit behavior. The frozen design is tracked in #69;
 this implementation does not change its exact vendored document or fixture.
 
 Initialize once with `session-peer handoff init --json`. The optional absolute
@@ -76,7 +77,7 @@ fail without erasing independently established native submission facts. No body,
 stderr, payload digest or receipt secret appears in handoff JSON.
 
 Automated receipt producer/bootstrap, Windows ledger and original-sender SSH
-handoff coordination remain unsupported. `ack --receipt -` and `handoff confirm
+receipt collectors remain unsupported. `ack --receipt -` and `handoff confirm
 --receipt -` consume at most 4096 raw UTF-8 bytes from private stdin; no receipt
 secret is accepted in argv/URI/environment. Receipt ACK means receipt only, not
 ownership, completed work or permission to act. Operator confirmation is
@@ -84,11 +85,13 @@ explicitly labeled and must match retained original context. No arbitrary
 message/transcript scan manufactures ACK. Ordinary generated Reply-To stays v1.
 
 
-### Unreleased destination-side SSH handoff
+<a id="unreleased-destination-side-ssh-handoff"></a>
+
+### Destination-side SSH handoff
 
 POSIX opt-in `send --host HOST` performs an exact-version preflight and a
 no-effect preparation before one destination-side send. Both ends must contain
-this reviewed candidate: the public 0.3.3 banner alone does not establish new
+the same reviewed 0.4.0 implementation: a 0.3.x banner does not establish new
 capability. Initialize the destination's private ledger explicitly; no command
 auto-installs a handler or initializes missing history. The origin does not
 create a local receipt collector. Reconcile with `handoff status`/`wait` on the
@@ -130,7 +133,9 @@ request-ack reports unsupported. Destination-native observation retains the
 same exact Codex version/platform/home/generation gates as local observation.
 
 
-## Unreleased bounded app-server mechanics — 0.4.0 work
+<a id="unreleased-bounded-app-server-mechanics--040-work"></a>
+
+## Bounded app-server mechanics — 0.4.0
 
 `dist/app-server.js` is an internal opt-in module, not a new public package
 export or a change to ordinary CLI submission. `nativeQueueOnce` requires an
@@ -174,7 +179,9 @@ managed policy before binding refusal; zero queue is the guarantee, not zero
 bootstrap filesystem activity. Observers still open only read-only warm stores.
 
 
-## Unreleased local delivery observation — #72
+<a id="unreleased-local-delivery-observation--72"></a>
+
+## Local delivery observation — #72
 
 A narrower qualified source path combines #71 queue mechanics with a warm
 Codex 0.160.1 or 0.162.1 metadata store on macOS arm64. `--observe-delivery` checks once
@@ -214,8 +221,9 @@ concurrent later waits do not replace the originating send's result. An explicit
 SIGINT-stopped wait returns exit 130 when its matching stopped record is proven,
 retaining independently known submission facts and never retracting/resending.
 
-`handoff wait --correlation-id UUID --wait-for delivered` starts a new read-only
-operation over a retained, positively submitted intent. It preserves the original
+`handoff wait --correlation-id UUID --wait-for delivered` starts a new operation
+over a retained, positively submitted intent. Native observation is read-only;
+the operation persists private wait/terminal records. It preserves the original
 home/thread/writer generation and private, exact version/source/platform
 qualification. Missing qualification is unsupported; today's PATH or matching
 schema never reconstructs it. A new wait has its own cutoff and never rewrites
@@ -247,16 +255,18 @@ on supported POSIX ledgers are separate capabilities, demonstrated by the KR/US
 checks in VALIDATION. Windows private ledger and automated receipt
 collector/bootstrap remain unsupported. Other native versions are not
 inferred from a minor range. The original-sender SSH collector is not provided.
-No package/version publication or completed milestone is implied by these
-source-only checks. Exact evidence and limits are in [VALIDATION](../VALIDATION.md).
+These source checks do not by themselves establish package publication or
+a completed milestone. Exact evidence and limits are in [VALIDATION](../VALIDATION.md).
 
 
 
 
 
-## 0.4.0 candidate scope
+<a id="040-candidate-scope"></a>
 
-The release candidate includes the qualified macOS arm64 observer and explicit
+## 0.4.0 implementation scope
+
+The 0.4.0 implementation includes the qualified macOS arm64 observer and explicit
 `operator_confirmed` receipts on supported POSIX ledgers. Other platforms do not
 inherit that qualification. Linux observation [#130](https://github.com/abruption/session-peer-ts/issues/130),
 Windows observation/private storage [#131](https://github.com/abruption/session-peer-ts/issues/131) and

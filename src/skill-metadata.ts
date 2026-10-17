@@ -11,18 +11,20 @@ const verdict = (compatible: boolean): SkillCheck => ({ status: compatible ? 'co
   code: compatible ? 'skill_contract_compatible' : 'skill_contract_mismatch', verification: 'metadata_only' });
 export const SKILL_METADATA_LIMIT = 65536;
 const keys = ['version', 'runtime-implementation', 'runtime-min-version', 'runtime-full-version', 'runtime-capability-policy'] as const;
-// Preserve each published runtime/profile result. The 0.3.6 release candidate
-// carries forward the exact three profiles reviewed for published 0.3.5.
+// Preserve each published runtime/profile result. The 0.4.0 release candidate
+// preserves the three published profiles and adds one exact reviewed successor.
 // Metadata compatibility does not authenticate content or publish/install a skill.
 // Every later runtime/profile requires separate review; no version ranges.
 const matrix: Record<string, readonly string[]> = {
   '0.3.2': ['0.1.0'], '0.3.3': ['0.1.0', '0.2.0'], '0.3.4': ['0.1.0', '0.2.0'],
-  '0.3.5': ['0.1.0', '0.2.0', '0.2.1'], '0.3.6': ['0.1.0', '0.2.0', '0.2.1']
+  '0.3.5': ['0.1.0', '0.2.0', '0.2.1'], '0.3.6': ['0.1.0', '0.2.0', '0.2.1'],
+  '0.4.0': ['0.1.0', '0.2.0', '0.2.1', '0.3.0']
 };
 const profiles: Record<string, readonly string[]> = {
   '0.1.0': ['0.1.0', 'typescript', '0.1.0', '0.1.0', 'probe-help'],
   '0.2.0': ['0.2.0', 'typescript', '0.1.0', '0.3.2', 'probe-help'],
-  '0.2.1': ['0.2.1', 'typescript', '0.1.0', '0.3.2', 'probe-help']
+  '0.2.1': ['0.2.1', 'typescript', '0.1.0', '0.3.2', 'probe-help'],
+  '0.3.0': ['0.3.0', 'typescript', '0.1.0', '0.4.0', 'probe-help']
 };
 // Deliberately not general YAML: plain ASCII tokens or unescaped quoted strings,
 // followed by an optional comment. YAML tags, aliases, maps and sequences fail.

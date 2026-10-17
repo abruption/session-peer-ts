@@ -4,13 +4,15 @@
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**Documentation and source version: 0.3.6.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.5 and 0.3.6 refuse each other’s SSH preflight.
+**Documentation and source version: 0.4.0.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and 0.4.0 refuse each other’s SSH preflight.
 
-This guide covers version 0.3.6 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
+**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported.
+
+This guide covers version 0.4.0 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
 
 <a id="migration-boundaries-033-candidate"></a>
 
-## Migration boundaries (0.3.6)
+## Migration boundaries (0.4.0)
 
 The [public 0.3.2 record](../VALIDATION.md#public-032--2026-10-07-kst) fixes the
 release source and artifact. SSH preflight checks the exact TS version banner,
@@ -51,15 +53,15 @@ not a commit hash; operators must align reviewed source commits separately.
 See [migration details](../PARITY.md#ordinary-cli-migration-notes--117) and
 [Windows qualification](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst).
 The dated migration comparison above uses the historical public versions.
-The unpublished 0.4.0 source candidate now uses Python 1.1.0 as its development
+The 0.4.0 source uses Python 1.1.0 as its development
 comparison baseline; public npm 0.3.3 retains its historical 1.0.2 marker.
 Python 1.1.0 includes an experimental local Claude receipt-only ACK path.
 That does not establish automated ACK or original-sender SSH collectors in this TS
-candidate. Neither baseline provides an end-to-end consumption guarantee;
+implementation. Neither baseline provides an end-to-end consumption guarantee;
 Side Session remains experimental. Relay/MCP are outside this comparison.
 
 
-[0.4.0 handoff design and unreleased implementation scope](../PARITY.md#handoff-v1-design-candidate--69)
+[0.4.0 handoff design and implementation scope](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## Contents
 
@@ -79,7 +81,7 @@ Side Session remains experimental. Relay/MCP are outside this comparison.
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-This guide describes **version 0.3.6**. The npm package and CLI command are both **`session-peer`**. This
+This guide describes **version 0.4.0**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -87,12 +89,12 @@ project does not provide a Relay server or hosted service.
 Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
-**Version 0.3.6 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).
+**Version 0.4.0 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).
 
 ```sh
-npm view session-peer@0.3.6 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.3.6
-session-peer --version  # session-peer 0.3.6 (typescript)
+npm view session-peer@0.4.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.4.0
+session-peer --version  # session-peer 0.4.0 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -159,7 +161,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, both ends need the same TypeScript client version (0.3.6).
+On SSH, both ends need the same TypeScript client version (0.4.0).
 
 ## Requirements
 
@@ -183,11 +185,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.3.6.tgz
+npm install --global --ignore-scripts ./session-peer-0.4.0.tgz
 session-peer --version
 ```
 
-Expected for version 0.3.6: `session-peer 0.3.6 (typescript)`. Keep the `./...tgz` path to
+Expected for version 0.4.0: `session-peer 0.4.0 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -207,7 +209,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.3.6.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.4.0.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -472,7 +474,7 @@ separate approval. Licensed under [MIT](../LICENSE).
 
 ## Package release
 
-Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current 0.3.6 availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.
+Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current 0.4.0 availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.
 
 Version 0.2.1 was published and verified on 2026-09-29 KST and 0.2.0 on
 2026-09-28 KST; see the [0.2.1 public release record](../VALIDATION.md#public-021--2026-09-29-kst).
@@ -480,7 +482,7 @@ Later releases add their own dated records. Check the exact version and current
 tags before installing:
 
 ```sh
-npm view session-peer@0.3.6 version dist.integrity
+npm view session-peer@0.4.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -532,7 +534,7 @@ and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 installation's owner is positively identified from the running CLI's path:
 an npm global prefix whose own `session-peer` launcher points at this package
 (default, Homebrew, nvm, nvm-windows and fnm prefixes), for example
-`npm install --global --ignore-scripts session-peer@0.3.6`; a pnpm, Yarn or Bun
+`npm install --global --ignore-scripts session-peer@0.4.0`; a pnpm, Yarn or Bun
 global store whose manifest declares `session-peer`; Volta; or the npx cache.
 Project installs (`npm_project`, `pnpm_project`), source checkouts (`source`)
 and anything else (`unknown`) get `updateCommand: null` and a `guidance`
@@ -620,15 +622,17 @@ Optional `sp` shorthand ships with 0.3.0 and later (not 0.2.1 or earlier) and is
 never enabled automatically. See [explicit activation and collisions](shorthand.md).
 
 
-## Unreleased handoff
+<a id="unreleased-handoff"></a>
 
-Unreleased 0.4.0 source adds an opt-in private POSIX handoff ledger. Published 0.3.3 has no handoff commands. Required unsupported evidence refuses before submission; best-effort unsupported evidence never proves ACK. Automated receipt bootstrap, Windows ledger and original-sender SSH collectors remain unsupported. POSIX SSH opt-in uses an explicitly initialized destination ledger: no-effect preparation pins target/home/generation before one send. See [destination-side SSH details](api.md#unreleased-destination-side-ssh-handoff); fake-SSH fixtures are distinct from real network qualification.
+## Private handoff and delivery observation (0.4.0)
+
+0.4.0 includes an opt-in private POSIX handoff ledger. Required unsupported evidence refuses before submission; best-effort unsupported evidence never proves ACK. Automated receipt bootstrap, Windows ledger and original-sender SSH collectors remain unsupported. POSIX SSH opt-in uses an explicitly initialized destination ledger: no-effect preparation pins target/home/generation before one send. See [destination-side SSH details](api.md#unreleased-destination-side-ssh-handoff); fake-SSH fixtures are distinct from real network qualification.
 
 [CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
-The source candidate supports exact Codex 0.160.1/0.162.1 on macOS arm64 with an already-warm metadata store. Retained qualified intents can start an independent read-only `handoff wait`; no native submission is repeated. Each operation owns its cutoff and preserves other pending or terminal waits. Dedicated new 0.162.1 Codex and Claude Code 2.1.296 sessions supplied local evidence; synthetic tests remain separate. Queued/posted, injection, turn completion and plain reply are distinct from receipt ACK. Automated ACK and Windows handoff remain unsupported.
+Native observation supports exact Codex 0.160.1/0.162.1 on macOS arm64 with an already-warm metadata store. Retained qualified intents can start an independent `handoff wait`: native observation is read-only, while the operation persists private wait/terminal records. No native submission is repeated. Each operation owns its cutoff and preserves other pending or terminal waits. Dedicated new 0.162.1 Codex and Claude Code 2.1.296 sessions supplied local evidence; synthetic tests remain separate. Queued/posted, injection, turn completion and plain reply are distinct from receipt ACK. Automated ACK and Windows handoff remain unsupported.
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
 
-Native delivery observation is unsupported on Linux and Windows. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 candidate scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).
+Native delivery observation is unsupported on Linux and Windows. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).

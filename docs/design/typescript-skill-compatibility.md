@@ -2,7 +2,17 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
-## 0.3.6 finite row
+## 0.4.0 finite row
+
+TS source/package 0.4.0 preserves the three reviewed profiles accepted by public 0.3.6 (skill 0.1.0, 0.2.0 and published 0.2.1) and adds exactly `0.3.0 / typescript / min 0.1.0 / full 0.4.0 / probe-help` for runtime 0.4.0 only. Compiled default, explicit `undefined`, explicit 0.4.0 and outer `inspectSkill` use this finite row. All historical runtime/profile verdicts remain unchanged; old runtime identities reject the new profile, and 0.3.7, 0.4.1 and other unreviewed runtime identities remain incompatible. Parser/reader behavior and malformed/unsupported envelopes are unchanged. This is a finite row, not a SemVer range or a skill publication.
+
+### Exact companion 0.3.0 candidate review — 2026-10-18 KST
+
+The complete companion [Draft PR #37 checkpoint `b8ff909ffc5fe1e5b22c66a5c302be8332a76038`](https://github.com/abruption/session-peer-skill/blob/b8ff909ffc5fe1e5b22c66a5c302be8332a76038/docs/candidates/session-peer-ts-0.3.0.md) is retained as `test/fixtures/ts-skill-0.3.0-candidate.md`: **20,162 raw UTF-8 bytes**, SHA-256 `1ae3690cb5d03777bf448cf06496fed27e4a9329deb03741d6d956a3b13c5ed4`. Exact-content review found no normative blocker and accepted this profile direction at design level only. The helper fixtures check exact bytes/hash, fatal UTF-8, compiled default/undefined/explicit 0.4.0 and outer inspection, with historical, future and malformed runtime rejection. The fixture is excluded from the npm package and its instructions are never executed by these checks.
+
+This is candidate-specific design/content review, not approval to install or publish the skill. The retained candidate still names its older feature checkpoint and review-only status; that source text is not evidence that its final guidance has been reviewed against the eventual published runtime. After actual supporting-runtime publication, final skill content and metadata require a fresh exact-head/whole-byte review and separate human publication approval. Runtime publication does not publish or install a skill. Existing four-language guidance retains the published 0.2.1 immutable source/hash below until a separately approved skill release is actually public; only then may a later guidance change adopt its immutable pin.
+
+## 0.3.6 finite row — historical checkpoint
 
 TS source/package 0.3.6 explicitly carries the same three reviewed skill profiles as public 0.3.5: 0.1.0, 0.2.0 and published 0.2.1. The immutable 0.2.1 source/hash below are unchanged. Default/undefined/outer inspection use compiled VERSION=0.3.6; an explicit 0.3.5 helper still returns its historical reviewed verdict. 0.3.7 and other unreviewed identities remain incompatible. Parser/reader behavior and all malformed/unsupported envelopes remain unchanged; this is an explicit finite row, not a SemVer range or a new skill release.
 
@@ -18,7 +28,7 @@ The published bytes are retained as an offline guidance fixture, distinct from t
 
 The skill repository tag, Python skill revision, TS skill revision, and npm runtime version are independent. `runtime-min-version` describes the skill's baseline CLI compatibility floor; `runtime-full-version` describes its documented published CLI feature coverage reference. Neither is a security recommendation, a doctor-acceptance rule, permission to send, or evidence of platform/native compatibility. Optional operations still need their actual resolved TS executable's version/help and prerequisites.
 
-The published 0.3.4 checkpoint at [`afed4a5a8945012faf1b23d52cffecb70470a5b3`](https://github.com/abruption/session-peer-ts/tree/afed4a5a8945012faf1b23d52cffecb70470a5b3) has the following finite runtime/profile matrix. The current 0.3.6 source/package row is documented above; the dated 0.3.5 successor rollout below is historical and does not change that immutable published artifact:
+The published 0.3.4 checkpoint at [`afed4a5a8945012faf1b23d52cffecb70470a5b3`](https://github.com/abruption/session-peer-ts/tree/afed4a5a8945012faf1b23d52cffecb70470a5b3) has the following finite runtime/profile matrix. The 0.4.0 candidate row and historical 0.3.6 row are documented above; the dated 0.3.5 successor rollout below is historical and does not change that immutable published artifact:
 
 | Inspecting runtime | Skill version | Implementation | Minimum | Full | Policy | Verdict |
 |---|---|---|---|---|---|---|

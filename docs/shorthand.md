@@ -1,6 +1,6 @@
 # Optional `sp` shorthand
 
-This reference describes source/package version 0.3.6. Check registry availability before using a version-pinned npm installation; before publication use a reviewed source artifact. The shorthand forwards to the explicitly selected CLI and does not install or upgrade it.
+This reference describes source/package version 0.4.0. Check registry availability before using a version-pinned npm installation; before publication use a reviewed source artifact. The shorthand forwards to the explicitly selected CLI and does not install or upgrade it.
 
 [README](../README.md) · [User guide](guide.md)
 
