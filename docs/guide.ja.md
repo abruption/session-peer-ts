@@ -22,8 +22,10 @@
 - npm、Python、リモートホスト、スキルは別管理です。TS は自己更新やリモート更新を提供しません。通知は既定で無効で、無効化指定が優先します。明示的な `update --check` はレジストリを照会します。公開 TS 0.3.5 は公開スキル `0.2.1` と旧 `0.1.0`・`0.2.0` の厳密なプロファイルを受け入れます。公開 TS 0.3.2・0.3.3・0.3.4 は `0.2.1` を拒否します。導入の節には独立して公開されたスキルのソースを固定しています。
 - Windows の検証は公開 0.3.1、Windows 10 x64、管理者アカウント、PowerShell 5.1、Node 24.16.0 で行いました。オフライン導入、ラッパー・ネイティブロック、運用者の doctor・存在しない宛先の dry-run、ローカル fixture 31 件を検証しました。Node 22 はバージョン表示とネイティブロックの確認のみです。非管理者、他のアーキテクチャ、F6 のランタイム検査、以前の Linux 実験の最新規則は未検証です。0.3.2 の実機 ACK やデプロイ補助ツールの検証ではありません。
 
-[移行の詳細](../PARITY.md#ordinary-cli-migration-notes--117)と [Windows の検証記録](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)を参照してください。Python 1.0.2 のテスト基準は維持します。比較対象の公開 CLI はどちらも一般のネイティブ ACK/wait、エンドツーエンドの重複防止、Side Session を提供しません。Relay/MCP はこの比較の対象外です。
+[移行の詳細](../PARITY.md#ordinary-cli-migration-notes--117)と [Windows の検証記録](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)を参照してください。上の日付付き移行比較は当時の公開版を対象にしています。未公開の 0.4.0 ソース候補は開発時の比較基準を Python 1.1.0 に更新しますが、公開 npm 0.3.3 の従来の 1.0.2 表示は変わりません。Python 1.1.0 には実験的なローカル Claude の受領確認専用 ACK 経路があります。これは TS 候補の自動 ACK、SSH handoff、Windows handoff 対応を意味しません。どちらの基準もエンドツーエンドの消費を保証せず、Side Session は実験段階です。Relay/MCP は比較対象外です。
 
+
+[0.4.0 handoff 設計（共同合意・未実装）](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 目次
 
@@ -202,7 +204,7 @@ npm run test:package
 npm audit
 ```
 
-Python は開発時の互換検証基準のみです（v1.0.2、`47c23713d0a2a3c11ebde6186afd8c43489b8b65`）。実行時依存ではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は三つの OS で Node 22/24 を使います。macOS/Linux は固定した基準に対する全契約・パッケージ検査、Windows x64 はビルド・型検査、ネイティブ Claude inbox、保持/未保持ロック、writer 所有権と提出直前の競合、CLI queue 結果、隔離した模擬 SSH 宛先での実 PowerShell/.cmd フレーミング、パッケージのインストール・ネイティブ読込・削除と audit を実行します。これらは fixture 検査で、Windows では POSIX/Python 参照スイートを実行しません。Windows x64/Node 24 の実機 ACK は別の一回限りの証拠です。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](../VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
+Python は開発時の比較基準です（v1.1.0、`8ca77cf31254c8287a2593fe484bb30a7dba2727`）。実行時依存ではありません。検証範囲は通常の一覧・探索結果であり、送信や handoff 全体の相互運用性を証明するものではありません。POSIX 契約テストには C コンパイラーと lsof も必要です。CI は三つの OS で Node 22/24 を使います。macOS/Linux は固定した基準に対する全契約・パッケージ検査、Windows x64 はビルド・型検査、ネイティブ Claude inbox、保持/未保持ロック、writer 所有権と提出直前の競合、CLI queue 結果、隔離した模擬 SSH 宛先での実 PowerShell/.cmd フレーミング、パッケージのインストール・ネイティブ読込・削除と audit を実行します。これらは fixture 検査で、Windows では POSIX/Python 参照スイートを実行しません。Windows x64/Node 24 の実機 ACK は別の一回限りの証拠です。SQLite・Unix inbox・実 lock の fixture と、専用実 TUI の証拠 [VALIDATION.md](../VALIDATION.md) は別です。fixture 成功は ACK ではありません。パッケージ内容、反復 pack ハッシュ、新規インストール、アンインストールも検証します。ネイティブ依存の通常の install script は実行せず、検証した prebuilt 経路は `--ignore-scripts` を使います。SQLite 読み取り専用接続も WAL 共有メモリー管理に関与し得るため、スナップショットではありません。
 
 [CONTRIBUTING.md](../CONTRIBUTING.md)、[RELEASING.md](../RELEASING.md)、[SECURITY.md](../SECURITY.md) を参照してください。今後のリリースの公開には別途承認が必要で、自動 npm 公開はありません。[MIT](../LICENSE) ライセンスです。
 

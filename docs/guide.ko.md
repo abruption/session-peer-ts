@@ -22,8 +22,10 @@
 - npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 공개 TS 0.3.5는 공개 스킬 `0.2.1`과 기존 `0.1.0`·`0.2.0`의 정확한 프로필을 허용하며, 공개 TS 0.3.2·0.3.3·0.3.4는 `0.2.1`을 거부합니다. 설치 절에는 별도로 공개된 스킬 소스를 고정했습니다.
 - Windows 검증은 공개 0.3.1, Windows 10 x64, 관리자 계정, PowerShell 5.1, Node 24.16.0에서 수행했습니다. 오프라인 설치, 래퍼·네이티브 잠금, 운영자의 doctor·없는 대상 dry-run과 로컬 fixture 31개가 검증됐습니다. Node 22는 버전 표시·네이티브 잠금 확인만 수행했습니다. 비관리자, 다른 아키텍처, F6 런타임 검사, 이전 Linux 실험의 최신 규칙 검증은 남아 있습니다. 이는 0.3.2 실기 ACK나 배포 도우미 검증이 아닙니다.
 
-[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. Python 1.0.2 테스트 기준은 유지합니다. 비교 대상 공개 CLI 모두 일반 네이티브 ACK/wait, 종단 간 중복 방지, Side Session을 제공하지 않습니다. Relay/MCP는 이 비교 범위에서 제외합니다.
+[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 미발행 0.4.0 소스 후보는 개발 비교 기준을 Python 1.1.0으로 갱신하며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 후보의 자동 ACK·SSH handoff·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
 
+
+[0.4.0 handoff 설계(공동 확정·미구현)](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 목차
 
@@ -419,8 +421,9 @@ npm run test:package
 npm audit
 ```
 
-Python은 개발 시 TypeScript 구현과 동작이 일치하는지 대조하는 기준 구현(conformance oracle)입니다(v1.0.2 커밋
-`47c23713d0a2a3c11ebde6186afd8c43489b8b65`)일 뿐 런타임 의존성이 아닙니다. POSIX 계약 테스트에는
+Python은 개발 시 동작을 대조하는 기준 구현입니다(v1.1.0 커밋
+`8ca77cf31254c8287a2593fe484bb30a7dba2727`). 런타임 의존성이 아닙니다.
+검증 범위는 일반 목록·탐색 결과이며, 전체 전송·handoff 상호운용성을 입증하지 않습니다. POSIX 계약 테스트에는
 C 컴파일러와 lsof도 필요합니다. CI(지속적 통합)는 세 OS에서 Node 22/24를 사용합니다.
 macOS/Linux는 고정된 참조 기준으로 전체 계약·패키지 검사를 실행하고, Windows는
 x64에서 빌드·타입 검사, 네이티브 Claude 받은 메시지함·잠금 점유/해제, writer 소유권·재검증

@@ -8,10 +8,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
+import { createHash } from 'node:crypto';
 
 const root = process.env.SESSION_PEER_PYTHON_ROOT ?? fileURLToPath(new URL('../../../', import.meta.url));
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/compatibility-v1.json', import.meta.url), 'utf8'));
+const pin = JSON.parse(readFileSync(new URL('./fixtures/python-reference.pin.json', import.meta.url), 'utf8'));
+for (const [path, digest] of Object.entries(pin.files)) {
+  assert.equal(createHash('sha256').update(readFileSync(join(root, path))).digest('hex'), digest,
+    `Python ${pin.version} reference must match ${pin.commit}: ${path}`);
+}
 assert.deepEqual(fixture, JSON.parse(readFileSync(join(root, 'tests/fixtures/compatibility-v1.json'), 'utf8')), 'vendored contract must match the pinned Python reference');
 const python = process.env.PYTHON ?? 'python3';
 

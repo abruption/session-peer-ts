@@ -13,7 +13,7 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
 **文書・ソースのバージョン: 0.3.6。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.5 と 0.3.6 は互いの SSH 事前確認を拒否します。
 
@@ -111,6 +111,8 @@ session-peer --version
 - [リリース証拠・プラットフォーム検証](VALIDATION.md).
 - [開発・貢献](CONTRIBUTING.md).
 - [リリース手順](RELEASING.md).
+
+- [0.4.0 handoff 設計（共同合意・未実装）](PARITY.md#handoff-v1-design-candidate--69).
 
 ## License
 

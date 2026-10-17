@@ -353,7 +353,7 @@ try {
       result.requestedCodexHome = options.values.get('--codex-home');
     // Without a return host there is nothing to probe from the destination.
     if (command === 'doctor' && options.flags.has('--check-return-route') && !returnTo) results = results?.map(item => item.ok === false ? item : ({ ...item, returnRoute: { status: 'failed', transport: 'ssh', host: null, reason: 'return_host_unavailable' } }));
-    const shape = (item: Record<string, unknown>) => ({ schemaVersion: 1, host: hostname(), command, ok: item.ok !== false, version: VERSION, referenceVersion: '1.0.2', ...item });
+    const shape = (item: Record<string, unknown>) => ({ schemaVersion: 1, host: hostname(), command, ok: item.ok !== false, version: VERSION, referenceVersion: '1.1.0', ...item });
     // Cached advisory notice, computed once per invocation by this client and never
     // in wire mode. JSON: additive `clientUpdate` on a flat (single-result) object
     // only; a repeated --host array keeps its exact element shape. Text: one stderr line.

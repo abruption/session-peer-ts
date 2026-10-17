@@ -1,0 +1,11 @@
+{
+  "repository": "abruption/session-peer",
+  "version": "1.1.0",
+  "commit": "8ca77cf31254c8287a2593fe484bb30a7dba2727",
+  "scope": "ordinary-list-discovery-projection",
+  "files": {
+    "session_peer.py": "d36d83f3d6f59eb20c958aac530ca6d5d988a99f6ceabf2704c7c51db1fe524f",
+    "session_peer_core/cli.py": "024965a5b84e5f09495aac902f91419008a96ea6ea9766149e27fd43b943e8c5",
+    "tests/fixtures/compatibility-v1.json": "afd5a0b37562bb6a81afa9c20628bfae0cfe4d1caf9e88db402005fc42aabcd7"
+  }
+}

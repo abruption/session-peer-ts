@@ -22,8 +22,10 @@
 - npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。公开 TS 0.3.5 接受公开技能 `0.2.1` 及旧 `0.1.0`、`0.2.0` 的精确配置；公开 TS 0.3.2、0.3.3 和 0.3.4 拒绝 `0.2.1`。安装部分固定了独立发布的技能源码。
 - Windows 验证使用公开 0.3.1、Windows 10 x64、管理员账号、PowerShell 5.1 和 Node 24.16.0。验证范围包括离线安装、包装器与原生锁、操作端 doctor 和不存在目标的 dry-run，以及 31 项本地 fixture。Node 22 仅确认版本标识和原生锁。非管理员、其他架构、F6 运行时校验、此前 Linux 实验的最新规则仍未验证。这不是 0.3.2 实机 ACK 或部署辅助工具的验证。
 
-请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。Python 1.0.2 测试基准保持不变。对比的两个公开 CLI 都没有通用原生 ACK/wait、端到端去重或 Side Session 支持。Relay/MCP 不在此次迁移对比范围内。
+请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。上述带日期的迁移比较针对当时的公开版本。未发布的 0.4.0 源码候选将开发比较基准更新为 Python 1.1.0；公开 npm 0.3.3 原有的 1.0.2 标识保持不变。Python 1.1.0 包含实验性的本地 Claude 收件确认专用 ACK 路径。这不表示 TS 候选支持自动 ACK、SSH handoff 或 Windows handoff。两种基准均不保证端到端消费，Side Session 仍属实验功能。Relay/MCP 不在比较范围内。
 
+
+[0.4.0 handoff 设计（联合确认、未实现）](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 目录
 
@@ -201,7 +203,7 @@ npm run test:package
 npm audit
 ```
 
-Python 只用作开发时的兼容性基准（v1.0.2，`47c23713d0a2a3c11ebde6186afd8c43489b8b65`），不是运行时依赖。POSIX 契约测试还需要 C 编译器和 lsof。CI 在三种 OS 上使用 Node 22/24。macOS/Linux 对固定基准执行完整契约与包检查；Windows x64 执行构建、类型检查、原生 Claude inbox、持有/空闲锁、writer 归属与提交前竞争、CLI 队列结果、隔离模拟 SSH 目标的实际 PowerShell/.cmd 帧处理、包安装/原生加载/卸载及 audit。这些属于 fixture 检查；Windows 不运行 POSIX/Python 参考测试套件。Windows x64/Node 24 实机 ACK 是单独的一次性证据。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](../VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
+Python 只用作开发时的比较基准（v1.1.0，`8ca77cf31254c8287a2593fe484bb30a7dba2727`），不是运行时依赖。验证范围为普通列表和发现结果，不代表发送或 handoff 的完整互操作性。POSIX 契约测试还需要 C 编译器和 lsof。CI 在三种 OS 上使用 Node 22/24。macOS/Linux 对固定基准执行完整契约与包检查；Windows x64 执行构建、类型检查、原生 Claude inbox、持有/空闲锁、writer 归属与提交前竞争、CLI 队列结果、隔离模拟 SSH 目标的实际 PowerShell/.cmd 帧处理、包安装/原生加载/卸载及 audit。这些属于 fixture 检查；Windows 不运行 POSIX/Python 参考测试套件。Windows x64/Node 24 实机 ACK 是单独的一次性证据。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](../VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
 
 参见 [CONTRIBUTING.md](../CONTRIBUTING.md)、[RELEASING.md](../RELEASING.md) 和 [SECURITY.md](../SECURITY.md)。后续版本的发布需单独批准，未启用自动 npm 发布。采用 [MIT](../LICENSE) 许可证。
 

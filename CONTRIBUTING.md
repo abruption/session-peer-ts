@@ -30,7 +30,7 @@ This repository follows the PR-based workflow of
 npm ci --ignore-scripts
 npm run build
 node scripts/check-repository.mjs
-SESSION_PEER_PYTHON_ROOT=/path/to/python-v1.0.2 npm test
+SESSION_PEER_PYTHON_ROOT=/path/to/python-v1.1.0 npm test
 npm run test:package
 npm audit
 ```
@@ -44,9 +44,11 @@ separate TypeScript consumer. The package root exposes only pure protocol helper
 The npm TypeScript indicator requires publishing these declarations in a new
 version; it does not retroactively alter `0.1.0-preview.0`.
 
-Python reference commit: `47c23713d0a2a3c11ebde6186afd8c43489b8b65`.
-CI checks it out separately. Python is a development oracle, never a runtime
-fallback. Match Node 22/24, macOS/Linux and the native dependency requirements.
+Python reference: 1.1.0 commit `8ca77cf31254c8287a2593fe484bb30a7dba2727`.
+CI checks it out separately; `test/fixtures/python-reference.pin.json` verifies
+selected source hashes before the ordinary list/discovery comparison tests run.
+This limited comparison does not establish full send/handoff interoperability.
+Python is a development oracle, never a runtime fallback. Match Node 22/24, macOS/Linux and the native dependency requirements.
 Windows CI separately runs `npm run test:windows` and `npm run test:package`
 on x64 Node 22/24. The Windows fixture compiles with the runner's .NET Framework
 C# compiler and uses real locks/processes plus an isolated fake SSH endpoint

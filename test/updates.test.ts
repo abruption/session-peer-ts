@@ -159,7 +159,7 @@ test('update --check reports npm dist-tags, writes a private atomic cache and le
   assert.equal(v.command, 'update'); assert.equal(v.ok, true); assert.equal(v.package, 'session-peer');
   assert.equal(v.current, '0.3.6'); assert.equal(v.latest, '0.3.7'); assert.equal(v.channel, 'latest'); assert.equal(v.distTag, 'latest');
   assert.equal(v.source, 'npm_registry'); assert.equal(v.status, 'update_available'); assert.equal(v.outdated, true); assert.equal(v.updated, false);
-  assert.equal(v.referenceVersion, '1.0.2'); assert.equal(v.cache, 'written');
+  assert.equal(v.referenceVersion, '1.1.0'); assert.equal(v.cache, 'written');
   // The test runs from a checkout; installed-path guidance is covered above and in package-smoke.
   assert.equal(v.managedBy, 'source'); assert.equal(v.updateCommand, null);
   assert.equal(v.skillsManagedBy, 'separate');

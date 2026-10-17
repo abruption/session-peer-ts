@@ -13,7 +13,7 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.0.2 -->
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
 **Documentation and source version: 0.3.6.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.5 and 0.3.6 refuse each other’s SSH preflight.
 
@@ -111,6 +111,8 @@ does not install a skill. Review its pinned-source instructions in the guide.
 - [Release evidence and platform validation](VALIDATION.md).
 - [Development and contributions](CONTRIBUTING.md).
 - [Release process](RELEASING.md).
+
+- [0.4.0 handoff design (jointly agreed, unimplemented)](PARITY.md#handoff-v1-design-candidate--69).
 
 ## License
 
