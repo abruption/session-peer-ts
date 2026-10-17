@@ -1,4 +1,52 @@
-# Validation record — updated 2026-10-14 KST
+# Validation record — updated 2026-10-18 KST
+
+## 0.4.0 preparation checks — 2026-10-18 KST
+
+Preparation source checkpoint `2fc936fa1557fd59ce561446d5239c7030df3d56`
+uses locally integrated dependency tree `d83635d6ed1c668fc33e42754f652c123350ddad`
+and the 0.4.0 version/baseline/finite skill row. These are local preparation
+checkpoints, not publication or a claim that the projected dependency commit is
+merged. The release PR records final merged dependency/source SHAs and its own
+current-head CI/reviews. Later rebases must preserve the verified runtime/test
+tree or rerun affected checks.
+
+On macOS arm64 / Node 24.16.0, `npm test` (including build and type checking)
+passed **389 total / 384 passed / 0 failed / 5 Windows-only skipped**. The oracle
+is the hash-checked isolated published Python 1.1.0 source
+`8ca77cf31254c8287a2593fe484bb30a7dba2727`; ordinary conformance and pure validator
+comparisons do not establish end-to-end runtime parity. Initial preparation
+exposed two stale update-notice regex expectations, corrected before the final
+passing run. `npm run test:package` passed reproducible archive checks, isolated
+install/removal, and bash/zsh shorthand contract/lifecycle checks. Repository
+structure, links/anchors and diff checks passed; npm audit reported zero
+vulnerabilities. The CLI reports `session-peer 0.4.0 (typescript)`.
+
+The finite 0.4.0 metadata row retains the three published profiles and the exact
+proposed skill 0.3.0/min0.1.0/full0.4.0/probe-help tuple. Complete Draft37 fixture
+`b8ff909ffc5fe1e5b22c66a5c302be8332a76038` is 20,162 raw UTF-8 bytes, SHA-256
+`1ae3690cb5d03777bf448cf06496fed27e4a9329deb03741d6d956a3b13c5ed4`.
+Default/undefined/explicit/outer-inspection and historical/future/malformed
+fixtures pass. This is candidate-specific metadata/content review, not a
+published skill, content authentication, execution, final whole-byte freeze or
+installation-pin adoption. Public skill 0.2.1 source/hash remain unchanged.
+
+Fresh regression evidence covers prepared recipient continuity, encrypted
+journal/key failures, overlapping wait operations, actual queue-process build
+mismatch, executable replacement, expired probes and SQLite replacement across
+the durable guard/final owner check. These use synthetic private homes, owned
+Node children, scripted/native-shaped protocol peers and actual Darwin lsof
+against those owned fixture descriptors. No new actual Codex/model/user-session
+input, remote-host delivery, automatic receipt or ACK qualification was performed.
+Native observation remains limited to the earlier recorded exact macOS profiles;
+Linux/Windows observation and automated receipt bootstrap remain #130–#132.
+
+Read-only registry checks on this preparation date found latest=0.3.6,
+preview=0.1.0-preview.1, 0.4.0 absent, and previous stable integrity matching the
+new release baseline. No authenticated pending-stage/publisher/MFA audit,
+publication dispatch, environment approval, final npm approval, tag, release or
+fleet/global installation was performed. Historical exceptions do not carry
+forward. Local packaging hashes before this record/final source are not the
+final release artifact; the PR records exact committed-source artifact checks.
 
 ## Public 0.3.6 — 2026-10-14 KST
 
