@@ -49,13 +49,13 @@ test('release gate rejects moved main, absent/failed/pending CI and missing envi
   assert.throws(() => validateGitHubGate(sha, main, runs, { name: 'npm', protection_rules: [{ type: 'required_reviewers', reviewers: [] }] }));
 });
 
-test('0.4.0 stable staging requires verified 0.3.6 and unchanged preview/tag baselines', () => {
+test('0.5.0 stable staging requires verified 0.4.0 and unchanged preview/tag baselines', () => {
   const previewDist = { integrity: 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==',
     attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.1.0-preview.1' } };
-  const stableDist = { integrity: 'sha512-8uR9/x9q2AWp/zfJox0CMgm919M7kxpAjR2vGd/ntuS2AAwQh4ohbDmAtyxLyLoEE8IPsZVEbPKHCChvIJBuoQ==',
-    attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.3.6' } };
-  const current = { name: pkg.name, versions: { '0.3.6': { dist: stableDist }, '0.1.0-preview.1': { dist: previewDist } },
-    'dist-tags': { latest: '0.3.6', preview: '0.1.0-preview.1' } };
+  const stableDist = { integrity: 'sha512-mMNJ118atoflhpFTkf2+DtO7MRf7FQnPK3lKWbq/vd8Xvb5DsjUtAgydIBOcd3Xj9BCYGqM50aFhzUr4dDGHSw==',
+    attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.4.0' } };
+  const current = { name: pkg.name, versions: { '0.4.0': { dist: stableDist }, '0.1.0-preview.1': { dist: previewDist } },
+    'dist-tags': { latest: '0.4.0', preview: '0.1.0-preview.1' } };
   validateRegistryState(pkg, 'stable-stage', current);
   assert.throws(() => validateRegistryState(pkg, 'stable-stage', null));
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', current));
@@ -71,10 +71,10 @@ test('0.4.0 stable staging requires verified 0.3.6 and unchanged preview/tag bas
     versions: { ...current.versions, '0.1.0-preview.1': { dist: { ...previewDist, attestations: undefined } } } }));
   const preview = { ...pkg, version: '0.1.0-preview.2', publishConfig: { ...pkg.publishConfig, tag: 'preview' } };
   assert.throws(() => validateRegistryState(preview, 'trusted-stage', { ...current, 'dist-tags': { latest: '0.1.0-preview.0' } }), /latest_points_to_prerelease/);
-  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.3.6': { dist: { ...stableDist, integrity: 'tampered' } } } }), /verified_stable_changed/);
-  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.3.6': { dist: { ...stableDist, attestations: undefined } } } }));
+  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.4.0': { dist: { ...stableDist, integrity: 'tampered' } } } }), /verified_stable_changed/);
+  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.4.0': { dist: { ...stableDist, attestations: undefined } } } }));
   validateRegistryState(preview, 'trusted-stage', { ...current,
-    'dist-tags': { latest: '0.3.6', preview: '0.1.0-preview.1' } });
+    'dist-tags': { latest: '0.4.0', preview: '0.1.0-preview.1' } });
 });
 
 test('release artifact binds version, allowlist, commit, SHA-256 and registry integrity', () => {

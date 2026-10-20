@@ -2,9 +2,10 @@ import {test,type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
-import {createRequire} from 'node:module';
+import {createRequire,syncBuiltinESMExports} from 'node:module';
+import fs from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,writeFileSync,watch} from 'node:fs';
+import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,statSync,writeFileSync,watch} from 'node:fs';
 import {join,delimiter,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateHandoff} from '../dist/handoff.js';
@@ -17,9 +18,13 @@ CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_or
 CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rollout_byte_offset INTEGER NOT NULL,next_rollout_ordinal INTEGER NOT NULL);`;
 async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-hd-'))),home=join(root,'home'),bin=join(root,'bin');chmodSync(root,0o700);mkdirSync(home,{mode:0o700});mkdirSync(bin,{mode:0o700});mkdirSync(join(home,'thread-writer-locks'),{mode:0o700});
- t.after(()=>rmSync(root,{recursive:true,force:true}));
+ let history:DatabaseSync|undefined;
+ t.after(()=>{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}});
  const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT)');state.prepare('INSERT INTO threads VALUES(?)').run(thread);state.close();
- if(warm){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));db.exec(schema);db.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread,'turn-fixture','completed');db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread,100,100);db.close();}
+ // Model a live warm WAL store: keep the owner connection open so other
+ // fixture connections cannot remove/recreate WAL and SHM between probes.
+ // DELETE-mode writes can expose a rollback journal that the observer refuses.
+ if(warm){const db=history=new DatabaseSync(join(home,'thread_history_1.sqlite'));db.exec('PRAGMA journal_mode=WAL');db.exec(schema);db.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread,'turn-fixture','completed');db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread,100,100);}
  const lock=join(home,'thread-writer-locks',thread+'.lock'),locks=createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt');
  const held=spawn(process.execPath,['-e',"const f=require('fs').openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(f,'exnb');console.log('ready');setInterval(()=>{},1000)",lock,locks]);held.stderr.resume();await once(held.stdout,'data');t.after(async()=>{if(held.exitCode===null&&held.signalCode===null){held.kill('SIGKILL');await once(held,'close');}});
  // The real tools are native executables. Do not spend the bounded owner
@@ -51,13 +56,50 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
 }});`,{mode:0o700});
  const env={...process.env,HOME:root,USERPROFILE:root,CODEX_HOME:home,SESSION_PEER_CODEX_HOMES:'[]',CLAUDE_CONFIG_DIR:join(root,'.claude'),SESSION_PEER_TAILSCALE:'off',SESSION_PEER_UPDATE_NOTICE:'',CODEX_THREAD_ID:'',CODEX_SESSION_ID:'',PATH:bin+delimiter+(process.env.PATH??''),SESSION_PEER_HANDOFF_HOME:join(root,'state','handoff')};
  const args=['send','--to','codex:'+thread,'--codex-home',home,'--codex-bin',codex,'--message','fixture request','--no-from','--no-reply-to'];
- function start(options:string[]){const child=spawn(process.execPath,[cli,...options,'--json'],{env});let stdout='',stderr='';child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);child.stdin.end();const timer=setTimeout(()=>child.kill('SIGKILL'),15000);const closed=once(child,'close');const result=closed.then(([code,signal])=>{clearTimeout(timer);assert.equal(signal,null,stderr);return{code,value:JSON.parse(stdout),stdout,stderr};});void result.catch(()=>{});t.after(async()=>{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await closed;}});return{child,result};}
+ let activeSend:undefined|{child:ReturnType<typeof spawn>;closed:()=>boolean;output:()=>{stdout:string;stderr:string}};
+ function start(options:string[]){const child=spawn(process.execPath,[cli,...options,'--json'],{env});let stdout='',stderr='',closedOutput=false;child.once('close',()=>{closedOutput=true;});child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);if(options[0]==='send')activeSend={child,closed:()=>closedOutput,output:()=>({stdout,stderr})};child.stdin.end();const timer=setTimeout(()=>child.kill('SIGKILL'),15000);const closed=once(child,'close');const result=closed.then(([code,signal])=>{clearTimeout(timer);assert.equal(signal,null,stderr);return{code,value:JSON.parse(stdout),stdout,stderr};});void result.catch(()=>{});t.after(async()=>{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await closed;}});return{child,result};}
  async function invoke(options:string[]){return start(options).result;}
  assert.equal((await invoke(['handoff','init'])).code,0);
  const calls=()=>readFileSync(log,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
  const nativeCalls=()=>readFileSync(nativeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
- async function queued(){if(calls().length)return;await new Promise<void>((ok,fail)=>{const watcher=watch(root,()=>{if(calls().length){clearTimeout(timer);watcher.close();ok();}});const timer=setTimeout(()=>{watcher.close();fail(new Error('queue fixture not called'));},10000);if(calls().length){clearTimeout(timer);watcher.close();ok();}});}
- async function initialized(){if(existsSync(initializeReady))return;await new Promise<void>((ok,fail)=>{const watcher=watch(root,()=>{if(existsSync(initializeReady)){clearTimeout(timer);watcher.close();ok();}});const timer=setTimeout(()=>{watcher.close();fail(new Error('initialize fixture not reached'));},10000);if(existsSync(initializeReady)){clearTimeout(timer);watcher.close();ok();}});}
+ // Readiness is the persisted queue evidence, not an fs.watch notification.
+ // Polling also detects a CLI that refused/exited before reaching the queue.
+ // Read/parse errors remain failures; neither they nor an exit mean readiness.
+ async function queued(){
+  if(calls().length)return;
+  await new Promise<void>((ok,fail)=>{
+   let settled=false;
+   const finish=(error?:unknown)=>{if(settled)return;settled=true;clearTimeout(timer);clearInterval(poll);if(error)fail(error);else ok();};
+   const diagnostic=()=>JSON.stringify({queueCalls:calls(),nativeCalls:nativeCalls(),send:activeSend?{
+    exitCode:activeSend.child.exitCode,signalCode:activeSend.child.signalCode,...activeSend.output()
+   }:null});
+   const check=()=>{try{
+    if(calls().length){finish();return;}
+    if(activeSend?.closed())finish(new Error('queue fixture not called: send exited before queue evidence; '+diagnostic()));
+   }catch(error){finish(error);}};
+   const poll=setInterval(check,25);
+   const timer=setTimeout(()=>{check();if(!settled){try{finish(new Error('queue fixture not called before 10000ms deadline; '+diagnostic()));}catch(error){finish(error);}}},10000);
+   t.after(()=>finish(new Error('fixture ended before queue evidence')));check();
+  });
+ }
+ // Initialization readiness also comes from persisted fixture evidence.
+ async function initialized(){
+  if(existsSync(initializeReady))return;
+  await new Promise<void>((ok,fail)=>{
+   let settled=false;
+   const finish=(error?:unknown)=>{if(settled)return;settled=true;clearTimeout(timer);clearInterval(poll);if(error)fail(error);else ok();};
+   const diagnostic=()=>JSON.stringify({initializeReady:existsSync(initializeReady),nativeCalls:nativeCalls(),send:activeSend?{
+    exitCode:activeSend.child.exitCode,signalCode:activeSend.child.signalCode,...activeSend.output()
+   }:null});
+   const check=()=>{try{
+    if(existsSync(initializeReady)){finish();return;}
+    if(activeSend?.closed())finish(new Error('initialize fixture not reached: send exited before initialize evidence; '+diagnostic()));
+   }catch(error){finish(error);}};
+   const poll=setInterval(check,25);
+   const timer=setTimeout(()=>{check();if(!settled){try{finish(new Error('initialize fixture not reached before 10000ms deadline; '+diagnostic()));}catch(error){finish(error);}}},10000);
+   t.after(()=>finish(new Error('fixture ended before initialize evidence')));check();
+  });
+ }
  const ledgerFile=join(root,'state','handoff','ledger.json');
  const ledger=()=>JSON.parse(readFileSync(ledgerFile,'utf8'));
  // Watch the directory because the ledger publishes by rename. Reading errors
@@ -76,6 +118,18 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
  function inject(clientId:string){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));try{db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(thread,'turn-fixture','after-submit-item',1,JSON.stringify({type:'userMessage',id:'after-submit-item',clientId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');}finally{db.close();}}
  return{root,home,codex,env,calls,nativeCalls,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
+test('warm history fixture keeps WAL sidecar identities stable across synthetic injection',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t,'none'),database=join(f.home,'thread_history_1.sqlite');
+ const mode=new DatabaseSync(database,{readOnly:true});
+ try{assert.equal((mode.prepare('PRAGMA journal_mode').get() as {journal_mode?:unknown}|undefined)?.journal_mode,'wal');}finally{mode.close();}
+ // Only the fixture's retained owner connection may keep sidecars alive here.
+ const sidecars=()=>['','-wal','-shm'].map(suffix=>{const value=statSync(database+suffix,{bigint:true});return{suffix,dev:value.dev,ino:value.ino};});
+ const before=sidecars();assert.equal(existsSync(database+'-journal'),false);
+ const id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';f.inject(id);
+ assert.equal(existsSync(database+'-journal'),false);assert.deepEqual(sidecars(),before);
+ const read=new DatabaseSync(database,{readOnly:true});
+ try{assert.equal((read.prepare(`SELECT count(*) AS total FROM thread_items WHERE json_extract(item_json,'$.clientId')=?`).get(id) as {total?:unknown}|undefined)?.total,1);}finally{read.close();}
+});
 test('scripted fixture paths, modes and versions remain literal data', {skip:process.platform==='win32'}, async t=>{
  const payload='\');throw new Error("fixture data executed");//\n\u2028\u2029';
  const f=await fixture(t,payload,payload);
@@ -84,6 +138,48 @@ test('scripted fixture paths, modes and versions remain literal data', {skip:pro
  const queue=spawnSync(process.execPath,[f.codex,'queue','add',thread],{env:f.env,encoding:'utf8'});
  assert.equal(queue.status,0,queue.stderr);assert.deepEqual(f.calls(),[{method:'legacy'}]);
  assert.equal(queue.stdout,'Queued message legacy-1 for thread '+thread+'.\n');
+});
+test('queue readiness observes persisted fixture evidence when filesystem notifications are suppressed',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t,'none');
+ const realWatch=fs.watch;
+ t.mock.method(fs,'watch',((path:any)=>realWatch(path,()=>{})) as typeof fs.watch);syncBuiltinESMExports();
+ t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const ready=f.queued();
+ const queued=spawnSync(process.execPath,[f.codex,'queue','add',thread],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.ifError(queued.error);assert.equal(queued.signal,null);assert.equal(queued.status,0,queued.stderr);
+ await ready;
+ assert.deepEqual(f.calls(),[{method:'legacy'}]);
+});
+test('initialize readiness observes persisted fixture evidence when filesystem notifications are suppressed',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t,'none');
+ const realWatch=fs.watch;
+ t.mock.method(fs,'watch',((path:any)=>realWatch(path,()=>{})) as typeof fs.watch);syncBuiltinESMExports();
+ t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const ready=f.initialized();
+ writeFileSync(join(f.root,'initialize-ready'),'ready');
+ await ready;
+ assert.equal(readFileSync(join(f.root,'initialize-ready'),'utf8'),'ready');
+});
+test('initialize readiness reports a send that exits before initialization with its current outcome',qualified,async t=>{
+ const f=await fixture(t,'concurrent-stop','0.163.0');
+ const active=f.start([...f.args,'--wait-for','delivered']);
+ await assert.rejects(f.initialized(),error=>{
+  assert.ok(error instanceof Error);assert.match(error.message,/send exited before initialize evidence/);
+  assert.match(error.message,/evidence_unsupported/);assert.match(error.message,/exitCode.:1/);return true;
+ });
+ const result=await active.result;assert.equal(result.code,1,result.stdout);assert.equal(result.value.submitted,false);
+ assert.equal(existsSync(join(f.root,'initialize-ready')),false);assert.deepEqual(f.calls(),[]);
+ assert.deepEqual(f.nativeCalls().filter((row:{command:string})=>row.command==='app-server'),[]);
+});
+test('queue readiness reports a send that exits before submission with its current outcome',qualified,async t=>{
+ const f=await fixture(t,'none','0.163.0');
+ const active=f.start([...f.args,'--wait-for','delivered']);
+ await assert.rejects(f.queued(),error=>{
+  assert.ok(error instanceof Error);assert.match(error.message,/send exited before queue evidence/);
+  assert.match(error.message,/evidence_unsupported/);assert.match(error.message,/exitCode.:1/);return true;
+ });
+ const result=await active.result;assert.equal(result.code,1,result.stdout);assert.equal(result.value.submitted,false);
+ assert.deepEqual(f.calls(),[]);
 });
 test('qualified local opt-in waits for exact client ID injection, not completed turn/ACK',qualified,async t=>{
  const f=await fixture(t);const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,0,r.stdout);assert.equal(r.value.status,'queued');assert.equal(r.value.submitted,true);assert.equal(r.value.consumptionConfirmed,false);assert.equal(r.value.queueId,'queue-fixture');const h=validateHandoff(r.value.handoff);assert.equal(h.state,'delivered');assert.equal(h.wait.status,'satisfied');assert.equal(h.observation.clientUserMessageId,h.correlationId);assert.equal(h.observation.turn?.status,'completed');assert.equal(h.ack.status,'not_requested');assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');assert.equal(f.calls()[0].clientId,h.correlationId);assert.equal(r.stdout.includes('PRIVATE_BODY_SENTINEL'),false);

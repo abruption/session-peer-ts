@@ -1,5 +1,28 @@
 # Validation record — updated 2026-10-20 KST
 
+## 0.5.0 preparation scope — 2026-10-20 KST
+
+This release preparation includes the merged platform groundwork from #153,
+#156 and #154, package/banner/current examples for 0.5.0, one finite doctor
+row preserving the four existing profiles, and the public 0.4.0 release
+baseline. It does not activate the Linux candidate, Windows tree cleanup,
+Windows handoff storage/native observation or Windows-client jump.
+
+The proposed #155 deployment harness and its new qualification claims are
+excluded. Its implementation and review evidence remain in that Draft PR
+for minimum-contract redesign under #23; they are not release evidence.
+The existing remote-deployment ADR stays at the main-branch version.
+
+Independent test-only fixes to persisted queue/initialize readiness and
+warm WAL fixture lifetime are retained. They change neither runtime guards
+nor observation deadlines or assertions; the original CI timeout causes
+remain unproven. Historical platform and mutation runs below keep their
+recorded source checkpoints and do not qualify new 0.5.0 support cells.
+
+Final source, current-head CI and rebuilt artifact results belong to the
+release-preparation PR. Preparation performs no staging, publication,
+new native/model/ACK experiment or global installation.
+
 
 ## Windows client jump ProxyCommand probe — #20, 2026-10-20 KST
 

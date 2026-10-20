@@ -2,6 +2,27 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## 0.5.0 finite row — release preparation
+
+The 0.5.0 source candidate explicitly carries forward the same four exact skill
+profiles as public 0.4.0: 0.1.0, 0.2.0, 0.2.1 and 0.3.0. The 0.3.0 profile
+retains its `runtime-min-version: 0.1.0`, `runtime-full-version: 0.4.0`,
+`runtime-implementation: typescript` and `runtime-capability-policy: probe-help`;
+there is no new skill metadata or range-based acceptance. Compiled/default,
+explicit `undefined`, explicit 0.5.0 and outer `inspectSkill` use that finite row.
+Historical rows, parser/reader behavior, mismatch/unknown envelopes and the
+immutable complete-file review fixtures stay unchanged. Unreviewed 0.5.1 and
+0.6.0 identities remain incompatible, while malformed runtime identities remain
+unknown with no verification field. Compatibility remains `metadata_only`, not
+content authentication, feature qualification, send permission or ACK evidence.
+
+This source change does not establish npm publication or install/update a skill.
+The four-language guidance continues to use the published skill 0.2.1 source
+`0f494cabd05901c03161dc91792dcf89f8e96631` and SHA-256
+`8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3`.
+Acceptance of the existing 0.3.0 metadata profile does not adopt a new installation
+pin. Linux/Windows native observation and automatic ACK support are unaffected.
+
 ## Public 0.4.0 guard verification — 2026-10-18 KST
 
 The public 0.4.0 tarball from source

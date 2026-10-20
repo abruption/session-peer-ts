@@ -9,6 +9,45 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.5.0 stable release procedure — 2026-10-20 KST
+
+The 0.5.0 source includes platform-qualification groundwork from #153, #156
+and #154. The #155 remote-maintenance harness is deferred for minimum-contract
+redesign under #158 and is excluded from this release. Linux native observation, Windows
+handoff storage/observation, Windows-client jump and automated receipt ACK are
+not enabled. #130/#131/#20/#23 retain their remaining acceptance gates.
+Experiments #82/#142 are excluded. Runtime publication does not publish, install
+or repin the companion skill; the finite doctor row preserves the four exact
+0.4.0 profiles.
+
+Read-only preparation baseline: npm latest=0.4.0,
+preview=0.1.0-preview.1. The verified previous stable integrity is
+`sha512-mMNJ118atoflhpFTkf2+DtO7MRf7FQnPK3lKWbq/vd8Xvb5DsjUtAgydIBOcd3Xj9BCYGqM50aFhzUr4dDGHSw==`.
+Previous attestation metadata:
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.4.0`.
+Recheck registry state and target-version absence before staging.
+
+1. Merge reviewed preparation and require exact merged-main release-gate,
+   Windows Node 22/24 and CodeQL success, plus current-source review.
+2. Perform fresh authenticated owner/pending-stage/Trusted-Publisher/package-MFA
+   and GitHub npm environment checks. Historical settings-read exceptions and
+   approvals do not carry forward; unread gates require a current user exception.
+3. Validate reproducible exact-source packing, isolated installation/removal,
+   compiled/default metadata acceptance and every packaged Markdown file under
+   the documentation gate below. Both SSH endpoints must use exactly 0.5.0.
+4. Obtain separate approval naming the merged 40-character main SHA,
+   `session-peer@0.5.0`, `stable-stage` and eventual latest promotion to 0.5.0.
+5. Dispatch only the approved source/version/mode. Review retained Actions bytes
+   before protected-environment approval, verify staged bytes/provenance, then
+   obtain separate final npm 2FA approval. Never repeat an uncertain upload.
+6. Verify public integrity/signatures/provenance and isolated install/removal,
+   preserve preview and record publication source. Create tags/GitHub release
+   only with separate authorization. No fleet/global installation is implied.
+
+This procedure records the required gates; preparation does not claim current
+settings were audited or approvals completed. The historical 0.4.0 procedure
+below must not be replayed for 0.5.0.
+
 ## Public release checkpoint — 0.4.0 (2026-10-18 KST)
 
 `session-peer@0.4.0` is public with latest=0.4.0 and unchanged
