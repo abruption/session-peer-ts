@@ -70,9 +70,10 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
     '-W', "'[%h]:%p'", '--', jump.host].join(' ');
 }
 // Win32-OpenSSH has no shell step (PowerShell/openssh-portable source; the spawn
-// path reads the same from v8.1.0.0 through latestw_all d0c65f2, which is source
-// provenance, not a test of those versions): readconf.c keeps the raw value, and
-// since 8.7 argv_split()s it first and rejects unbalanced quotes; sshconnect.c
+// path reads the same in the four inspected revisions v8.1.0.0, v9.5.0.0,
+// v10.0.0.0 and latestw_all d0c65f2, which is source provenance, not a test of
+// them): readconf.c keeps the raw value and, except in v8.1.0.0, argv_split()s
+// it first and rejects unbalanced quotes; sshconnect.c
 // percent-expands "exec %s", skips "exec " and posix_spawnp()s the whole string
 // as argv[0] with no arguments; misc.c build_commandline_string() passes a string
 // that starts with '"' unchanged to CreateProcessW(NULL, ...) (w32fd.c, which
@@ -84,9 +85,9 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
 // backslashes, so no MSVCRT escaping is needed. "[%h]:%p" is double-quoted where
 // POSIX single-quotes it; %h from a configured HostName stays the same trusted
 // ssh_config boundary. SSH_TEST_ENVIRONMENT makes Win32-OpenSSH rewrite the
-// path (bash_to_win_path) when atoi() of it is nonzero; parseInt() gives the
-// same zero/nonzero result within the representable int range and refuses
-// out-of-range or non-ASCII-whitespace forms (no full equivalence is claimed).
+// path (bash_to_win_path): upstream checks atoi(value). This builder refuses
+// when Number.parseInt(value, 10) is truthy; that is not a general emulation of
+// C atoi, and non-ASCII, locale and overflow behavior is unqualified.
 // An isolated no-connection probe with the real Win32-OpenSSH 9.5p1 ssh.exe and
 // an argv-dump hop matched this exactly (VALIDATION). Not enabled: a connected
 // hop and owned-process-tree cleanup of the hop grandchild are unqualified (#20,

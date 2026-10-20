@@ -1,7 +1,8 @@
 // #20: Win32-OpenSSH client ProxyCommand construction for --ssh-jump. Pure
 // models of the Win32 path, ported from PowerShell/openssh-portable latestw_all
-// d0c65f24b6eec32b7cae4ed08eca81e8c1df791c (identical in v8.1.0.0, v9.5.0.0 and
-// v10.0.0.0), libuv quote_cmd_arg and the UCRT argv parser. Source evidence, not
+// d0c65f24b6eec32b7cae4ed08eca81e8c1df791c (same inspected spawn path in v8.1.0.0,
+// v9.5.0.0 and v10.0.0.0; quote precheck absent in 8.1), libuv quote_cmd_arg and
+// the UCRT argv parser. Source evidence, not
 // an actual Windows client run: the CLI still refuses a Windows client.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -174,6 +175,9 @@ test('ssh.exe paths that cannot be represented safely are refused before any eff
   assert.throws(() => jumpOptions('/usr/bin/ssh', jump, 'win32'), /ssh_jump_unsupported_ssh_path/);
   for (const value of ['1', ' 1', '-1', '7x']) assert.throws(() => windowsProxyCommand('C:\\a\\ssh.exe', jump, { SSH_TEST_ENVIRONMENT: value }), /ssh_jump_unsupported_environment/);
   for (const value of ['0', '', 'yes', '0x1']) assert.doesNotThrow(() => windowsProxyCommand('C:\\a\\ssh.exe', jump, { SSH_TEST_ENVIRONMENT: value }));
+  // JavaScript parseInt behavior only, not a claim about C atoi: NBSP is skipped.
+  assert.throws(() => windowsProxyCommand('C:\\a\\ssh.exe', jump, { SSH_TEST_ENVIRONMENT: '\u00a01' }), /ssh_jump_unsupported_environment/);
+  assert.doesNotThrow(() => windowsProxyCommand('C:\\a\\ssh.exe', jump, { SSH_TEST_ENVIRONMENT: '\u00a00' }));
   // Jump fields are validated by sshJump first; nothing reaches the builder with %, quotes or spaces.
   for (const value of ['hop@j%h', 'h%r@jump', 'hop@"j"', 'hop@j k', "hop@j'k", 'hop@j\\k', 'hop@j^k', 'hop@j&k']) assert.throws(() => sshJump(value), /invalid_ssh_jump/);
 });
