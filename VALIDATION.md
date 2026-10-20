@@ -1,5 +1,28 @@
-# Validation record — updated 2026-10-18 KST
+# Validation record — updated 2026-10-20 KST
 
+
+## #131 Windows owned process-tree cleanup and storage guard — source, 2026-10-20 KST
+
+Source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b`; not a
+release. On win32, `run()` now terminates the direct child and then descendants
+attributed by parent PID and creation time through handles held by a single
+PowerShell helper (no bare-PID kill, no `taskkill`, no shell, no caller text in
+argv), carving a cleanup reserve (`min(6000, timeout/2)` ms) out of the caller's
+total; stopped Windows results report `cleanup: confirmed|unconfirmed`. A
+read-only owner-SID/protected-DACL/reparse guard and a protected private-leaf
+creator were added for Windows storage; the handoff ledger itself still refuses
+Windows with `handoff_storage_unsupported`. POSIX behaviour is unchanged.
+
+Local macOS arm64 / Node 24.16.0: build and test types passed; `npm test` with
+the pinned Python 1.1.0 reference `8ca77cf31254c8287a2593fe484bb30a7dba2727`:
+409 total / 401 passed / 0 failed / 8 skipped (the three new skips are
+Windows-native process-tree/storage cases). A first run without the Python
+reference root failed six conformance tests on the missing oracle file only.
+`npm run test:package`, repository checks and `git diff --check` passed.
+Windows behaviour was exercised only through emulated platform/helper fixtures
+on macOS; every native Windows case is unrun locally and awaits the Windows CI
+job. No live session, message, SSH destination, ACL or service was touched;
+Windows observation, ledger storage and #20 jump support remain unqualified.
 
 ## Public 0.4.0 — 2026-10-18 KST
 
