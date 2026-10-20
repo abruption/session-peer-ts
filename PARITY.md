@@ -814,7 +814,7 @@ or agent session was used.
 | Validation before dispatch | Host/option checks run inside the loop, so an earlier host may already be contacted. argparse syntax errors print usage to stderr (exit 2) without JSON; other pre-dispatch errors are attributed to each `--host` | Every host, `--ssh-opt`, message and remote option is validated before any `ssh` process starts (including `ssh -G`). TS always answers in JSON. Every `--host VALUE`/`--host=VALUE` before `--` is collected before any other check, so with two or more of them every pre-dispatch refusal, including syntax errors such as an unknown option or a missing value, is an array with one `submitted:false` element per host; with fewer it is one flat object |
 | Duplicate destinations | Not checked | `duplicate_ssh_host` for a repeated destination string (user, case-insensitive host name, canonical IPv6). Syntactic only: aliases or addresses of the same physical host are not detected |
 | Attempts | One attempt per host | One preflight and at most one request per destination. Refused/unknown hosts are reported in place; later hosts still get their single attempt. No failover, resend or retry after `unknown` |
-| Timeouts | Python subprocess timeouts on the direct child | POSIX: each `ssh` (and every other external command) starts detached, in a new session and process group without a controlling terminal, registered as soon as its PID exists; cleanup covers that group only (a descendant that calls `setsid()` leaves it and is out of scope; no PID scanning); a timeout, an output overflow or SIGINT/SIGTERM/SIGHUP to the CLI kills the whole group, including a jump `ProxyCommand` that holds the pipes, and the call completes after the exit plus a 100 ms grace instead of waiting for the pipes. Windows: only the direct child is killed, descendants may linger, and the call still returns at the deadline. Preflight timeout stays a refusal and request timeout stays `unknown` without retry ([#87](https://github.com/abruption/session-peer-ts/issues/87)) |
+| Timeouts | Python subprocess timeouts on the direct child | POSIX: each `ssh` (and every other external command) starts detached, in a new session and process group without a controlling terminal, registered as soon as its PID exists; cleanup covers that group only (a descendant that calls `setsid()` leaves it and is out of scope; no PID scanning); a timeout, an output overflow or SIGINT/SIGTERM/SIGHUP to the CLI kills the whole group, including a jump `ProxyCommand` that holds the pipes, and the call completes after the exit plus a 100 ms grace instead of waiting for the pipes. Windows: only the direct child is killed, descendants may linger, and the call still returns at the deadline. A candidate owned-tree cleanup backend is prepared but deliberately not selected: Windows process creation/exit times are wall-clock instants, so descendant ownership cannot be proven without a Job-object boundary ([#131](https://github.com/abruption/session-peer-ts/issues/131)). Preflight timeout stays a refusal and request timeout stays `unknown` without retry ([#87](https://github.com/abruption/session-peer-ts/issues/87)) |
 | `--ssh-opt` | Arbitrary ssh arguments minus a substring blocklist (`proxycommand`, `localcommand`, `permitlocalcommand`) | Allowlist only: `-p PORT`, `-l USER`, `-i IDENTITY_FILE`, `-o Port=`/`User=`/`IdentityFile=`/`IdentitiesOnly=yes\|no`, `-4`, `-6`, as separate or attached tokens. Anything else is `unsupported_ssh_option`; a bad, duplicate or dash-leading value is `invalid_ssh_option`. Identity paths refuse `%` and `$` (OpenSSH token/environment expansion). Options are re-emitted canonically after the fixed `BatchMode=yes`, `StrictHostKeyChecking=yes` and `ConnectTimeout=10`, which OpenSSH therefore keeps |
 | Jump hosts | `ProxyJump`/`-J` allowed through `--ssh-opt`; the hop gets no command-line `BatchMode`/`StrictHostKeyChecking` | **Done for POSIX clients:** typed `--ssh-jump USER@HOST[:PORT]` (one hop, explicit user, shell- and %-inert characters only). The CLI builds a fixed `ProxyCommand`: the shell-quoted, %-escaped `ssh` path with `BatchMode=yes`, `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`, `ConnectTimeout=10`, `ConnectionAttempts=1`, `ProxyCommand=none`, `ProxyJump=none`, `ControlPath=none`, `ForwardAgent=no`, `ClearAllForwardings=yes`, `PermitLocalCommand=no`, `-W '[%h]:%p'`. It is placed with the fixed options, together with outer `ControlMaster=no`, `ControlPath=none` and `ProxyUseFdpass=no`, so it overrides a `ProxyJump`/`ProxyCommand` and any control master in ssh_config for the target (checked with `ssh -G -F <fixture>`). `-J`/`ProxyJump`/`ProxyCommand` through `--ssh-opt` stay refused. Refused with `--ssh-control-path` and on **Windows clients** (`ssh_jump_unsupported_platform`): Windows quoting passed a no-connection Win32-OpenSSH 9.5p1 probe, but a connected hop and process cleanup are unverified. No multi-hop, and no Tailscale lookup for the hop (v1). Result field `sshJump`. `--ssh-opt` values (including `-4`/`-6`) apply to the target only, not the hop. Shell scope: the generated `ProxyCommand` was verified with sh, bash and zsh; other login shells are unverified. Unverified boundaries: connected Win32-OpenSSH client jumps. A separate Windows `ProxyCommand` builder (quoted absolute `ssh.exe` path, doubled `%`, `-W "[%h]:%p"`, same hardening options; other paths refused with `ssh_jump_unsupported_ssh_path`) is checked against source-derived models of Win32-OpenSSH, libuv and UCRT command-line parsing and, in an isolated no-connection probe, against the real Win32-OpenSSH 9.5p1 `ssh.exe` (27/27 cells, [record](VALIDATION.md#windows-client-jump-proxycommand-probe--20-2026-10-20-kst)); it is not reachable from the CLI. Enabling it still needs a connected hop run and Windows owned-process-tree cleanup on timeout, overflow and interrupt: production `run()` kills only the direct child, so a `ProxyCommand` descendant may survive; #131 keeps tree cleanup as an unselected preparation backend (its native tests use a PowerShell → PING stand-in, not an `ssh.exe` → `ProxyCommand` `ssh.exe` shape). Such a stop remains an unknown effect with no resend. Enabling also needs an analysis (not yet a fix) of real `ssh.exe` not exiting with pipe stdin in a non-interactive session, and the same absolute, resolved `ssh.exe` as both the outer binary and the `ProxyCommand` program. Python parity: Python accepts arbitrary `-J` hops; TS offers a stricter, typed single hop |
 | User | `sshUser`/`sshUserSource`: `explicit` from `USER@HOST`, else `ssh -G` (`ssh_config_or_local_default`), else `unknown` | Same fields and sources; `-l USER` also counts as `explicit`. `-l` together with `USER@HOST` is `conflicting_ssh_user`, because `-l` silently wins. Without an explicit user, one local `ssh -G` runs per host (5 s limit). It does not connect, but per ssh(1)/ssh_config(5) it evaluates the user's ssh configuration, including `Match exec` commands, as Python's lookup does. A failed or unexpected lookup gives `unknown` for that host only |
@@ -1173,6 +1173,63 @@ fixture refused the durable effect guard and left zero queue rows. No version
 range, Linux/Windows qualification, live delivery or ACK follows from these
 queue-only fixtures. Initial harness failures are recorded separately and were
 never retried with an already-attempted intent.
+
+### Platform-aware native profile table — #130 (unreleased source)
+
+Queue and observation selection use one exact
+`(host platform-arch, native version, source commit)` row with its
+`initialize.platformOs`, storage-binding, owner-inspection and SSH-destination
+policy and a pinned executable artifact (historical darwin-arm64 rows predate
+artifact pinning). Selectable rows remain darwin-arm64 Codex 0.160.1/0.162.1
+only. A **linux-arm64 Codex 0.162.1 candidate** is recorded but not
+selectable: its upstream `codex-aarch64-unknown-linux-musl` executable digest
+(`071cbe8d…cabe5`), Linux-generated schema/notification hashes (equal to
+darwin 0.162.1) and one dedicated-thread client-ID injection on a Linux arm64
+test host are in `test/fixtures/linux-observation-native-evidence.json`.
+Every Linux tuple therefore refuses required delivery before effect and uses
+the ordinary queue for best-effort observation, locally and over SSH
+(Linux rows can never be selected by SSH destination requests). Historical
+KR/US ordinary queue results are not injection evidence.
+
+### Linux row activation follow-up design — #130 (frozen, not implemented)
+
+Activation of the candidate requires both bindings below, reviewed together
+with the ledger owner; neither changes ordinary JSON or existing ledgers.
+
+1. **Original writer executable.** At capability, effect and every
+   independent-wait owner check, the single lsof/`/proc/locks` writer PID's
+   `/proc/<pid>/exe` must be the qualified artifact: inode equal to the
+   digest-verified selected executable, or (different path) a complete digest
+   equal to the row's `artifact.sha256`, computed in the owned worker under
+   the original deadline. Mismatch, unreadable `exe`, deleted executable or a
+   gnu/other-version writer → `metadata_owner_changed` / required unsupported
+   before effect; no fallback to the ordinary Darwin owner contract.
+2. **Retained kernel identity.** Leave `generation` byte-compatible (it is
+   also the ordinary writer evidence). Add one optional private ledger field
+   on observation-qualified intents only, e.g.
+   `observationOwner: { schemaVersion: 1, kind: 'linux_procfs', starttime,
+   bootId, exeDev, exeIno }` (`/proc/<pid>/stat` field 22, `/proc/sys/kernel/
+   random/boot_id`), written in the same durable step as the qualification
+   and never exposed in ordinary/public JSON. Every owner check (send and
+   independent wait) must reproduce it exactly; a record without it, with an
+   unknown `schemaVersion`/`kind`, or written by an older runtime cannot
+   resume Linux observation (`unsupported`, fail-closed); Darwin records are
+   unaffected.
+
+Activation scope also requires an end-to-end CLI test that fails when the
+destination wire request omits the `remote` flag (today only hermetic and a
+since-superseded Linux-host regression cover it), and states that procfs
+lock/device matching was exercised only on ext4; other filesystems
+(btrfs/overlay/tmpfs/NFS) remain unverified and must refuse if `/proc/locks`
+and `stat` device numbers disagree.
+
+Required negative tests: writer exe inode/digest mismatch (gnu or other
+version holding the lock while a pinned musl queue binary is selected);
+deleted/replaced writer executable; same-second PID reuse with identical
+lsof/ps fields but a different kernel start time or boot ID; a retained
+record missing or carrying a malformed `observationOwner`; an old-runtime
+ledger record; reboot between send and wait; SSH destination still refused;
+Darwin and ordinary ledger JSON byte-for-byte unchanged.
 
 ## 0.4.0 candidate release scope
 

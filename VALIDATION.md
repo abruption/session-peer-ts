@@ -52,6 +52,235 @@ leaves tree cleanup as an unselected preparation backend, so cleanup of a
 `ProxyCommand` descendant is not guaranteed and blocks enabling. A stop
 there remains an unknown effect with no resend.
 
+
+## #131 Windows tree-cleanup backend and storage guard (preparation, not selected) — source, 2026-10-20 KST
+
+This is a source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b`,
+not a release. Production behaviour is unchanged on every platform. On Windows,
+`run()` still terminates only the direct child; descendants may linger, the
+child keeps its full timeout, and no new result field or signal handling was
+added.
+
+Review established a design limit for owning a process tree on Windows 10
+without native code:
+- Descendant ownership cannot be proven. GetProcessTimes creation/exit values
+  are UTC wall-clock instants, not monotonic generations, and Win32_Process
+  ParentProcessId may refer to a reused PID.
+- After a clock rollback, a child of an earlier holder of a parent's PID can
+  satisfy any creation-time ordering. Handle-holding fixes only the current
+  identity.
+- A sound boundary needs the child created inside a Job object (suspended,
+  assigned, resumed), which Node's spawn cannot do.
+
+The candidate backend `reapWindowsTree` is therefore kept unselected. It uses
+held handles only, holds the visible tree before any kill, and classifies from
+the post-hold snapshot only, by UTC creation-time ordering. That classifier is
+provisional, not an ownership proof, and is known to be unsound under a clock
+rollback. Confirmation requires a post-kill snapshot. Any observed PID swap, or
+any vanished, denied or unlisted candidate, makes the result unconfirmed. Only
+classifier-accepted candidates are killed. Its tests cover the algorithm and
+record the rollback limit as a todo named as an unresolved design limit
+(never counted as a pass or skip).
+
+The storage guard is a read-only owner-SID/protected-DACL/reparse inspection
+plus a protected private-leaf creator. It is not connected to the handoff
+ledger, which still refuses Windows with `handoff_storage_unsupported`.
+Accepting the token's default owner (an elevated administrator's
+Administrators) is a weaker, group-wide boundary. Creator precheck, creation
+and postcheck are not atomic. Null-DACL, parent-ACL and creator-race handling
+remain unqualified while it is unconnected. Like the existing inspection code,
+it resolves `powershell.exe` through PATH rather than a SystemRoot-pinned path.
+
+Checkpoints. Each result belongs to the commit it was run on:
+- Full local suite, macOS arm64 / Node 24.16.0, at `3dc405d`:
+  - build, test types, `npm run test:package`, repository checks and
+    `git diff --check` passed;
+  - `npm test`, with the pinned Python 1.1.0 reference
+    `8ca77cf31254c8287a2593fe484bb30a7dba2727`, passed with zero failures.
+- Mutation checks, on the `f06041d` tree. Each guard was removed in turn, and
+  every removal made its regression test fail. The eight guards are:
+  - confirm only after a post-kill snapshot;
+  - doubt on an observed PID swap;
+  - no earlier-row inheritance for unlisted candidates;
+  - doubt on gone or denied candidates;
+  - doubt on unlisted candidates;
+  - reject a root after an observed exit;
+  - the creation-time check;
+  - hold the visible tree before any kill.
+- Comment, wording and test-name changes only, at `534d3fb`: light checks.
+- At the final head, the native process-tree fixture was redesigned. Light
+  checks, the focused local files and a Windows rerun of the two new test files
+  cover it (below).
+
+Separately authorized isolated runs used a Windows x64 test host: Windows 10
+19045, PowerShell 5.1, Node 24.16.0 x64. The account was an administrator,
+elevated over SSH. Each run used a dedicated temporary prefix and the host lock.
+
+Runs on earlier heads, with the backend selected or exercised natively, found
+and fixed:
+- a detached helper exited at once;
+- PowerShell 5.1 wrapped the JSON path array;
+- an elevated administrator's files are owned by Administrators;
+- a Node child's job ends its descendants.
+
+Those earlier native backend runs let the classifier terminate processes it
+accepted on the test host. The final head no longer runs the backend natively:
+its kills cannot be bounded to fixture identities, and isolated-host approval
+does not authorize terminating foreign processes.
+
+At `f06041d`, `npm run test:windows` and `npm run test:package` passed on that
+host.
+
+Earlier fixture heads, through `534d3fb`, started a `PING.EXE` with a 600 s
+lifetime and cleaned it up by PID. A grandchild could therefore have outlived a
+run. Afterwards, cleanup was checked only through process command lines
+containing the prefix (and later a read-only `PING.EXE` listing). Those checks
+showed nothing, but no actual leak was observed or ruled out beyond them.
+
+From the final fixture onward:
+- The child and grandchild have explicit lifetimes: about 25 s for the child
+  (`run()` ends it earlier through its own handle) and about 11 s for PING.
+- They are never killed by PID; the test only observes PID presence until
+  both are absent, then removes its directory last.
+- Unreadable PIDs, or a PID still present or unknown, keep the evidence and
+  fail the cleanup.
+- Presence is not identity: a reused PID can look present, and an error other
+  than ESRCH is reported as unknown.
+- The mocked helper-transport test is skipped on win32, so a mock that misses
+  can never open its fake PIDs there.
+
+The native tests on Windows are the production baseline and the storage cases;
+the reruns of the two new files are in the PR.
+
+ACLs of existing paths were not changed; the tests set a protected DACL only on
+new leaves inside the prefix. The interrupt behaviour of production `run()` on
+Windows is unchanged and untested here. The following remain unrun: the Windows
+CI job (where the native tests are registered), non-admin and non-elevated
+cells, arm64 and cold-boot helper latency. No live agent session or message,
+policy, service or account change was made.
+
+
+## Unreleased Linux arm64 observation candidate — #130, 2026-10-20 KST
+
+Source-only follow-up on the published 0.4.0 runtime; no version change.
+Native selection is one exact `(process.platform-process.arch, native version,
+source commit, platformOs, storage binding, owner inspection, artifact)` table
+with no version range, libc/arch fallback or cross-platform inheritance.
+Selectable rows are the two historical darwin-arm64 rows. A **linux-arm64 /
+Codex 0.162.1 / `092d3acd…`** candidate pinned to the upstream
+`aarch64-unknown-linux-musl` executable is recorded but **not activated**
+(see "Activation decision" below); every Linux tuple is unsupported.
+
+Head history: the live injection below ran with the candidate temporarily
+selectable (local build of the later `b804115` tree); `b804115` and
+`2f3b35d` committed it as a selectable row. Review round 2 found two
+identity gaps, and the final head moves it to a non-selectable candidate.
+
+Linux mechanics: owned app-server storage binding reads only that child's
+`/proc/<pid>` (direct child, own group, all UIDs, exe inode, stable start time,
+exact canonical paths, deleted descriptors refused); writer owner evidence
+also requires `/proc/locks` to name the lsof owner as the sole exclusive
+`flock` holder (Codex `File::try_lock`) without changing the generation; the
+executable digest is checked within the original deadline.
+
+Evidence on a Linux arm64 test host (kernel 7.0 aarch64, Node 24.18.0, ext4),
+recorded in `test/fixtures/linux-observation-native-evidence.json`:
+
+- Artifact: the user-owned standalone binary's SHA-256 `071cbe8d…cabe5` equals
+  the executable extracted from upstream `rust-v0.162.1`
+  `codex-aarch64-unknown-linux-musl.tar.gz` (`bf3ca271…`) and `.zst`.
+- Schema: `codex app-server generate-json-schema --experimental` with empty
+  isolated HOME/CODEX_HOME produced queue/add params/response, item/started
+  and turn/completed hashes and an 84-method notification set identical to
+  the darwin 0.162.1 evidence.
+- Live injection, separately user-approved, in one new dedicated TUI thread
+  started by absolute path with `--sandbox read-only --ask-for-approval never`
+  (trust via a `-c` override; `config.toml` unchanged). No other Codex writer
+  was live. The TUI showed an "Update available" menu with "Update now"
+  preselected; it was dismissed with Esc and nothing was updated.
+- A new thread is not saved (no `threads` row or history projection) until its
+  first turn; a dry-run first refused `thread_not_yet_persisted`. One synthetic
+  bootstrap prompt was therefore typed (turn 1). Whether the earlier Darwin
+  dedicated threads had such a prior turn is **not recorded** in their evidence.
+- The first send was refused **before effect** (`evidence_unsupported`,
+  `submitted=false`): the structural capability check used a version-only
+  lookup that became ambiguous once 0.162.1 had two platform rows. It was fixed
+  (regression test failed on the pre-fix code and passed after; it now uses a
+  hermetic two-platform table) and exactly one approved resend
+  of the same synthetic probe followed.
+- That send exited 0 with `status=queued`, `submitted=true`,
+  `consumptionConfirmed=false`, state `delivered`, wait satisfied: one
+  matching client-ID row (native item ID different), linked turn, writer
+  generation unchanged and kernel flock holder equal to the lsof owner.
+  `handoff status` and an independent `handoff wait` exited 0. ACK remained
+  `not_requested`; the model's reply was not answered or treated as ACK.
+  Two model turns ran in total.
+- Cleanup: only the owned tmux session was killed; the codex PID and its
+  `/proc/locks` entries were gone, and the private prefix and ledger were
+  removed. The native thread record and Codex's own empty lock files remain;
+  Codex removed one earlier stale empty lock file itself at startup.
+
+Review follow-ups (same date):
+
+- SSH destination requests cannot select a Linux row (`sshDestination: false`);
+  a qualified linux-arm64 destination refuses required delivery before effect
+  with zero queue calls and keeps the best-effort ordinary send. Darwin keeps
+  its 0.4.0 destination behaviour. At `2f3b35d` (row selectable) a Linux-host
+  regression showed the old code entering the row path over SSH and the fixed
+  code refusing; at the final head no Linux row is selectable and the policy
+  is covered by hermetic synthetic-table tests.
+- Executable digest and procfs binding now run in an owned worker: at the
+  original remaining budget the supervisor requests termination of the
+  worker's group and the caller refuses; actual reaping of a worker blocked in
+  uninterruptible kernel I/O may occur later, when the kernel returns. This is
+  a refusal-at-deadline guarantee, not a bound on how long a blocked kernel
+  call takes. The `--procfs-owner` reads run inside the already
+  deadline-bounded writer-probe process. Canonical-path `lstat` checks remain
+  in the caller, as on Darwin.
+- Retained identity: the generation still binds the lock fingerprint, lsof
+  pid/uid/command and `ps lstart` (1-second resolution). The kernel tick start
+  time and flock holder are checked within each probe invocation, not against
+  the original send, and the TUI writer's executable bytes are not pinned
+  (only the owned queue child's artifact is). PID reuse within the same second
+  by another `codex` that re-acquires the unchanged lock inode would not be
+  detected. A retained Linux kernel identity needs a ledger-schema field and
+  is a follow-up; generation compatibility was kept.
+- External review inputs received summaries of the native send/status/wait
+  JSON and generation values, not the raw records; the root review audited the
+  raw private records separately.
+
+Activation decision (review round 2): the row is not activated because (1)
+only the owned queue child's executable is digest-pinned, while the original
+TUI writer is checked by lsof command/pid/uid and `ps lstart`, so a
+different-version or gnu writer holding the lock beside a pinned musl queue
+binary is not distinguished; and (2) the writer's kernel start time is not
+retained across send and independent wait. Safely closing (2) needs an
+optional private ledger field owned by the ledger, so both are frozen as the
+follow-up design in PARITY.md rather than pushed as an unreviewed schema
+change. Recorded artifact/schema/injection evidence and the procfs machinery
+remain; SSH destination requests can never select a Linux row. The worker
+comment now limits its hard bound to the worker's supervisor refusal;
+caller-side `realpath`/`stat`/`lstat` stay synchronous with deadline checks
+only.
+
+Full suites at the `dd21302` source checkpoint (candidate not activated): on
+Darwin 27.0 arm64 / Node 24.16 the full `npm test` (with the pinned Python
+reference) passed 400, failed 0, skipped 8 (5 Windows-only, 3 Linux-only). On
+the Linux arm64 test host it passed 376, failed 0, skipped 28
+(Darwin-qualified and Windows-only), with every Linux-only native case
+passing; that run used only fixtures in a private prefix, with no
+credentials, model turn or install change. The raw Linux log has no HEAD
+marker; it is tied to the checkpoint by the executor's run record. Earlier
+checkpoints' counts (`b804115`, `2f3b35d`) are superseded.
+
+Later documentation/comment/evidence-description commits (`ffe8afc` and the
+following one) changed no runtime statement. At those heads only light gates
+ran: `npm run build`, `npm run test:types`, the related linux-observation,
+app-server and metadata-observation tests (80 pass, 0 fail, 3 skipped),
+`node scripts/check-repository.mjs` and `git diff --check`. No new full-suite,
+Linux-host or live-model run was performed at those heads.
+Queued/delivered remain distinct from receipt ACK or work completion.
+
 ## Public 0.4.0 — 2026-10-18 KST
 
 `session-peer@0.4.0` is public. Registry checks confirmed `latest=0.4.0` and
