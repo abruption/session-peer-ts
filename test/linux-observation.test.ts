@@ -1,7 +1,8 @@
 // Platform-aware native profile selection and Linux procfs machinery (#130).
 // Fakes model /proc on every host; `linuxNative` cases read the real kernel
-// only on Linux. Synthetic tables exercise selection/binding mechanics; the one
-// production Linux row (linux-arm64 / 0.162.1) is backed by recorded live evidence.
+// only on Linux. Synthetic tables exercise selection/binding mechanics. The
+// recorded linux-arm64 / 0.162.1 candidate is NOT selectable: production stays
+// darwin-only until the original writer's executable and kernel identity bind.
 import { test, mock, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import childProcess, { spawn, spawnSync } from 'node:child_process';
@@ -13,7 +14,7 @@ import { hostname, tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
-import { NATIVE_PROFILES, nativeProfileRefusal, selectNativeProfile, validateNativeProfiles, type NativeProfile } from '../dist/native-profiles.js';
+import { CANDIDATE_PROFILES, NATIVE_PROFILES, nativeProfileRefusal, selectNativeProfile, validateNativeProfiles, type NativeProfile } from '../dist/native-profiles.js';
 import { devParts, nativeExecutable, parseProcStat, parseProcStatusUid, procFlockOwner, procLockHolders,
   procOpenedFiles, procOwnedFiles, procOwner, ProcRefusal, type ProcReader } from '../dist/linux-proc.js';
 import { AppServerFault, BoundedAppServerClient, appServerCapability, artifactDigest, nativeQueueCapability, nativeQueueOnce,
@@ -43,32 +44,24 @@ function fault(code: string, attempted = false) {
   return (error: unknown) => { assert.ok(error instanceof AppServerFault); assert.equal(error.code, code); assert.equal(error.attempted, attempted); return true; };
 }
 
-test('production native profiles are exact rows; only the evidenced linux-arm64 0.162.1 tuple exists for Linux', () => {
+test('production native profiles are exact darwin-arm64 rows; every Linux tuple, including the candidate, is unsupported', () => {
   assert.equal(Object.isFrozen(NATIVE_PROFILES), true);
-  assert.deepEqual(NATIVE_PROFILES.map(row => [row.platform, row.version, row.commit, row.platformOs, row.storageBinding, row.artifact?.sha256 ?? null]), [
+  assert.deepEqual(NATIVE_PROFILES.map(row => [row.platform, row.version, row.commit, row.platformOs, row.storageBinding, row.artifact]), [
     ['darwin-arm64', '0.160.1', 'd27764b82f7118f674371e6d6e76271d9d606edb', 'macos', 'darwin_lsof', null],
     ['darwin-arm64', '0.162.1', current, 'macos', 'darwin_lsof', null],
-    ['linux-arm64', '0.162.1', current, 'linux', 'linux_procfs', '071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5'],
   ]);
   for (const row of NATIVE_PROFILES) assert.equal(Object.isFrozen(row), true);
   const scope: AppServerScope = { codexHome: '/fixture', threadId: thread, generation: 'g', ownerIdentity: 'o' };
-  const absent: [string, string][] = [];
-  for (const platform of ['linux-x64', 'linux-arm', 'linux-arm64-musl', 'linux-arm64-gnu', 'Linux-arm64', 'darwin-x64']) {
-    for (const version of ['0.160.1', '0.162.1', '0.163.0']) absent.push([platform, version]);
+  for (const platform of ['linux-arm64', 'linux-x64', 'linux-arm', 'linux-arm64-musl', 'linux-arm64-gnu', 'Linux-arm64', 'darwin-x64']) {
+    for (const version of ['0.160.1', '0.162.1', '0.163.0']) {
+      assert.equal(selectNativeProfile({ platform, version }), undefined);
+      assert.equal(metadataQualification(version, platform), undefined);
+      assert.equal(nativeQueueCapability({ version, platform, scope }).queueSupported, false);
+      assert.equal(appServerCapability({ version, platform, scope }).schema, 'version_unqualified');
+      for (const remote of [false, true]) assert.equal(observationQualification(version, platform, remote), undefined);
+    }
+    assert.equal(nativeProfileRefusal({ platform, version: '0.162.1' }), 'platform_unsupported');
   }
-  absent.push(['linux-arm64', '0.160.1'], ['linux-arm64', '0.163.0'], ['linux-arm64', '0.162.2'], ['linux-arm64', '0.162.0']);
-  for (const [platform, version] of absent) {
-    assert.equal(selectNativeProfile({ platform, version }), undefined, platform + '/' + version);
-    assert.equal(metadataQualification(version, platform), undefined);
-    assert.equal(nativeQueueCapability({ version, platform, scope }).queueSupported, false);
-    assert.equal(appServerCapability({ version, platform, scope }).schema, 'version_unqualified');
-  }
-  assert.equal(nativeProfileRefusal({ platform: 'linux-x64', version: '0.162.1' }), 'platform_unsupported');
-  assert.equal(nativeProfileRefusal({ platform: 'linux-arm64', version: '0.160.1' }), 'platform_unsupported');
-  assert.equal(nativeQueueCapability({ version: '0.162.1', platform: 'linux-arm64', scope }).queueSupported, true);
-  assert.deepEqual(metadataQualification('codex-cli 0.162.1', 'linux-arm64'), { version: '0.162.1', commit: current, platform: 'linux-arm64' });
-  // Without a platform a version naming two platform rows is ambiguous, not darwin.
-  assert.equal(metadataQualification('0.162.1'), undefined);
   for (const version of ['0.162.0', '0.162.2', '0.163.0', '0.162', '0.162.1-alpha', 'codex-cli 0.162.1', '>=0.160.1']) {
     assert.equal(selectNativeProfile({ platform: 'darwin-arm64', version }), undefined);
     assert.equal(nativeProfileRefusal({ platform: 'darwin-arm64', version }), 'version_unsupported');
@@ -79,10 +72,14 @@ test('production native profiles are exact rows; only the evidenced linux-arm64 
   assert.equal(selectNativeProfile({ platform: 'darwin-arm64', version: 0 } as any), undefined);
 });
 
-test('the linux-arm64 row matches its recorded artifact, schema and live injection evidence', async () => {
+test('the recorded linux-arm64 candidate matches its evidence but is not activated', async () => {
   const evidence = JSON.parse(readFileSync(new URL('./fixtures/linux-observation-native-evidence.json', import.meta.url), 'utf8'));
-  const row = selectNativeProfile({ platform: 'linux-arm64', version: '0.162.1' })!;
+  assert.equal(CANDIDATE_PROFILES.length, 1);
+  const row = CANDIDATE_PROFILES[0]!;
   assert.deepEqual(evidence.nativeProfile, JSON.parse(JSON.stringify(row)));
+  assert.equal(selectNativeProfile(row), undefined); assert.equal(NATIVE_PROFILES.includes(row), false);
+  assert.equal(evidence.activated, false);
+  assert.deepEqual(evidence.activationBlockers.map((item: { id: string }) => item.id), ['original_writer_executable', 'retained_kernel_identity']);
   assert.equal(evidence.upstreamArtifact.extractedBinarySha256, row.artifact!.sha256);
   assert.equal(evidence.upstreamArtifact.hostBinarySha256Equal, true);
   const { APP_SERVER_QUEUE_EVIDENCE, NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS } = await import('../dist/app-server.js');
@@ -112,12 +109,14 @@ CREATE TABLE thread_items(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,item_id 
 CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_ordinal) WHERE item_type='userMessage';
 CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rollout_byte_offset INTEGER NOT NULL,next_rollout_ordinal INTEGER NOT NULL);`);
   db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread, 1, 1);
-  assert.equal(NATIVE_PROFILES.filter(row => row.version === '0.162.1').length, 2);
+  // Hermetic table with the same version on two platforms (darwin + candidate).
+  const table = [...NATIVE_PROFILES, ...CANDIDATE_PROFILES];
+  assert.equal(table.filter(row => row.version === '0.162.1').length, 2);
   const scope = { home: root, threadId: thread, generation: 'fixture-generation' };
   for (const version of ['0.162.1', 'codex-cli 0.162.1']) {
-    assert.deepEqual(await metadataCapability(scope, version, { observationRemainingMs: () => 5000 }, () => true), { supported: true }, version);
+    assert.deepEqual(await metadataCapability(scope, version, { observationRemainingMs: () => 5000 }, () => true, table), { supported: true }, version);
   }
-  assert.deepEqual(await metadataCapability(scope, '0.162.2', { observationRemainingMs: () => 5000 }, () => true),
+  assert.deepEqual(await metadataCapability(scope, '0.162.2', { observationRemainingMs: () => 5000 }, () => true, table),
     { supported: false, reason: 'metadata_version_unsupported' });
 });
 
@@ -368,9 +367,8 @@ test('wire selection is the exact (platform, version) row: Linux handshake drift
   await assert.rejects(BoundedAppServerClient.connectNativeQueueFixture(drift.scope, drift.transport, performance.now() + 1000,
     async () => true, async () => {}, '0.162.1', 'linux-arm64', table), fault('owner_changed'));
   assert.deepEqual(drift.requests.map(r => r.method), ['initialize']);
-  // Production has only linux-arm64/0.162.1; arch/version neighbours are absent.
-  for (const [platform, version, profiles] of [['linux-x64', '0.162.1', NATIVE_PROFILES], ['linux-arm64', '0.160.1', NATIVE_PROFILES],
-    ['linux-x64', '0.162.1', table],
+  // Production has no Linux row; arch/version neighbours are absent too.
+  for (const [platform, version, profiles] of [['linux-arm64', '0.162.1', NATIVE_PROFILES], ['linux-x64', '0.162.1', table],
     ['linux-arm64', '0.160.1', table]] as const) {
     const absent = hermetic(t, 'linux', version); let guards = 0;
     await assert.rejects(BoundedAppServerClient.connectNativeQueueFixture(absent.scope, absent.transport, performance.now() + 1000,
@@ -630,39 +628,17 @@ test('SSH to a Linux destination: complete result keeps pre-effect refusal; part
 });
 
 test('SSH destination requests cannot select a Linux row; local and Darwin selection are unchanged', () => {
-  assert.deepEqual(observationQualification('0.162.1', 'linux-arm64', false), { version: '0.162.1', commit: current, platform: 'linux-arm64' });
-  assert.equal(observationQualification('0.162.1', 'linux-arm64', true), undefined);
-  assert.equal(observationQualification('codex-cli 0.162.1', 'linux-arm64', true), undefined);
+  const table = [...NATIVE_PROFILES, ...CANDIDATE_PROFILES];
+  assert.deepEqual(observationQualification('0.162.1', 'linux-arm64', false, table), { version: '0.162.1', commit: current, platform: 'linux-arm64' });
+  assert.equal(observationQualification('0.162.1', 'linux-arm64', true, table), undefined);
+  assert.equal(observationQualification('codex-cli 0.162.1', 'linux-arm64', true, table), undefined);
   for (const remote of [false, true]) {
-    assert.deepEqual(observationQualification('0.162.1', 'darwin-arm64', remote), { version: '0.162.1', commit: current, platform: 'darwin-arm64' });
-    assert.equal(observationQualification('0.162.1', 'linux-x64', remote), undefined);
-    assert.equal(observationQualification('0.160.1', 'linux-arm64', remote), undefined);
+    for (const profiles of [table, undefined]) {
+      assert.deepEqual(observationQualification('0.162.1', 'darwin-arm64', remote, profiles), { version: '0.162.1', commit: current, platform: 'darwin-arm64' });
+      assert.equal(observationQualification('0.162.1', 'linux-x64', remote, profiles), undefined);
+      assert.equal(observationQualification('0.160.1', 'linux-arm64', remote, profiles), undefined);
+    }
+    // Production: the candidate is never selected, locally or over SSH.
+    assert.equal(observationQualification('0.162.1', 'linux-arm64', remote), undefined);
   }
-});
-
-// Regression: a qualified linux-arm64 row reached the app-server path over SSH.
-test('SSH to a qualified linux-arm64 row stays fail-closed before effect and keeps best-effort ordinary send', {
-  skip: host !== 'linux-arm64',
-}, async t => {
-  const f = await sshFixture(t, '0.162.1', true);
-  const invoke = async (args: string[], wire: boolean) => {
-    const child = spawn(process.execPath, [resolve('dist/cli.js'), 'send', ...(wire ? ['--host', 'fixture'] : []), ...args.slice(1), '--json'],
-      { env: { ...f.env, ...(wire ? f.ssh : {}) } });
-    let stdout = '', stderr = ''; child.stdout.on('data', c => { stdout += c; }); child.stderr.on('data', c => { stderr += c; }); child.stdin.end();
-    const timer = setTimeout(() => child.kill('SIGKILL'), 20000); const [code, signal] = await once(child, 'close'); clearTimeout(timer);
-    assert.equal(signal, null, stderr); return { code, value: JSON.parse(stdout), stdout };
-  };
-  const required = await invoke([...f.args, '--wait-for', 'delivered', '--wait-timeout', '15'], true);
-  assert.equal(required.code, 1, required.stdout); assert.equal(required.value.submitted, false);
-  assert.equal(required.value.error, 'evidence_unsupported'); assert.equal(required.value.handoff.wait.status, 'unsupported');
-  assert.deepEqual(f.queueCalls(), []); assert.equal(f.nativeCalls().some(call => call.command === 'app-server'), false);
-  const best = await invoke([...f.args, '--observe-delivery'], true);
-  assert.equal(best.code, 0, best.stdout); assert.equal(best.value.status, 'queued');
-  assert.equal(best.value.handoff.observation.status, 'unsupported'); assert.deepEqual(f.queueCalls(), [{ method: 'legacy' }]);
-  // Local control: the same host/version selects the row (and this script is
-  // not the pinned artifact, so the app-server path refuses before effect).
-  const local = await invoke([...f.args, '--wait-for', 'delivered', '--wait-timeout', '15'], false);
-  assert.equal(local.code, 1, local.stdout); assert.equal(local.value.submitted, false);
-  assert.equal(local.value.error, 'app_server_unsupported_version');
-  assert.deepEqual(f.queueCalls(), [{ method: 'legacy' }]); assert.equal(f.nativeCalls().some(call => call.command === 'app-server'), false);
 });

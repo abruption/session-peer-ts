@@ -6,7 +6,7 @@
 
 **문서·소스 기준 버전: 0.4.0.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6과 0.4.0은 서로의 SSH 사전 확인을 거부합니다.
 
-**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 미배포 소스(0.4.0 미포함)에는 정확한 Linux 프로필 하나가 추가됩니다: Linux arm64의 Codex 0.162.1과 고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일입니다. 그 밖의 Linux 아키텍처·버전은 미지원입니다.
+**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 미배포 소스(0.4.0 미포함)는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하지만 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.
 
 이 가이드는 0.4.0을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
 
@@ -608,4 +608,4 @@ native 전송 관찰은 macOS arm64의 정확한 Codex 0.160.1/0.162.1과 이미
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
 
-Linux·Windows의 native 주입 관측은 미지원입니다. 미배포 소스(0.4.0 미포함)에는 정확한 Linux 프로필 하나가 추가됩니다: Linux arm64의 Codex 0.162.1과 고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일입니다. 그 밖의 Linux 아키텍처·버전은 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.
+Linux·Windows의 native 주입 관측은 미지원입니다. 미배포 소스(0.4.0 미포함)는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하지만 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.

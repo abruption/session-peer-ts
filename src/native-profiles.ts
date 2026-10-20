@@ -3,8 +3,9 @@
 // Lookup is by exact `${process.platform}-${process.arch}` and exact version:
 // there is no SemVer range, no libc/arch fallback and no cross-platform
 // inheritance. A schema, matching version, ordinary queue result or fixture on
-// another platform never adds a row; each Linux row requires a dedicated live
-// client-ID injection test on that exact tuple (see #130).
+// another platform never adds a row. A Linux row additionally requires the
+// original writer's executable and retained kernel identity (see #130); none
+// is selectable yet.
 export type NativeProfile = Readonly<{
   platform: string; version: string; commit: string;
   // initialize.platformOs reported by the queue process (std::env::consts::OS).
@@ -54,9 +55,14 @@ export const NATIVE_PROFILES: readonly NativeProfile[] = validateNativeProfiles(
     platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', sshDestination: true, artifact: null },
   { platform: 'darwin-arm64', version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
     platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', sshDestination: true, artifact: null },
-  // Linux arm64 test host, 2026-10-20: upstream rust-v0.162.1 musl artifact
-  // (extracted digest below), Linux-generated schema/opt-out evidence and one
-  // dedicated-thread client-ID injection. See linux-observation-native-evidence.json.
+]);
+// Recorded but NOT selectable. Linux arm64 test host, 2026-10-20: upstream
+// rust-v0.162.1 musl artifact digest, Linux-generated schema/opt-out evidence
+// and one dedicated-thread client-ID injection (linux-observation-native-
+// evidence.json). Activation is withheld until the original TUI writer's
+// executable is bound to this artifact and the writer's kernel identity is
+// retained across send and independent wait (PARITY.md follow-up design).
+export const CANDIDATE_PROFILES: readonly NativeProfile[] = validateNativeProfiles([
   { platform: 'linux-arm64', version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
     platformOs: 'linux', storageBinding: 'linux_procfs', ownerInspection: 'lsof_ps_procfs_locks', sshDestination: false,
     artifact: { target: 'aarch64-unknown-linux-musl', sha256: '071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5' } },

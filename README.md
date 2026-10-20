@@ -17,7 +17,7 @@
 
 **Documentation and source version: 0.4.0.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and 0.4.0 refuse each other’s SSH preflight.
 
-**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. Unreleased source (not in 0.4.0) adds one exact Linux profile: Codex 0.162.1 on Linux arm64 with the pinned upstream `aarch64-unknown-linux-musl` executable; other Linux architectures/versions remain unsupported.
+**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. Unreleased source (not in 0.4.0) records a Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test) but does not activate it; Linux native observation remains unsupported.
 
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.

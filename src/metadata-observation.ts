@@ -3,7 +3,7 @@
 import childProcess, { type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NATIVE_PROFILES } from './native-profiles.js';
+import { NATIVE_PROFILES, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 
 export const METADATA_SOURCE = Object.freeze({ version: '0.160.1',
   commit: 'd27764b82f7118f674371e6d6e76271d9d606edb',
@@ -152,12 +152,13 @@ async function inspect(scope: MetadataScope, mode: 'capability' | 'observe', bud
   const { storageStamp: _privateStamp, ...publicResult } = result;
   return publicResult;
 }
+// `profiles` is a hermetic test hook (validated synthetic tables only).
 export async function metadataCapability(scope: MetadataScope, version: string, budget: MetadataBudget | undefined,
-  verifyOwner: VerifyMetadataOwner): Promise<MetadataCapability> {
+  verifyOwner: VerifyMetadataOwner, profiles: readonly NativeProfile[] = NATIVE_PROFILES): Promise<MetadataCapability> {
   // Structural store check: any exact row's version. Platform selection is the
   // caller's exact metadataQualification(version, platform), never inferred here.
   const exact = typeof version === 'string' && version.startsWith('codex-cli ') ? version.slice('codex-cli '.length) : version;
-  if (!metadataQualifications.some(row => row.version === exact)) return { supported: false, reason: 'metadata_version_unsupported' };
+  if (!validateNativeProfiles(profiles).some(row => row.version === exact)) return { supported: false, reason: 'metadata_version_unsupported' };
   const result = await inspect(scope, 'capability', budget, verifyOwner);
   return { supported: result.supported, ...(result.reason === undefined ? {} : { reason: result.reason }) };
 }

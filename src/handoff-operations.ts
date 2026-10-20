@@ -12,7 +12,7 @@ import { checkMessage, queueId, send, type SendContext, type SendOptions } from 
 import { Refusal } from './discovery.js';
 import { HomeRefusal } from './writer.js';
 import { executable, run, UnknownOutcome } from './process.js';
-import { currentPlatform, selectNativeProfile } from './native-profiles.js';
+import { currentPlatform, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; remote?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
@@ -50,10 +50,17 @@ export function correlationEnvelope(message: string, id: string): string {
 // request may select only rows whose SSH-remote observation is admitted; any
 // other row behaves as unsupported (required goals refuse before effect and
 // best-effort uses the ordinary queue, chosen before an app-server attempt).
-export function observationQualification(nativeVersion: string, platform: string, remote: boolean): MetadataQualification | undefined {
-  const qualification = metadataQualification(nativeVersion, platform);
-  const profile = qualification && selectNativeProfile(qualification);
-  return profile && profile.commit === qualification.commit && (!remote || profile.sshDestination) ? qualification : undefined;
+// `table` is a hermetic test hook; production passes no table.
+export function observationQualification(nativeVersion: string, platform: string, remote: boolean,
+  table?: readonly NativeProfile[]): MetadataQualification | undefined {
+  if (!table) {
+    const qualification = metadataQualification(nativeVersion, platform);
+    const profile = qualification && selectNativeProfile(qualification);
+    return profile && profile.commit === qualification.commit && (!remote || profile.sshDestination) ? qualification : undefined;
+  }
+  const exact = typeof nativeVersion === 'string' ? nativeVersion.replace(/^codex-cli /, '') : '';
+  const profile = selectNativeProfile({ platform, version: exact }, validateNativeProfiles(table));
+  return profile && (!remote || profile.sshDestination) ? { version: profile.version, commit: profile.commit, platform: profile.platform } : undefined;
 }
 // Owner probe arguments for an exact profile. A Linux row additionally requires
 // the kernel flock holder to be the same unchanged process; generation is unchanged.

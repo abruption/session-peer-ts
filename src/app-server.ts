@@ -14,7 +14,7 @@ import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
 import { run } from './process.js';
-import { NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
+import { CANDIDATE_PROFILES, NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 import { procOwnedFiles, type OpenedFile, type ProcReader } from './linux-proc.js';
 import { fileURLToPath } from 'node:url';
 
@@ -43,6 +43,7 @@ export const APP_SERVER_QUEUE_EVIDENCE = Object.freeze([
   }),
   // Generated on the Linux arm64 host from the exact pinned musl artifact with
   // an isolated CODEX_HOME; byte-identical to the darwin-arm64 0.162.1 schemas.
+  // Schema evidence only: no linux-arm64 profile row is selectable yet.
   Object.freeze({
     version: '0.162.1', inspectedPlatform: 'linux-arm64',
     officialSourceCommit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
@@ -57,8 +58,8 @@ export const APP_SERVER_QUEUE_EVIDENCE = Object.freeze([
 function queueEvidence(version: string, platform: string) {
   return APP_SERVER_QUEUE_EVIDENCE.find(profile => profile.version === version && profile.inspectedPlatform === platform);
 }
-// Every production profile row must carry its own exact schema evidence row.
-if (NATIVE_PROFILES.some(row => !queueEvidence(row.version, row.platform))) throw new Error('native profile lacks queue evidence');
+// Every production or candidate profile row must carry its own exact schema evidence row.
+if ([...NATIVE_PROFILES, ...CANDIDATE_PROFILES].some(row => !queueEvidence(row.version, row.platform))) throw new Error('native profile lacks queue evidence');
 export const APP_SERVER_LIMITS = Object.freeze({
   frameBytes: 65536, receivedBytes: 1024 * 1024, sentBytes: 256 * 1024,
   frames: 512, notifications: 256, requests: 16, observations: 64, messageBytes: 32768,
@@ -561,10 +562,13 @@ function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
     }
   }
 }
-// Synchronous native-profile I/O (executable digest, procfs binding) runs in
-// an owned worker. Hard execution bound: run() reaps its group at the original
-// remaining budget, and beforeDeadline() refuses at that deadline even if the
-// kernel has not yet released a worker blocked in uninterruptible I/O.
+// Synchronous native-profile I/O (executable digest, procfs walk) runs in an
+// owned worker. Supervisor refusal boundary for that worker only: run() reaps
+// its group at the original remaining budget, and beforeDeadline() refuses at
+// that deadline even if the kernel has not yet released a worker blocked in
+// uninterruptible I/O. Caller-side realpath/stat/lstat (executable identity,
+// canonical SQLite paths) stay synchronous here, as on Darwin, and are only
+// followed by deadline checks; they have no execution-time bound.
 async function nativeWorker(args: string[], deadlineMs: number): Promise<Record<string, unknown> | undefined> {
   const extension = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
   const worker = fileURLToPath(new URL('./linux-native-probe' + extension, import.meta.url));
@@ -739,8 +743,9 @@ function releaseOwned(pid: number | undefined): void {
   for (const name of terminationSignals) process.removeListener(name, terminateOwned);
   process.removeListener('exit', processExit);
 }
-// POSIX groups reap owned descendants on the exact darwin-arm64 and
-// linux-arm64 profile rows. Windows resource cleanup remains unqualified.
+// POSIX groups reap owned descendants. Only darwin-arm64 rows are selectable;
+// Linux uses the same owned group in hermetic and candidate checks. Windows
+// resource cleanup remains unqualified.
 function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Omit<MetadataOnlyTransport, 'qualification'> & { pid?: number } {
   if (process.platform === 'win32') throw new AppServerFault('unsupported_transport', false);
   const child = spawn(binary, args, { env, cwd, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });

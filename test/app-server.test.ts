@@ -69,12 +69,9 @@ test('native queue capability qualifies exact mechanics only, never live deliver
   for (const version of ['0.161.0', '0.162.0', '0.162.2', '0.163.0', '0.162.1-rc.1', 'v0.162.1']) {
     assert.equal(nativeQueueCapability({ version, platform: 'darwin-arm64', scope }).queueSupported, false);
   }
-  for (const platform of ['darwin-x64', 'linux-x64', 'win32-x64']) {
+  for (const platform of ['darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64']) {
     assert.equal(nativeQueueCapability({ version: '0.162.1', platform, scope }).queueSupported, false);
   }
-  // linux-arm64 has its own exact 0.162.1 row (#130); 0.160.1 is not inherited.
-  assert.equal(nativeQueueCapability({ version: '0.162.1', platform: 'linux-arm64', scope }).queueSupported, true);
-  assert.equal(nativeQueueCapability({ version: '0.160.1', platform: 'linux-arm64', scope }).queueSupported, false);
   assert.equal(nativeQueueCapability({ version: undefined, platform: undefined, scope } as any).queueSupported, false);
 });
 

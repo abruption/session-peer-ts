@@ -1,16 +1,21 @@
 # Validation record — updated 2026-10-18 KST
 
 
-## Unreleased Linux arm64 observation profile — #130, 2026-10-20 KST
+## Unreleased Linux arm64 observation candidate — #130, 2026-10-20 KST
 
 Source-only follow-up on the published 0.4.0 runtime; no version change.
 Native selection is one exact `(process.platform-process.arch, native version,
 source commit, platformOs, storage binding, owner inspection, artifact)` table
-with no version range, libc/arch fallback or cross-platform inheritance. Rows:
-the two historical darwin-arm64 rows and one new **linux-arm64 / Codex 0.162.1
-/ `092d3acd…`** row pinned to the upstream `aarch64-unknown-linux-musl`
-executable. linux-x64, other Linux versions, gnu builds and SSH-remote
-observation remain unsupported.
+with no version range, libc/arch fallback or cross-platform inheritance.
+Selectable rows are the two historical darwin-arm64 rows. A **linux-arm64 /
+Codex 0.162.1 / `092d3acd…`** candidate pinned to the upstream
+`aarch64-unknown-linux-musl` executable is recorded but **not activated**
+(see "Activation decision" below); every Linux tuple is unsupported.
+
+Head history: the live injection below ran with the candidate temporarily
+selectable (local build of the later `b804115` tree); `b804115` and
+`2f3b35d` committed it as a selectable row. Review round 2 found two
+identity gaps, and the final head moves it to a non-selectable candidate.
 
 Linux mechanics: owned app-server storage binding reads only that child's
 `/proc/<pid>` (direct child, own group, all UIDs, exe inode, stable start time,
@@ -41,7 +46,8 @@ recorded in `test/fixtures/linux-observation-native-evidence.json`:
 - The first send was refused **before effect** (`evidence_unsupported`,
   `submitted=false`): the structural capability check used a version-only
   lookup that became ambiguous once 0.162.1 had two platform rows. It was fixed
-  (regression test fails before, passes after) and exactly one approved resend
+  (regression test failed on the pre-fix code and passed after; it now uses a
+  hermetic two-platform table) and exactly one approved resend
   of the same synthetic probe followed.
 - That send exited 0 with `status=queued`, `submitted=true`,
   `consumptionConfirmed=false`, state `delivered`, wait satisfied: one
@@ -60,8 +66,10 @@ Review follow-ups (same date):
 - SSH destination requests cannot select a Linux row (`sshDestination: false`);
   a qualified linux-arm64 destination refuses required delivery before effect
   with zero queue calls and keeps the best-effort ordinary send. Darwin keeps
-  its 0.4.0 destination behaviour. A Linux-host regression showed the old code
-  entering the row path over SSH and the fixed code refusing.
+  its 0.4.0 destination behaviour. At `2f3b35d` (row selectable) a Linux-host
+  regression showed the old code entering the row path over SSH and the fixed
+  code refusing; at the final head no Linux row is selectable and the policy
+  is covered by hermetic synthetic-table tests.
 - Executable digest and procfs binding now run in an owned worker: the
   worker's group is killed at the original remaining budget and the caller
   refuses at that deadline even if a worker is still blocked in
@@ -82,12 +90,27 @@ Review follow-ups (same date):
   JSON and generation values, not the raw records; the root review audited the
   raw private records separately.
 
-Tests (after the review follow-ups): on Darwin 27.0 arm64 / Node 24.16 the
-full `npm test` (with the pinned Python reference) passed 400, failed 0,
-skipped 9 (5 Windows-only, 4 Linux-host-only). On the Linux arm64 test host
-it passed 376, failed 0, skipped 28 (Darwin-qualified and Windows-only), with
-every Linux-only native case passing; that rerun used only fixtures in a
-private prefix, with no credentials, model turn or install change.
+Activation decision (review round 2): the row is not activated because (1)
+only the owned queue child's executable is digest-pinned, while the original
+TUI writer is checked by lsof command/pid/uid and `ps lstart`, so a
+different-version or gnu writer holding the lock beside a pinned musl queue
+binary is not distinguished; and (2) the writer's kernel start time is not
+retained across send and independent wait. Safely closing (2) needs an
+optional private ledger field owned by the ledger, so both are frozen as the
+follow-up design in PARITY.md rather than pushed as an unreviewed schema
+change. Recorded artifact/schema/injection evidence and the procfs machinery
+remain; SSH destination requests can never select a Linux row. The worker
+comment now limits its hard bound to the worker's supervisor refusal;
+caller-side `realpath`/`stat`/`lstat` stay synchronous with deadline checks
+only.
+
+Tests at the final head (candidate not activated): on Darwin 27.0 arm64 /
+Node 24.16 the full `npm test` (with the pinned Python reference) passed 400,
+failed 0, skipped 8 (5 Windows-only, 3 Linux-only). On the Linux arm64 test
+host it passed 376, failed 0, skipped 28 (Darwin-qualified and Windows-only),
+with every Linux-only native case passing; that rerun used only fixtures in a
+private prefix, with no credentials, model turn or install change. Earlier
+heads' counts (`b804115`, `2f3b35d`) are superseded.
 Queued/delivered remain distinct from receipt ACK or work completion.
 
 ## Public 0.4.0 — 2026-10-18 KST

@@ -13,6 +13,17 @@
       "sha256": "071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5"
     }
   },
+  "activated": false,
+  "activationBlockers": [
+    {
+      "id": "original_writer_executable",
+      "gap": "Only the owned queue child executable is digest-pinned; the original TUI writer is checked by lsof command/pid/uid and ps lstart, so another Codex build (version or gnu/musl) holding the writer lock is not distinguished."
+    },
+    {
+      "id": "retained_kernel_identity",
+      "gap": "The kernel tick start time and flock holder are compared only inside one probe; the retained generation binds ps lstart at 1-second resolution, so same-second PID reuse with an unchanged lock inode, UID and command is not distinguished across send and independent wait."
+    }
+  ],
   "date": "2026-10-20",
   "host": "Linux arm64 test host (kernel 7.0 aarch64, Node 24.18.0, ext4); identifiers omitted",
   "upstreamArtifact": {

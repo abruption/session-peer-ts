@@ -6,7 +6,7 @@
 
 **文書・ソースのバージョン: 0.4.0。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](../VALIDATION.md)、リリース手順は [RELEASING.md](../RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と 0.4.0 は互いの SSH 事前確認を拒否します。
 
-**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 未リリースのソース（0.4.0 には含まれない）は厳密な Linux プロファイルを 1 つ追加します: Linux arm64 の Codex 0.162.1 と固定された上流 `aarch64-unknown-linux-musl` 実行ファイルです。その他の Linux アーキテクチャ・バージョンは未対応です。
+**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 未リリースのソース（0.4.0 には含まれない）は Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが有効化しません。Linux の native 観測は引き続き未対応です。
 
 0.4.0 の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。以前の公開記録は [0.3.1 公開リリースの証拠](../VALIDATION.md#public-031--2026-10-04-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
 
@@ -355,4 +355,4 @@ native 観測は、macOS arm64 の厳密な Codex 0.160.1/0.162.1 と既存の�
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
 
-Linux・Windows の native 注入観測は未対応です。 未リリースのソース（0.4.0 には含まれない）は厳密な Linux プロファイルを 1 つ追加します: Linux arm64 の Codex 0.162.1 と固定された上流 `aarch64-unknown-linux-musl` 実行ファイルです。その他の Linux アーキテクチャ・バージョンは未対応です。対応する POSIX ledger では、運用者が明示的に確認した受領を `operator_confirmed` として記録できますが、自動 ACK 収集ではありません。0.4.0 の範囲は、検証済みの macOS 観測と明示的な運用者確認です。Linux・Windows 観測と receipt bootstrap は [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) の後続作業です。
+Linux・Windows の native 注入観測は未対応です。 未リリースのソース（0.4.0 には含まれない）は Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが有効化しません。Linux の native 観測は引き続き未対応です。対応する POSIX ledger では、運用者が明示的に確認した受領を `operator_confirmed` として記録できますが、自動 ACK 収集ではありません。0.4.0 の範囲は、検証済みの macOS 観測と明示的な運用者確認です。Linux・Windows 観測と receipt bootstrap は [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) の後続作業です。
