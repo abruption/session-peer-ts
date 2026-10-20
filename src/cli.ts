@@ -146,7 +146,17 @@ export function parse(args: string[]): Options {
     jump = sshJump(values.get('--ssh-jump')!);
     // An existing control master would bypass the hop entirely.
     if (values.has('--ssh-control-path')) throw new Refusal('conflicting_ssh_jump');
-    // Win32-OpenSSH starts ProxyCommand without a POSIX shell; not yet proven.
+    // Win32-OpenSSH starts ProxyCommand without a POSIX shell. windowsProxyCommand's
+    // quoting matched an isolated no-connection 9.5p1 probe; a connected hop and
+    // cleanup are unverified. Enabling also needs: an analysis of real ssh.exe not
+    // exiting with pipe stdin in a non-interactive session (run() uses pipe stdin);
+    // the same absolute, resolved ssh.exe from executable() as the outer binary and
+    // the ProxyCommand program; owned-process-tree cleanup on Windows: run() kills
+    // only the direct child, so a ProxyCommand ssh.exe may outlive a timeout, an
+    // overflow or an interrupt (#131 keeps tree cleanup as an unselected candidate
+    // backend, whose native tests use a PowerShell -> PING stand-in, never this
+    // ssh.exe -> ProxyCommand ssh.exe shape); any such stop stays an unknown effect
+    // with no resend; and the builder called here, before ssh -G.
     if (process.platform === 'win32') throw new Refusal('ssh_jump_unsupported_platform');
   }
   if (values.has('--ssh-control-path')) {
