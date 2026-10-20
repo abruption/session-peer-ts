@@ -310,11 +310,13 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   time through held handles, never by a bare PID, `taskkill` or wall-clock time.
   The child gets the timeout minus a cleanup reserve (a third, at most 2.5 s),
   so the call, cleanup included, still returns at the original deadline; Ctrl-C
-  or SIGHUP runs the same cleanup, capped at 2.5 s, before the CLI exits. When
-  ownership cannot be proven, nothing is killed and the result reports
-  `cleanup: unconfirmed`, which is treated as `unknown`. This happens, for
-  example, when the child had already exited while a descendant kept its output
-  open. A descendant whose own parent already exited may linger. Windows-native
+  or SIGHUP runs the same cleanup, capped at 2.5 s, before the CLI exits.
+  Candidates or branches whose ownership cannot be proven are not terminated,
+  and the result reports `cleanup: unconfirmed`, treated as `unknown`. The
+  directly spawned child and descendants already proven owned may still have
+  been terminated, so `unconfirmed` is not evidence of no effect. This happens,
+  for example, when the child had already exited while a descendant kept its
+  output open. A descendant whose own parent already exited may linger. Windows-native
   tests for this are registered for the Windows CI job but have not run there
   yet; they passed in one isolated Windows 10 x64 administrator run, using no
   live agent session. A preflight

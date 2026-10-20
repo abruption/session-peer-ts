@@ -161,7 +161,7 @@ export function run(binary: string, args: string[], options: {
 // handle. No taskkill, no PID-only kill, no shell, no caller text in argv.
 
 export type TreeCleanup = 'confirmed' | 'unconfirmed';
-export type TreeReply = { snapshot: bigint; rows: Map<number, number>;
+export type TreeReply = { rows: Map<number, number>;
   held: Map<number, { start: bigint; exit: bigint | null }>; errors: Map<number, 'gone' | 'denied'> };
 export type TreeHelper = { pid?: number; request(hold: number[], kill: number[]): Promise<TreeReply>; close(): void };
 // exited: Node has observed the root's exit (its handle, and so its PID, may
@@ -174,7 +174,7 @@ export type TreeRoot = { pid: number; exited: () => boolean; kill: () => void };
 export const WINDOWS_TREE_RESERVE_MS = 2500;
 export const treeReserve = (total: number) => Math.min(WINDOWS_TREE_RESERVE_MS, Math.max(0, Math.floor(total / 3)));
 
-// Request: "<hold csv|-> <kill csv|->". Reply: "ok <snapshot> <rows> <held> <errors>"
+// Request: "<hold csv|-> <kill csv|->". Reply: "ok <rows> <held> <errors>"
 // with rows pid:ppid, held pid:start:exit (exit empty while running) and errors
 // pid:gone|denied. Get-CimInstance returns no command lines or arguments here.
 const helperScript = String.raw`
@@ -205,18 +205,19 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
         $errors += "$($id):$kind"
       } catch { $errors += "$($id):gone" }
     }
+    # Snapshot right after the holds and before any kill, so every candidate
+    # held here that is still running is listed with its own parent.
+    $rows = @(Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId | ForEach-Object { "$($_.ProcessId):$($_.ParentProcessId)" })
     $kills = @(Ids $parts[1])
     foreach ($id in $kills) { if ($held.ContainsKey($id)) { try { $held[$id].Kill() } catch {} } }
     foreach ($id in $kills) { if ($held.ContainsKey($id)) { try { [void]$held[$id].WaitForExit(250) } catch {} } }
-    $snapshot = Ticks ([DateTime]::UtcNow)
-    $rows = @(Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId | ForEach-Object { "$($_.ProcessId):$($_.ParentProcessId)" })
     $states = @()
     foreach ($id in @($held.Keys)) {
       $item = $held[$id]
       $exit = ''; if ($item.HasExited) { $exit = Ticks $item.ExitTime }
       $states += "$($id):$(Ticks $item.StartTime):$exit"
     }
-    [Console]::Out.WriteLine("ok $snapshot $(Field $rows) $(Field $states) $(Field $errors)")
+    [Console]::Out.WriteLine("ok $(Field $rows) $(Field $states) $(Field $errors)")
   } catch { [Console]::Out.WriteLine('error') }
   [Console]::Out.Flush()
 }
@@ -225,17 +226,17 @@ const csv = (values: number[]) => values.length ? values.join(',') : '-';
 const ticks = (text: string) => { if (!/^[1-9][0-9]{0,18}$/.test(text)) throw new Error('tree_reply'); return BigInt(text); };
 export function parseTreeReply(line: string): TreeReply {
   const parts = line.split(' ');
-  if (parts.length !== 5 || parts[0] !== 'ok') throw new Error('tree_reply');
+  if (parts.length !== 4 || parts[0] !== 'ok') throw new Error('tree_reply');
   const list = (text: string) => text === '-' ? [] : text.split(',');
   const id = (text: string) => { if (!/^[0-9]{1,10}$/.test(text)) throw new Error('tree_reply'); return Number(text); };
-  const reply: TreeReply = { snapshot: ticks(parts[1]!), rows: new Map(), held: new Map(), errors: new Map() };
-  for (const row of list(parts[2]!)) { const [pid, ppid, extra] = row.split(':'); if (extra !== undefined) throw new Error('tree_reply'); reply.rows.set(id(pid!), id(ppid ?? '')); }
-  for (const row of list(parts[3]!)) {
+  const reply: TreeReply = { rows: new Map(), held: new Map(), errors: new Map() };
+  for (const row of list(parts[1]!)) { const [pid, ppid, extra] = row.split(':'); if (extra !== undefined) throw new Error('tree_reply'); reply.rows.set(id(pid!), id(ppid ?? '')); }
+  for (const row of list(parts[2]!)) {
     const [pid, start, exit, extra] = row.split(':');
     if (extra !== undefined || exit === undefined) throw new Error('tree_reply');
     reply.held.set(id(pid!), { start: ticks(start!), exit: exit === '' ? null : ticks(exit) });
   }
-  for (const row of list(parts[4]!)) {
+  for (const row of list(parts[3]!)) {
     const [pid, error, extra] = row.split(':');
     if (extra !== undefined || (error !== 'gone' && error !== 'denied')) throw new Error('tree_reply');
     reply.errors.set(id(pid!), error);
@@ -297,7 +298,7 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
   try { helper = (options.helper ?? windowsTreeHelper)(); } catch { clearTimeout(grace); root.kill(); return 'unconfirmed'; }
   const owned = new Map<number, { start: bigint; exit: bigint | null }>(), foreign = new Set<number>(), unknown = new Set<number>();
   // An already observed exit means the root PID may be reused: no evidence.
-  let hold: number[] = root.exited() ? [] : [root.pid], kill: number[] = [], previous: TreeReply | undefined;
+  let hold: number[] = root.exited() ? [] : [root.pid], kill: number[] = [];
   let doubtful = !hold.length, rootPending = hold.length > 0;
   const parentOwns = (ppid: number, start: bigint) => {
     const parent = owned.get(ppid);
@@ -320,22 +321,24 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
         if (rootPending && pid === root.pid) {
           // Still unobserved by Node now, so it was the root when opened.
           rootPending = false;
-          // A proven root is terminated through the held handle in the next
-          // request, after its listed children are held (Node's own kill
-          // would let a Node child's job end them first, unheld); the grace
-          // timer stays as the backstop. An unproven root is killed now.
+          // A proven root is terminated through the held handle once the
+          // visible tree is held (Node's own kill would let a Node child's job
+          // end them first, unheld); the grace timer stays as the backstop.
+          // An unproven root is killed now.
           if (state && !root.exited()) owned.set(pid, { ...state }); else { doubtful = true; unknown.add(pid); clearTimeout(grace); root.kill(); }
           continue;
         }
         if (!state) { doubtful = true; unknown.add(pid); continue; }
-        // This snapshot follows the hold. An exited (unlisted) process may use
-        // the earlier row only if it already owned the PID when that was taken.
-        const ppid = reply.rows.get(pid) ?? (previous && state.start <= previous.snapshot ? previous.rows.get(pid) : undefined);
+        // Only this snapshot, taken after the hold, describes the held process.
+        // An earlier row may belong to a previous holder of the PID, and no
+        // wall-clock stamp can prove otherwise: an unlisted (already exited)
+        // candidate stays unattributed, and nothing under it is killed.
+        const ppid = reply.rows.get(pid);
         if (ppid === undefined) { doubtful = true; unknown.add(pid); }
         else if (ppid !== pid && parentOwns(ppid, state.start)) owned.set(pid, { ...state });
         else foreign.add(pid);
       }
-      previous = reply; hold = []; kill = [];
+      hold = []; kill = [];
       for (const [pid, node] of owned) if (node.exit === null) kill.push(pid);
       // An unproven root already made the result doubtful; its PID is in unknown.
       for (const [pid, ppid] of reply.rows) {
@@ -343,6 +346,11 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
         if (pid <= 4 || pid === ppid || pid === self || pid === helper.pid || owned.has(pid) || foreign.has(pid) || unknown.has(pid)) continue;
         if (owned.has(ppid)) hold.push(pid);
       }
+      // Hold the whole visible tree before killing anything: a dying Node
+      // parent's job ends its children, and an unheld one would then vanish
+      // unattributed. A tree that keeps growing is bounded by the deadline
+      // (the root by ROOT_HOLD_GRACE_MS).
+      if (hold.length) kill = [];
       if (!hold.length && !kill.length) {
         if (root.exited()) return doubtful ? 'unconfirmed' : 'confirmed';
         // The root was asked to terminate; give Node a moment to observe it.

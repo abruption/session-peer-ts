@@ -20,8 +20,15 @@ type Proc = { pid: number; ppid: number; start: bigint; exit: bigint | null; stu
 // (and its zombie) addressable; kills apply only to held entries.
 class Table {
   clock = 1000n; procs = new Map<number, Proc>(); held = new Set<number>(); kills: number[] = []; holds: number[] = [];
-  requests = 0; closed = false; vanish = new Set<number>(); onRequest?: (table: Table) => void; onKill?: (pid: number) => void;
+  requests = 0; closed = false; cascade = false; vanish = new Set<number>(); onRequest?: (table: Table) => void; onKill?: (pid: number) => void;
   tick() { return this.clock += 10n; }
+  // A Node parent's libuv job ends its children when it exits; an unheld one
+  // is then gone for good (its PID released).
+  endChildren(ppid: number) {
+    for (const child of [...this.procs.values()]) if (child.ppid === ppid && child.exit === null) {
+      child.exit = this.tick(); if (!this.held.has(child.pid)) this.procs.delete(child.pid); this.endChildren(child.pid);
+    }
+  }
   add(pid: number, ppid: number, start = this.tick(), extra: Partial<Proc> = {}) { const p = { pid, ppid, start, exit: null, ...extra }; this.procs.set(pid, p); return p; }
   reply(hold: number[], kill: number[]): TreeReply {
     this.requests++; this.onRequest?.(this);
@@ -33,17 +40,19 @@ class Table {
       if (p.denied) { errors.set(pid, 'denied'); continue; }
       this.held.add(pid);
     }
+    // As the helper does: snapshot after the holds, before the kills.
+    const rows = new Map<number, number>();
+    for (const p of this.procs.values()) if (p.exit === null) rows.set(p.pid, p.ppid);
     for (const pid of kill) {
       assert.ok(this.held.has(pid), `kill ${pid} without a held handle`);
       this.kills.push(pid); this.onKill?.(pid);
       const p = this.procs.get(pid)!;
       if (p.spawnOnKill && !this.procs.has(p.spawnOnKill.pid)) { this.procs.set(p.spawnOnKill.pid, { ...p.spawnOnKill, start: this.tick() }); }
-      if (!p.stubborn && p.exit === null) p.exit = this.tick();
+      if (!p.stubborn && p.exit === null) { p.exit = this.tick(); if (this.cascade) this.endChildren(pid); }
     }
-    const snapshot = this.tick(), rows = new Map<number, number>(), held = new Map<number, { start: bigint; exit: bigint | null }>();
-    for (const p of this.procs.values()) if (p.exit === null) rows.set(p.pid, p.ppid);
+    const held = new Map<number, { start: bigint; exit: bigint | null }>();
     for (const pid of this.held) { const p = this.procs.get(pid)!; held.set(pid, { start: p.start, exit: p.exit }); }
-    return { snapshot, rows, held, errors };
+    return { rows, held, errors };
   }
   helper(pid = 7): TreeHelper {
     return { pid, request: async (hold, kill) => this.reply(hold, kill), close: () => { this.closed = true; } };
@@ -121,7 +130,7 @@ test('a reused PID between snapshot and hold is attributed by the held identity,
   assert.equal(table.kills.includes(101), false);
 });
 
-test('an exited (zombie) candidate is attributed from the earlier row only if it owned the PID then', async () => {
+test('an exited (unlisted) candidate is never attributed from an earlier row', async () => {
   const table = new Table(), root = rooted(table);
   const child = table.add(101, ROOT); table.add(102, 101);
   const original = table.reply.bind(table);
@@ -131,8 +140,9 @@ test('an exited (zombie) candidate is attributed from the earlier row only if it
     if (hold.includes(101)) { child.exit = table.tick(); reply.rows.delete(101); reply.held.set(101, { start: child.start, exit: child.exit }); }
     return reply;
   };
-  assert.equal(await reap(table, root), 'confirmed');
-  assert.deepEqual([...new Set(table.kills)].filter(pid => pid !== ROOT), [102]);
+  // Even the genuine child cannot be proven once it is unlisted: no kill.
+  assert.equal(await reap(table, root), 'unconfirmed');
+  assert.deepEqual([...new Set(table.kills)].filter(pid => pid !== ROOT), []);
 
   // The listed 101 is replaced after that snapshot by an unrelated process that
   // exits at once: its earlier row cannot describe it, so nothing under it is killed.
@@ -149,6 +159,33 @@ test('an exited (zombie) candidate is attributed from the earlier row only if it
   };
   assert.equal(await reap(other, second), 'unconfirmed');
   assert.deepEqual(other.kills.filter(pid => pid !== ROOT), []);
+});
+
+test('an unlisted held candidate never inherits an earlier row, whatever the helper clock said', async () => {
+  // A snapshot listed 101 under the root (whatever wall clock the helper had).
+  // 101 is then reused by an unrelated process (other parent) that is held,
+  // exits at once and is unlisted; its child must not be attributed through
+  // the old row, and the result is unconfirmed.
+  const table = new Table(), root = rooted(table);
+  table.add(101, ROOT);
+  const original = table.reply.bind(table);
+  table.reply = (hold, kill) => {
+    if (!hold.includes(101)) return original(hold, kill);
+    table.procs.delete(101); const reuser = table.add(101, 1); table.add(102, 101);
+    const reply = original(hold, kill); reuser.exit = table.tick(); reply.rows.delete(101);
+    reply.held.set(101, { start: reuser.start, exit: reuser.exit }); return reply;
+  };
+  assert.equal(await reap(table, root), 'unconfirmed');
+  assert.deepEqual(table.kills.filter(pid => pid !== ROOT), []);
+});
+
+test('the whole visible tree is held before anything is killed, so job-killed descendants stay attributed', async () => {
+  const table = new Table(), root = rooted(table);
+  table.cascade = true;
+  table.add(101, ROOT); table.add(102, 101); table.add(103, 102);
+  assert.equal(await reap(table, root), 'confirmed');
+  assert.deepEqual([...new Set(table.holds)].sort(), [ROOT, 101, 102, 103]);
+  assert.ok(table.kills.length > 0);
 });
 
 test('a descendant started during cleanup is found and killed in a later round', async () => {
@@ -229,14 +266,14 @@ test('a root that never exits, a hung, failing or absent helper and an abort are
 });
 
 test('helper replies are parsed strictly', () => {
-  const reply = parseTreeReply('ok 133000000000000000 100:50,101:100 101:133000000000000010:,102:133000000000000020:133000000000000030 103:gone,104:denied');
+  const reply = parseTreeReply('ok 100:50,101:100 101:133000000000000010:,102:133000000000000020:133000000000000030 103:gone,104:denied');
   assert.equal(reply.rows.get(101), 100);
   assert.deepEqual(reply.held.get(101), { start: 133000000000000010n, exit: null });
   assert.equal(reply.held.get(102)!.exit, 133000000000000030n);
   assert.equal(reply.errors.get(104), 'denied');
-  assert.equal(parseTreeReply('ok 1 - - -').rows.size, 0);
-  for (const line of ['', 'error', 'ok 1 - -', 'ok 0 - - -', 'ok x - - -', 'ok 1 1:2:3 - -', 'ok 1 a:1 - -', 'ok 1 - 1:2 -',
-    'ok 1 - 1:0: -', 'ok 1 - - 1:other', 'ok 1 - - - extra', 'ok 1 12345678901:1 - -']) {
+  assert.equal(parseTreeReply('ok - - -').rows.size, 0);
+  for (const line of ['', 'error', 'ok - -', 'ok 1 - - -', 'ok 1:2:3 - -', 'ok a:1 - -', 'ok - 1:2 -',
+    'ok - 1:0: -', 'ok - 1:x: -', 'ok - - 1:other', 'ok - - - extra', 'ok 12345678901:1 - -']) {
     assert.throws(() => parseTreeReply(line), /tree_reply/, line);
   }
   assert.equal(treeReserve(3000), 1000); assert.equal(treeReserve(60000), WINDOWS_TREE_RESERVE_MS); assert.equal(treeReserve(1), 0);
@@ -256,7 +293,7 @@ function fakePowerShell(table: Table, options: { hang?: boolean } = {}) {
       if (options.hang) continue;
       const r = table.reply(hold!, kill!);
       const field = (items: string[]) => items.length ? items.join(',') : '-';
-      helper.stdout.write(`ok ${r.snapshot} ${field([...r.rows].map(([a, b]) => `${a}:${b}`))} ${field([...r.held].map(([pid, s]) => `${pid}:${s.start}:${s.exit ?? ''}`))} ${field([...r.errors].map(([pid, e]) => `${pid}:${e}`))}\r\n`);
+      helper.stdout.write(`ok ${field([...r.rows].map(([a, b]) => `${a}:${b}`))} ${field([...r.held].map(([pid, s]) => `${pid}:${s.start}:${s.exit ?? ''}`))} ${field([...r.errors].map(([pid, e]) => `${pid}:${e}`))}\r\n`);
     }
   });
   return helper;
@@ -360,7 +397,7 @@ childProcess.spawn = (binary, args, options) => {
     if (kill !== '-') { kills.push(...kill.split(',').map(Number)); if (kills.includes(root)) try { process.kill(root, 'SIGKILL'); } catch {} writeFileSync(${JSON.stringify(log)}, JSON.stringify(kills)); }
     const states = [...held].map(([id, at]) => id + ':' + at + ':' + (kills.includes(id) ? at + 20n : '')).join(',') || '-';
     const rows = [[root, process.pid], [9001, root]].filter(([id]) => !kills.includes(id)).map(row => row.join(':')).join(',') || '-';
-    helper.stdout.write('ok ' + ft() + ' ' + rows + ' ' + states + ' -\\n');
+    helper.stdout.write('ok ' + rows + ' ' + states + ' -\\n');
   });
   return helper;
 };

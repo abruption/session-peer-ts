@@ -7,15 +7,19 @@ This is a source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b
 not a release. POSIX behaviour is unchanged.
 
 On win32, `run()` stops a child as follows:
-- A single PowerShell helper first holds a handle to the child. It holds the
-  listed children, then terminates the child through that handle (Node kills
-  it after `ROOT_HOLD_GRACE_MS`, 2 s, if the helper is slow).
-- It then terminates descendants attributed only by parent PID and kernel
-  creation/exit times read through held handles. No bare PID, wall clock,
-  `taskkill`, shell or caller text is involved.
-- If the child's exit was already observed, nothing under its PID is killed.
-  The same applies to a candidate that vanished, was denied or became
-  unlisted; in each of these cases the result is `cleanup: unconfirmed`.
+- A single PowerShell helper first holds a handle to the directly spawned
+  child. It holds every visible descendant, then terminates the child and the
+  proven descendants through held handles. Node kills the child after
+  `ROOT_HOLD_GRACE_MS`, 2 s, if the helper is slow.
+- Ownership is proven only from parent PID and kernel creation/exit times read
+  through held handles, taken from a process snapshot made after the hold. No
+  bare PID, wall-clock stamp, earlier snapshot row, `taskkill`, shell or caller
+  text is involved.
+- Some candidates or branches cannot be proven: a child whose exit was already
+  observed, or a candidate that vanished, was denied or became unlisted. These
+  are not terminated, and the result is `cleanup: unconfirmed`. That result is
+  not evidence of no effect, because the spawned child and proven descendants
+  may already have been terminated.
 - The cleanup reserve is `min(2500, timeout/3)` ms, taken out of the caller's
   total. A signal caps a cleanup at 2.5 s, including one already in progress.
 
@@ -26,15 +30,17 @@ Creator precheck, creation and postcheck are not atomic. The handoff ledger is
 not connected to this guard and still refuses Windows with
 `handoff_storage_unsupported`.
 
-Local macOS arm64 / Node 24.16.0:
+Local macOS arm64 / Node 24.16.0, final code:
 - Build, test types, `npm run test:package`, repository checks and
   `git diff --check` passed.
 - `npm test`, with the pinned Python 1.1.0 reference
   `8ca77cf31254c8287a2593fe484bb30a7dba2727`, passed with zero failures.
   Windows-native cases skip there; full counts are in the PR.
-- Each targeted guard was removed in turn. Every removal made its regression
-  test fail: gone and unlisted candidates, the signal cap, root proof after an
-  observed exit, and the kernel creation-time check.
+- Each targeted guard was removed in turn, and every removal made its
+  regression test fail. Covered guards: an earlier-row fallback for unlisted
+  candidates (any clock), gone and unlisted candidates, the signal cap, root
+  proof after an observed exit, the kernel creation-time check, and holding the
+  tree before any kill.
 
 Separately authorized isolated runs used a Windows x64 test host: Windows 10
 19045, PowerShell 5.1.19041.6456, Node 24.16.0 x64. The account was an
@@ -45,21 +51,22 @@ Earlier native runs found and fixed:
 - The detached helper exited at once on its piped stdin.
 - PowerShell 5.1 wrapped the JSON path array.
 - Files created by an elevated administrator are owned by Administrators.
-- A Node child's own libuv job kills its descendants when it exits. Therefore
-  a Node parent never leaves pipe holders behind, and Node's kill of a proven
-  root must wait until its children are held.
+- A Node child's own libuv job kills its descendants when it exits. Once the
+  earlier-row fallback was removed, killing before the whole tree was held let
+  a job-ended grandchild vanish unattributed.
 
 With the final code on that host:
-- The new native process-tree and storage tests passed, 21 of 24 with 3
-  POSIX-only skips. They cover:
+- The new native process-tree and storage tests passed, 23 of 26 with 3
+  POSIX-only skips; the native process-tree cases also passed in two more runs.
+  They cover:
   - Node and non-Node parents (PowerShell starting `PING.EXE` via
     CreateProcessW) on timeout, overflow and handler-emitted interrupt;
   - an exited parent with a pipe-holding child, which reports `unconfirmed`
     and is not killed;
   - a private directory, an inherited ACL and a junction inside the prefix.
-- `npm run test:windows` passed: 337 total / 196 passed / 0 failed / 141
+- `npm run test:windows` passed: 339 total / 198 passed / 0 failed / 141
   skipped. `npm run test:package` passed.
-- The full cleanup took 973-1344 ms over 20 warm samples.
+- The full cleanup took 973-1278 ms over 20 warm samples.
 - The prefix was removed, and no process with it in its command line remained.
 
 The interrupt cases emit the SIGINT event to the installed handler; they do not
