@@ -69,11 +69,39 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
     '-o', 'ClearAllForwardings=yes', '-o', 'PermitLocalCommand=no', ...(jump.port ? ['-p', jump.port] : []), '-l', jump.user,
     '-W', "'[%h]:%p'", '--', jump.host].join(' ');
 }
+// Win32-OpenSSH has no shell step (PowerShell/openssh-portable, same code from
+// v8.1.0.0 through latestw_all d0c65f2): readconf.c keeps the raw value but
+// argv_split()s it first and rejects unbalanced quotes; sshconnect.c
+// percent-expands "exec %s", skips "exec " and posix_spawnp()s the whole string
+// as argv[0] with no arguments; misc.c build_commandline_string() passes a string
+// that starts with '"' unchanged to CreateProcessW(NULL, ...) (w32fd.c, which
+// then also skips its unquoted-name retry). No cmd.exe runs, so %VAR%, ^, & and |
+// are inert; the ssh.exe UCRT splits the line once more. Only an absolute drive
+// path ending in \ssh.exe without '"', ':' or wildcard characters is accepted:
+// it is the quoted program name (read up to the next '"', no escapes), and every
+// other argument is a fixed or validated token without spaces, quotes or
+// backslashes, so no MSVCRT escaping is needed. "[%h]:%p" is double-quoted where
+// POSIX single-quotes it; %h from a configured HostName stays the same trusted
+// ssh_config boundary. SSH_TEST_ENVIRONMENT makes Win32-OpenSSH rewrite the
+// path (bash_to_win_path) and is refused.
+// Not enabled: the CLI still refuses a Windows client until an actual Win32
+// OpenSSH run and bounded owned-process-tree cleanup on timeout, output
+// overflow and interrupt are qualified (#20, #131).
+export function windowsProxyCommand(ssh: string, jump: SshJump, env: NodeJS.ProcessEnv = process.env): string {
+  if (ssh.length > 4096 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(ssh) ||
+    !/^[A-Za-z]:\\(?:[^\x00-\x1f\x7f"*:<>?|/\\]+\\)*ssh\.exe$/i.test(ssh)) throw new Refusal('ssh_jump_unsupported_ssh_path');
+  if (Number.parseInt(env.SSH_TEST_ENVIRONMENT ?? '', 10)) throw new Refusal('ssh_jump_unsupported_environment');
+  return [`"${ssh.replace(/%/g, '%%')}"`, '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ConnectTimeout=10',
+    '-o', 'ConnectionAttempts=1', '-o', 'ProxyCommand=none', '-o', 'ProxyJump=none', '-o', 'ControlPath=none', '-o', 'ForwardAgent=no',
+    '-o', 'ClearAllForwardings=yes', '-o', 'PermitLocalCommand=no', ...(jump.port ? ['-p', jump.port] : []), '-l', jump.user,
+    '-W', '"[%h]:%p"', '--', jump.host].join(' ');
+}
 // Outer options for a jump: a configured ControlMaster/ControlPath could reuse
 // an existing master and bypass the hop, and ProxyUseFdpass would change how the
 // proxy hands over its connection, so all three are fixed before user options.
-export function jumpOptions(ssh: string, jump: SshJump): string[] {
-  return ['-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ProxyUseFdpass=no', '-o', `ProxyCommand=${proxyCommand(ssh, jump)}`];
+export function jumpOptions(ssh: string, jump: SshJump, platform: NodeJS.Platform = process.platform): string[] {
+  const command = platform === 'win32' ? windowsProxyCommand(ssh, jump) : proxyCommand(ssh, jump);
+  return ['-o', 'ControlMaster=no', '-o', 'ControlPath=none', '-o', 'ProxyUseFdpass=no', '-o', `ProxyCommand=${command}`];
 }
 // Like Python, ask OpenSSH which login user applies without connecting. With
 // `force`, `ssh -G` also runs for an explicit user so the caller can see a

@@ -146,7 +146,9 @@ export function parse(args: string[]): Options {
     jump = sshJump(values.get('--ssh-jump')!);
     // An existing control master would bypass the hop entirely.
     if (values.has('--ssh-control-path')) throw new Refusal('conflicting_ssh_jump');
-    // Win32-OpenSSH starts ProxyCommand without a POSIX shell; not yet proven.
+    // Win32-OpenSSH starts ProxyCommand without a POSIX shell. windowsProxyCommand
+    // models it from source only; an actual client run and owned-process-tree
+    // cleanup (#131) are still unqualified, so this stays before any SSH.
     if (process.platform === 'win32') throw new Refusal('ssh_jump_unsupported_platform');
   }
   if (values.has('--ssh-control-path')) {
