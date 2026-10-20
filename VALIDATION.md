@@ -176,9 +176,12 @@ mismatches**. It repeated the second rerun's steps and added the following:
   refused as `unreceipted_activation`.
 
 The user executables were identical, and the test directory was removed with
-no leftover path or process. This is the only Linux run of the final harness
-revision. Together with the earlier minimal reruns, it covers only the subset
-named in the ADR.
+no leftover path or process. This is the only Linux run of harness revision
+`afe2c7f5…d809` (commit `c0203fe`). Together with the earlier minimal reruns,
+it covers only the subset named in the ADR. The later journal-freshness fix
+records each acquisition once and lets a break close only a matching open
+acquisition. It was verified with Darwin-local fixtures only and was not
+rerun on the host.
 
 The rule cells L3–L8 above (retention, fresh-lock recovery, receipt states,
 journal-confirmed rollback, `.receipts` trust, lock overrides and activation

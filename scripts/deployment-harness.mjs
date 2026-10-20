@@ -661,6 +661,13 @@ function runEvents(journal, run) {
   if (events[0]?.event !== 'run_started') throw new Refusal('run_unknown');
   return events;
 }
+// An acquisition stays open until this run's unlock of the same (prefixId,
+// lockId) or a recorded break that closed exactly that pair.
+function acquisitionClosed(journal, acquired) {
+  return journal.entries.slice(acquired.seq + 1).some(entry => entry.prefixId === acquired.prefixId &&
+    ((entry.event === 'lock_released' && entry.runId === acquired.runId && entry.lockId === acquired.lockId) ||
+     (entry.event === 'lock_broken' && entry.closesLockId === acquired.lockId)));
+}
 function since(events, event) { const index = events.findLastIndex(entry => entry.event === event); return index < 0 ? [] : events.slice(index); }
 function switches(journal, target) {
   let count = 0;
@@ -696,14 +703,31 @@ const op = {
     const value = file ? readJson(file) : undefined;
     const record = { event, runId: run };
     const locked = since(events, 'lock_acquired');
-    const holding = locked.length && !locked.some(entry => ['lock_released', 'lock_broken'].includes(entry.event));
+    const holding = !!locked.length && !acquisitionClosed(journal, locked[0]);
     if (RESULT[event]) {
       if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || value.dryRun !== false)
         throw new Refusal('result_invalid', { event });
-      if (event === 'lock_broken') Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override, prefixId: value.prefixId, brokenLockId: value.brokenLockId });
-      else if (value.runId !== run) throw new Refusal('result_invalid', { event, reason: 'run' });
+      if (event === 'lock_broken') {
+        // A break closes an acquisition only when it names an open one recorded
+        // here, on the same prefix and with the same lockId. Anything else (an
+        // unowned override, another journal's or prefix's lock, an already
+        // closed lock) is kept as an audit record that closes nothing.
+        if (!HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
+        if (value.brokenLockId && journal.entries.some(entry => entry.event === 'lock_broken' && entry.prefixId === value.prefixId && entry.brokenLockId === value.brokenLockId))
+          throw new Refusal('break_replayed');
+        const open = value.brokenLockId ? journal.entries.find(entry => entry.event === 'lock_acquired' && entry.prefixId === value.prefixId &&
+          entry.lockId === value.brokenLockId && !acquisitionClosed(journal, entry)) : undefined;
+        if (open && open.runId !== value.runId) throw new Refusal('result_invalid', { event, reason: 'owner' });
+        Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override, prefixId: value.prefixId, brokenLockId: value.brokenLockId ?? null,
+          closesLockId: open ? open.lockId : null });
+      } else if (value.runId !== run) throw new Refusal('result_invalid', { event, reason: 'run' });
       if (event === 'lock_acquired') {
-        if (holding || !HEX32.test(value.lockId ?? '') || !HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
+        if (!HEX32.test(value.lockId ?? '') || !HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
+        // Each acquisition is recorded exactly once per journal, by its own run:
+        // re-recording (even the current one) is refused, never deduplicated.
+        if (journal.entries.some(entry => entry.event === 'lock_acquired' && entry.prefixId === value.prefixId && entry.lockId === value.lockId))
+          throw new Refusal('acquisition_replayed');
+        if (holding) throw new Refusal('result_invalid', { event, reason: 'already_holding' });
         Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });
       } else if (event !== 'lock_broken') {
         // Every lock-bound result must come from this run's current lock on
@@ -762,7 +786,7 @@ const op = {
     const locked = since(events, 'lock_acquired');
     const base = { harness: HARNESS, statementVersion: 1, kind, runId: run, operatorLabel: journal.operatorLabel, journalHead: journal.head, issuedAt: now() };
     const lockId = locked[0]?.lockId ?? null, prefixId = locked[0]?.prefixId ?? null;
-    const holding = locked.length && !locked.some(entry => ['lock_released', 'lock_broken'].includes(entry.event));
+    const holding = !!locked.length && !acquisitionClosed(journal, locked[0]);
     if (kind === 'run-ended') {
       if (!events.some(entry => entry.event === 'run_ended')) throw new Refusal('run_not_ended');
       return { ...base, prefixId, lockId };

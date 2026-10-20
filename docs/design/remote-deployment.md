@@ -829,7 +829,16 @@ statement carries the prefix sentinel ID and that `lockId`. `op record`
 refuses a result from another run, another prefix or an earlier lock,
 including an earlier lock of the same run acquired at the same timestamp.
 `callers_switched` needs the publishing run's unlock under the same lock that
-published the receipt.
+published the receipt. The journal records each acquisition (prefix ID and
+`lockId`) exactly once. Re-recording one, whether replayed after it closed or
+repeated while current, is refused (`acquisition_replayed`), never
+deduplicated. An acquisition stays current until this run's unlock of the
+same pair, or until a recorded break closes exactly that pair. A break result
+names a prefix and a broken `lockId`. It closes the current acquisition only
+when that pair is an open acquisition recorded in this journal. Other break
+results are recorded as audit entries that close nothing: an unowned
+override, a lock on another prefix or from another journal, or an already
+closed lock. Recording the same break twice is refused (`break_replayed`).
 It accepts the operator results only after a recorded destination `verify`
 of the same target under the same lock:
 
@@ -904,7 +913,7 @@ has the results and the deviations. That full run used harness revision
 L3–L8: retention, fresh-lock recovery without a receipt, the receipt states,
 journal-confirmed rollback, `.receipts` trust, lock-owner overrides and the
 activation rows. Three later same-day minimal reruns used the review-fixed
-revisions. The final one used `afe2c7f5…d809`. They covered only this subset:
+revisions. The last one used `afe2c7f5…d809` (commit `c0203fe`). They covered only this subset:
 
 - the primary order;
 - the explicit `already_provisioned` discard;
@@ -915,7 +924,10 @@ revisions. The final one used `afe2c7f5…d809`. They covered only this subset:
 - run-owned staging discards.
 
 On that one arm64/glibc/Node 24 cell, this qualifies the table's rules with
-the earlier revision, and the listed subset with the final revision. It does
+the earlier revision, and the listed subset with revision `afe2c7f5…d809`.
+The later journal-freshness change (acquisition replay and break closure
+binding) has Darwin-local fixture evidence only; it was not rerun on the
+Linux host. It does
 not qualify Linux x64 under the current rules, Node 22, concurrent or
 adversarial races, the empty-directory window or a deploy helper.
 
@@ -998,7 +1010,7 @@ Only the primary install has operator SSH evidence. **On Windows**, Node
 remains **partially validated**. On one Linux arm64 Node 24 test host only
 (2026-10-20), the current recovery rules and the exact operator-check,
 receipt, unlock and caller-switch order were requalified with harness
-revision `210759a1…41e7`. With the final revision, only the primary order and
+revision `210759a1…41e7`. With revision `afe2c7f5…d809`, only the primary order and
 the subset listed above were rerun. The other cells listed
 under "Not validated" above remain not fully validated. Local stubs, including the 2026-10-20 harness
 fixtures, do not replace destination evidence. These results do not qualify a

@@ -504,3 +504,53 @@ test('staging is discarded only by its own run; markerless leftovers need an exp
   ok(['dest', 'discard-staging', ...w.P, '--run', owner, '--staging', staging, '--execute', '--confirm-destructive']);
   assert.deepEqual(readdirSync(w.root), []);
 });
+
+test('an acquisition is recorded once per journal; a replayed one cannot revive an earlier lock', { skip }, t => {
+  const w = world(t);
+  const first = w.begin();
+  const acquired = ok(['dest', 'lock', ...w.P, '--run', first, '--operator-label', w.label, '--execute']);
+  w.record(first, 'lock_acquired', acquired);
+  const released = ok(['dest', 'unlock', ...w.P, '--run', first, '--execute']);
+  w.record(first, 'lock_released', released);
+  const second = w.begin(); w.lock(second);
+  w.record(second, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', second, '--execute']));
+  // Replaying the first acquisition would make its old unlock result current again.
+  refused(['op', 'record', ...w.J, '--run', first, '--event', 'lock_acquired', '--file', w.file('lock', acquired), '--execute'], 'acquisition_replayed');
+  refused(['op', 'record', ...w.J, '--run', first, '--event', 'lock_released', '--file', w.file('unlock', released), '--execute'], 'lock_not_recorded');
+  refused(['op', 'record', ...w.J, '--run', second, '--event', 'lock_acquired', '--file', w.file('lock', acquired), '--execute'], 'result_invalid');
+  // Re-recording the current acquisition is not idempotent either: each acquisition is recorded exactly once.
+  const third = w.begin();
+  const current = ok(['dest', 'lock', ...w.P, '--run', third, '--operator-label', w.label, '--execute']);
+  w.record(third, 'lock_acquired', current);
+  refused(['op', 'record', ...w.J, '--run', third, '--event', 'lock_acquired', '--file', w.file('lock', current), '--execute'], 'acquisition_replayed');
+});
+
+test('only a break of the same prefix and lock closes the current acquisition', { skip }, t => {
+  const w = world(t);
+  const holder = w.begin(); w.lock(holder);
+  // A break on another prefix is an audit record only.
+  const other = join(w.base, 'prefix2'), P2 = ['--prefix', other];
+  ok(['dest', 'init-prefix', ...P2, '--execute']);
+  const elsewhere = w.begin();
+  ok(['dest', 'lock', ...P2, '--run', elsewhere, '--operator-label', w.label, '--execute']);
+  const foreign = ok(['dest', 'break-lock', ...P2, '--unowned', '--lock-name', '.activate.lock', '--declare-run-ended', '--execute', '--confirm-destructive']);
+  const foreignRecord = w.record(holder, 'lock_broken', foreign).record;
+  // The holder still holds its lock: its lock-bound results stay recordable.
+  w.activate(holder);
+  assert.equal(foreignRecord.closesLockId, null);
+  // A break of a lock already closed (or never recorded here) closes nothing either.
+  const stale = w.begin();
+  ok(['dest', 'lock', ...P2, '--run', stale, '--operator-label', w.label, '--execute']);
+  const staleBreak = ok(['dest', 'break-lock', ...P2, '--unowned', '--lock-name', '.activate.lock', '--declare-run-ended', '--execute', '--confirm-destructive']);
+  assert.equal(w.record(holder, 'lock_broken', staleBreak).record.closesLockId, null);
+  w.record(holder, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', holder, '--execute']));
+  // Legitimate recovery: the ended holder's own lock, broken on its prefix.
+  w.record(holder, 'run_ended');
+  const recovery = w.begin();
+  const ended = w.file('ended', ok(['op', 'statement', ...w.J, '--kind', 'run-ended', '--run', holder]));
+  const broken = ok(['dest', 'break-lock', ...w.P, '--statement', ended, '--execute', '--confirm-destructive']);
+  const closed = w.record(recovery, 'lock_broken', broken).record;
+  assert.equal(closed.closesLockId, broken.brokenLockId);
+  refused(['op', 'record', ...w.J, '--run', recovery, '--event', 'lock_broken', '--file', w.file('broken', broken), '--execute'], 'break_replayed');
+  w.lock(recovery);
+});
