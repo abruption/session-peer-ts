@@ -734,7 +734,9 @@ gaps:
 
 The details and the deviations from this workflow are in
 [VALIDATION.md](../../VALIDATION.md#remote-deployment-workflow-posix-cell-23-f5--2026-10-02-kst).
-Rules added after that Linux run remain **unvalidated on Linux**:
+Rules added after that Linux run were not exercised by it. On 2026-10-20
+they were run once with the [validation harness](#validation-harness-2026-10-20)
+on a Linux **arm64** test host only; Linux x86_64 has not been rerun under them:
 - the fresh-lock recovery of an unreceipted target;
 - receipts that copy the marker's `runId`;
 - `.receipts` trust checks;
@@ -846,9 +848,23 @@ before the receipt and caller switching was refused before unlock. This is
 **not** Linux, Windows, OpenSSH or remote-account evidence, and no cell above
 is qualified by it.
 
-**Linux requalification (unrun; needs a separately authorized host).** On an
-isolated test directory of a Linux arm64 or x64 account, with Node 24 (and,
-for the Node 22 cell, 22.13+) at absolute paths:
+**Linux arm64 run (2026-10-20, user-authorized test host).** The steps below
+were run once, harness-driven, on Ubuntu (Linux 7.0) aarch64 with glibc 2.39,
+Node 24.18.0 (ABI 137) and its bundled npm 11.16.0. The test directory was a
+new `/tmp` directory with mode 700 (`/tmp` is root-owned and sticky). It
+installed the published 0.4.0 tarball offline. The operator side (`op`, the
+journal and the `session-peer` 0.4.0 CLI from this branch) ran on the macOS
+arm64 workstation over the existing pinned SSH trust. The `dest` side ran over
+SSH with the recorded Node. 185 harness/operator steps checked 89 expected
+outcomes, all as expected. Step 6 was not run because no Node 22 exists on
+the host, and none was installed. [VALIDATION.md](../../VALIDATION.md#23-deployment-validation-harness--linux-arm64-test-host-2026-10-20-kst)
+has the results and the deviations. This qualifies exactly the rules in the
+table above on that one arm64/glibc/Node 24 cell, with this harness. It does
+not qualify Linux x64 under the current rules, Node 22, concurrent or
+adversarial races, the empty-directory window or a deploy helper.
+
+On an isolated test directory of a Linux arm64 or x64 account, with Node 24
+(and, for the Node 22 cell, 22.13+) at absolute paths:
 
 1. Read-only discovery: OS, arch, glibc, Node and bundled npm versions,
    `session-peer` entries on `PATH`, and that the test directory is absent.
@@ -893,20 +909,23 @@ account type.
   an unowned lock, and the per-file manifest. Selected corresponding Windows
   fixture cases passed at the 2026-10-07 checkpoint; the dated VALIDATION.md
   section distinguishes native/local fixtures from operator SSH.
-- Not exercised on Linux under the current rules: explicit recovery of an
-  unreceipted target under a fresh lock, corrupt/mismatched/orphan receipt
-  handling, `.receipts` trust checks and operator override for unconfirmable
-  lock owners. Those Windows fixture cells passed at the dated checkpoint.
+- Not exercised on Linux x86_64 under the current rules: explicit recovery
+  of an unreceipted target under a fresh lock, corrupt/mismatched/orphan
+  receipt handling, `.receipts` trust checks and operator override for
+  unconfirmable lock owners. These passed once on the Linux arm64 test host
+  with the harness (2026-10-20). The Windows fixture cells passed at the dated
+  checkpoint.
   General concurrent/adversarial race qualification remains open. The
   identity launcher was only compared logically (Linux) and prototyped
   (macOS).
-  The [validation harness](#validation-harness-2026-10-20) covers these
-  rules with Darwin-local fixtures only; its Linux, Windows non-admin and
+  The [validation harness](#validation-harness-2026-10-20) also has
+  Darwin-local fixtures for them. Its Linux x64, Windows (any account) and
   Node 22 full-matrix runs are unrun.
 - The POSIX empty-directory race window. It is documented as unguaranteed and
   was not exercised.
-- Linux arm64, Windows arm64 and macOS x64 native loads; glibc below 2.28 and
-  musl (expected to fail).
+- Windows arm64 and macOS x64 native loads; glibc below 2.28 and musl
+  (expected to fail). The Linux arm64 node-24 binary loaded on the 2026-10-20
+  test host (glibc 2.39).
 - Complete Node 22 installation/recovery qualification on Windows, arm64 or
   macOS. Windows x64 Node 22.23.3 direct-CLI/native-lock smoke passed; Linux
   x86_64 Node 22.23.3 was exercised under the earlier dated workflow.
@@ -920,9 +939,10 @@ provisioning workflow and operator SSH checks (doctor and refused dry-run;
 no message delivery) passed, plus 31 native storage/local-wrapper fixtures.
 Only the primary install has operator SSH evidence. **On Windows**, Node
 22 has direct-CLI/native-lock smoke evidence only. Issue #23's last criterion
-remains **partially validated**: current recovery rules have not been
-requalified on Linux, and the other cells listed under "Not validated" above
-remain not fully validated. Local stubs, including the 2026-10-20 harness
+remains **partially validated**. The current recovery rules and the exact
+operator-check, receipt, unlock and caller-switch order were requalified once,
+on one Linux arm64 Node 24 test host only (2026-10-20). The other cells listed
+under "Not validated" above remain not fully validated. Local stubs, including the 2026-10-20 harness
 fixtures, do not replace destination evidence. These results do not qualify a
 shipped deploy helper or Windows-client jump.
 
