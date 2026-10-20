@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Proposed** (design only; nothing in this document is implemented) |
+| Status | **Proposed** (design only; no deploy helper, capability flag or negotiation is implemented. An operator-invoked [validation harness](#validation-harness-2026-10-20) exists for requalification) |
 | Date | 2026-10-02 |
 | Applies to | `session-peer` 0.2.1 source and later; SSH transport (`--host`) only |
 | Decision owner | Repository maintainer |
@@ -31,17 +31,21 @@ SSH, so a destination needs only a usable Python and a POSIX shell. Its
 `install.sh --host` additionally pushes the program to
 `$HOME/.local/share/session-peer` and links `$HOME/.local/bin/session-peer`.
 
-The TypeScript client deliberately does not do that. In 0.2.1 through 0.3.2 the local client
+The TypeScript client deliberately does not do that. In 0.2.1 through 0.4.0 the local client
 runs `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10`
 and, before any message leaves the machine:
 
 1. runs `<remote-bin> --version` with no message (15 s timeout);
 2. requires stdout to equal exactly the client's own version line, for example
-   `session-peer 0.3.2 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
+   `session-peer 0.4.0 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
    otherwise refuses with a fixed code from `sshPreflightFailure` in `src/cli.ts`;
 3. sends a `schemaVersion: 1` JSON request on stdin to
    `<remote-bin> --stdio-request` and verifies the `schemaVersion: 1` response
    shape, command, exit code and send status before reporting success.
+
+The 0.4.0 bounded handoff path (`--correlation-id` and related options) sends
+its destination preparation request only after this same exact-version
+preflight; it does not relax or replace the version rule.
 
 0.3.0 ([#20](https://github.com/abruption/session-peer-ts/issues/20))
 adds ordered repeated `--host`, an allowlisted `--ssh-opt`, a single-hop
@@ -107,7 +111,9 @@ The name `session-peer` is shared with the Python implementation (pipx,
 
 Python works offline because the source travels over SSH. An npm registry
 install needs network access to `registry.npmjs.org` (or a mirror) from the
-destination, plus the transitive `nan` package.
+destination for the package and every runtime dependency pinned by the release
+lockfile (for 0.4.0: `fs-ext-extra-prebuilt`, its dependency `nan`, and
+`smol-toml`).
 
 ## Options
 
@@ -492,8 +498,11 @@ PATH entry, a shell profile or a service.
    Then verify from the operator machine with
    `session-peer doctor --host H --remote-bin <target>/session-peer --json` and a
    `send ... --dry-run`. Never send a live message as a deployment check.
-   The order is fixed: **publish the receipt, then release the lock, then
-   switch callers (step 9)**.
+   The order is fixed: **destination checks, then the operator doctor and
+   dry-run, then publish the receipt, then release the lock, then switch
+   callers (step 9)**. The operator checks are part of step 8: if either
+   fails, no receipt is written, the run keeps the lock and rolls back as in
+   [cleanup and rollback](#cleanup-and-rollback).
 9. **Switch callers.** Only after the receipt is published and the lock is
    released does the operator change any local `--remote-bin` configuration to
    the new target. Until then, existing callers keep using the previous
@@ -603,6 +612,7 @@ PATH entry, a shell profile or a service.
 | State of `<root>/<version>-<id16>` before step 7 | Outcome |
 | --- | --- |
 | Absent | Rename, then step 8. On failure in step 8, roll back (below). |
+| Absent, but `<root>/.receipts/<version>-<id16>.json` exists (an orphan receipt) | Refuse before the rename. The receipt is removed or quarantined only by the explicit, ownership-confirmed cleanup above; never overwritten. |
 | Owned by this workflow, same `identityHash`, a matching completion receipt, and step 8 checks (including the manifest) pass on the existing directory | Report "already provisioned" and reuse the existing receipt (no new receipt). Delete only this run's staging; no change. |
 | Owned, same `identityHash`, but **no matching receipt** | Verification is insufficient. Refuse. The operator runs the explicit recovery (re-verify or roll back) under the lock, then reruns. |
 | Receipt present but corrupt or mismatched, or a `.receipts` path failing trust checks | Refuse. Explicit, ownership-confirmed cleanup only; never a blind delete. |
@@ -773,6 +783,103 @@ This was a private operator test harness, not a shipped deploy helper; neither
 the host nor the account was disposable. It does not qualify Windows-client
 `--ssh-jump`.
 
+### Validation harness (2026-10-20)
+
+`scripts/deployment-harness.mjs` is repository-only tooling (it is not in the
+npm package). It implements the checks of this document as separately invoked
+commands, so the cells that the Linux run left open can be requalified with
+exact, repeatable steps. It is **not** F6 and changes nothing in the CLI:
+
+- It never opens SSH, never contacts a registry, never installs anything on a
+  destination by itself and never runs during `list`, `send` or `doctor`. The
+  exact-version preflight is untouched.
+- The operator moves the harness and the verified tarballs with existing SSH
+  trust, then runs each `dest` command on the destination with the recorded
+  Node. `op` commands run on the operator host and keep the run journal.
+- `dest init-prefix` creates a **new** prefix (it refuses an existing path, a
+  non-canonical path and an ancestor that others can write without the sticky
+  bit) and writes a sentinel. Every other `dest` command refuses a path
+  without that sentinel or failing the trust checks. The root is
+  `<prefix>/data/session-peer-ts`, the ADR layout with
+  `XDG_DATA_HOME=<prefix>/data`. Nothing is written outside the prefix or the
+  journal, and `dest path-inventory` only hashes the `session-peer` entries on
+  `PATH`, so another manager's executable can be shown unchanged.
+- Every mutating command is a dry run unless `--execute`. Rollback,
+  retention, lock breaking, receipt cleanup, staging discard and prefix
+  removal also need `--confirm-destructive`.
+- It is POSIX only and refuses on Windows; see the Windows cells below.
+
+The fixed step 8 order is enforced across both sides. `op record` accepts a
+destination result only from the matching `dest` command and run, and
+accepts the operator `doctor` (`ok`, `diagnosticCompleted`,
+`implementation:"typescript"`) and dry-run (`submitted:false`) results only
+after a recorded destination `verify` of the same target under the same lock.
+`op statement --kind operator-checks-passed` exists only after both, and `dest
+receipt` requires that statement, bound to the current lock's creation time,
+the marker's `identityHash` and the recomputed manifest. `dest unlock` refuses
+while this run's activated target has no matching receipt and has not been
+rolled back. `op record --event callers_switched` refuses until the receipt is
+recorded and the publishing run has released its lock. Statements are JSON
+files that the operator carries to the destination. Like the marker, they are
+consistency checks between cooperating same-user steps, not authentication.
+
+| Rule | Harness command and outcome |
+| --- | --- |
+| Fresh-lock recovery of an unreceipted target | The old lock blocks `dest lock` (`lock_held`, `autoStale:false`). `dest break-lock` needs a `run-ended` statement for the owning run and removes only the lock. The new run's `dest receipt` copies the marker `runId` (`recovery:true`) |
+| Journal-confirmed rollback | `dest rollback` from another run needs a `no-caller` statement. `op statement` refuses one for a target the journal never activated or verified (`target_unknown_to_journal`) or with an outstanding caller switch (`configured_for_caller`). Without it: `rollback_unconfirmed`, re-verify only |
+| Corrupt, mismatched and orphan receipts | Classified and refused by `dest activate`/`dest receipt` (orphans before the rename). `dest receipt-cleanup` (quarantine or remove) needs the lock and ownership through the marker, or a `receipt-owned` journal statement for orphans |
+| `.receipts` trust | A group/world-accessible directory, a symlinked `.receipts` or a non-regular receipt file is refused; nothing is followed through a link |
+| Unknown or unverifiable lock owner | A lock without `owner.json`, with an unreadable one, or whose run the journal cannot show as ended, is removed only by `dest break-lock --unowned --lock-name .activate.lock --declare-run-ended`, and never touches an install |
+| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` (reported as `already_provisioned`) and `owned_receipt_*` |
+
+**Darwin-local evidence only (2026-10-20).** On macOS 27 arm64 with Node
+24.16.0 and npm 11.15.0, `test/deployment-receipt-harness.test.ts` passed 8 of
+8 tests in private temporary prefixes. They used a tree assembled from this
+checkout and a local `ssh` stand-in that runs the real CLI's `doctor --host`
+and `send --dry-run --host` against the installed wrapper. Two ordered runs were
+also recorded by hand. One used the assembled tree. The other used `--npm-cli`
+offline installation of the published 0.4.0 tarball. That tarball's SHA-256
+equals the [0.4.0 release record](../../VALIDATION.md#public-040--2026-10-18-kst),
+and its three dependency integrities equal the lockfile. Both ended
+`owned_receipted` with a matching receipt, after `dest unlock` was refused
+before the receipt and caller switching was refused before unlock. This is
+**not** Linux, Windows, OpenSSH or remote-account evidence, and no cell above
+is qualified by it.
+
+**Linux requalification (unrun; needs a separately authorized host).** On an
+isolated test directory of a Linux arm64 or x64 account, with Node 24 (and,
+for the Node 22 cell, 22.13+) at absolute paths:
+
+1. Read-only discovery: OS, arch, glibc, Node and bundled npm versions,
+   `session-peer` entries on `PATH`, and that the test directory is absent.
+2. Upload the reviewed harness, the verified tarballs and a lockfile
+   integrity JSON; compare `sha256sum` with the operator's values.
+3. `dest init-prefix`, `dest path-inventory`, `dest identity`, then `dest
+   stage --npm-cli` with the recorded Node's `npm-cli.js`.
+4. Primary install: `dest lock`, `dest probe` (staging), `dest activate`,
+   `dest verify`, operator `doctor --host` and `send --to <absent> --dry-run
+   --host` with `--remote-bin` set to the wrapper (through a test-only
+   isolation shim outside the install, as in the 2026-10-02 run), `op
+   statement`, `dest receipt`, `dest unlock`, `op record callers_switched`.
+   Record the refused out-of-order attempts.
+5. The cells in the table above, each on a fresh name or after explicit
+   cleanup, with every result recorded through `op record`.
+6. Node 22 cell: repeat steps 3–5 with the Node 22 path; expect a new identity
+   and directory beside the Node 24 install.
+7. `dest path-inventory --compare`, `dest destroy-prefix`, and a read-only
+   check that the test directory is gone.
+
+**Windows non-admin (unrun).** The harness refuses on Windows. These cells need
+either a reviewed Windows port of the same checks or a manual run of the same
+order. The port or run must use reparse-point and DACL checks (owner = SSH
+user; write only for that user, `SYSTEM` and `Administrators`),
+`CreateDirectoryW` exclusivity for staging and lock,
+`[System.IO.Directory]::Move` for activation and rollback, and the
+self-locating `.cmd` wrapper. Run under a standard (non-administrator) account
+on Windows x64 with PowerShell 5.1, Node 24 and Node 22.13+. Operator checks
+must use `--remote-platform win32`. The 2026-10-07 record does not cover this
+account type.
+
 ### Not validated
 
 - Other Windows account/runtime/architecture combinations and other POSIX
@@ -793,6 +900,9 @@ the host nor the account was disposable. It does not qualify Windows-client
   General concurrent/adversarial race qualification remains open. The
   identity launcher was only compared logically (Linux) and prototyped
   (macOS).
+  The [validation harness](#validation-harness-2026-10-20) covers these
+  rules with Darwin-local fixtures only; its Linux, Windows non-admin and
+  Node 22 full-matrix runs are unrun.
 - The POSIX empty-directory race window. It is documented as unguaranteed and
   was not exercised.
 - Linux arm64, Windows arm64 and macOS x64 native loads; glibc below 2.28 and
@@ -812,8 +922,9 @@ Only the primary install has operator SSH evidence. **On Windows**, Node
 22 has direct-CLI/native-lock smoke evidence only. Issue #23's last criterion
 remains **partially validated**: current recovery rules have not been
 requalified on Linux, and the other cells listed under "Not validated" above
-remain not fully validated. Local stubs do not replace destination evidence. These
-results do not qualify a shipped deploy helper or Windows-client jump.
+remain not fully validated. Local stubs, including the 2026-10-20 harness
+fixtures, do not replace destination evidence. These results do not qualify a
+shipped deploy helper or Windows-client jump.
 
 ## Follow-ups
 

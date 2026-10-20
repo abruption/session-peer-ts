@@ -1,5 +1,60 @@
-# Validation record — updated 2026-10-18 KST
+# Validation record — updated 2026-10-20 KST
 
+
+## #23 deployment validation harness — Darwin-local, 2026-10-20 KST
+
+Source only; nothing was released and the package stays 0.4.0. The new
+operator-invoked harness `scripts/deployment-harness.mjs` and its rules are
+described in the
+[ADR](docs/design/remote-deployment.md#validation-harness-2026-10-20). It
+is not the proposed F6 deploy helper, and no CLI, SSH, preflight or package
+behavior changed. **No Linux or Windows destination was contacted. No SSH
+connection, live agent session or message delivery took place.** Every result
+below is **Darwin-local evidence only** and qualifies no destination cell.
+
+| Item | Value |
+| --- | --- |
+| Host | macOS 27.0.1 arm64, Node 24.16.0 (ABI 137), npm 11.15.0 |
+| Prefixes | New private directories under the user temp directory, created by `dest init-prefix` and removed afterwards |
+| Operator checks | Real `dist/cli.js doctor --host` and `send --to 999999 --dry-run --host` through a local `ssh` stand-in (drops options and runs the remote command with an isolated `HOME` and `PATH=/usr/bin:/bin`); not OpenSSH |
+| Registry use | Read-only `npm pack` of `session-peer@0.4.0`, `fs-ext-extra-prebuilt@2.2.14` and `nan@2.29.0` (`smol-toml@1.9.0` came from the local npm cache) for the offline-install run |
+
+Results:
+
+- `test/deployment-receipt-harness.test.ts`: **8 passed, 0 failed, 0
+  skipped**. It covers dedicated-prefix refusals and dry-run defaults, the
+  enforced step 8 order (destination checks, operator doctor and dry-run,
+  receipt, unlock, caller switch), fresh-lock recovery of an unreceipted
+  target (the receipt keeps the original marker `runId`), same-run and
+  journal-confirmed rollback, refusal without journal confirmation, corrupt,
+  mismatched and orphan receipts with explicit ownership-confirmed cleanup,
+  `.receipts` mode, symlink and non-regular-file refusals, unowned, unreadable
+  and unconfirmable lock overrides, and the empty, file, symlink,
+  inconsistent-marker and failed-verification activation rows. The tree under
+  test was assembled from this checkout's `dist/` and locked dependencies.
+- An ordered run by hand with that assembled tree ended `owned_receipted` with
+  a matching receipt. `dest unlock` was refused before the receipt
+  (`unreceipted_activation`), the statement before the operator checks
+  (`operator_checks_incomplete`) and caller switching before unlock
+  (`switch_before_unlock`). Operator doctor returned `ok:true`,
+  `diagnosticCompleted:true`, `implementation:"typescript"`; the dry-run
+  returned `no_reachable_target`, `status:"refused"`, `submitted:false`.
+- The same ordered run with `dest stage --npm-cli`, using the recorded Node's
+  bundled npm, offline and with `--ignore-scripts`, installed the published
+  `session-peer-0.4.0.tgz`. Its SHA-256
+  `84adc8b50ef8f03a2c2170e3c36a97b573f28a6bcbeb7dbc965e16c3b37a57c9` and
+  integrity equal the [0.4.0 record](#public-040--2026-10-18-kst). The three
+  dependency tarballs matched the lockfile integrity. The marker recorded
+  `source:"npm-offline"`, and the run reached the same outcomes and refusals.
+  A first attempt that passed one file as both npm `--userconfig` and
+  `--globalconfig` was refused by npm and fixed to use separate empty files,
+  as in the 2026-10-07 Windows record.
+
+Not run, pending separately authorized hosts: the Linux requalification of the
+current receipt/recovery rules and exact operator ordering (arm64 or x64), a
+Windows non-administrator account (the harness refuses on Windows), and a Node
+22 full matrix (no Node 22 was available locally). The 2026-10-02 Linux and
+2026-10-07 Windows records keep their dated scope.
 
 ## Public 0.4.0 — 2026-10-18 KST
 
