@@ -146,11 +146,13 @@ export function parse(args: string[]): Options {
     jump = sshJump(values.get('--ssh-jump')!);
     // An existing control master would bypass the hop entirely.
     if (values.has('--ssh-control-path')) throw new Refusal('conflicting_ssh_jump');
-    // Win32-OpenSSH starts ProxyCommand without a POSIX shell. windowsProxyCommand
-    // models it from source only. Enabling also needs: an actual client run; this
-    // path reporting a run() `cleanup: 'unconfirmed'` stop as an unknown effect (no
-    // resend, no success); #131's native tree tests passing with an ssh.exe ->
-    // ProxyCommand ssh.exe grandchild; and the builder called here, before ssh -G.
+    // Win32-OpenSSH starts ProxyCommand without a POSIX shell. windowsProxyCommand's
+    // quoting matched an isolated real-ssh.exe 9.5p1 probe (no connection). Enabling
+    // also needs: a connected hop run; this path reporting a run() `cleanup:
+    // 'unconfirmed'` stop as an unknown effect (no resend, no success), including an
+    // outer ssh.exe that exited while its ProxyCommand still holds the pipes and is
+    // left running; #131's native tree tests passing with an ssh.exe -> ProxyCommand
+    // ssh.exe grandchild; and the builder called here, before ssh -G.
     if (process.platform === 'win32') throw new Refusal('ssh_jump_unsupported_platform');
   }
   if (values.has('--ssh-control-path')) {

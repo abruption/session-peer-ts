@@ -36,10 +36,18 @@ prefix-only known-hosts files were used.
 - Cleanup: the prefix was removed and no process with the prefix in its path or
   command line remained.
 
+The probe ran at branch revision `9d54fa3dfbb0c50a1f9624461a43a3f02824706b`
+(the `windowsProxyCommand` source is unchanged by later documentation-only
+commits). The probe driver, the argv-dump source and host-identifier-free
+results are provided with the review material for this change, not in the
+repository.
+
 This is evidence for quoting only. Windows `--ssh-jump` stays refused: no hop
 or destination connection, version other than 9.5p1, non-administrator
 account, or #131 owned-process-tree cleanup (timeout, overflow, interrupt) was
-exercised.
+exercised. In particular, an outer `ssh.exe` that exits while its
+`ProxyCommand` still holds the pipes leaves that process running with an
+unconfirmed cleanup; enabling must report that as an unknown effect.
 
 ## Public 0.4.0 — 2026-10-18 KST
 
