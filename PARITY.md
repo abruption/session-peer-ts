@@ -1,5 +1,30 @@
 # Python compatibility and npm migration
 
+## 0.5.0 release scope — 2026-10-20 KST
+
+The 0.5.0 source carries platform-qualification groundwork and operator-invoked
+remote-maintenance validation. It does not activate additional observation or
+Windows jump support. #130, #131, #20 and #23 remain partial follow-ups:
+
+- #153: exact platform/native-version selection and procfs inspection groundwork;
+  the Linux arm64 candidate is not selectable, locally or over SSH.
+- #156: unselected Windows tree-cleanup backend and private-storage guard;
+  production `run()` retains direct-child-only Windows cleanup, and Windows
+  handoff storage/native observation remain unsupported.
+- #154: Win32-OpenSSH ProxyCommand construction and no-network quoting evidence;
+  Windows-client jump still refuses before effect.
+- #155: POSIX repository-only, default-dry-run deployment receipt/recovery
+  harness. It is excluded from the npm package and does not install anything
+  during ordinary CLI commands.
+
+The finite 0.5.0 doctor matrix preserves the four exact profiles reviewed for
+0.4.0. This is metadata-only compatibility, not additional feature or platform
+qualification. The installed-skill guidance pin, native-version evidence,
+Python reference and ordinary no-resend/receipt boundaries are unchanged.
+SSH endpoints require exactly the same TS version, including 0.5.0.
+Publication and validation evidence belong to dated release records; these
+source changes alone are not public artifact verification.
+
 ## Public 0.4.0 checkpoint — 2026-10-18 KST
 
 [Version 0.4.0](https://github.com/abruption/session-peer-ts/releases/tag/v0.4.0)
@@ -11,14 +36,14 @@ observation and explicit operator-confirmed receipt scope below; #130–#132
 remain separate platform/collector extensions. Published skill 0.2.1 remains
 the installation pin; runtime publication is not companion-skill publication.
 
-## Current comparison — Python 1.1.0 / TypeScript 0.4.0
+## Current comparison — Python 1.1.0 / TypeScript 0.5.0
 
-Updated 2026-10-18 KST. TypeScript 0.4.0 uses published
+Updated 2026-10-20 KST. TypeScript 0.5.0 uses published
 Python **1.1.0**, commit
 [`8ca77cf`](https://github.com/abruption/session-peer/tree/8ca77cf31254c8287a2593fe484bb30a7dba2727),
 as the ordinary list/discovery comparison baseline. JSON reports
 `referenceVersion: "1.1.0"`; this identifies a comparison source, not complete
-runtime parity. The source reports `VERSION=0.4.0`; publication evidence belongs
+runtime parity. The source reports `VERSION=0.5.0`; publication evidence belongs
 to the dated validation and release records. This source does not change
 immutable public npm artifacts or their historical comparison markers.
 

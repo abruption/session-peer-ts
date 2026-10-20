@@ -1,5 +1,18 @@
 # Validation record — updated 2026-10-20 KST
 
+## 0.5.0 preparation scope — 2026-10-20 KST
+
+The release preparation changes package/banner/current examples to 0.5.0,
+adds one exact finite doctor row preserving existing profiles and updates the
+release baseline to the verified public 0.4.0 integrity. It does not activate
+the Linux candidate, Windows cleanup/storage/observation or Windows-client jump.
+The repository-only deployment harness is excluded from the npm package.
+Historical platform and mutation runs below remain tied to their recorded
+commits; they are not new 0.5.0 native qualification. Final source/artifact and
+CI results are recorded in the release-preparation PR. No staging, publication,
+new native/model/ACK experiment or global installation is performed by preparation.
+
+
 
 ## Unreleased Linux arm64 observation candidate — #130, 2026-10-20 KST
 
@@ -332,7 +345,7 @@ Local macOS arm64, Node 24.16.0/npm 11.15.0:
 - `npm run test:package`: PASS, reproducible package and isolated installation/removal, bash/zsh shorthand contract and lifecycle. No global installation.
 - `node scripts/check-repository.mjs`, `git diff --check`: PASS. `npm audit`: zero vulnerabilities.
 
-The physical Windows 24-case synthetic fixture evidence below belongs to the PR #134 correction at version 0.3.3, not to a new physical 0.3.4 installation, live queue/injection or ACK experiment. Preparation will additionally validate its exact committed artifact and current-head CI before review completion; their source/hash results belong in the PR record and are not fabricated here. Publication/environment approval/final npm2FA/tag/fleet operations are not performed by these checks.
+The physical Windows 24-case synthetic fixture evidence below belongs to the PR #134 correction at version 0.3.3, not to a new physical 0.3.4 installation, live queue/injection or ACK experiment. Preparation will additionally validate its exact committed artifact and current-head CI before review completion; their source/hash results belong in the PR record and are not fabricated here. Publication/environment approval/final npm 2FA/tag/fleet operations are not performed by these checks.
 
 ## Public 0.3.3 checkpoint — rechecked 2026-10-12 KST
 
