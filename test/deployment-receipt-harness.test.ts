@@ -4,16 +4,20 @@
 // destination evidence: no OpenSSH, no remote account and no published tarball.
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { chmodSync, cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 type Out = Record<string, any>;
 const repo = fileURLToPath(new URL('..', import.meta.url));
-const script = join(repo, 'scripts/deployment-harness.mjs');
+// Test-only override to run these fixtures against another revision's copy of
+// the harness (for before/after comparisons) without touching the worktree.
+const script = process.env.DEPLOYMENT_HARNESS_SCRIPT ?? join(repo, 'scripts/deployment-harness.mjs');
 const skip = process.platform === 'win32' ? 'POSIX harness; the Windows procedure is documented in the ADR' : false;
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
 const lockIntegrity = JSON.parse(readFileSync(join(repo, 'package-lock.json'), 'utf8')).packages;
@@ -200,7 +204,12 @@ test('rollback needs the same run or positive journal confirmation that no calle
   const retire = w.begin(); w.lock(retire);
   refused(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', retire, '--target', w.name], 'configured_for_caller');
   refused(['dest', 'retire', ...w.P, '--run', retire, '--name', w.name, '--execute', '--confirm-destructive'], 'configured_for_caller_or_unconfirmed');
+  // Caller state changes only while no acquisition on the prefix is open.
+  // Releasing, unswitching, then locking again is the same as unswitching before the lock: the guard is unchanged.
+  refused(['op', 'record', ...w.J, '--run', retire, '--event', 'callers_unswitched', '--target', w.name, '--prefix-id', w.prefixId, '--execute'], 'acquisition_open');
+  w.record(retire, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', retire, '--execute']));
   w.record(retire, 'callers_unswitched', undefined, w.name, ['--prefix-id', w.prefixId]);
+  w.lock(retire);
   ok(['dest', 'retire', ...w.P, '--run', retire, '--name', w.name, '--execute', '--confirm-destructive', '--statement',
     w.file('no-caller', ok(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', retire, '--target', w.name]))]);
   assert.equal(existsSync(join(w.root, '.receipts', `${w.name}.json`)), false);
@@ -1162,4 +1171,404 @@ test('missing receipt completion resyncs its intent before creating the receipt'
     assert.ok(synced.includes(intent)); assert.equal(synced.includes(receipt), false);
   }
   assert.equal(ok(args).replayed, true);
+});
+
+async function waitFor(path: string) {
+  for (let waited = 0; !existsSync(path); waited += 20) { if (waited > 30000) throw new Error(`timed out waiting for ${path}`); await sleep(20); }
+}
+function runAsync(args: string[], env: NodeJS.ProcessEnv) {
+  const child = spawn(process.execPath, [script, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = ''; child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.resume();
+  return { done: once(child, 'close').then(([code]) => ({ code: code as number, out: JSON.parse(stdout) as Out })) };
+}
+
+test('a held journal lock refuses every journal command without waiting or changing the journal', { skip }, t => {
+  const j = journalOnly(t);
+  const before = readFileSync(j.journal);
+  mkdirSync(`${j.journal}.lock`, { mode: 0o700 });
+  assert.equal(j.record({}).out.error, 'journal_busy');
+  refused(['op', 'begin', ...j.J, '--execute'], 'journal_busy');
+  refused(['op', 'begin', ...j.J], 'journal_busy');
+  refused(['op', 'record', ...j.J, '--run', j.run, '--event', 'run_ended'], 'journal_busy');
+  refused(['op', 'statement', ...j.J, '--kind', 'run-ended', '--run', j.run], 'journal_busy');
+  assert.deepEqual(readFileSync(j.journal), before);
+  assert.equal(existsSync(`${j.journal}.lock`), true);
+  rmSync(`${j.journal}.lock`, { recursive: true });
+  assert.equal(j.record({}).out.ok, true);
+});
+
+test('two concurrent journal writers: the second is refused while the first holds the lock', { skip }, async t => {
+  const j = journalOnly(t);
+  const release = `${j.journal}.release`;
+  const first = runAsync(['op', 'begin', ...j.J, '--execute'], { ...process.env, SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK: release });
+  await waitFor(`${release}.held`);
+  assert.equal(j.record({}).out.error, 'journal_busy');
+  writeFileSync(release, '');
+  const result = await first.done;
+  assert.equal(result.code, 0); assert.equal(result.out.ok, true);
+  assert.equal(existsSync(`${j.journal}.lock`), false);
+  assert.equal(j.record({}).out.ok, true);
+  assert.equal(ok(['op', 'statement', ...j.J, '--kind', 'run-ended', '--run', j.run]).kind, 'run-ended');
+});
+
+test('a failing append rolls back only its own line while another writer is held off', { skip }, async t => {
+  const j = journalOnly(t);
+  const before = readFileSync(j.journal);
+  const release = `${j.journal}.release`;
+  const failing = runAsync(['op', 'record', ...j.J, '--run', j.run, '--event', 'run_ended', '--execute'],
+    { ...process.env, SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK: release, SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl', SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT: '1' });
+  await waitFor(`${release}.held`);
+  assert.equal(j.record({}).out.error, 'journal_busy');
+  // A statement cannot snapshot the journal while an append may still be rolled back.
+  refused(['op', 'statement', ...j.J, '--kind', 'run-ended', '--run', j.run], 'journal_busy');
+  writeFileSync(release, '');
+  const result = await failing.done;
+  assert.equal(result.out.error, 'journal_append_failed'); assert.equal(result.out.rollback, 'restored');
+  assert.deepEqual(readFileSync(j.journal), before);
+});
+
+test('the attested remote-bin must be exactly the canonical verified wrapper', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
+  const doctor = w.cli(['doctor']);
+  const record = (bin: string) => h(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name, '--file', w.file('doctor', doctor), '--remote-bin', bin, '--execute']).out;
+  const other = `${w.name.slice(0, -16)}0000000000000000`;
+  for (const bin of [join(w.root, w.name, '..', other, 'session-peer'), join(w.root, other, w.name, 'session-peer'), join(w.base, 'elsewhere', w.name, 'session-peer'),
+    `data/session-peer-ts/${w.name}/session-peer`, join(w.root, w.name, 'other-wrapper'), `${w.root}/./${w.name}//session-peer`,
+    `${w.root}/${w.name}/../${w.name}/session-peer`])
+    assert.equal(record(bin).error, 'operator_check_target_mismatch', bin);
+  assert.equal(record(w.remoteBin()).ok, true);
+});
+
+test('manifest links must resolve inside the install before anything runs', { skip }, t => {
+  for (const kind of ['absolute', 'escaping', 'chain', 'dangling'] as const) {
+    const w = world(t);
+    const pkg = join(w.tree, 'node_modules/session-peer');
+    const run = w.begin(); w.lock(run);
+    const launched = w.launches();
+    if (kind === 'absolute') { const outside = join(w.base, 'outside-pkg'); cpSync(pkg, outside, { recursive: true }); rmSync(pkg, { recursive: true }); symlinkSync(outside, pkg); }
+    else if (kind === 'escaping') {
+      // Resolves to a sibling of the staging tree inside the root: outside the install.
+      cpSync(pkg, join(w.root, 'outside-pkg'), { recursive: true }); rmSync(pkg, { recursive: true }); symlinkSync('../../outside-pkg', pkg);
+    } else if (kind === 'chain') { symlinkSync(join(w.base, 'outside.txt'), join(w.tree, 'escape')); writeFileSync(join(w.base, 'outside.txt'), 'x'); symlinkSync('../escape', join(w.tree, 'node_modules/alias')); }
+    else symlinkSync('missing-target', join(w.tree, 'node_modules/dangling'));
+    refused(['dest', 'stage', ...w.P, '--run', run, '--identity', w.identityFile, '--from-tree', w.tree, '--execute'], 'unsafe_link');
+    assert.equal(w.launches(), launched, kind);
+  }
+  // A bounded internal link is recorded; changing its target is detected.
+  const w = world(t);
+  symlinkSync('session-peer/dist/cli.js', join(w.tree, 'node_modules/.cli-link'));
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const link = join(w.root, w.name, 'node_modules/.cli-link');
+  // The internal link survived the activation rename; its referent's bytes are covered too.
+  const referent = join(w.root, w.name, 'node_modules/session-peer/dist/cli.js'), bytes = readFileSync(referent);
+  assert.equal(readFileSync(link).equals(bytes), true);
+  writeFileSync(referent, Buffer.concat([bytes, Buffer.from('\n// changed\n')]));
+  assert.equal(w.state(), 'owned_failed_verification');
+  writeFileSync(referent, bytes);
+  assert.equal(w.state(), 'owned_no_receipt');
+  rmSync(link); symlinkSync('session-peer/dist/help.js', link);
+  assert.equal(w.state(), 'owned_failed_verification');
+});
+
+test('caller state changes are refused while any acquisition on the prefix is open', { skip }, t => {
+  const w = world(t);
+  w.provision();
+  const holder = w.begin(); w.lock(holder);
+  const noCaller = ok(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', holder, '--target', w.name]);
+  assert.equal(noCaller.kind, 'no-caller');
+  const switcher = w.begin();
+  const caller = (event: string) => h(['op', 'record', ...w.J, '--run', switcher, '--event', event, '--target', w.name, '--prefix-id', w.prefixId, '--execute']).out;
+  assert.equal(caller('callers_switched').error, 'acquisition_open');
+  assert.equal(caller('callers_unswitched').error, 'acquisition_open');
+  w.record(holder, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', holder, '--execute']));
+  assert.equal(caller('callers_switched').ok, true);
+});
+
+test('a publication is superseded by a later removal and re-activation of the same name', { skip }, t => {
+  const w = world(t);
+  w.provision();
+  const retire = w.begin(); w.lock(retire);
+  const noCaller = w.file('no-caller', ok(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', retire, '--target', w.name]));
+  w.record(retire, 'retired', ok(['dest', 'retire', ...w.P, '--run', retire, '--name', w.name, '--statement', noCaller, '--execute', '--confirm-destructive']));
+  w.record(retire, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', retire, '--execute']));
+  const switching = (run: string) => h(['op', 'record', ...w.J, '--run', run, '--event', 'callers_switched', '--target', w.name, '--prefix-id', w.prefixId, '--execute']).out;
+  const fresh = w.begin();
+  assert.equal(switching(fresh).error, 'publication_superseded');
+  w.lock(fresh); w.activate(fresh);
+  assert.equal(switching(fresh).error, 'publication_superseded');
+  w.finish(fresh);
+  assert.equal(switching(fresh).ok, true);
+});
+
+test('npm receives tarballs as absolute paths, so none can be read as an npm option', { skip }, t => {
+  const w = world(t);
+  const pkg = join(w.base, '--prefix=escape'), dep = join(w.base, 'dep.tgz');
+  writeFileSync(pkg, 'package bytes'); writeFileSync(dep, 'dependency bytes');
+  const integrity = join(w.base, 'npm-integrity.json');
+  writeFileSync(integrity, JSON.stringify({ dep: `sha512-${createHash('sha512').update('dependency bytes').digest('base64')}` }));
+  const identity = ok(['dest', 'identity', '--version', packageVersion, '--package-sha256', sha('package bytes'), '--lock-integrity', integrity]);
+  const identityFile = w.file('npm-identity', identity);
+  const argvFile = join(w.base, 'npm-argv.json'), fakeNpm = join(w.base, 'fake-npm-cli.js');
+  writeFileSync(fakeNpm, `require('node:fs').writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(process.argv.slice(2))); process.exit(1);\n`);
+  const run = w.begin();
+  const result = h(['dest', 'stage', ...w.P, '--run', run, '--identity', identityFile, '--npm-cli', fakeNpm,
+    '--package-tarball', '--prefix=escape', '--dependency-tarball', 'dep.tgz', '--execute'], process.env, w.base);
+  assert.equal(result.out.error, 'npm_install_failed');
+  const argv = JSON.parse(readFileSync(argvFile, 'utf8')) as string[];
+  assert.ok(argv.includes(pkg)); assert.ok(argv.includes(dep));
+  assert.equal(argv.filter(arg => arg.startsWith('--prefix')).length, 1);
+  assert.equal(argv[argv.indexOf('--prefix') + 1], join(w.root, result.out.staging));
+  assert.equal(existsSync(join(w.base, 'escape')), false);
+});
+
+// Journal-only: shaped destination results (no prefix needed) drive the
+// caller-state rules, so they run wherever a private journal directory exists.
+test('caller-state fences on shaped destination results: open acquisitions and superseded publications', { skip }, t => {
+  const j = journalOnly(t);
+  const prefixId = 'a'.repeat(32), target = `${packageVersion}-${'b'.repeat(16)}`;
+  const result = (command: string, run: string, extra: Record<string, unknown>) =>
+    ({ harness: 'session-peer-ts deployment validation harness', command, ok: true, dryRun: false, runId: run, prefixId, ...extra });
+  const dir = dirname(j.journal);
+  let n = 0;
+  const rec = (run: string, event: string, value?: unknown, extra: string[] = []) => {
+    const args = ['op', 'record', ...j.J, '--run', run, '--event', event, '--execute', ...extra];
+    if (value) { const file = join(dir, `r${n++}.json`); writeFileSync(file, JSON.stringify(value)); args.push('--file', file); }
+    return h(args).out;
+  };
+  const caller = (run: string, event: string) => rec(run, event, undefined, ['--target', target, '--prefix-id', prefixId]);
+  const lifecycle = (run: string, events: [string, string, Record<string, unknown>][]) => {
+    const lockId = createHash('sha256').update(`${run}${n}`).digest('hex').slice(0, 32);
+    assert.equal(rec(run, 'lock_acquired', result('dest lock', run, { lockId })).ok, true);
+    for (const [event, command, extra] of events) assert.equal(rec(run, event, result(command, run, { lockId, target, ...extra })).ok, true, event);
+    return lockId;
+  };
+  const begin = () => ok(['op', 'begin', ...j.J, '--execute']).runId as string;
+  const publisher = begin();
+  const lockId = lifecycle(publisher, [['activated', 'dest activate', { outcome: 'activated' }], ['receipt_published', 'dest receipt', {}]]);
+  const other = begin();
+  assert.equal(caller(other, 'callers_switched').error, 'switch_before_unlock');
+  assert.equal(rec(publisher, 'lock_released', result('dest unlock', publisher, { lockId })).ok, true);
+  // Any open acquisition on the prefix blocks both caller events.
+  const holder = begin();
+  const held = lifecycle(holder, []);
+  assert.equal(caller(other, 'callers_switched').error, 'acquisition_open');
+  assert.equal(caller(other, 'callers_unswitched').error, 'acquisition_open');
+  assert.equal(rec(holder, 'lock_released', result('dest unlock', holder, { lockId: held })).ok, true);
+  assert.equal(caller(other, 'callers_switched').ok, true);
+  assert.equal(caller(other, 'callers_unswitched').ok, true);
+  // A later retirement supersedes the publication, as does a new activation; a fresh publication restores it.
+  const remover = begin();
+  const removed = lifecycle(remover, [['retired', 'dest retire', {}]]);
+  assert.equal(rec(remover, 'lock_released', result('dest unlock', remover, { lockId: removed })).ok, true);
+  assert.equal(caller(other, 'callers_switched').error, 'publication_superseded');
+  const again = begin();
+  const reactivated = lifecycle(again, [['activated', 'dest activate', { outcome: 'activated' }]]);
+  assert.equal(caller(other, 'callers_switched').error, 'publication_superseded');
+  assert.equal(rec(again, 'receipt_published', result('dest receipt', again, { lockId: reactivated, target })).ok, true);
+  assert.equal(rec(again, 'lock_released', result('dest unlock', again, { lockId: reactivated })).ok, true);
+  assert.equal(caller(other, 'callers_switched').ok, true);
+});
+
+test('remote-bin attestation on shaped results: only the exact canonical wrapper passes', { skip }, t => {
+  const j = journalOnly(t);
+  const prefixId = 'c'.repeat(32), lockId = 'd'.repeat(32), target = `${packageVersion}-${'e'.repeat(16)}`;
+  const wrapper = `/dest/root/data/session-peer-ts/${target}/session-peer`;
+  const dir = dirname(j.journal);
+  let n = 0;
+  const file = (value: unknown) => { const path = join(dir, `s${n++}.json`); writeFileSync(path, JSON.stringify(value)); return path; };
+  const base = { harness: 'session-peer-ts deployment validation harness', ok: true, dryRun: false, runId: j.run, prefixId, lockId };
+  ok(['op', 'record', ...j.J, '--run', j.run, '--event', 'lock_acquired', '--file', file({ ...base, command: 'dest lock' }), '--execute']);
+  ok(['op', 'record', ...j.J, '--run', j.run, '--event', 'verified', '--execute', '--file', file({ ...base, command: 'dest verify', target,
+    identityHash: 'f'.repeat(64), manifestSha256: '0'.repeat(64), markerRunId: j.run, version: packageVersion, wrapper })]);
+  const doctor = file({ ok: true, diagnosticCompleted: true, implementation: 'typescript', ready: false, version: packageVersion, host: 'dest.example' });
+  const attest = (bin: string) => h(['op', 'record', ...j.J, '--run', j.run, '--event', 'operator_doctor', '--target', target, '--file', doctor, '--remote-bin', bin, '--execute']).out;
+  // Only the exact canonical wrapper passes: a path that merely normalizes to
+  // it (through `.`, `//` or `link/..`) is refused, since a shell follows links.
+  for (const bin of [`/dest/root/data/session-peer-ts/${target}/../other/session-peer`, `/dest/root/data/session-peer-ts/other/${target}/session-peer`,
+    `dest/root/data/session-peer-ts/${target}/session-peer`, `/elsewhere/${target}/session-peer`, `/dest/root/data/./session-peer-ts//${target}/session-peer`,
+    `/dest/root/data/session-peer-ts/link/../${target}/session-peer`, `${wrapper}/`])
+    assert.equal(attest(bin).error, 'operator_check_target_mismatch', bin);
+  assert.equal(attest(wrapper).ok, true);
+});
+
+test('a statement cannot use an appended acquisition that is rolled back afterwards', { skip }, async t => {
+  const j = journalOnly(t);
+  const before = readFileSync(j.journal);
+  const lockId = '9'.repeat(32), prefixId = '8'.repeat(32), target = `${packageVersion}-${'7'.repeat(16)}`;
+  const acquired = join(dirname(j.journal), 'acquired.json');
+  writeFileSync(acquired, JSON.stringify({ harness: 'session-peer-ts deployment validation harness', command: 'dest lock', ok: true, dryRun: false, runId: j.run, prefixId, lockId }));
+  const release = `${j.journal}.release`;
+  const failing = runAsync(['op', 'record', ...j.J, '--run', j.run, '--event', 'lock_acquired', '--file', acquired, '--execute'],
+    { ...process.env, SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl', SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT: '1', SESSION_PEER_TS_HARNESS_TEST_PAUSE_BEFORE_ROLLBACK: release });
+  await waitFor(`${release}.held`);
+  // The complete line is on disk, waiting for its rollback: nothing may read it.
+  assert.equal(readFileSync(j.journal, 'utf8').includes(lockId), true);
+  refused(['op', 'statement', ...j.J, '--kind', 'no-caller', '--run', j.run, '--target', target], 'journal_busy');
+  refused(['op', 'record', ...j.J, '--run', j.run, '--event', 'run_ended'], 'journal_busy');
+  writeFileSync(release, '');
+  const result = await failing.done;
+  assert.equal(result.out.error, 'journal_append_failed'); assert.equal(result.out.rollback, 'restored');
+  assert.deepEqual(readFileSync(j.journal), before);
+  refused(['op', 'statement', ...j.J, '--kind', 'no-caller', '--run', j.run, '--target', target], 'lock_not_recorded');
+});
+
+// Filesystem unit (no prefix): the harness's own link check, imported directly.
+test('a link chain must stay inside the install at every step, not only at its end', { skip }, async t => {
+  const { manifestOf, resolvesInside } = await import(script);
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-links-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const top = join(base, 'install'), pkg = join(top, 'node_modules/session-peer');
+  mkdirSync(join(pkg, 'dist'), { recursive: true }); mkdirSync(join(base, 'outside'));
+  writeFileSync(join(pkg, 'dist/cli.js'), 'original');
+  mkdirSync(join(top, 'node_modules/.bin'));
+  const link = (text: string, path: string) => { symlinkSync(text, path); return path; };
+  // Out through another location and back in: refused although the end is inside.
+  link('../install/node_modules/session-peer', join(base, 'outside/back'));
+  assert.equal(resolvesInside(top, link('../outside/back', join(top, 'alias'))), false);
+  assert.equal(resolvesInside(top, link('../../install/node_modules/session-peer', join(top, 'node_modules/dotdot'))), false);
+  assert.equal(resolvesInside(top, link(join(pkg, 'dist/cli.js'), join(top, 'absolute'))), false);
+  assert.equal(resolvesInside(top, link('missing', join(top, 'dangling'))), false);
+  link('loop-b', join(top, 'loop-a')); link('loop-a', join(top, 'loop-b'));
+  assert.equal(resolvesInside(top, join(top, 'loop-a')), false);
+  assert.equal(resolvesInside(top, link('dist/cli.js/x', join(pkg, 'through-file'))), false);
+  for (const name of ['alias', 'node_modules/dotdot', 'absolute', 'dangling', 'loop-a', 'loop-b', 'node_modules/session-peer/through-file']) rmSync(join(top, name));
+  // A trailing slash or dot still requires a directory under OS semantics.
+  for (const text of ['dist/cli.js/', 'dist/cli.js/.']) {
+    const invalid = link(text, join(pkg, 'non-directory'));
+    assert.equal(resolvesInside(top, invalid), false, text);
+    assert.throws(() => manifestOf(top), /unsafe_link/);
+    rmSync(invalid);
+  }
+  for (const text of ['dist/', 'dist/.']) {
+    const directory = link(text, join(pkg, 'directory-alias'));
+    assert.equal(resolvesInside(top, directory), true, text);
+    rmSync(directory);
+  }
+  // A bounded internal npm-style link survives a rename and its referent is covered.
+  const internal = link('../session-peer/dist/cli.js', join(top, 'node_modules/.bin/session-peer'));
+  assert.equal(resolvesInside(top, internal), true);
+  const before = manifestOf(top);
+  renameSync(top, join(base, 'renamed'));
+  const renamed = join(base, 'renamed');
+  assert.equal(resolvesInside(renamed, join(renamed, 'node_modules/.bin/session-peer')), true);
+  assert.equal(manifestOf(renamed), before);
+  writeFileSync(join(renamed, 'node_modules/session-peer/dist/cli.js'), 'changed');
+  assert.notEqual(manifestOf(renamed), before);
+  link('../outside/back', join(renamed, 'escape'));
+  assert.throws(() => manifestOf(renamed));
+});
+
+test('npm receives the file the OS selects, even through a symlinked ancestor and ..', { skip }, t => {
+  const w = world(t);
+  // base/link -> base/outside/sub: the OS reads link/../pkg as base/outside/pkg, not base/pkg.
+  mkdirSync(join(w.base, 'outside/sub'), { recursive: true });
+  symlinkSync(join(w.base, 'outside/sub'), join(w.base, 'link'));
+  writeFileSync(join(w.base, 'pkg'), 'decoy bytes'); writeFileSync(join(w.base, 'outside/pkg'), 'selected bytes');
+  writeFileSync(join(w.base, 'dep.tgz'), 'dependency bytes');
+  const integrity = join(w.base, 'npm-integrity.json');
+  writeFileSync(integrity, JSON.stringify({ dep: `sha512-${createHash('sha512').update('dependency bytes').digest('base64')}` }));
+  const identity = ok(['dest', 'identity', '--version', packageVersion, '--package-sha256', sha('selected bytes'), '--lock-integrity', integrity]);
+  const argvFile = join(w.base, 'npm-argv.json'), fakeNpm = join(w.base, 'fake-npm-cli.js');
+  writeFileSync(fakeNpm, `require('node:fs').writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(process.argv.slice(2))); process.exit(1);\n`);
+  const result = h(['dest', 'stage', ...w.P, '--run', w.begin(), '--identity', w.file('npm-identity', identity), '--npm-cli', fakeNpm,
+    '--package-tarball', 'link/../pkg', '--dependency-tarball', 'dep.tgz', '--execute'], process.env, w.base);
+  assert.equal(result.out.error, 'npm_install_failed');
+  const argv = JSON.parse(readFileSync(argvFile, 'utf8')) as string[];
+  assert.ok(argv.includes(realpathSync(join(w.base, 'outside/pkg')))); assert.ok(!argv.includes(join(w.base, 'pkg')));
+});
+
+test('a hard-linked journal is refused before any read or change', { skip }, async t => {
+  const j = journalOnly(t);
+  const before = readFileSync(j.journal);
+  const alias = `${j.journal}.alias`;
+  linkSync(j.journal, alias);
+  for (const path of [j.journal, alias]) {
+    refused(['op', 'begin', '--journal', path, '--execute'], 'journal_aliased');
+    refused(['op', 'statement', '--journal', path, '--kind', 'run-ended', '--run', j.run], 'journal_aliased');
+    refused(['op', 'record', '--journal', path, '--run', j.run, '--event', 'run_ended', '--execute'], 'journal_aliased');
+  }
+  assert.deepEqual(readFileSync(j.journal), before);
+  rmSync(alias);
+  // An alias created while a writer holds the lock is caught before its read.
+  const release = `${j.journal}.release`;
+  const writer = runAsync(['op', 'begin', ...j.J, '--execute'], { ...process.env, SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK: release });
+  await waitFor(`${release}.held`);
+  linkSync(j.journal, alias);
+  writeFileSync(release, '');
+  assert.equal((await writer.done).out.error, 'journal_aliased');
+  assert.deepEqual(readFileSync(j.journal), before);
+});
+
+test('a destructive lifecycle event closes a lock\'s later publication record', { skip }, t => {
+  for (const [event, command] of [['retired', 'dest retire'], ['rolled_back', 'dest rollback'], ['receipt_cleaned', 'dest receipt-cleanup']] as const) {
+    const j = journalOnly(t);
+    const prefixId = 'a'.repeat(32), target = `${packageVersion}-${'b'.repeat(16)}`;
+    const dir = dirname(j.journal);
+    let n = 0;
+    const result = (cmd: string, run: string, lockId: string, extra: Record<string, unknown> = {}) =>
+      ({ harness: 'session-peer-ts deployment validation harness', command: cmd, ok: true, dryRun: false, runId: run, prefixId, lockId, ...extra });
+    const rec = (run: string, ev: string, value?: unknown, extra: string[] = []) => {
+      const args = ['op', 'record', ...j.J, '--run', run, '--event', ev, '--execute', ...extra];
+      if (value) { const file = join(dir, `r${n++}.json`); writeFileSync(file, JSON.stringify(value)); args.push('--file', file); }
+      return h(args).out;
+    };
+    const first = '1'.repeat(32);
+    assert.equal(rec(j.run, 'lock_acquired', result('dest lock', j.run, first)).ok, true);
+    assert.equal(rec(j.run, 'activated', result('dest activate', j.run, first, { target, outcome: 'activated' })).ok, true);
+    assert.equal(rec(j.run, event, result(command, j.run, first, { target })).ok, true);
+    // The receipt response arrives late, after the destructive event under the same lock.
+    assert.equal(rec(j.run, 'receipt_published', result('dest receipt', j.run, first, { target })).error, 'publication_closed', event);
+    assert.equal(rec(j.run, 'lock_released', result('dest unlock', j.run, first)).ok, true);
+    const switcher = ok(['op', 'begin', ...j.J, '--execute']).runId as string;
+    assert.equal(rec(switcher, 'callers_switched', undefined, ['--target', target, '--prefix-id', prefixId]).error, 'switch_before_receipt', event);
+    // Recovery needs a new lock with its own publication.
+    const run = ok(['op', 'begin', ...j.J, '--execute']).runId as string, second = '2'.repeat(32);
+    assert.equal(rec(run, 'lock_acquired', result('dest lock', run, second)).ok, true);
+    assert.equal(rec(run, 'activated', result('dest activate', run, second, { target, outcome: 'activated' })).ok, true);
+    assert.equal(rec(run, 'receipt_published', result('dest receipt', run, second, { target })).ok, true);
+    assert.equal(rec(run, 'lock_released', result('dest unlock', run, second)).ok, true);
+    assert.equal(rec(switcher, 'callers_switched', undefined, ['--target', target, '--prefix-id', prefixId]).ok, true, event);
+  }
+});
+
+test('init holds the journal lock until its header line is complete', { skip }, async t => {
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-init-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const dir = join(base, 'operator'); mkdirSync(dir, { mode: 0o700 });
+  const journal = join(dir, 'journal.jsonl'), J = ['--journal', journal], release = join(base, 'release');
+  const init = ['op', 'init', ...J, '--dest-alias', 'fixture-dest', '--dest-host', 'dest.example', '--execute'];
+  const first = runAsync(init, { ...process.env, SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_INIT_HEADER: release });
+  await waitFor(`${release}.held`);
+  // The complete header JSON is on disk without its newline: nothing may use it.
+  const partial = readFileSync(journal, 'utf8');
+  assert.equal(partial.endsWith('\n'), false); assert.equal(JSON.parse(partial).event, 'journal_created');
+  refused(['op', 'begin', ...J, '--execute'], 'journal_busy');
+  refused(init, 'journal_busy');
+  refused(['op', 'init', ...J, '--dest-alias', 'fixture-dest', '--dest-host', 'dest.example'], 'journal_busy');
+  writeFileSync(release, '');
+  assert.equal((await first.done).out.ok, true);
+  assert.equal(readFileSync(journal, 'utf8').endsWith('\n'), true);
+  refused(init, 'journal_exists');
+  const run = ok(['op', 'begin', ...J, '--execute']).runId;
+  refused(['op', 'statement', ...J, '--kind', 'run-ended', '--run', run], 'run_not_ended');
+});
+
+
+test('an unterminated journal record is refused without further mutation', { skip }, t => {
+  const j = journalOnly(t);
+  const complete = readFileSync(j.journal);
+  assert.equal(complete.at(-1), 10);
+  const incomplete = complete.subarray(0, -1);
+  writeFileSync(j.journal, incomplete);
+  for (const args of [
+    ['op', 'begin', ...j.J, '--execute'],
+    ['op', 'begin', ...j.J],
+    ['op', 'statement', ...j.J, '--run', j.run, '--kind', 'run-ended'],
+    ['op', 'record', ...j.J, '--run', j.run, '--event', 'run_ended', '--execute']
+  ]) {
+    refused(args, 'journal_corrupt');
+    assert.deepEqual(readFileSync(j.journal), incomplete);
+  }
 });
