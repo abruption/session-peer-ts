@@ -79,17 +79,26 @@ does not authorize terminating foreign processes.
 At `f06041d`, `npm run test:windows` and `npm run test:package` passed on that
 host.
 
-At the final head, only the two new test files were rerun there, in a new
-prefix:
-- The production case passed, and so did the storage cases (private
-  directory, inherited ACL, and a junction inside the prefix).
-- In the production case, `run()` terminates only the direct PowerShell child.
-  The child's `PING.EXE` grandchild (finite lifetime, about 11 s) is left
-  alone.
-- The test never kills the grandchild by PID; it only observes it end on its
-  own before removing its directory.
-- A read-only listing afterwards showed neither fixture PID remaining.
-- The prefix was removed, and no process with it in its command line remained.
+Earlier fixture heads, through `534d3fb`, started a `PING.EXE` with a 600 s
+lifetime and cleaned it up by PID. A grandchild could therefore have outlived a
+run. Afterwards, cleanup was checked only through process command lines
+containing the prefix (and later a read-only `PING.EXE` listing). Those checks
+showed nothing, but no actual leak was observed or ruled out beyond them.
+
+From the final fixture onward:
+- The child and grandchild have explicit lifetimes: about 25 s for the child
+  (`run()` ends it earlier through its own handle) and about 11 s for PING.
+- They are never killed by PID; the test only observes PID presence until
+  both are absent, then removes its directory last.
+- Unreadable PIDs, or a PID still present or unknown, keep the evidence and
+  fail the cleanup.
+- Presence is not identity: a reused PID can look present, and an error other
+  than ESRCH is reported as unknown.
+- The mocked helper-transport test is skipped on win32, so a mock that misses
+  can never open its fake PIDs there.
+
+The native tests on Windows are the production baseline and the storage cases;
+the reruns of the two new files are in the PR.
 
 ACLs of existing paths were not changed; the tests set a protected DACL only on
 new leaves inside the prefix. The interrupt behaviour of production `run()` on
