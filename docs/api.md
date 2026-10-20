@@ -192,6 +192,13 @@ false` even when the explicit wait fails. The separate handoff describes the
 requested evidence goal. After any possible RPC write, no legacy fallback or
 second submission occurs.
 
+Selection is by the exact host platform/architecture and native version.
+Unreleased source records a Linux arm64 Codex 0.162.1 candidate (pinned musl
+executable, procfs storage binding, `/proc/locks` writer-owner check) but does
+not activate it. Linux and any other unlisted platform/version have no
+profile, so required delivery refuses before effect and best-effort uses the
+ordinary queue.
+
 Before an opted-in native effect, original saved thread/home/writer evidence,
 default SQLite storage, exact native version and a warm supported metadata
 schema are checked. Required unsupported observation refuses before effect.

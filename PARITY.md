@@ -1174,6 +1174,63 @@ range, Linux/Windows qualification, live delivery or ACK follows from these
 queue-only fixtures. Initial harness failures are recorded separately and were
 never retried with an already-attempted intent.
 
+### Platform-aware native profile table — #130 (unreleased source)
+
+Queue and observation selection use one exact
+`(host platform-arch, native version, source commit)` row with its
+`initialize.platformOs`, storage-binding, owner-inspection and SSH-destination
+policy and a pinned executable artifact (historical darwin-arm64 rows predate
+artifact pinning). Selectable rows remain darwin-arm64 Codex 0.160.1/0.162.1
+only. A **linux-arm64 Codex 0.162.1 candidate** is recorded but not
+selectable: its upstream `codex-aarch64-unknown-linux-musl` executable digest
+(`071cbe8d…cabe5`), Linux-generated schema/notification hashes (equal to
+darwin 0.162.1) and one dedicated-thread client-ID injection on a Linux arm64
+test host are in `test/fixtures/linux-observation-native-evidence.json`.
+Every Linux tuple therefore refuses required delivery before effect and uses
+the ordinary queue for best-effort observation, locally and over SSH
+(Linux rows can never be selected by SSH destination requests). Historical
+KR/US ordinary queue results are not injection evidence.
+
+### Linux row activation follow-up design — #130 (frozen, not implemented)
+
+Activation of the candidate requires both bindings below, reviewed together
+with the ledger owner; neither changes ordinary JSON or existing ledgers.
+
+1. **Original writer executable.** At capability, effect and every
+   independent-wait owner check, the single lsof/`/proc/locks` writer PID's
+   `/proc/<pid>/exe` must be the qualified artifact: inode equal to the
+   digest-verified selected executable, or (different path) a complete digest
+   equal to the row's `artifact.sha256`, computed in the owned worker under
+   the original deadline. Mismatch, unreadable `exe`, deleted executable or a
+   gnu/other-version writer → `metadata_owner_changed` / required unsupported
+   before effect; no fallback to the ordinary Darwin owner contract.
+2. **Retained kernel identity.** Leave `generation` byte-compatible (it is
+   also the ordinary writer evidence). Add one optional private ledger field
+   on observation-qualified intents only, e.g.
+   `observationOwner: { schemaVersion: 1, kind: 'linux_procfs', starttime,
+   bootId, exeDev, exeIno }` (`/proc/<pid>/stat` field 22, `/proc/sys/kernel/
+   random/boot_id`), written in the same durable step as the qualification
+   and never exposed in ordinary/public JSON. Every owner check (send and
+   independent wait) must reproduce it exactly; a record without it, with an
+   unknown `schemaVersion`/`kind`, or written by an older runtime cannot
+   resume Linux observation (`unsupported`, fail-closed); Darwin records are
+   unaffected.
+
+Activation scope also requires an end-to-end CLI test that fails when the
+destination wire request omits the `remote` flag (today only hermetic and a
+since-superseded Linux-host regression cover it), and states that procfs
+lock/device matching was exercised only on ext4; other filesystems
+(btrfs/overlay/tmpfs/NFS) remain unverified and must refuse if `/proc/locks`
+and `stat` device numbers disagree.
+
+Required negative tests: writer exe inode/digest mismatch (gnu or other
+version holding the lock while a pinned musl queue binary is selected);
+deleted/replaced writer executable; same-second PID reuse with identical
+lsof/ps fields but a different kernel start time or boot ID; a retained
+record missing or carrying a malformed `observationOwner`; an old-runtime
+ledger record; reboot between send and wait; SSH destination still refused;
+Darwin and ordinary ledger JSON byte-for-byte unchanged.
+
 ## 0.4.0 candidate release scope
 
 On 2026-10-11 the user approved keeping #69/#70/#71/#72 together in 0.4.0,
