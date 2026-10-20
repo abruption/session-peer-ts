@@ -591,6 +591,9 @@ const dest = {
         const checked = verify(p, name, a.execute);
         if (!describes(checked, committed) || (a.execute && !checked.ok)) throw new Refusal('publication_target_changed', { state: checked.state });
         if (!a.execute) return { dryRun: true, target: name, plan: ['write the committed receipt bytes'] };
+        // An earlier intent write may have failed its sync. Reconfirm it
+        // before creating or syncing the missing receipt on this attempt.
+        syncPath(pubPath); syncPath(p.lock);
         writeExclusive(receiptPath, pub.receipt, true);
         if (receiptState(p, name).state !== 'matching') throw new Refusal('receipt_present', { receipt: receiptState(p, name).state });
       } else if (!regular(receiptPath, 'receipt') || sha256(readFileSync(receiptPath)) !== sha256(pub.receipt) || present.state !== 'matching' ||

@@ -1140,3 +1140,26 @@ test('replays and adoption resync the existing intent and synced marker around t
   }
   assert.equal(ok(args).replayed, true);
 });
+
+
+test('missing receipt completion resyncs its intent before creating the receipt', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const proof = w.checks(run);
+  const args = ['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', proof, '--execute'];
+  const trace = join(w.base, 'completion-sync.log');
+  const intent = join(w.root, '.activate.lock', 'publication.json');
+  const receipt = join(w.root, '.receipts', `${w.name}.json`);
+  const env = { ...process.env, SESSION_PEER_TS_HARNESS_TEST_FSYNC_TRACE: trace, SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'publication.json' };
+  // First failure leaves a readable intent, but no receipt. Repeating the
+  // explicitly requested completion with the same fault must not create one.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    rmSync(trace, { force: true });
+    const failed = h(args, env);
+    assert.equal(failed.code, 1); assert.equal(failed.out.reason, 'EIO');
+    assert.equal(existsSync(intent), true); assert.equal(existsSync(receipt), false);
+    const synced = readFileSync(trace, 'utf8').split('\n').filter(Boolean);
+    assert.ok(synced.includes(intent)); assert.equal(synced.includes(receipt), false);
+  }
+  assert.equal(ok(args).replayed, true);
+});
