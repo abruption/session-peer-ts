@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, lstatSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { createConnection } from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { Refusal } from './discovery.js';
@@ -176,4 +176,141 @@ export async function postWindowsPipe(pipe: string, pid: number, text: string): 
       });
     });
   });
+}
+
+// Candidate private Windows storage guard (#131), not connected to the handoff
+// ledger and not sufficient on its own. Read-only inspection of reparse
+// attributes along the path and of the leaf's owner and DACL; the only write
+// creates a new leaf directory with a protected owner-only DACL. No existing
+// ACL is changed or relaxed (no icacls, no Set-Acl on existing paths, no
+// inheritance edits above the leaf). Null-DACL, parent-ACL and creator-race
+// handling, LockFileEx fencing, replace-over-open and durability remain
+// unqualified, so Windows ledger storage stays unsupported.
+export type WindowsAce = { sid: string; allow: boolean; rights: number; inherited: boolean; inherits: boolean };
+export type WindowsStorageEntry = { path: string; exists: boolean; directory?: boolean; reparse?: boolean;
+  owner?: string; protected?: boolean; nullDacl?: boolean; rules?: WindowsAce[] };
+export type WindowsStorageReport = { user: string; tokenOwner: string; entries: WindowsStorageEntry[] };
+export type WindowsStorageFailure = 'path_unsupported' | 'inspection_failed' | 'missing' | 'reparse_point' | 'not_directory' |
+  'not_file' | 'owner_mismatch' | 'acl_missing' | 'acl_inherited' | 'acl_broad';
+const storageScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$sid = [Security.Principal.SecurityIdentifier]
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$user = $identity.User.Value; $tokenOwner = $identity.Owner.Value
+$entries = @()
+foreach ($path in $paths) {
+  $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+  if (!$item) { $entries += @{path=$path; exists=$false}; continue }
+  $entry = @{path=$path; exists=$true; directory=[bool]$item.PSIsContainer; reparse=[bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint)}
+  if (!$entry.reparse -and $path -eq $paths[-1]) {
+    $acl = $item.GetAccessControl([Security.AccessControl.AccessControlSections]'Owner, Access')
+    $entry.owner = $acl.GetOwner($sid).Value
+    $entry.protected = [bool]$acl.AreAccessRulesProtected
+    $entry.nullDacl = [bool]($acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access) -match 'D:NO_ACCESS_CONTROL')
+    $entry.rules = @($acl.GetAccessRules($true, $true, $sid) | ForEach-Object { @{sid=$_.IdentityReference.Value;
+      allow=($_.AccessControlType -eq 'Allow'); rights=[int64]$_.FileSystemRights; inherited=[bool]$_.IsInherited;
+      inherits=($_.InheritanceFlags -ne [Security.AccessControl.InheritanceFlags]::None)} })
+  }
+  $entries += $entry
+}
+[Console]::Out.Write((ConvertTo-Json -InputObject @{user=$user; tokenOwner=$tokenOwner; entries=@($entries)} -Compress -Depth 5))
+`;
+// Every component from the drive root to the leaf, for reparse checks. UNC,
+// device (\\?\, \\.\) and relative paths are not private-storage candidates.
+export function windowsAncestors(path: string): string[] | undefined {
+  if (!/^[A-Za-z]:\\/.test(path) || /[\0\r\n]/.test(path) || path.split(/[\\/]/).some(part => part === '..' || part === '.')) return undefined;
+  const parts = win32.normalize(path).replace(/\\+$/, '').split('\\');
+  return parts.map((_, index) => index ? parts.slice(0, index + 1).join('\\') : parts[0] + '\\');
+}
+const sidPattern = /^S-1-[0-9]+(?:-[0-9]+){1,14}$/;
+function storageReport(value: unknown, paths: string[]): WindowsStorageReport | undefined {
+  const report = value as WindowsStorageReport;
+  if (!report || typeof report !== 'object' || typeof report.user !== 'string' || !sidPattern.test(report.user) ||
+      typeof report.tokenOwner !== 'string' || !sidPattern.test(report.tokenOwner) ||
+      !Array.isArray(report.entries) || report.entries.length !== paths.length) return undefined;
+  for (const [index, entry] of report.entries.entries()) {
+    if (!entry || entry.path !== paths[index] || typeof entry.exists !== 'boolean') return undefined;
+    if (!entry.exists) continue;
+    if (typeof entry.directory !== 'boolean' || typeof entry.reparse !== 'boolean') return undefined;
+    if (entry.reparse || index !== paths.length - 1) continue;
+    if (typeof entry.owner !== 'string' || !sidPattern.test(entry.owner) || typeof entry.protected !== 'boolean' ||
+        typeof entry.nullDacl !== 'boolean' || !Array.isArray(entry.rules) || entry.rules.length > 256 ||
+        entry.rules.some(rule => !rule || typeof rule.sid !== 'string' || !sidPattern.test(rule.sid) || typeof rule.allow !== 'boolean' ||
+          !Number.isSafeInteger(rule.rights) || typeof rule.inherited !== 'boolean' || typeof rule.inherits !== 'boolean')) return undefined;
+  }
+  return report;
+}
+// The leaf must be owned by the current user SID or the token's default owner
+// (an elevated administrator's new files are owned by Administrators; measured
+// on Windows 10 x64). A group owner is a weaker boundary: every member of that
+// group may rewrite the DACL, so this is not an owner-only guarantee for an
+// elevated administrator, and the non-administrator cell is unverified. Every
+// allow ACE, inherited
+// or inheritable included, must name that SID; a directory's DACL must be
+// protected from its parent. No component may be a reparse point (symlink,
+// junction, mount point or other tag), checked by attribute, not lstat.
+export function windowsStorageFailure(report: WindowsStorageReport, kind: 'directory' | 'file'): WindowsStorageFailure | undefined {
+  const entries = report.entries, leaf = entries.at(-1);
+  if (!leaf) return 'inspection_failed';
+  if (entries.some(entry => entry.exists && entry.reparse)) return 'reparse_point';
+  if (!leaf.exists || entries.some(entry => !entry.exists)) return 'missing';
+  if (kind === 'directory' ? !leaf.directory : leaf.directory) return kind === 'directory' ? 'not_directory' : 'not_file';
+  if (leaf.owner !== report.user && leaf.owner !== report.tokenOwner) return 'owner_mismatch';
+  if (leaf.nullDacl) return 'acl_missing';
+  if (leaf.rules!.some(rule => rule.allow && rule.sid !== report.user)) return 'acl_broad';
+  if (kind === 'directory' && (!leaf.protected || leaf.rules!.some(rule => rule.inherited))) return 'acl_inherited';
+  return undefined;
+}
+export function inspectWindowsStorage(path: string): WindowsStorageReport {
+  if (process.platform !== 'win32') throw new Refusal('windows_inspection_unavailable', 1);
+  const paths = windowsAncestors(path);
+  if (!paths) throw new Refusal('handoff_storage_untrusted', 1);
+  const encoded = Buffer.from(JSON.stringify(paths), 'utf8').toString('base64');
+  // PowerShell 5.1 emits a JSON array as one object; cast, do not wrap in @().
+  const code = `$paths = [string[]](ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'))))\ntry {\n${storageScript}\n} catch { exit 1 }`;
+  const done = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '$script = [Console]::In.ReadToEnd(); Invoke-Expression $script'],
+    { input: code, encoding: 'utf8', timeout: START_PROBE_TIMEOUT_MS, maxBuffer: 1024 * 1024, windowsHide: true });
+  if (done.status !== 0 || done.error) throw new Refusal('windows_owner_inspection_failed', 1);
+  let report: WindowsStorageReport | undefined;
+  try { report = storageReport(JSON.parse(done.stdout), paths); } catch { /* Rejected below. */ }
+  if (!report) throw new Refusal('windows_owner_inspection_failed', 1);
+  return report;
+}
+// Fails closed with handoff_storage_untrusted; the specific failure is not
+// surfaced because it would describe local ACL layout.
+export function verifyWindowsPrivate(path: string, kind: 'directory' | 'file', inspect = inspectWindowsStorage): void {
+  if (windowsStorageFailure(inspect(path), kind)) throw new Refusal('handoff_storage_untrusted', 1);
+}
+// Creates only a new leaf under an existing reparse-free parent, owned by the
+// current user with a protected DACL granting that user alone, inherited by its
+// contents; the whole chain is inspected again afterwards. Precheck, creation
+// and postcheck are separate steps, not one atomic operation: someone able to
+// write the parent can race them, and only the postcheck can reject the result.
+export function createWindowsPrivateDirectory(path: string, inspect = inspectWindowsStorage): void {
+  if (process.platform !== 'win32') throw new Refusal('handoff_storage_unsupported', 1);
+  const paths = windowsAncestors(path);
+  if (!paths || paths.length < 2) throw new Refusal('handoff_storage_untrusted', 1);
+  if (inspect(paths.at(-2)!).entries.some(entry => !entry.exists || entry.reparse)) throw new Refusal('handoff_storage_untrusted', 1);
+  const encoded = Buffer.from(paths.at(-1)!, 'utf8').toString('base64');
+  const code = `
+$ErrorActionPreference = 'Stop'
+try {
+  $path = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'))
+  if (Test-Path -LiteralPath $path) { exit 3 }
+  if (!(Test-Path -LiteralPath ([IO.Path]::GetDirectoryName($path)) -PathType Container)) { exit 4 }
+  $user = [Security.Principal.WindowsIdentity]::GetCurrent().User
+  $security = New-Object Security.AccessControl.DirectorySecurity
+  $security.SetOwner($user)
+  $security.SetAccessRuleProtection($true, $false)
+  $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($user, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+  [void][IO.Directory]::CreateDirectory($path, $security)
+} catch { exit 1 }
+`;
+  const done = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    '$script = [Console]::In.ReadToEnd(); Invoke-Expression $script'],
+    { input: code, encoding: 'utf8', timeout: START_PROBE_TIMEOUT_MS, maxBuffer: 65536, windowsHide: true });
+  if (done.status === 3) throw new Refusal('handoff_ledger_exists', 1);
+  if (done.status !== 0 || done.error) throw new Refusal('handoff_storage_untrusted', 1);
+  verifyWindowsPrivate(paths.at(-1)!, 'directory', inspect);
 }
