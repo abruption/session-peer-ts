@@ -178,13 +178,14 @@ export async function postWindowsPipe(pipe: string, pid: number, text: string): 
   });
 }
 
-// Private Windows storage (#131). Read-only inspection of reparse attributes
-// along the path and of the leaf's owner and DACL; the only write is creating a new leaf directory with a
-// protected owner-only DACL. No existing ACL is changed or relaxed (no icacls,
-// no Set-Acl on existing paths, no inheritance edits above the leaf). Nothing
-// here is wired into the handoff ledger yet: without native evidence for
-// LockFileEx fencing, replace-over-open and durability, Windows ledger storage
-// stays unsupported and these checks only define what qualification requires.
+// Candidate private Windows storage guard (#131), not connected to the handoff
+// ledger and not sufficient on its own. Read-only inspection of reparse
+// attributes along the path and of the leaf's owner and DACL; the only write
+// creates a new leaf directory with a protected owner-only DACL. No existing
+// ACL is changed or relaxed (no icacls, no Set-Acl on existing paths, no
+// inheritance edits above the leaf). Null-DACL, parent-ACL and creator-race
+// handling, LockFileEx fencing, replace-over-open and durability remain
+// unqualified, so Windows ledger storage stays unsupported.
 export type WindowsAce = { sid: string; allow: boolean; rights: number; inherited: boolean; inherits: boolean };
 export type WindowsStorageEntry = { path: string; exists: boolean; directory?: boolean; reparse?: boolean;
   owner?: string; protected?: boolean; nullDacl?: boolean; rules?: WindowsAce[] };

@@ -25,7 +25,8 @@ held handles only, holds the visible tree before any kill, and attributes from
 the post-hold snapshot only. Confirmation requires a post-kill snapshot. Any
 observed PID swap or vanished, denied or unlisted candidate makes the result
 unconfirmed, and nothing unproven is killed. Its tests cover the algorithm and
-record the rollback limit as a todo.
+record the rollback limit as a todo named as an unresolved design limit
+(never counted as a pass or skip).
 
 The storage guard is a read-only owner-SID/protected-DACL/reparse inspection
 plus a protected private-leaf creator. It is not connected to the handoff

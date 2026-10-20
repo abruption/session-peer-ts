@@ -201,7 +201,8 @@ test('a child the root starts while being killed is seen in a post-kill snapshot
   assert.equal(table.procs.get(104)!.exit !== null, true);
 });
 
-test.todo('design limit: GetProcessTimes are UTC wall-clock instants, so after a clock rollback a child of an earlier holder of a parent PID can satisfy parent.start <= start <= parent.exit and be misattributed; no production path uses this backend until a Job-object (or equivalent) ownership boundary exists');
+// Counted as todo, never as a pass or skip: the limit is unresolved.
+test.todo('DESIGN LIMIT, UNRESOLVED (not a pass): GetProcessTimes are UTC wall-clock instants, so after a clock rollback a child of an earlier holder of a parent PID can satisfy parent.start <= start <= parent.exit and be misattributed; no production path uses this backend until a Job-object (or equivalent) ownership boundary exists');
 
 test('a descendant started during cleanup is found and killed in a later round', async () => {
   const table = new Table(), root = rooted(table, { stubborn: true });
