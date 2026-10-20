@@ -836,9 +836,16 @@ deduplicated. An acquisition stays current until this run's unlock of the
 same pair, or until a recorded break closes exactly that pair. A break result
 names a prefix and a broken `lockId`. It closes the current acquisition only
 when that pair is an open acquisition recorded in this journal. Other break
-results are recorded as audit entries that close nothing: an unowned
-override, a lock on another prefix or from another journal, or an already
-closed lock. Recording the same break twice is refused (`break_replayed`).
+results are recorded as audit entries that close nothing: an override whose
+owner pair cannot be identified, a lock on another prefix or from another
+journal, or an already closed lock. An override is not excluded as such. If
+the broken lock had a readable owner whose exact pair is an open acquisition
+here, the break closes it. Recording the same break twice is refused
+(`break_replayed`). A recorded break also acts as a tombstone for its pair.
+An acquisition result for that same prefix and `lockId`, recorded later
+(break first, acquisition afterwards), is refused as `acquisition_replayed`
+and never becomes current. A break naming the same `lockId` on another prefix
+is an unrelated generation and does not block it.
 It accepts the operator results only after a recorded destination `verify`
 of the same target under the same lock:
 

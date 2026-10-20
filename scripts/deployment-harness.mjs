@@ -725,7 +725,10 @@ const op = {
         if (!HEX32.test(value.lockId ?? '') || !HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
         // Each acquisition is recorded exactly once per journal, by its own run:
         // re-recording (even the current one) is refused, never deduplicated.
-        if (journal.entries.some(entry => entry.event === 'lock_acquired' && entry.prefixId === value.prefixId && entry.lockId === value.lockId))
+        // A break of that same pair recorded anywhere (even before the
+        // acquisition itself) is a tombstone: the pair can never become current.
+        if (journal.entries.some(entry => entry.prefixId === value.prefixId &&
+          ((entry.event === 'lock_acquired' && entry.lockId === value.lockId) || (entry.event === 'lock_broken' && entry.brokenLockId === value.lockId))))
           throw new Refusal('acquisition_replayed');
         if (holding) throw new Refusal('result_invalid', { event, reason: 'already_holding' });
         Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });

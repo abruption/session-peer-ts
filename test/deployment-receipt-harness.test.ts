@@ -554,3 +554,25 @@ test('only a break of the same prefix and lock closes the current acquisition', 
   refused(['op', 'record', ...w.J, '--run', recovery, '--event', 'lock_broken', '--file', w.file('broken', broken), '--execute'], 'break_replayed');
   w.lock(recovery);
 });
+
+test('a break recorded first tombstones that acquisition; recording it later is refused', { skip }, t => {
+  const w = world(t);
+  const late = w.begin();
+  // The acquisition result is kept but not recorded; its break is recorded first.
+  const acquired = ok(['dest', 'lock', ...w.P, '--run', late, '--operator-label', w.label, '--execute']);
+  const recorder = w.begin();
+  const broken = ok(['dest', 'break-lock', ...w.P, '--unowned', '--lock-name', '.activate.lock', '--declare-run-ended', '--execute', '--confirm-destructive']);
+  assert.equal(broken.brokenLockId, acquired.lockId);
+  assert.equal(w.record(recorder, 'lock_broken', broken).record.closesLockId, null);
+  refused(['op', 'record', ...w.J, '--run', late, '--event', 'lock_acquired', '--file', w.file('lock', acquired), '--execute'], 'acquisition_replayed');
+  // A break naming the same lockId on another prefix is an unrelated
+  // generation (shaped by hand: lockIds are random) and blocks nothing here.
+  const other = join(w.base, 'prefix2');
+  ok(['dest', 'init-prefix', '--prefix', other, '--execute']);
+  const otherPrefixId = JSON.parse(readFileSync(join(other, '.session-peer-ts-harness.json'), 'utf8')).prefixId;
+  const fresh = w.begin();
+  const current = ok(['dest', 'lock', ...w.P, '--run', fresh, '--operator-label', w.label, '--execute']);
+  w.record(recorder, 'lock_broken', { ...broken, prefixId: otherPrefixId, brokenLockId: current.lockId, runId: null });
+  w.record(fresh, 'lock_acquired', current);
+  w.record(fresh, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', fresh, '--execute']));
+});
