@@ -241,7 +241,10 @@ function storageReport(value: unknown, paths: string[]): WindowsStorageReport | 
 }
 // The leaf must be owned by the current user SID or the token's default owner
 // (an elevated administrator's new files are owned by Administrators; measured
-// on Windows 10 x64), but every allow ACE, inherited
+// on Windows 10 x64). A group owner is a weaker boundary: every member of that
+// group may rewrite the DACL, so this is not an owner-only guarantee for an
+// elevated administrator, and the non-administrator cell is unverified. Every
+// allow ACE, inherited
 // or inheritable included, must name that SID; a directory's DACL must be
 // protected from its parent. No component may be a reparse point (symlink,
 // junction, mount point or other tag), checked by attribute, not lstat.
@@ -280,7 +283,9 @@ export function verifyWindowsPrivate(path: string, kind: 'directory' | 'file', i
 }
 // Creates only a new leaf under an existing reparse-free parent, owned by the
 // current user with a protected DACL granting that user alone, inherited by its
-// contents; the whole chain is inspected again afterwards.
+// contents; the whole chain is inspected again afterwards. Precheck, creation
+// and postcheck are separate steps, not one atomic operation: someone able to
+// write the parent can race them, and only the postcheck can reject the result.
 export function createWindowsPrivateDirectory(path: string, inspect = inspectWindowsStorage): void {
   if (process.platform !== 'win32') throw new Refusal('handoff_storage_unsupported', 1);
   const paths = windowsAncestors(path);

@@ -3,57 +3,71 @@
 
 ## #131 Windows owned process-tree cleanup and storage guard — source, 2026-10-20 KST
 
-Source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b`; not a
-release. On win32, `run()` now terminates the direct child and then descendants
-attributed by parent PID and creation time through handles held by a single
-PowerShell helper (no bare-PID kill, no `taskkill`, no shell, no caller text in
-argv). It carves a cleanup reserve of `min(2500, timeout/3)` ms out of the
-caller's total, and stopped Windows results report `cleanup: confirmed|unconfirmed`.
-A read-only owner-SID/protected-DACL/reparse guard and a protected
-private-leaf creator were added for Windows storage; the handoff ledger itself
-still refuses Windows with `handoff_storage_unsupported`. POSIX behaviour is
-unchanged.
+This is a source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b`,
+not a release. POSIX behaviour is unchanged.
 
-Local macOS arm64 / Node 24.16.0: build, test types, `npm run test:package`,
-repository checks and `git diff --check` passed. `npm test` with the pinned
-Python 1.1.0 reference `8ca77cf31254c8287a2593fe484bb30a7dba2727` passed with
-zero failures; Windows-native cases skip there. Full counts are in the PR.
+On win32, `run()` stops a child as follows:
+- A single PowerShell helper first holds a handle to the child. It holds the
+  listed children, then terminates the child through that handle (Node kills
+  it after `ROOT_HOLD_GRACE_MS`, 2 s, if the helper is slow).
+- It then terminates descendants attributed only by parent PID and kernel
+  creation/exit times read through held handles. No bare PID, wall clock,
+  `taskkill`, shell or caller text is involved.
+- If the child's exit was already observed, nothing under its PID is killed.
+  The same applies to a candidate that vanished, was denied or became
+  unlisted; in each of these cases the result is `cleanup: unconfirmed`.
+- The cleanup reserve is `min(2500, timeout/3)` ms, taken out of the caller's
+  total. A signal caps a cleanup at 2.5 s, including one already in progress.
 
-Separately authorized isolated run on a Windows x64 test host (Windows 10
-19045, PowerShell 5.1.19041.6456, Node 24.16.0, x64), administrator account
-elevated over SSH, dedicated temporary prefix, `npm ci --ignore-scripts` (the
-fs-ext prebuild loaded). The first native runs found three real defects, fixed
-before the recorded results:
-- PowerShell started detached read EOF from its piped stdin and exited at once,
-  so every cleanup was unconfirmed. The helper is no longer detached.
-- PowerShell 5.1 returned the JSON path array as one object, so storage
-  inspection failed. The array is now cast, not wrapped.
+Windows storage gained a read-only owner-SID/protected-DACL/reparse guard and a
+protected private-leaf creator. Ownership by the token's default owner group
+(an elevated administrator's Administrators) is a weaker, group-wide boundary.
+Creator precheck, creation and postcheck are not atomic. The handoff ledger is
+not connected to this guard and still refuses Windows with
+`handoff_storage_unsupported`.
+
+Local macOS arm64 / Node 24.16.0:
+- Build, test types, `npm run test:package`, repository checks and
+  `git diff --check` passed.
+- `npm test`, with the pinned Python 1.1.0 reference
+  `8ca77cf31254c8287a2593fe484bb30a7dba2727`, passed with zero failures.
+  Windows-native cases skip there; full counts are in the PR.
+- Each targeted guard was removed in turn. Every removal made its regression
+  test fail: gone and unlisted candidates, the signal cap, root proof after an
+  observed exit, and the kernel creation-time check.
+
+Separately authorized isolated runs used a Windows x64 test host: Windows 10
+19045, PowerShell 5.1.19041.6456, Node 24.16.0 x64. The account was an
+administrator, elevated over SSH. Each run used a dedicated temporary prefix and
+`npm ci --ignore-scripts` (the fs-ext prebuild loaded).
+
+Earlier native runs found and fixed:
+- The detached helper exited at once on its piped stdin.
+- PowerShell 5.1 wrapped the JSON path array.
 - Files created by an elevated administrator are owned by Administrators.
-  Ownership now accepts the token's default owner, but never as an allowed ACE.
+- A Node child's own libuv job kills its descendants when it exits. Therefore
+  a Node parent never leaves pipe holders behind, and Node's kill of a proven
+  root must wait until its children are held.
 
-The Node-to-Node "parent exits while a child holds the pipes" case does not
-occur on Windows: a Node child's own libuv job kills its descendants when it
-exits. That case is therefore covered with a non-Node parent instead.
+With the final code on that host:
+- The new native process-tree and storage tests passed, 21 of 24 with 3
+  POSIX-only skips. They cover:
+  - Node and non-Node parents (PowerShell starting `PING.EXE` via
+    CreateProcessW) on timeout, overflow and handler-emitted interrupt;
+  - an exited parent with a pipe-holding child, which reports `unconfirmed`
+    and is not killed;
+  - a private directory, an inherited ACL and a junction inside the prefix.
+- `npm run test:windows` passed: 337 total / 196 passed / 0 failed / 141
+  skipped. `npm run test:package` passed.
+- The full cleanup took 973-1344 ms over 20 warm samples.
+- The prefix was removed, and no process with it in its command line remained.
 
-After the fixes:
-- The new native process-tree and storage tests passed. These cover Node and
-  non-Node parents (PowerShell starting `PING.EXE` via CreateProcessW), with
-  timeout, exit-while-held, overflow and interrupt, plus a private directory,
-  an inherited ACL and a junction inside the prefix.
-- `npm run test:windows`, first full run: 334 total / 193 passed / 1 failed /
-  140 skipped. The single failure was an update-cache test that does not use
-  `run()`. It passed 3/3 alone, and a second full run passed with
-  334 / 194 / 0 / 140.
-- `npm run test:package` passed.
-- The helper round (start, attribute, kill, confirm) took 845-1014 ms over 20
-  samples. These are warm; a cold-boot helper was not measured.
-- The prefix was removed. No process with the prefix in its command line and
-  no `PING.EXE` remained.
-
-The non-admin and non-elevated cells, arm64, Node 22 on that host, and
-cold-boot helper latency remain unrun. Codex 0.155.1 on that host is not a
-qualified profile, so Windows native observation stays unsupported. No live
-agent session or message, ACL, policy, service or account change was made.
+The interrupt cases emit the SIGINT event to the installed handler; they do not
+deliver a console Ctrl+C. The following remain unrun: the Windows CI job (where
+these native tests are registered), non-admin and non-elevated cells, arm64,
+Node 22 on that host, and cold-boot helper latency. Codex 0.155.1 on that host
+is not a qualified profile. No live agent session or message, ACL, policy,
+service or account change was made.
 
 ## Public 0.4.0 — 2026-10-18 KST
 

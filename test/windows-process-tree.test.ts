@@ -11,15 +11,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import timers from 'node:timers/promises';
-import { filetime, parseTreeReply, reapWindowsTree, run, treeReserve, WINDOWS_TREE_RESERVE_MS,
+import { parseTreeReply, reapWindowsTree, run, treeReserve, WINDOWS_TREE_RESERVE_MS,
   type TreeHelper, type TreeReply } from '../dist/process.js';
 
+const filetime = (ms: number) => BigInt(Math.floor(ms)) * 10000n + 116444736000000000n;
 type Proc = { pid: number; ppid: number; start: bigint; exit: bigint | null; stubborn?: boolean; denied?: boolean; spawnOnKill?: Proc };
 // A virtual process table behind the helper protocol: holding keeps a PID
 // (and its zombie) addressable; kills apply only to held entries.
 class Table {
   clock = 1000n; procs = new Map<number, Proc>(); held = new Set<number>(); kills: number[] = []; holds: number[] = [];
-  requests = 0; closed = false; vanish = new Set<number>(); onRequest?: (table: Table) => void;
+  requests = 0; closed = false; vanish = new Set<number>(); onRequest?: (table: Table) => void; onKill?: (pid: number) => void;
   tick() { return this.clock += 10n; }
   add(pid: number, ppid: number, start = this.tick(), extra: Partial<Proc> = {}) { const p = { pid, ppid, start, exit: null, ...extra }; this.procs.set(pid, p); return p; }
   reply(hold: number[], kill: number[]): TreeReply {
@@ -34,7 +35,7 @@ class Table {
     }
     for (const pid of kill) {
       assert.ok(this.held.has(pid), `kill ${pid} without a held handle`);
-      this.kills.push(pid);
+      this.kills.push(pid); this.onKill?.(pid);
       const p = this.procs.get(pid)!;
       if (p.spawnOnKill && !this.procs.has(p.spawnOnKill.pid)) { this.procs.set(p.spawnOnKill.pid, { ...p.spawnOnKill, start: this.tick() }); }
       if (!p.stubborn && p.exit === null) p.exit = this.tick();
@@ -49,41 +50,60 @@ class Table {
   }
 }
 const SELF = 50, ROOT = 100;
-function rooted(table: Table, exitAfter = 1) {
-  const spawnedAt = table.tick();
-  table.add(ROOT, SELF, table.tick());
-  let exitedAt: bigint | undefined;
-  table.onRequest = t => { if (t.requests > exitAfter && exitedAt === undefined) { t.procs.get(ROOT)!.exit = exitedAt = t.tick(); } };
-  return { pid: ROOT, spawnedAt, exitedAt: () => exitedAt };
+// The root as run() exposes it: Node observes its exit as soon as it ends.
+function rooted(table: Table, options: { exited?: boolean; stubborn?: boolean } = {}) {
+  const proc = table.add(ROOT, SELF);
+  if (options.exited) proc.exit = table.tick();
+  if (options.stubborn) proc.stubborn = true;
+  let kills = 0;
+  return { pid: ROOT, exited: () => table.procs.get(ROOT) !== proc || proc.exit !== null,
+    kill: () => { kills++; if (!proc.stubborn && proc.exit === null) proc.exit = table.tick(); }, kills: () => kills };
 }
-const reap = (table: Table, root: ReturnType<typeof rooted>, deadlineMs = 2000, helper = table.helper()) =>
-  reapWindowsTree(root, performance.now() + deadlineMs, { helper: () => helper, self: SELF });
+const reap = (table: Table, root: ReturnType<typeof rooted>, deadlineMs = 2000, helper = table.helper()) => {
+  const deadline = performance.now() + deadlineMs;
+  return reapWindowsTree(root, () => deadline, { helper: () => helper, self: SELF });
+};
 
-test('an owned child and grandchild are killed through held handles; unrelated processes are never touched', async () => {
+test('the root is held first; an owned child and grandchild are killed through held handles; unrelated processes are never touched', async () => {
   const table = new Table(), root = rooted(table);
   table.add(101, ROOT); table.add(102, 101); table.add(200, 1); table.add(300, SELF); table.add(4, 0);
   assert.equal(await reap(table, root), 'confirmed');
-  assert.deepEqual([...new Set(table.kills)].sort(), [101, 102]);
-  for (const pid of [SELF, 7, ROOT, 200, 300, 4]) assert.equal(table.holds.includes(pid), false, String(pid));
+  assert.equal(table.holds[0], ROOT);
+  assert.deepEqual([...new Set(table.kills)].sort(), [ROOT, 101, 102]);
+  assert.ok(root.kills() >= 1);
+  for (const pid of [SELF, 7, 200, 300, 4]) assert.equal(table.holds.includes(pid), false, String(pid));
   assert.equal(table.closed, true);
 });
 
-test('PID reuse: children of a reused or older PID holder are held but never killed', async () => {
-  const table = new Table(), root = rooted(table, 0);
-  const early = table.add(111, ROOT, 1n);               // created before the spawn by an earlier PID holder
-  const child = table.add(101, ROOT);
-  table.add(120, 101, child.start - 5n);               // ppid 101 but older than the owned 101
-  table.onRequest = t => {
-    if (t.requests === 1) {
-      t.procs.get(ROOT)!.exit = t.tick(); exited = t.clock;
-      t.procs.delete(ROOT); t.add(ROOT, 999);         // root PID reused after Node observed its exit
-      t.add(110, ROOT);                                // child of the reuser
-    }
+test('attribution uses held kernel times only: wall-clock changes are irrelevant and earlier PID holders are excluded', async () => {
+  // Kernel times far from any wall-clock value, as after a clock step.
+  for (const clock of [5n, filetime(Date.now() + 86400000)]) {
+    const table = new Table(); table.clock = clock;
+    const root = rooted(table), start = table.procs.get(ROOT)!.start;
+    const child = table.add(101, ROOT);
+    table.add(111, ROOT, start - 1n);                // same millisecond, one tick before the root: an earlier PID holder's child
+    table.add(120, 101, child.start - 1n);           // ppid 101 but older than the owned 101
+    assert.equal(await reap(table, root), 'confirmed');
+    assert.deepEqual([...new Set(table.kills)].sort(), [ROOT, 101], String(clock));
+  }
+});
+
+test('a root whose exit Node already observed, or whose PID was reused before the hold, proves nothing', async () => {
+  let table = new Table(), root = rooted(table, { exited: true });
+  table.add(101, ROOT);
+  assert.equal(await reap(table, root), 'unconfirmed');
+  assert.deepEqual(table.kills, []); assert.equal(table.holds.includes(ROOT), false);
+
+  table = new Table(); root = rooted(table);
+  table.add(101, ROOT);
+  const original = table.reply.bind(table);
+  let first = true;
+  table.reply = (hold, kill) => {
+    if (first) { first = false; table.procs.delete(ROOT); table.add(ROOT, 999); table.add(110, ROOT); }
+    return original(hold, kill);
   };
-  let exited: bigint | undefined; root.exitedAt = () => exited;
-  assert.equal(await reap(table, root), 'confirmed');
-  assert.deepEqual([...new Set(table.kills)], [101]);
-  for (const pid of [early.pid, 110, 120]) assert.equal(table.kills.includes(pid), false, String(pid));
+  assert.equal(await reap(table, root), 'unconfirmed');
+  assert.deepEqual(table.kills, []);
 });
 
 test('a reused PID between snapshot and hold is attributed by the held identity, not the old row', async () => {
@@ -102,7 +122,7 @@ test('a reused PID between snapshot and hold is attributed by the held identity,
 });
 
 test('an exited (zombie) candidate is attributed from the earlier row only if it owned the PID then', async () => {
-  const table = new Table(), root = rooted(table, 3);
+  const table = new Table(), root = rooted(table);
   const child = table.add(101, ROOT); table.add(102, 101);
   const original = table.reply.bind(table);
   table.reply = (hold, kill) => {
@@ -112,11 +132,11 @@ test('an exited (zombie) candidate is attributed from the earlier row only if it
     return reply;
   };
   assert.equal(await reap(table, root), 'confirmed');
-  assert.deepEqual([...new Set(table.kills)], [102]);
+  assert.deepEqual([...new Set(table.kills)].filter(pid => pid !== ROOT), [102]);
 
   // The listed 101 is replaced after that snapshot by an unrelated process that
   // exits at once: its earlier row cannot describe it, so nothing under it is killed.
-  const other = new Table(), second = rooted(other, 3);
+  const other = new Table(), second = rooted(other);
   other.add(101, ROOT);
   const forward = other.reply.bind(other);
   other.reply = (hold, kill) => {
@@ -128,37 +148,58 @@ test('an exited (zombie) candidate is attributed from the earlier row only if it
     return forward(hold, kill);
   };
   assert.equal(await reap(other, second), 'unconfirmed');
-  assert.deepEqual(other.kills, []);
+  assert.deepEqual(other.kills.filter(pid => pid !== ROOT), []);
 });
 
 test('a descendant started during cleanup is found and killed in a later round', async () => {
-  const table = new Table(), root = rooted(table, 4);
+  const table = new Table(), root = rooted(table, { stubborn: true });
   table.add(101, ROOT, undefined, { spawnOnKill: { pid: 103, ppid: 101, start: 0n, exit: null } });
+  let rounds = 0;
+  table.onRequest = t => { if (++rounds === 4) t.procs.get(ROOT)!.stubborn = false; };
   assert.equal(await reap(table, root), 'confirmed');
-  assert.deepEqual([...new Set(table.kills)].sort(), [101, 103]);
+  assert.deepEqual([...new Set(table.kills)].filter(pid => pid !== ROOT).sort(), [101, 103]);
 });
 
-test('denied, vanished-with-children and unkillable candidates make cleanup unconfirmed without foreign kills', async () => {
+test('denied, vanished, unlisted and unkillable candidates make cleanup unconfirmed without foreign kills', async () => {
   let table = new Table(), root = rooted(table);
   table.add(101, ROOT, undefined, { denied: true });
   assert.equal(await reap(table, root), 'unconfirmed');
-  assert.deepEqual(table.kills, []);
+  assert.deepEqual(table.kills.filter(pid => pid !== ROOT), []);
 
   table = new Table(); root = rooted(table);
   table.add(101, ROOT); table.add(102, 101); table.vanish.add(101);
   assert.equal(await reap(table, root), 'unconfirmed');
   assert.equal(table.kills.includes(102), false, 'an unattributable orphan is not killed');
 
+  // Vanished with no visible descendant: still no evidence of a complete tree.
+  table = new Table(); root = rooted(table);
+  table.add(101, ROOT); table.vanish.add(101);
+  assert.equal(await reap(table, root), 'unconfirmed');
+
+  // Held but unlisted afterwards and started after the earlier snapshot: its
+  // parent is unknown, so it is neither attributed nor killed.
+  table = new Table(); root = rooted(table);
+  table.add(101, ROOT);
+  const original = table.reply.bind(table);
+  table.reply = (hold, kill) => {
+    if (!hold.includes(101)) return original(hold, kill);
+    table.procs.delete(101); const late = table.add(101, ROOT);
+    const reply = original(hold, kill); late.exit = table.tick(); reply.rows.delete(101);
+    reply.held.set(101, { start: late.start, exit: late.exit }); return reply;
+  };
+  assert.equal(await reap(table, root), 'unconfirmed');
+  assert.deepEqual(table.kills.filter(pid => pid !== ROOT), []);
+
   table = new Table(); root = rooted(table);
   table.add(101, ROOT, undefined, { stubborn: true });
   const started = performance.now();
   assert.equal(await reap(table, root, 300), 'unconfirmed');
   assert.ok(performance.now() - started < 1000);
-  assert.deepEqual([...new Set(table.kills)], [101]);
+  assert.deepEqual([...new Set(table.kills)].filter(pid => pid !== ROOT), [101]);
 });
 
-test('a root that never exits, a hung, failing or absent helper are all bounded and unconfirmed', async () => {
-  const table = new Table(), root = rooted(table, Infinity);
+test('a root that never exits, a hung, failing or absent helper and an abort are all bounded, unconfirmed and still kill the root', async () => {
+  const table = new Table(), root = rooted(table, { stubborn: true });
   let started = performance.now();
   assert.equal(await reap(table, root, 200), 'unconfirmed');
   assert.ok(performance.now() - started < 800);
@@ -168,13 +209,23 @@ test('a root that never exits, a hung, failing or absent helper are all bounded 
     { request: async () => { throw new Error('private-native-error'); }, close: () => { closed++; } },
   ];
   for (const helper of helpers) {
-    started = performance.now();
-    assert.equal(await reapWindowsTree(rooted(new Table()), performance.now() + 200, { helper: () => helper }), 'unconfirmed');
-    assert.ok(performance.now() - started < 800);
+    const victim = rooted(new Table());
+    started = performance.now(); const deadline = performance.now() + 200;
+    assert.equal(await reapWindowsTree(victim, () => deadline, { helper: () => helper }), 'unconfirmed');
+    assert.ok(performance.now() - started < 800); assert.ok(victim.kills() >= 1);
   }
   assert.equal(closed, 2);
-  assert.equal(await reapWindowsTree(rooted(new Table()), performance.now() + 200, { helper: () => { throw new Error('spawn'); } }), 'unconfirmed');
-  assert.equal(await reapWindowsTree(rooted(new Table()), performance.now() - 1, { helper: () => new Table().helper() }), 'unconfirmed');
+  const absent = rooted(new Table()), soon = performance.now() + 200;
+  assert.equal(await reapWindowsTree(absent, () => soon, { helper: () => { throw new Error('spawn'); } }), 'unconfirmed');
+  assert.ok(absent.kills() >= 1);
+  const past = performance.now() - 1;
+  assert.equal(await reapWindowsTree(rooted(new Table()), () => past, { helper: () => new Table().helper() }), 'unconfirmed');
+  // A signal shortens a cleanup that would otherwise wait for a hung helper.
+  const cut = new AbortController(), far = performance.now() + 60000, hung = rooted(new Table());
+  setTimeout(() => cut.abort(), 100);
+  started = performance.now();
+  assert.equal(await reapWindowsTree(hung, () => far, { helper: () => helpers[0]!, signal: cut.signal }), 'unconfirmed');
+  assert.ok(performance.now() - started < 500); assert.ok(hung.kills() >= 1);
 });
 
 test('helper replies are parsed strictly', () => {
@@ -189,7 +240,6 @@ test('helper replies are parsed strictly', () => {
     assert.throws(() => parseTreeReply(line), /tree_reply/, line);
   }
   assert.equal(treeReserve(3000), 1000); assert.equal(treeReserve(60000), WINDOWS_TREE_RESERVE_MS); assert.equal(treeReserve(1), 0);
-  assert.equal(filetime(0), 116444736000000000n);
 });
 
 // Fake powershell.exe child speaking the helper line protocol over real streams.
@@ -227,7 +277,11 @@ function emulate(t: TestContext, options: { hang?: boolean } = {}) {
     if (binary !== 'powershell.exe') return original(binary, args, spawnOptions);
     calls.push({ args, options: spawnOptions });
     table.clock = filetime(Date.now());
-    if (existsSync(pid)) { const root = Number(readFileSync(pid, 'utf8')); table.add(9001, root, table.clock); table.add(9002, 9001, table.tick()); }
+    if (existsSync(pid)) {
+      const root = Number(readFileSync(pid, 'utf8')); table.add(root, process.pid, table.clock); table.add(9001, root); table.add(9002, 9001);
+      // A kill through the held root handle ends the real local child.
+      table.onKill = id => { if (id === root) try { process.kill(root, 'SIGKILL'); } catch { /* Gone. */ } };
+    }
     return fakePowerShell(table, options);
   });
   const script = (body: string) => `require('node:fs').writeFileSync(${JSON.stringify(pid)}, String(process.pid)); ${body}`;
@@ -241,7 +295,7 @@ test('win32 run(): a timeout terminates the child and its owned tree within the 
   const elapsed = performance.now() - started;
   assert.equal(done.interrupted, true); assert.equal(done.stopReason, 'timeout'); assert.equal(done.cleanup, 'confirmed');
   assert.ok(elapsed >= total - treeReserve(total) - 50 && elapsed < total + 300, `${elapsed} ms`);
-  assert.deepEqual([...new Set(fake.table.kills)].sort(), [9001, 9002]);
+  assert.deepEqual([...new Set(fake.table.kills)].filter(pid => pid === 9001 || pid === 9002).sort(), [9001, 9002]);
   assert.equal(fake.calls.length, 1);
   const call = fake.calls[0]!;
   assert.equal(call.options.shell, false); assert.equal(call.options.detached, undefined); assert.equal(call.options.windowsHide, true);
@@ -257,7 +311,7 @@ test('win32 run(): output overflow, a hung helper and normal completion', async 
   let done = await run(process.execPath, ['-e', fake.script('process.stdout.write("x".repeat(65536)); setInterval(() => {}, 1000)')], { timeout: 4000, limit: 1024 });
   assert.equal(done.stopReason, 'output_limit'); assert.equal(done.cleanup, 'confirmed');
   assert.ok(performance.now() - started < 3000);
-  assert.deepEqual([...new Set(fake.table.kills)].sort(), [9001, 9002]);
+  assert.deepEqual([...new Set(fake.table.kills)].filter(pid => pid === 9001 || pid === 9002).sort(), [9001, 9002]);
   t.mock.restoreAll();
   fake = emulate(t, { hang: true }); started = performance.now();
   done = await run(process.execPath, ['-e', fake.script('setInterval(() => {}, 1000)')], { timeout: 800 });
@@ -277,46 +331,69 @@ test('POSIX run() results never carry a cleanup field', { skip: process.platform
   assert.equal(done.interrupted, true); assert.equal('cleanup' in done, false);
 });
 
-// Emulated on POSIX, where a real signal can reach the runner: the win32
-// handler terminates the child, kills the owned virtual descendant, re-raises.
-test('win32 run(): a signal runs the tree cleanup, then re-raises', { skip: process.platform === 'win32' }, async t => {
+// Emulated on POSIX, where a real signal can reach the runner. The fake helper
+// holds the real child and a virtual descendant 9001; with 'hang' it never
+// answers after the child overflowed its output, so the earlier 90 s cleanup
+// is still in progress when the signal arrives.
+function signalRunner(t: TestContext, mode: 'answer' | 'hang') {
   const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-tree-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const log = join(dir, 'log.json'), pid = join(dir, 'pid'), runner = join(dir, 'runner.mjs');
   const dist = (name: string) => JSON.stringify(pathToFileURL(join(process.cwd(), 'dist', name)).href);
+  const body = mode === 'hang' ? 'process.stdout.write("x".repeat(65536)); setInterval(() => {}, 1000)' : 'setInterval(() => {}, 1000)';
   writeFileSync(runner, `import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { filetime, run } from ${dist('process.js')};
+import { run } from ${dist('process.js')};
 Object.defineProperty(process, 'platform', { value: 'win32' });
-const original = childProcess.spawn, kills = [];
+const original = childProcess.spawn, kills = [], held = new Map(), ft = () => BigInt(Date.now()) * 10000n + 116444736000000000n;
 childProcess.spawn = (binary, args, options) => {
   if (binary !== 'powershell.exe') return original(binary, args, options);
-  const root = Number(readFileSync(${JSON.stringify(pid)}, 'utf8')), start = filetime(Date.now());
+  const root = Number(readFileSync(${JSON.stringify(pid)}, 'utf8')), start = ft();
   const helper = Object.assign(new EventEmitter(), { pid: 7, stdin: new PassThrough(), stdout: new PassThrough(), kill() { return true; } });
   helper.stdin.setEncoding('utf8');
   helper.stdin.on('data', line => {
-    const kill = line.trim().split(' ')[1];
-    if (kill !== '-') { kills.push(...kill.split(',').map(Number)); writeFileSync(${JSON.stringify(log)}, JSON.stringify(kills)); }
-    const held = line.startsWith('-') && !kills.length ? '-' : '9001:' + start + ':' + (kills.length ? start + 10n : '');
-    helper.stdout.write('ok ' + filetime(Date.now()) + ' ' + (kills.length ? '-' : '9001:' + root) + ' ' + held + ' -\\n');
+    if (${JSON.stringify(mode)} === 'hang') return;
+    const [hold, kill] = line.trim().split(' ');
+    for (const id of hold === '-' ? [] : hold.split(',').map(Number)) held.set(id, id === root ? start : start + 10n);
+    if (kill !== '-') { kills.push(...kill.split(',').map(Number)); if (kills.includes(root)) try { process.kill(root, 'SIGKILL'); } catch {} writeFileSync(${JSON.stringify(log)}, JSON.stringify(kills)); }
+    const states = [...held].map(([id, at]) => id + ':' + at + ':' + (kills.includes(id) ? at + 20n : '')).join(',') || '-';
+    const rows = [[root, process.pid], [9001, root]].filter(([id]) => !kills.includes(id)).map(row => row.join(':')).join(',') || '-';
+    helper.stdout.write('ok ' + ft() + ' ' + rows + ' ' + states + ' -\\n');
   });
   return helper;
 };
-await run(process.execPath, ['-e', 'require("node:fs").writeFileSync(${JSON.stringify(pid).replace(/"/g, '\\"')}, String(process.pid)); setInterval(() => {}, 1000)'], { timeout: 60000 });
+await run(process.execPath, ['-e', 'require("node:fs").writeFileSync(${JSON.stringify(pid).replace(/"/g, '\\"')}, String(process.pid)); ${body}'], { timeout: 90000, limit: 1024 });
 `);
   const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
-  for (let i = 0; i < 250 && !existsSync(pid); i++) await timers.setTimeout(20);
-  assert.ok(existsSync(pid));
-  const rootPid = Number(readFileSync(pid, 'utf8'));
-  const started = Date.now(); child.kill('SIGTERM');
-  const [code, signal] = await once(child, 'close');
-  assert.equal(signal, 'SIGTERM', String(code)); assert.ok(Date.now() - started < 3000);
-  assert.deepEqual(JSON.parse(readFileSync(log, 'utf8')), [9001]);
+  return { child, log, pid };
+}
+async function signalled(t: TestContext, mode: 'answer' | 'hang') {
+  const f = signalRunner(t, mode);
+  for (let i = 0; i < 250 && !existsSync(f.pid); i++) await timers.setTimeout(20);
+  assert.ok(existsSync(f.pid));
+  await timers.setTimeout(mode === 'hang' ? 300 : 0);
+  const rootPid = Number(readFileSync(f.pid, 'utf8')), started = Date.now(); f.child.kill('SIGTERM');
+  const [code, signal] = await once(f.child, 'close');
+  const elapsed = Date.now() - started;
+  assert.equal(signal, 'SIGTERM', String(code));
   let alive = true;
   for (let i = 0; i < 50 && alive; i++) { try { process.kill(rootPid, 0); await timers.setTimeout(20); } catch { alive = false; } }
-  assert.equal(alive, false);
+  assert.equal(alive, false, 'the child is terminated');
+  return { elapsed, log: f.log };
+}
+
+test('win32 run(): a signal runs the tree cleanup, then re-raises', { skip: process.platform === 'win32' }, async t => {
+  const { elapsed, log } = await signalled(t, 'answer');
+  assert.ok(elapsed < 3000, `${elapsed} ms`);
+  assert.deepEqual(JSON.parse(readFileSync(log, 'utf8')).filter((pid: number) => pid === 9001), [9001]);
+});
+
+test('win32 run(): a signal caps an in-progress overflow cleanup to WINDOWS_TREE_RESERVE_MS', { skip: process.platform === 'win32' }, async t => {
+  const { elapsed, log } = await signalled(t, 'hang');
+  assert.ok(elapsed >= WINDOWS_TREE_RESERVE_MS - 300 && elapsed < WINDOWS_TREE_RESERVE_MS + 1500, `${elapsed} ms`);
+  assert.equal(existsSync(log), false, 'nothing was killed without evidence');
 });
 
 // Native Windows: real owned trees. Unrun on non-Windows hosts.
@@ -340,8 +417,8 @@ if(process.argv[2]==='exit')process.exit(0);if(process.argv[2]==='flood')process
 
 test('native win32: timeout and overflow kill the whole owned tree within the total', native, async t => {
   // No 'exit' case here: a Node child's own libuv job kills its descendants
-  // when it exits, so nothing holds the pipes (measured); the non-Node test
-  // below covers a parent that exits while its child keeps the pipes.
+  // when it exits, so nothing holds the pipes (measured); the non-Node tests
+  // below cover a parent that exits while its child keeps the pipes.
   for (const [mode, options] of [['stay', { timeout: 8000 }], ['flood', { timeout: 8000, limit: 1024 }]] as const) {
     const f = tree(t), started = performance.now();
     const done = await run(process.execPath, [f.script, mode], options);
@@ -356,8 +433,8 @@ test('native win32: timeout and overflow kill the whole owned tree within the to
 test('native win32: an interrupt cleans the owned tree before the CLI exits', native, async t => {
   const f = tree(t), runner = join(realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wrunner-'))), 'runner.mjs');
   t.after(() => rmSync(join(runner, '..'), { recursive: true, force: true }));
-  // Windows cannot deliver a console signal to one child here; emit the
-  // SIGINT event to the installed handler, which then re-raises.
+  // Not a console Ctrl+C: Windows cannot deliver one to this child alone, so
+  // the SIGINT event is emitted to the installed handler, which re-raises.
   writeFileSync(runner, `import { existsSync } from 'node:fs';
 import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'dist/process.js')).href)};
 void run(process.execPath, [${JSON.stringify(f.script)}, 'stay'], { timeout: 60000 });
@@ -392,8 +469,21 @@ Start-Sleep -Seconds 600`;
   } };
 }
 
+test('native win32: a parent that exited before the stop proves nothing; its pipe-holding child is not killed', native, async t => {
+  // Node observed the parent's exit, so its PID may already be reused: the
+  // child keeping the pipes cannot be attributed, and the result is unconfirmed.
+  const f = nativeTree(t, 'exit'), started = performance.now();
+  const done = await run('powershell.exe', f.args, { timeout: 8000 });
+  assert.equal(done.stopReason, 'timeout'); assert.equal(done.cleanup, 'unconfirmed');
+  assert.ok(performance.now() - started < 8500);
+  const { grandchild } = JSON.parse(readFileSync(f.pids, 'utf8')) as { grandchild: number };
+  assert.doesNotThrow(() => process.kill(grandchild, 0), 'not killed without evidence');
+  process.kill(grandchild); // The test's own fixture process.
+  assert.deepEqual(await f.gone(), []);
+});
+
 test('native win32: a non-Node parent and its CreateProcessW grandchild are cleaned on timeout, overflow and interrupt', native, async t => {
-  for (const [mode, options] of [['stay', { timeout: 8000 }], ['exit', { timeout: 8000 }], ['flood', { timeout: 8000, limit: 1024 }]] as const) {
+  for (const [mode, options] of [['stay', { timeout: 8000 }], ['flood', { timeout: 8000, limit: 1024 }]] as const) {
     const f = nativeTree(t, mode), started = performance.now();
     const done = await run('powershell.exe', f.args, options);
     const elapsed = performance.now() - started;

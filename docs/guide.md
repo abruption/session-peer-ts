@@ -304,15 +304,20 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   a timeout or output overflow the whole group is killed, including a jump
   `ProxyCommand` or any other descendant still holding the output pipes, and the
   call returns shortly after. Ctrl-C, SIGTERM or SIGHUP to the CLI also kills the
-  group before the CLI exits. On Windows the direct child is terminated and then
-  its owned descendants, identified by parent PID and creation time through
-  handles the CLI holds (never a bare PID or `taskkill`). The child gets the
-  timeout minus a cleanup reserve (a third, at most 2.5 s), so the call, cleanup
-  included, still returns at the original deadline; Ctrl-C or SIGHUP runs the
-  same cleanup before the CLI exits. A descendant whose own parent already
-  exited cannot be linked and may linger. This Windows cleanup is exercised by
-  the Windows test suite (CI and one isolated Windows 10 x64 administrator run),
-  not by live agent sessions. A preflight
+  group before the CLI exits. On Windows the CLI first holds a handle to the
+  direct child, terminates it (within 2 s of the stop), then terminates the
+  owned descendants. Descendants are identified by parent PID and kernel creation
+  time through held handles, never by a bare PID, `taskkill` or wall-clock time.
+  The child gets the timeout minus a cleanup reserve (a third, at most 2.5 s),
+  so the call, cleanup included, still returns at the original deadline; Ctrl-C
+  or SIGHUP runs the same cleanup, capped at 2.5 s, before the CLI exits. When
+  ownership cannot be proven, nothing is killed and the result reports
+  `cleanup: unconfirmed`, which is treated as `unknown`. This happens, for
+  example, when the child had already exited while a descendant kept its output
+  open. A descendant whose own parent already exited may linger. Windows-native
+  tests for this are registered for the Windows CI job but have not run there
+  yet; they passed in one isolated Windows 10 x64 administrator run, using no
+  live agent session. A preflight
   timeout is a refusal (`ssh_preflight_timeout`); a request timeout is `unknown`
   and is never retried.
 - Each destination gets one preflight and at most one request, in order. A
