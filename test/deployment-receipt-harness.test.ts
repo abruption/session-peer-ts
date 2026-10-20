@@ -375,7 +375,7 @@ test('operator check records bind the destination host, remote version and named
   const w = world(t);
   const run = w.begin(); w.lock(run); w.activate(run);
   w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
-  const doctor = { ok: true, diagnosticCompleted: true, implementation: 'typescript', ready: false, version: '0.4.0', host: 'dest.example' };
+  const doctor = { ok: true, diagnosticCompleted: true, implementation: 'typescript', ready: false, version: JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).version, host: 'dest.example' };
   const record = (value: unknown, extra: string[]) => h(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name,
     '--file', w.file('doctor', value), '--execute', ...extra]);
   const bin = ['--remote-bin', w.remoteBin()];
