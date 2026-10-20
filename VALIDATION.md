@@ -1,6 +1,46 @@
 # Validation record — updated 2026-10-18 KST
 
 
+## Windows client jump ProxyCommand probe — #20, 2026-10-20 KST
+
+Unreleased branch source (`windowsProxyCommand`, CLI gate unchanged) on a
+Windows x64 test host: Windows 10 x64 (10.0.19045), PowerShell 5.1, Node
+24.16.0, inbox-path Win32-OpenSSH `OpenSSH_for_Windows_9.5p1, LibreSSL 3.8.2`
+(file version 9.5.4.1), administrator account, dedicated temporary prefix.
+No network destination: the generated `ProxyCommand` program was a compiled
+argv-dump `ssh.exe` that recorded `GetCommandLineW`, the real UCRT argv
+(`ucrtbase` `_configure_wide_argv`) and its parent process, then exited, so
+the real `ssh.exe` failed with 255 before any key exchange. `-F none` and
+prefix-only known-hosts files were used.
+
+- 27 of 27 cells matched the source-derived model: 3 dump paths (plain; a
+  directory with spaces, `'`, `100%`, `(x) ^&!;,=#$`, `%PATH% %h %p %%`;
+  Unicode/emoji with `#`) × 3 hops (`hop@jump`, `h_o.p-1@jump.example:2200`,
+  `hop@[2001:db8::2]:22`) × 3 targets (`dummyhost`, IPv6 `2001:db8::1` with
+  `-p 2222`, and a quoted `HostName` containing a space and `-oProxyCommand=x`).
+  The raw command line equalled the percent-expanded value exactly; the UCRT
+  argv equalled the intended hop argv (all hardening options, `-W [host]:port`
+  as one argument, `-- <hop>`); the parent was the System32 `ssh.exe` itself,
+  so no `cmd.exe` ran and `%PATH%`, `^&` stayed literal. OpenSSH lowercased
+  the configured `HostName` before `%h` expansion.
+- `ssh.cmd` and UNC paths were refused with `ssh_jump_unsupported_ssh_path`.
+- On the same host, `test/ssh-jump-windows.test.ts`: 4/4 pass; `npm run
+  test:windows`: 317 tests, 179 pass, 0 fail, 138 POSIX-only skips, including
+  the native `ssh_jump_unsupported_platform` refusal test.
+  `fs-ext-extra-prebuilt` loaded after `npm ci --ignore-scripts`.
+- Observation, not yet analysed: in this non-interactive SSH session the real
+  `ssh.exe` (even `ssh -G`) did not exit within 15 s when its stdin was a
+  Node pipe or file, and exited promptly with stdin ignored (`NUL`). The probe
+  therefore used ignored stdin. Windows-client SSH with pipe stdin is not
+  covered by this record.
+- Cleanup: the prefix was removed and no process with the prefix in its path or
+  command line remained.
+
+This is evidence for quoting only. Windows `--ssh-jump` stays refused: no hop
+or destination connection, version other than 9.5p1, non-administrator
+account, or #131 owned-process-tree cleanup (timeout, overflow, interrupt) was
+exercised.
+
 ## Public 0.4.0 — 2026-10-18 KST
 
 `session-peer@0.4.0` is public. Registry checks confirmed `latest=0.4.0` and
