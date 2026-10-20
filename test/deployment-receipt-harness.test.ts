@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { chmodSync, cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -1571,4 +1571,73 @@ test('an unterminated journal record is refused without further mutation', { ski
     refused(args, 'journal_corrupt');
     assert.deepEqual(readFileSync(j.journal), incomplete);
   }
+});
+
+// Prefix-free filesystem units: exercise the actual staging-copy helper only.
+test('prepared-tree copying preserves the exclusive staging root and internal npm links', { skip }, async t => {
+  const { copyPreparedTree } = await import(script);
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-copy-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const source = join(base, 'source'), destination = join(base, 'destination');
+  mkdirSync(source, { mode: 0o700 }); mkdirSync(destination, { mode: 0o700 });
+  chmodSync(source, 0o755); // Distinguish source mode from the private staging root.
+  assert.equal(statSync(source, { bigint: true }).mode & 0o777n, 0o755n);
+  mkdirSync(join(source, 'node_modules/session-peer/dist'), { recursive: true, mode: 0o700 });
+  mkdirSync(join(source, 'node_modules/.bin'), { mode: 0o700 });
+  writeFileSync(join(source, 'package.json'), 'prepared fixture');
+  writeFileSync(join(source, 'node_modules/session-peer/dist/cli.js'), 'fixture code');
+  symlinkSync('../session-peer/dist/cli.js', join(source, 'node_modules/.bin/session-peer'));
+  const before = statSync(destination, { bigint: true });
+  copyPreparedTree(source, destination);
+  const after = statSync(destination, { bigint: true });
+  assert.equal(after.dev, before.dev); assert.equal(after.ino, before.ino); assert.equal(after.mode & 0o777n, 0o700n);
+  assert.equal(readFileSync(join(destination, 'package.json'), 'utf8'), 'prepared fixture');
+  assert.equal(readFileSync(join(destination, 'node_modules/session-peer/dist/cli.js'), 'utf8'), 'fixture code');
+  assert.equal(readlinkSync(join(destination, 'node_modules/.bin/session-peer')), '../session-peer/dist/cli.js');
+  assert.equal(realpathSync(join(destination, 'node_modules/.bin/session-peer')), join(destination, 'node_modules/session-peer/dist/cli.js'));
+});
+
+test('prepared-tree copying refuses existing destination entries without overwriting them', { skip }, async t => {
+  const { copyPreparedTree } = await import(script);
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-copy-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const source = join(base, 'source'); mkdirSync(source, { mode: 0o700 });
+  writeFileSync(join(source, 'package.json'), 'replacement');
+  mkdirSync(join(source, 'nested'), { mode: 0o700 }); writeFileSync(join(source, 'nested/entry'), 'replacement');
+  for (const [index, collision] of ['package.json', 'nested/entry'].entries()) {
+    const destination = join(base, 'destination-' + index); mkdirSync(destination, { mode: 0o700 });
+    if (collision.includes('/')) mkdirSync(join(destination, 'nested'), { mode: 0o700 });
+    writeFileSync(join(destination, collision), 'preserve sentinel');
+    assert.throws(() => copyPreparedTree(source, destination), /prepared_tree_destination_not_empty/);
+    assert.equal(readFileSync(join(destination, collision), 'utf8'), 'preserve sentinel');
+    assert.deepEqual(readdirSync(destination), [collision.includes('/') ? 'nested' : 'package.json']);
+  }
+});
+
+test('prepared-tree copying refuses overlapping roots and non-directory sources before any copy', { skip }, async t => {
+  const { copyPreparedTree } = await import(script);
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-copy-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const outer = join(base, 'outer'), inner = join(outer, 'inner'), destination = join(base, 'destination');
+  mkdirSync(outer, { mode: 0o700 }); mkdirSync(inner, { mode: 0o700 }); mkdirSync(destination, { mode: 0o700 });
+  writeFileSync(join(outer, 'sentinel'), 'preserve');
+  for (const [source, target] of [[outer, outer], [outer, inner], [inner, outer]])
+    assert.throws(() => copyPreparedTree(source, target), /prepared_tree_overlap/);
+  assert.throws(() => copyPreparedTree(join(outer, 'sentinel'), destination), /prepared_tree_invalid/);
+  assert.deepEqual(readdirSync(outer).sort(), ['inner', 'sentinel']); assert.deepEqual(readdirSync(inner), []);
+  assert.deepEqual(readdirSync(destination), []); assert.equal(readFileSync(join(outer, 'sentinel'), 'utf8'), 'preserve');
+});
+
+test('prepared-tree source paths follow native symlink-parent semantics rather than lexical normalization', { skip }, async t => {
+  const { copyPreparedTree } = await import(script);
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-copy-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const real = join(base, 'real'), child = join(real, 'child'), destination = join(base, 'destination');
+  mkdirSync(real, { mode: 0o700 }); mkdirSync(child, { mode: 0o700 }); mkdirSync(destination, { mode: 0o700 });
+  writeFileSync(join(real, 'selected'), 'actual native parent'); symlinkSync(child, join(base, 'alias'));
+  copyPreparedTree(join(base, 'alias') + '/..', destination);
+  assert.deepEqual(readdirSync(destination).sort(), ['child', 'selected']);
+  assert.equal(readFileSync(join(destination, 'selected'), 'utf8'), 'actual native parent');
+  assert.throws(() => copyPreparedTree(join(base, 'alias') + '/..', child), /prepared_tree_overlap/);
+  assert.deepEqual(readdirSync(child), []);
 });

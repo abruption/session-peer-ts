@@ -1013,6 +1013,15 @@ obtain fresh checks under a new lock.
   staging, before anything reads through the tree, and before every probe.
   Bounded internal relative links, such as npm's, are allowed, and their
   texts are covered by the manifest.
+- **Prepared-tree copying.** The harness exclusively creates the empty staging
+  root with mode 0700, then copies top-level source entries to absent children
+  with `errorOnExist:true`, `force:false` and verbatim relative links. It does
+  not remove or replace that root or merge into existing entries. Source roots
+  are resolved using native filesystem semantics; non-directories and overlapping
+  source/destination roots are refused before copying. This avoids Node 24.22's
+  refusal to copy a directory over an existing destination with those flags.
+  Manifest/link checks still follow copying, before wrapper/version/native
+  probes; no atomic-copy or hostile same-user-writer guarantee is implied.
 - **npm arguments.** `dest stage --npm-cli` interprets each given tarball
   path as the OS does, never lexically: a symlinked ancestor followed by `..`
   selects what the OS would read. The final component must be a regular file,

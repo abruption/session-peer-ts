@@ -441,6 +441,28 @@ function verify(p, name, execute) {
     wrapper: join(p.root, name, 'session-peer') };
 }
 
+// The caller exclusively creates the empty 0700 staging root. Copy children,
+// not the source root over that existing directory: Node 24.22 rejects the
+// latter when errorOnExist && !force. Keep the same no-overwrite options and
+// the caller's root inode/mode; no hostile-writer or atomic-copy guarantee.
+function copyPreparedTree(originalSource, originalDestination) {
+  let source, destination;
+  try {
+    // Resolve the actual input spelling through the OS, including link/.. .
+    source = realpathSync.native(originalSource);
+    destination = realpathSync.native(originalDestination);
+    if (!lstatSync(source).isDirectory() || !lstatSync(destination).isDirectory()) throw new Error();
+  } catch { throw new Refusal('prepared_tree_invalid'); }
+  const contains = (parent, child) => child === parent || child.startsWith(parent.endsWith(sep) ? parent : parent + sep);
+  if (contains(source, destination) || contains(destination, source)) throw new Refusal('prepared_tree_overlap');
+  if (readdirSync(destination).length) throw new Refusal('prepared_tree_destination_not_empty');
+  for (const name of readdirSync(source)) {
+    const target = join(destination, name);
+    if (lstat(target)) throw new Refusal('prepared_tree_destination_not_empty');
+    cpSync(join(source, name), target, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
+  }
+}
+
 // ---- destination commands ----
 const dest = {
   'init-prefix'(a) {
@@ -512,7 +534,7 @@ const dest = {
       'write wrapper, manifest, marker'];
     if (!a.execute) return { dryRun: true, staging, name, plan };
     mkdirSync(dir, { mode: 0o700 });
-    if (tree) cpSync(tree, dir, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
+    if (tree) copyPreparedTree(tree, dir);
     else {
       const scratch = join(dir, '.harness-scratch');
       mkdirSync(scratch, { mode: 0o700 }); mkdirSync(join(scratch, 'home'), { mode: 0o700 });
@@ -1212,6 +1234,6 @@ function main(argv) {
     return 1;
   }
 }
-// Runs as a command; imported (by its tests), it only exposes pure helpers.
+// Runs as a command; imported by tests, it only defines filesystem helpers.
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));
-export { manifestOf, resolvesInside };
+export { manifestOf, resolvesInside, copyPreparedTree };
