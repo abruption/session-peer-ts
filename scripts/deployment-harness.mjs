@@ -708,10 +708,11 @@ const op = {
       if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || value.dryRun !== false)
         throw new Refusal('result_invalid', { event });
       if (event === 'lock_broken') {
-        // A break closes an acquisition only when it names an open one recorded
-        // here, on the same prefix and with the same lockId. Anything else (an
-        // unowned override, another journal's or prefix's lock, an already
-        // closed lock) is kept as an audit record that closes nothing.
+        // A break (an override included) closes an acquisition only when its
+        // readable owner pair names an open one recorded here, on the same
+        // prefix and with the same lockId. Anything else (an override whose
+        // owner pair cannot be identified, another journal's or prefix's lock,
+        // an already closed lock) is kept as an audit record that closes nothing.
         if (!HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
         if (value.brokenLockId && journal.entries.some(entry => entry.event === 'lock_broken' && entry.prefixId === value.prefixId && entry.brokenLockId === value.brokenLockId))
           throw new Refusal('break_replayed');
