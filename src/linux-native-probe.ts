@@ -1,10 +1,10 @@
 // Owned one-shot worker for synchronous native-profile I/O: the complete
 // executable digest and the Linux owned-child procfs/canonical-path binding.
 // The caller runs it with process.run() under the ORIGINAL remaining budget;
-// at that deadline the worker's process group is killed and the caller refuses
-// the effect. A process blocked in uninterruptible kernel I/O cannot be reaped
-// until the kernel returns; the caller's effect decision never waits on it
-// beyond its own deadline check. Output is closed JSON returned only to the
+// at that deadline it requests termination of the worker's process group and
+// the caller refuses the effect. Actual reaping of a process blocked in
+// uninterruptible kernel I/O may occur later, when the kernel returns; the
+// caller's effect decision never waits on it beyond its own deadline check. Output is closed JSON returned only to the
 // caller (opened paths stay in memory, never in CLI output or logs).
 import { createHash } from 'node:crypto';
 import { closeSync, openSync, readSync, realpathSync, statSync } from 'node:fs';

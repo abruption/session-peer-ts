@@ -566,10 +566,10 @@ function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
   }
 }
 // Synchronous native-profile I/O (executable digest, procfs walk) runs in an
-// owned worker. Supervisor refusal boundary for that worker only: run() reaps
-// its group at the original remaining budget, and beforeDeadline() refuses at
-// that deadline even if the kernel has not yet released a worker blocked in
-// uninterruptible I/O. Caller-side realpath/stat/lstat (executable identity,
+// owned worker. Supervisor refusal boundary for that worker only: run()
+// requests termination of its group (SIGKILL) at the original remaining
+// budget and beforeDeadline() refuses at that deadline; actual reaping of a
+// worker blocked in uninterruptible kernel I/O may occur later. Caller-side realpath/stat/lstat (executable identity,
 // canonical SQLite paths) stay synchronous here, as on Darwin, and are only
 // followed by deadline checks; they have no execution-time bound.
 async function nativeWorker(args: string[], deadlineMs: number): Promise<Record<string, unknown> | undefined> {

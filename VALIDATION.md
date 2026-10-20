@@ -1,4 +1,4 @@
-# Validation record — updated 2026-10-18 KST
+# Validation record — updated 2026-10-20 KST
 
 
 ## Unreleased Linux arm64 observation candidate — #130, 2026-10-20 KST
@@ -70,12 +70,12 @@ Review follow-ups (same date):
   regression showed the old code entering the row path over SSH and the fixed
   code refusing; at the final head no Linux row is selectable and the policy
   is covered by hermetic synthetic-table tests.
-- Executable digest and procfs binding now run in an owned worker: the
-  worker's group is killed at the original remaining budget and the caller
-  refuses at that deadline even if a worker is still blocked in
-  uninterruptible kernel I/O (which cannot be reaped until the kernel
-  returns). This is a refusal-at-deadline guarantee, not a bound on how long a
-  blocked kernel call takes. The `--procfs-owner` reads run inside the already
+- Executable digest and procfs binding now run in an owned worker: at the
+  original remaining budget the supervisor requests termination of the
+  worker's group and the caller refuses; actual reaping of a worker blocked in
+  uninterruptible kernel I/O may occur later, when the kernel returns. This is
+  a refusal-at-deadline guarantee, not a bound on how long a blocked kernel
+  call takes. The `--procfs-owner` reads run inside the already
   deadline-bounded writer-probe process. Canonical-path `lstat` checks remain
   in the caller, as on Darwin.
 - Retained identity: the generation still binds the lock fingerprint, lsof
@@ -104,13 +104,22 @@ comment now limits its hard bound to the worker's supervisor refusal;
 caller-side `realpath`/`stat`/`lstat` stay synchronous with deadline checks
 only.
 
-Tests at the final head (candidate not activated): on Darwin 27.0 arm64 /
-Node 24.16 the full `npm test` (with the pinned Python reference) passed 400,
-failed 0, skipped 8 (5 Windows-only, 3 Linux-only). On the Linux arm64 test
-host it passed 376, failed 0, skipped 28 (Darwin-qualified and Windows-only),
-with every Linux-only native case passing; that rerun used only fixtures in a
-private prefix, with no credentials, model turn or install change. Earlier
-heads' counts (`b804115`, `2f3b35d`) are superseded.
+Full suites at the `dd21302` source checkpoint (candidate not activated): on
+Darwin 27.0 arm64 / Node 24.16 the full `npm test` (with the pinned Python
+reference) passed 400, failed 0, skipped 8 (5 Windows-only, 3 Linux-only). On
+the Linux arm64 test host it passed 376, failed 0, skipped 28
+(Darwin-qualified and Windows-only), with every Linux-only native case
+passing; that run used only fixtures in a private prefix, with no
+credentials, model turn or install change. The raw Linux log has no HEAD
+marker; it is tied to the checkpoint by the executor's run record. Earlier
+checkpoints' counts (`b804115`, `2f3b35d`) are superseded.
+
+Later documentation/comment/evidence-description commits (`ffe8afc` and the
+following one) changed no runtime statement. At those heads only light gates
+ran: `npm run build`, `npm run test:types`, the related linux-observation,
+app-server and metadata-observation tests (80 pass, 0 fail, 3 skipped),
+`node scripts/check-repository.mjs` and `git diff --check`. No new full-suite,
+Linux-host or live-model run was performed at those heads.
 Queued/delivered remain distinct from receipt ACK or work completion.
 
 ## Public 0.4.0 — 2026-10-18 KST
