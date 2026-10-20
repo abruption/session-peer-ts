@@ -203,6 +203,7 @@ test('rollback needs the same run or positive journal confirmation that no calle
   refused(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', retire, '--target', w.name], 'configured_for_caller');
   refused(['dest', 'retire', ...w.P, '--run', retire, '--name', w.name, '--execute', '--confirm-destructive'], 'configured_for_caller_or_unconfirmed');
   // Caller state changes only while no acquisition on the prefix is open.
+  // Releasing, unswitching, then locking again is the same as unswitching before the lock: the guard is unchanged.
   refused(['op', 'record', ...w.J, '--run', retire, '--event', 'callers_unswitched', '--target', w.name, '--prefix-id', w.prefixId, '--execute'], 'acquisition_open');
   w.record(retire, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', retire, '--execute']));
   w.record(retire, 'callers_unswitched', undefined, w.name, ['--prefix-id', w.prefixId]);
@@ -1388,4 +1389,25 @@ test('remote-bin attestation on shaped results: only the exact canonical wrapper
     `/dest/root/data/session-peer-ts/link/../${target}/session-peer`, `${wrapper}/`])
     assert.equal(attest(bin).error, 'operator_check_target_mismatch', bin);
   assert.equal(attest(wrapper).ok, true);
+});
+
+test('a statement cannot use an appended acquisition that is rolled back afterwards', { skip }, async t => {
+  const j = journalOnly(t);
+  const before = readFileSync(j.journal);
+  const lockId = '9'.repeat(32), prefixId = '8'.repeat(32), target = `${packageVersion}-${'7'.repeat(16)}`;
+  const acquired = join(dirname(j.journal), 'acquired.json');
+  writeFileSync(acquired, JSON.stringify({ harness: 'session-peer-ts deployment validation harness', command: 'dest lock', ok: true, dryRun: false, runId: j.run, prefixId, lockId }));
+  const release = `${j.journal}.release`;
+  const failing = runAsync(['op', 'record', ...j.J, '--run', j.run, '--event', 'lock_acquired', '--file', acquired, '--execute'],
+    { ...process.env, SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl', SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT: '1', SESSION_PEER_TS_HARNESS_TEST_PAUSE_BEFORE_ROLLBACK: release });
+  await waitFor(`${release}.held`);
+  // The complete line is on disk, waiting for its rollback: nothing may read it.
+  assert.equal(readFileSync(j.journal, 'utf8').includes(lockId), true);
+  refused(['op', 'statement', ...j.J, '--kind', 'no-caller', '--run', j.run, '--target', target], 'journal_busy');
+  refused(['op', 'record', ...j.J, '--run', j.run, '--event', 'run_ended'], 'journal_busy');
+  writeFileSync(release, '');
+  const result = await failing.done;
+  assert.equal(result.out.error, 'journal_append_failed'); assert.equal(result.out.rollback, 'restored');
+  assert.deepEqual(readFileSync(j.journal), before);
+  refused(['op', 'statement', ...j.J, '--kind', 'no-caller', '--run', j.run, '--target', target], 'lock_not_recorded');
 });

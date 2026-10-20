@@ -859,18 +859,19 @@ function withJournalLock(path, work) {
   catch (error) { if (error.code === 'EEXIST') throw new Refusal('journal_busy'); throw error; }
   let released = false;
   try {
-    testPause(journalLock(path));
+    testPause('SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK', journalLock(path));
     const result = work();
     try { rmdirSync(journalLock(path)); released = true; } catch {}
     return released ? result : { ...result, journalLock: 'left_in_place' };
   } finally { if (!released) try { rmdirSync(journalLock(path)); } catch {} }
 }
-// Test hook only: while holding the journal lock, announce it and wait (bounded)
-// for a release file, so a second command can be run deterministically.
-function testPause(lock) {
-  const file = process.env.SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK;
+// Test hooks only: at a named point (inside the journal lock, or after a
+// failed append before its rollback), announce it and wait (bounded) for a
+// release file, so a second command can be run deterministically.
+function testPause(variable, note) {
+  const file = process.env[variable];
   if (!file) return;
-  writeExclusive(`${file}.held`, lock);
+  writeExclusive(`${file}.held`, note);
   const cell = new Int32Array(new SharedArrayBuffer(4));
   for (let waited = 0; !existsSync(file); waited += 20) {
     if (waited > 60000) throw Object.assign(new Error('test pause timed out'), { code: 'ETIMEDOUT' });
@@ -891,6 +892,7 @@ function journalAppend(path, journal, event) {
     try { writeAll(fd, `${line}\n`); syncFd(fd, path); }
     catch (error) {
       let rollbackError;
+      testPause('SESSION_PEER_TS_HARNESS_TEST_PAUSE_BEFORE_ROLLBACK', path);
       try {
         if (TEST_TRUNCATE_FAIL) throw Object.assign(new Error('injected truncate failure'), { code: 'EIO' });
         ftruncateSync(fd, size); syncFd(fd, path);
