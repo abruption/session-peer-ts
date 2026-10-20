@@ -657,7 +657,7 @@ function journalAppend(path, journal, event) {
   try { writeSync(fd, `${line}\n`); } finally { closeSync(fd); }
   return { seq: journal.entries.length, head: sha256(line) };
 }
-// The destination results op record accepts; any other event name is a usage error.
+// Destination-result event mappings. Operator events are handled separately below.
 const RESULT = { lock_acquired: 'dest lock', activated: 'dest activate', verified: 'dest verify', receipt_published: 'dest receipt',
   lock_released: 'dest unlock', rolled_back: 'dest rollback', lock_broken: 'dest break-lock', receipt_cleaned: 'dest receipt-cleanup',
   retired: 'dest retire' };

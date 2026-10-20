@@ -839,8 +839,11 @@ results `op record` accepts are exactly these:
   ownership basis);
 - `retired` (`dest retire`).
 
-Each must be an executed result. Any other event name is a usage error. `op
-record` refuses a result from another run, another prefix or an earlier lock,
+Each destination result must be executed. Operator checks, caller-switch
+attestations and run-ended events are handled separately. An unrecognized
+destination-result event such as `retire` is not recordable. The new cleanup
+and retirement records are audit entries; they do not invalidate earlier
+receipt records or change switch/statement eligibility. `op record` refuses a result from another run, another prefix or an earlier lock,
 including an earlier lock of the same run acquired at the same timestamp.
 `callers_switched` needs the publishing run's unlock under the same lock that
 published the receipt. The journal records each acquisition (prefix ID and
