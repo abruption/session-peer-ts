@@ -85,8 +85,8 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
 // ssh_config boundary. SSH_TEST_ENVIRONMENT makes Win32-OpenSSH rewrite the
 // path (bash_to_win_path) and is refused.
 // Not enabled: the CLI still refuses a Windows client until an actual Win32
-// OpenSSH run and bounded owned-process-tree cleanup on timeout, output
-// overflow and interrupt are qualified (#20, #131).
+// OpenSSH run and bounded owned-process-tree cleanup of the hop grandchild on
+// timeout, output overflow and interrupt are qualified (#20, #131; see cli.ts).
 export function windowsProxyCommand(ssh: string, jump: SshJump, env: NodeJS.ProcessEnv = process.env): string {
   if (ssh.length > 4096 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(ssh) ||
     !/^[A-Za-z]:\\(?:[^\x00-\x1f\x7f"*:<>?|/\\]+\\)*ssh\.exe$/i.test(ssh)) throw new Refusal('ssh_jump_unsupported_ssh_path');
