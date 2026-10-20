@@ -1,17 +1,19 @@
-// Windows owned process-tree cleanup. The virtual-table cases run everywhere
-// (deterministic PID reuse, vanish, denial, hang); the native cases run only on
-// win32 (CI windows job) with real node -> node -> node trees.
+// Windows process cleanup. Production run() kills only the direct child on
+// Windows and never starts the tree helper; that is pinned here. The rest
+// tests the candidate tree backend (reapWindowsTree), which no production
+// path selects: virtual-table cases run everywhere, native ones only on win32.
+// They test the candidate algorithm and record its design limits; they are not
+// evidence that descendant ownership can be proven on Windows.
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import childProcess, { spawn } from 'node:child_process';
-import { EventEmitter, once } from 'node:events';
+import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import timers from 'node:timers/promises';
-import { parseTreeReply, reapWindowsTree, run, treeReserve, WINDOWS_TREE_RESERVE_MS,
+import { parseTreeReply, reapWindowsTree, run,
   type TreeHelper, type TreeReply } from '../dist/process.js';
 
 const filetime = (ms: number) => BigInt(Math.floor(ms)) * 10000n + 116444736000000000n;
@@ -84,7 +86,7 @@ test('the root is held first; an owned child and grandchild are killed through h
   assert.equal(table.closed, true);
 });
 
-test('attribution uses held kernel times only: wall-clock changes are irrelevant and earlier PID holders are excluded', async () => {
+test('candidate backend: creation-time ordering excludes earlier PID holders under shifted clock bases (not under a rollback; see the todo)', async () => {
   // Kernel times far from any wall-clock value, as after a clock step.
   for (const clock of [5n, filetime(Date.now() + 86400000)]) {
     const table = new Table(); table.clock = clock;
@@ -115,7 +117,7 @@ test('a root whose exit Node already observed, or whose PID was reused before th
   assert.deepEqual(table.kills, []);
 });
 
-test('a reused PID between snapshot and hold is attributed by the held identity, not the old row', async () => {
+test('a PID swap observed between snapshot and hold is never killed and makes the result unconfirmed', async () => {
   const table = new Table(), root = rooted(table);
   table.add(101, ROOT);
   // Between the snapshot that listed 101 and the hold, 101 exits and an
@@ -126,7 +128,8 @@ test('a reused PID between snapshot and hold is attributed by the held identity,
     if (hold.includes(101) && !swapped) { swapped = true; table.procs.delete(101); table.add(101, 1); }
     return original(hold, kill);
   };
-  assert.equal(await reap(table, root), 'confirmed');
+  // The listed 101 may have started descendants that are no longer visible.
+  assert.equal(await reap(table, root), 'unconfirmed');
   assert.equal(table.kills.includes(101), false);
 });
 
@@ -187,6 +190,18 @@ test('the whole visible tree is held before anything is killed, so job-killed de
   assert.deepEqual([...new Set(table.holds)].sort(), [ROOT, 101, 102, 103]);
   assert.ok(table.kills.length > 0);
 });
+
+test('a child the root starts while being killed is seen in a post-kill snapshot before confirming', async () => {
+  // Not stubborn: the root exits at its kill, so only a fresh snapshot after
+  // that kill can reveal the child it started in between.
+  const table = new Table(), root = rooted(table);
+  table.procs.get(ROOT)!.spawnOnKill = { pid: 104, ppid: ROOT, start: 0n, exit: null };
+  assert.equal(await reap(table, root), 'confirmed');
+  assert.ok(table.kills.includes(104), 'the late child is killed');
+  assert.equal(table.procs.get(104)!.exit !== null, true);
+});
+
+test.todo('design limit: GetProcessTimes are UTC wall-clock instants, so after a clock rollback a child of an earlier holder of a parent PID can satisfy parent.start <= start <= parent.exit and be misattributed; no production path uses this backend until a Job-object (or equivalent) ownership boundary exists');
 
 test('a descendant started during cleanup is found and killed in a later round', async () => {
   const table = new Table(), root = rooted(table, { stubborn: true });
@@ -276,11 +291,10 @@ test('helper replies are parsed strictly', () => {
     'ok - 1:0: -', 'ok - 1:x: -', 'ok - - 1:other', 'ok - - - extra', 'ok 12345678901:1 - -']) {
     assert.throws(() => parseTreeReply(line), /tree_reply/, line);
   }
-  assert.equal(treeReserve(3000), 1000); assert.equal(treeReserve(60000), WINDOWS_TREE_RESERVE_MS); assert.equal(treeReserve(1), 0);
 });
 
 // Fake powershell.exe child speaking the helper line protocol over real streams.
-function fakePowerShell(table: Table, options: { hang?: boolean } = {}) {
+function fakePowerShell(table: Table) {
   const helper = Object.assign(new EventEmitter(), { pid: 7, stdin: new PassThrough(), stdout: new PassThrough(), killed: false,
     kill() { this.killed = true; return true; } });
   let input = '';
@@ -290,7 +304,6 @@ function fakePowerShell(table: Table, options: { hang?: boolean } = {}) {
     for (let end = input.indexOf('\n'); end >= 0; end = input.indexOf('\n')) {
       const [hold, kill] = input.slice(0, end).split(' ').map(text => text === '-' ? [] : text.split(',').map(Number));
       input = input.slice(end + 1);
-      if (options.hang) continue;
       const r = table.reply(hold!, kill!);
       const field = (items: string[]) => items.length ? items.join(',') : '-';
       helper.stdout.write(`ok ${field([...r.rows].map(([a, b]) => `${a}:${b}`))} ${field([...r.held].map(([pid, s]) => `${pid}:${s.start}:${s.exit ?? ''}`))} ${field([...r.errors].map(([pid, e]) => `${pid}:${e}`))}\r\n`);
@@ -298,244 +311,87 @@ function fakePowerShell(table: Table, options: { hang?: boolean } = {}) {
   });
   return helper;
 }
-function windows(t: TestContext) {
-  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
-  Object.defineProperty(process, 'platform', { value: 'win32' });
-  t.after(() => { t.mock.restoreAll(); Object.defineProperty(process, 'platform', platform); });
-}
-// The real child is an ordinary local node process that records its PID; its
-// descendants are virtual entries keyed to that PID, created after the spawn.
-function emulate(t: TestContext, options: { hang?: boolean } = {}) {
-  const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-tree-')));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const table = new Table(), calls: { args: readonly string[]; options: childProcess.SpawnOptions }[] = [], pid = join(dir, 'pid');
-  const original = childProcess.spawn;
-  t.mock.method(childProcess, 'spawn', (binary: string, args: readonly string[], spawnOptions: childProcess.SpawnOptions) => {
-    if (binary !== 'powershell.exe') return original(binary, args, spawnOptions);
-    calls.push({ args, options: spawnOptions });
-    table.clock = filetime(Date.now());
-    if (existsSync(pid)) {
-      const root = Number(readFileSync(pid, 'utf8')); table.add(root, process.pid, table.clock); table.add(9001, root); table.add(9002, 9001);
-      // A kill through the held root handle ends the real local child.
-      table.onKill = id => { if (id === root) try { process.kill(root, 'SIGKILL'); } catch { /* Gone. */ } };
-    }
-    return fakePowerShell(table, options);
-  });
-  const script = (body: string) => `require('node:fs').writeFileSync(${JSON.stringify(pid)}, String(process.pid)); ${body}`;
-  return { table, calls, script };
-}
 
-test('win32 run(): a timeout terminates the child and its owned tree within the original total', async t => {
-  windows(t);
-  const fake = emulate(t), total = 1200, started = performance.now();
-  const done = await run(process.execPath, ['-e', fake.script('setInterval(() => {}, 1000)'), 'private-message-text'], { timeout: total });
-  const elapsed = performance.now() - started;
-  assert.equal(done.interrupted, true); assert.equal(done.stopReason, 'timeout'); assert.equal(done.cleanup, 'confirmed');
-  assert.ok(elapsed >= total - treeReserve(total) - 50 && elapsed < total + 300, `${elapsed} ms`);
-  assert.deepEqual([...new Set(fake.table.kills)].filter(pid => pid === 9001 || pid === 9002).sort(), [9001, 9002]);
-  assert.equal(fake.calls.length, 1);
-  const call = fake.calls[0]!;
+test('candidate backend: the helper transport speaks the line protocol with a fixed, hidden, shell-free PowerShell', async t => {
+  const table = new Table(), root = rooted(table), calls: { args: readonly string[]; options: childProcess.SpawnOptions }[] = [];
+  table.add(101, ROOT);
+  t.mock.method(childProcess, 'spawn', (binary: string, args: readonly string[], options: childProcess.SpawnOptions) => {
+    assert.equal(binary, 'powershell.exe'); calls.push({ args, options }); return fakePowerShell(table);
+  });
+  t.after(() => t.mock.restoreAll());
+  const deadline = performance.now() + 2000;
+  assert.equal(await reapWindowsTree(root, () => deadline, { self: SELF }), 'confirmed');
+  assert.ok(table.kills.includes(101));
+  const call = calls[0]!;
   assert.equal(call.options.shell, false); assert.equal(call.options.detached, undefined); assert.equal(call.options.windowsHide, true);
   assert.deepEqual(call.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-EncodedCommand']); assert.equal(call.args.length, 4);
   const script = Buffer.from(call.args[3]!, 'base64').toString('utf16le');
-  assert.equal(script.includes('private-message-text'), false);
-  assert.match(script, /GetProcessById/); assert.doesNotMatch(script, /taskkill|Stop-Process|Invoke-Expression/i);
+  assert.match(script, /GetProcessById/); assert.doesNotMatch(script, /taskkill|Stop-Process|Invoke-Expression|UtcNow/i);
 });
 
-test('win32 run(): output overflow, a hung helper and normal completion', async t => {
-  windows(t);
-  let fake = emulate(t), started = performance.now();
-  let done = await run(process.execPath, ['-e', fake.script('process.stdout.write("x".repeat(65536)); setInterval(() => {}, 1000)')], { timeout: 4000, limit: 1024 });
-  assert.equal(done.stopReason, 'output_limit'); assert.equal(done.cleanup, 'confirmed');
-  assert.ok(performance.now() - started < 3000);
-  assert.deepEqual([...new Set(fake.table.kills)].filter(pid => pid === 9001 || pid === 9002).sort(), [9001, 9002]);
-  t.mock.restoreAll();
-  fake = emulate(t, { hang: true }); started = performance.now();
-  done = await run(process.execPath, ['-e', fake.script('setInterval(() => {}, 1000)')], { timeout: 800 });
-  const elapsed = performance.now() - started;
-  assert.equal(done.stopReason, 'timeout'); assert.equal(done.cleanup, 'unconfirmed');
-  assert.ok(elapsed >= 750 && elapsed < 1100, `${elapsed} ms`);
-  assert.deepEqual(fake.table.kills, []);
-  t.mock.restoreAll();
-  fake = emulate(t);
-  done = await run(process.execPath, ['-e', 'process.stdout.write("ok")'], { timeout: 4000 });
-  assert.equal(done.code, 0); assert.equal(done.stdout, 'ok'); assert.equal(done.interrupted, false);
-  assert.equal('cleanup' in done, false); assert.equal(fake.calls.length, 0);
-});
-
-test('POSIX run() results never carry a cleanup field', { skip: process.platform === 'win32' }, async () => {
-  const done = await run(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { timeout: 200 });
-  assert.equal(done.interrupted, true); assert.equal('cleanup' in done, false);
-});
-
-// Emulated on POSIX, where a real signal can reach the runner. The fake helper
-// holds the real child and a virtual descendant 9001; with 'hang' it never
-// answers after the child overflowed its output, so the earlier 90 s cleanup
-// is still in progress when the signal arrives.
-function signalRunner(t: TestContext, mode: 'answer' | 'hang') {
-  const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-tree-')));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const log = join(dir, 'log.json'), pid = join(dir, 'pid'), runner = join(dir, 'runner.mjs');
-  const dist = (name: string) => JSON.stringify(pathToFileURL(join(process.cwd(), 'dist', name)).href);
-  const body = mode === 'hang' ? 'process.stdout.write("x".repeat(65536)); setInterval(() => {}, 1000)' : 'setInterval(() => {}, 1000)';
-  writeFileSync(runner, `import childProcess from 'node:child_process';
-import { EventEmitter } from 'node:events';
-import { PassThrough } from 'node:stream';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { run } from ${dist('process.js')};
-Object.defineProperty(process, 'platform', { value: 'win32' });
-const original = childProcess.spawn, kills = [], held = new Map(), ft = () => BigInt(Date.now()) * 10000n + 116444736000000000n;
-childProcess.spawn = (binary, args, options) => {
-  if (binary !== 'powershell.exe') return original(binary, args, options);
-  const root = Number(readFileSync(${JSON.stringify(pid)}, 'utf8')), start = ft();
-  const helper = Object.assign(new EventEmitter(), { pid: 7, stdin: new PassThrough(), stdout: new PassThrough(), kill() { return true; } });
-  helper.stdin.setEncoding('utf8');
-  helper.stdin.on('data', line => {
-    if (${JSON.stringify(mode)} === 'hang') return;
-    const [hold, kill] = line.trim().split(' ');
-    for (const id of hold === '-' ? [] : hold.split(',').map(Number)) held.set(id, id === root ? start : start + 10n);
-    if (kill !== '-') { kills.push(...kill.split(',').map(Number)); if (kills.includes(root)) try { process.kill(root, 'SIGKILL'); } catch {} writeFileSync(${JSON.stringify(log)}, JSON.stringify(kills)); }
-    const states = [...held].map(([id, at]) => id + ':' + at + ':' + (kills.includes(id) ? at + 20n : '')).join(',') || '-';
-    const rows = [[root, process.pid], [9001, root]].filter(([id]) => !kills.includes(id)).map(row => row.join(':')).join(',') || '-';
-    helper.stdout.write('ok ' + rows + ' ' + states + ' -\\n');
+// Production: no path starts the helper, so run() cannot kill anything but the
+// child it spawned, on any platform (on Windows the descendants may linger).
+test('production run() never starts the tree helper on timeout, overflow or completion', async t => {
+  let helpers = 0;
+  const original = childProcess.spawn;
+  t.mock.method(childProcess, 'spawn', (binary: string, args: readonly string[], options: childProcess.SpawnOptions) => {
+    if (/powershell/i.test(binary)) helpers++;
+    return original(binary, args, options);
   });
-  return helper;
-};
-await run(process.execPath, ['-e', 'require("node:fs").writeFileSync(${JSON.stringify(pid).replace(/"/g, '\\"')}, String(process.pid)); ${body}'], { timeout: 90000, limit: 1024 });
-`);
-  const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
-  return { child, log, pid };
-}
-async function signalled(t: TestContext, mode: 'answer' | 'hang') {
-  const f = signalRunner(t, mode);
-  for (let i = 0; i < 250 && !existsSync(f.pid); i++) await timers.setTimeout(20);
-  assert.ok(existsSync(f.pid));
-  await timers.setTimeout(mode === 'hang' ? 300 : 0);
-  const rootPid = Number(readFileSync(f.pid, 'utf8')), started = Date.now(); f.child.kill('SIGTERM');
-  const [code, signal] = await once(f.child, 'close');
-  const elapsed = Date.now() - started;
-  assert.equal(signal, 'SIGTERM', String(code));
-  let alive = true;
-  for (let i = 0; i < 50 && alive; i++) { try { process.kill(rootPid, 0); await timers.setTimeout(20); } catch { alive = false; } }
-  assert.equal(alive, false, 'the child is terminated');
-  return { elapsed, log: f.log };
-}
-
-test('win32 run(): a signal runs the tree cleanup, then re-raises', { skip: process.platform === 'win32' }, async t => {
-  const { elapsed, log } = await signalled(t, 'answer');
-  assert.ok(elapsed < 3000, `${elapsed} ms`);
-  assert.deepEqual(JSON.parse(readFileSync(log, 'utf8')).filter((pid: number) => pid === 9001), [9001]);
+  t.after(() => t.mock.restoreAll());
+  const stopped = await run(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { timeout: 300 });
+  const flooded = await run(process.execPath, ['-e', 'process.stdout.write("x".repeat(65536)); setInterval(() => {}, 1000)'], { timeout: 4000, limit: 1024 });
+  const ok = await run(process.execPath, ['-e', 'process.stdout.write("ok")'], { timeout: 4000 });
+  assert.equal(stopped.stopReason, 'timeout'); assert.equal(flooded.stopReason, 'output_limit'); assert.equal(ok.stdout, 'ok');
+  for (const done of [stopped, flooded, ok]) assert.equal('cleanup' in done, false);
+  assert.equal(helpers, 0);
 });
 
-test('win32 run(): a signal caps an in-progress overflow cleanup to WINDOWS_TREE_RESERVE_MS', { skip: process.platform === 'win32' }, async t => {
-  const { elapsed, log } = await signalled(t, 'hang');
-  assert.ok(elapsed >= WINDOWS_TREE_RESERVE_MS - 300 && elapsed < WINDOWS_TREE_RESERVE_MS + 1500, `${elapsed} ms`);
-  assert.equal(existsSync(log), false, 'nothing was killed without evidence');
-});
-
-// Native Windows: real owned trees. Unrun on non-Windows hosts.
+// Native Windows. Unrun on non-Windows hosts.
 const native = { skip: process.platform !== 'win32' };
-function tree(t: TestContext) {
-  const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wtree-')));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const pids = join(dir, 'pids.json'), script = join(dir, 'tree.cjs');
-  writeFileSync(script, `const {spawn}=require('node:child_process');
-const g=spawn(process.execPath,['-e',"const {spawn}=require('node:child_process');const h=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:['ignore','inherit','inherit']});require('node:fs').writeFileSync(process.argv[1],String(h.pid));setInterval(()=>{},1000)",${JSON.stringify(join(dir, 'great.txt'))}],{stdio:['ignore','inherit','inherit']});
-const wait=()=>{try{const great=Number(require('node:fs').readFileSync(${JSON.stringify(join(dir, 'great.txt'))},'utf8'));
-require('node:fs').writeFileSync(${JSON.stringify(pids)},JSON.stringify({child:process.pid,grandchild:g.pid,great}));
-if(process.argv[2]==='exit')process.exit(0);if(process.argv[2]==='flood')process.stdout.write('x'.repeat(65536));}catch{setTimeout(wait,20)}};wait();setInterval(()=>{},1000);`);
-  const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  return { script, pids, ready: () => existsSync(pids), async gone() {
-    const all = Object.values(JSON.parse(readFileSync(pids, 'utf8')) as Record<string, number>);
-    for (let i = 0; i < 100 && all.some(alive); i++) await timers.setTimeout(50);
-    return all.filter(alive);
-  } };
-}
-
-test('native win32: timeout and overflow kill the whole owned tree within the total', native, async t => {
-  // No 'exit' case here: a Node child's own libuv job kills its descendants
-  // when it exits, so nothing holds the pipes (measured); the non-Node tests
-  // below cover a parent that exits while its child keeps the pipes.
-  for (const [mode, options] of [['stay', { timeout: 8000 }], ['flood', { timeout: 8000, limit: 1024 }]] as const) {
-    const f = tree(t), started = performance.now();
-    const done = await run(process.execPath, [f.script, mode], options);
-    const elapsed = performance.now() - started;
-    assert.equal(done.interrupted, true, mode); assert.equal(done.cleanup, 'confirmed', mode);
-    assert.equal(done.stopReason, mode === 'flood' ? 'output_limit' : 'timeout', mode);
-    assert.ok(elapsed < options.timeout + 500, `${mode}: ${elapsed} ms`);
-    assert.deepEqual(await f.gone(), [], mode);
-  }
-});
-
-test('native win32: an interrupt cleans the owned tree before the CLI exits', native, async t => {
-  const f = tree(t), runner = join(realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wrunner-'))), 'runner.mjs');
-  t.after(() => rmSync(join(runner, '..'), { recursive: true, force: true }));
-  // Not a console Ctrl+C: Windows cannot deliver one to this child alone, so
-  // the SIGINT event is emitted to the installed handler, which re-raises.
-  writeFileSync(runner, `import { existsSync } from 'node:fs';
-import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'dist/process.js')).href)};
-void run(process.execPath, [${JSON.stringify(f.script)}, 'stay'], { timeout: 60000 });
-const poll = () => existsSync(${JSON.stringify(f.pids)}) ? process.emit('SIGINT', 'SIGINT') : setTimeout(poll, 20); poll();`);
-  const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
-  const started = performance.now();
-  const [code] = await once(child, 'close');
-  assert.equal(code, 1); assert.ok(performance.now() - started < 30000);
-  assert.deepEqual(await f.gone(), []);
-});
-
-
 // A non-Node native parent (powershell.exe) starts ping.exe via CreateProcessW
 // (Start-Process -NoNewWindow), which inherits and holds the output pipes, like
 // ssh.exe starting a ProxyCommand.
-function nativeTree(t: TestContext, mode: 'stay' | 'exit' | 'flood') {
+function nativeTree(t: TestContext, mode: 'stay' | 'exit') {
   const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wnative-')));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const pids = join(dir, 'pids.json'), quote = (text: string) => `'${text.replace(/'/g, "''")}'`;
   const script = `$g = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\PING.EXE') -ArgumentList '-n','600','127.0.0.1' -NoNewWindow -PassThru
 [IO.File]::WriteAllText(${quote(pids)}, (ConvertTo-Json @{child=$PID; grandchild=$g.Id} -Compress))
-if ('${mode}' -eq 'flood') { [Console]::Out.Write('x' * 65536) }
 if ('${mode}' -eq 'exit') { exit 0 }
 Start-Sleep -Seconds 600`;
   const args = ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')];
   const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  return { args, pids, async gone() {
-    const all = Object.values(JSON.parse(readFileSync(pids, 'utf8')) as Record<string, number>);
-    assert.equal(all.length, 2);
+  const read = () => JSON.parse(readFileSync(pids, 'utf8')) as { child: number; grandchild: number };
+  // The test's own fixture processes, removed whatever the outcome.
+  t.after(() => { try { for (const pid of Object.values(read())) try { process.kill(pid); } catch { /* Gone. */ } } catch { /* Never started. */ } });
+  return { args, pids, read, alive, async gone(all: number[]) {
     for (let i = 0; i < 100 && all.some(alive); i++) await timers.setTimeout(50);
     return all.filter(alive);
   } };
 }
 
-test('native win32: a parent that exited before the stop proves nothing; its pipe-holding child is not killed', native, async t => {
-  // Node observed the parent's exit, so its PID may already be reused: the
-  // child keeping the pipes cannot be attributed, and the result is unconfirmed.
-  const f = nativeTree(t, 'exit'), started = performance.now();
+test('native win32: production run() kills only the direct child; its CreateProcessW grandchild is left alone', native, async t => {
+  const f = nativeTree(t, 'stay'), started = performance.now();
   const done = await run('powershell.exe', f.args, { timeout: 8000 });
-  assert.equal(done.stopReason, 'timeout'); assert.equal(done.cleanup, 'unconfirmed');
-  assert.ok(performance.now() - started < 8500);
-  const { grandchild } = JSON.parse(readFileSync(f.pids, 'utf8')) as { grandchild: number };
-  assert.doesNotThrow(() => process.kill(grandchild, 0), 'not killed without evidence');
-  process.kill(grandchild); // The test's own fixture process.
-  assert.deepEqual(await f.gone(), []);
+  assert.equal(done.stopReason, 'timeout'); assert.equal('cleanup' in done, false);
+  assert.ok(performance.now() - started < 8800);
+  const { child, grandchild } = f.read();
+  assert.deepEqual(await f.gone([child]), []);
+  assert.equal(f.alive(grandchild), true, 'production does not kill descendants');
 });
 
-test('native win32: a non-Node parent and its CreateProcessW grandchild are cleaned on timeout, overflow and interrupt', native, async t => {
-  for (const [mode, options] of [['stay', { timeout: 8000 }], ['flood', { timeout: 8000, limit: 1024 }]] as const) {
-    const f = nativeTree(t, mode), started = performance.now();
-    const done = await run('powershell.exe', f.args, options);
-    const elapsed = performance.now() - started;
-    assert.equal(done.cleanup, 'confirmed', mode); assert.equal(done.stopReason, mode === 'flood' ? 'output_limit' : 'timeout', mode);
-    assert.ok(elapsed < options.timeout + 500, `${mode}: ${elapsed} ms`);
-    assert.deepEqual(await f.gone(), [], mode);
+test('native win32: candidate backend holds and cleans a non-Node tree; an exited parent proves nothing', native, async t => {
+  for (const mode of ['stay', 'exit'] as const) {
+    const f = nativeTree(t, mode), child = spawn('powershell.exe', f.args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    let exited = false; child.once('exit', () => { exited = true; });
+    for (let i = 0; i < 400 && !existsSync(f.pids); i++) await timers.setTimeout(25);
+    if (mode === 'exit') for (let i = 0; i < 400 && !exited; i++) await timers.setTimeout(25);
+    const deadline = performance.now() + 8000;
+    const outcome = await reapWindowsTree({ pid: child.pid!, exited: () => exited, kill: () => child.kill() }, () => deadline);
+    const { grandchild } = f.read();
+    if (mode === 'stay') { assert.equal(outcome, 'confirmed'); assert.deepEqual(await f.gone([child.pid!, grandchild]), []); }
+    else { assert.equal(outcome, 'unconfirmed'); assert.equal(f.alive(grandchild), true, 'not killed without evidence'); }
+    child.stdout!.destroy();
   }
-  const f = nativeTree(t, 'stay'), runner = join(realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wrunner-'))), 'runner.mjs');
-  t.after(() => rmSync(join(runner, '..'), { recursive: true, force: true }));
-  writeFileSync(runner, `import { existsSync } from 'node:fs';
-import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'dist/process.js')).href)};
-void run('powershell.exe', ${JSON.stringify(f.args)}, { timeout: 60000 });
-const poll = () => existsSync(${JSON.stringify(f.pids)}) ? process.emit('SIGINT', 'SIGINT') : setTimeout(poll, 20); poll();`);
-  const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
-  const [code] = await once(child, 'close');
-  assert.equal(code, 1);
-  assert.deepEqual(await f.gone(), []);
 });

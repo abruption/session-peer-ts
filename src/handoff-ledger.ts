@@ -1,8 +1,8 @@
 // Private POSIX ledger. No native submission or transcript access occurs here.
 // Fencing assumes intact retained history: unmarked clones/rollbacks cannot be
 // detected by a local-only ledger. Windows ACL/bootstrap support is not claimed:
-// src/windows.ts defines the owner-SID/protected-DACL/reparse guard Windows
-// storage must pass, but LockFileEx fencing, replace-over-open, durability and
+// src/windows.ts has a candidate owner-SID/protected-DACL/reparse guard, not
+// connected here and not sufficient on its own; LockFileEx fencing, replace-over-open, durability and
 // crash recovery have no native evidence, so every Windows ledger operation
 // still fails closed (handoff_storage_unsupported) before touching storage.
 import { randomBytes, randomUUID, createHash, timingSafeEqual, createCipheriv, createDecipheriv } from 'node:crypto';

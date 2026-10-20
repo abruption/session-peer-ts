@@ -26,94 +26,60 @@ export function executable(name: string): string {
 }
 export type StopReason = 'timeout' | 'output_limit' | 'process_error';
 export type Done = { code: number | null; stdout: string; stderr: string; spawned: boolean; interrupted: boolean;
-  stdoutBytes?: Buffer; stopReason?: StopReason; cleanup?: TreeCleanup };
+  stdoutBytes?: Buffer; stopReason?: StopReason };
 // On POSIX every child is started detached: a new session and process group
 // with no controlling terminal. A timeout, an output overflow or a signal to
 // this CLI reaps that group, which includes descendants such as a jump
 // ProxyCommand, and nothing else; a descendant that calls setsid() itself has
-// left the group and is out of scope (there is no PID scanning).
-// On Windows the same stops hold the child, terminate it and then its owned
-// descendants (reapWindowsTree below): attributed by parent PID and kernel
-// creation/exit times through held handles, never by bare PID or wall clock. The child gets total - treeReserve(total)
-// of the caller's timeout and cleanup the rest, so the result still arrives
-// within the original total. A stopped Windows run reports cleanup 'confirmed'
-// only when the child and every attributed descendant were observed exited and
-// nothing unverifiable was seen; otherwise 'unconfirmed', an unknown effect
-// that permits no fallback or resend. POSIX results carry no cleanup field.
+// left the group and is out of scope (there is no PID scanning). Windows has no
+// equivalent here: only the child is killed and descendants may linger; the
+// tree backend below is a candidate that is deliberately not used (#131).
 const groups = new Set<number>();
-const trees = new Map<number, (cap: number) => Promise<unknown>>();
+const posix = process.platform !== 'win32';
 const reap = (pid: number | undefined) => { if (pid) try { process.kill(-pid, 'SIGKILL'); } catch { /* Already gone (ESRCH). */ } };
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 // A detached group no longer receives the terminal's Ctrl-C, so forward
 // termination signals as a group kill, then re-raise with default handling.
-// Windows first runs every active tree cleanup, each within its own total
-// and WINDOWS_TREE_RESERVE_MS from now; Node re-raises there as TerminateProcess.
 function forward(signal: NodeJS.Signals) {
+  for (const pid of groups) reap(pid);
+  groups.clear();
   for (const name of signals) process.removeListener(name, forward);
-  if (process.platform !== 'win32') {
-    for (const pid of groups) reap(pid);
-    groups.clear();
-    process.kill(process.pid, signal); return;
-  }
-  const cap = performance.now() + WINDOWS_TREE_RESERVE_MS, pending = [...trees.values()].map(halt => halt(cap));
-  trees.clear();
-  void Promise.allSettled(pending).then(() => { try { process.kill(process.pid, signal); } catch { process.exit(1); } });
+  process.kill(process.pid, signal);
 }
 export function run(binary: string, args: string[], options: {
   env?: NodeJS.ProcessEnv; input?: string; timeout?: number; limit?: number; rawStdout?: boolean;
 } = {}): Promise<Done> {
   return new Promise(resolve => {
     let stdout = '', stderr = '', bytes = 0, stderrBytes = 0, spawned = false, interrupted = false, finished = false, stopped = false;
-    let stopReason: StopReason | undefined, cleanup: TreeCleanup | undefined, tree: Promise<unknown> | undefined, exited = false, limit = 0;
+    let stopReason: StopReason | undefined;
     const chunks: Buffer[] = [], outputDecoder = new StringDecoder('utf8'), diagnosticDecoder = new StringDecoder('utf8');
-    const windows = process.platform === 'win32', total = options.timeout ?? 3000, started = performance.now();
-    const cut = new AbortController();
-    const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: !windows });
+    const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: posix });
     const release = () => {
-      if (child.pid === undefined || !(windows ? trees.delete(child.pid) : groups.delete(child.pid)) || groups.size || trees.size) return;
+      if (child.pid === undefined || !groups.delete(child.pid) || groups.size) return;
       for (const name of signals) process.removeListener(name, forward);
     };
     const finish = (code: number | null) => {
-      // A started Windows cleanup alone completes the run (bounded by total).
-      if (finished || (tree && !cleanup)) return;
+      if (finished) return;
       finished = true; clearTimeout(timer); release();
       stdout += outputDecoder.end(); stderr += diagnosticDecoder.end();
       resolve({ code, stdout, stderr, spawned, interrupted,
-        ...(options.rawStdout ? { stdoutBytes: Buffer.concat(chunks, bytes) } : {}), ...(stopReason ? { stopReason } : {}),
-        ...(cleanup ? { cleanup } : {}) });
-    };
-    // A later signal shortens an in-progress cleanup to its own cap.
-    const sweep = (deadline: number) => {
-      if (tree) {
-        if (deadline < limit) { limit = deadline; setTimeout(() => cut.abort(), Math.max(0, deadline - performance.now())); }
-        return tree;
-      }
-      limit = deadline;
-      const pid = child.pid, kill = () => { try { child.kill('SIGKILL'); } catch { /* Exit decides. */ } };
-      tree = (pid === undefined ? Promise.resolve<TreeCleanup>('unconfirmed') :
-        reapWindowsTree({ pid, exited: () => exited, kill }, () => limit, { signal: cut.signal }))
-        .then(outcome => { cleanup = outcome; finish(child.exitCode); });
-      return tree;
+        ...(options.rawStdout ? { stdoutBytes: Buffer.concat(chunks, bytes) } : {}), ...(stopReason ? { stopReason } : {}) });
     };
     const stop = (reason: StopReason) => {
       if (stopped || finished) return;
       stopped = interrupted = true; stopReason = reason;
-      if (!windows) reap(child.pid); else sweep(started + total);
-      // A descendant may still hold the pipes: stop reading so completion
-      // depends on the exit (POSIX) or the bounded cleanup (Windows).
+      if (posix) reap(child.pid); else child.kill('SIGKILL');
+      // A descendant outside our reach (Windows) may still hold the pipes:
+      // stop reading so completion depends on the exit, not on their close.
       child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
       // Already exited (only a descendant was left): complete after the grace.
-      if (!windows && (child.exitCode !== null || child.signalCode !== null)) setTimeout(() => finish(child.exitCode), 100);
+      if (child.exitCode !== null || child.signalCode !== null) setTimeout(() => finish(child.exitCode), 100);
     };
-    const timer = setTimeout(() => stop('timeout'), total - (windows ? treeReserve(total) : 0));
+    const timer = setTimeout(() => stop('timeout'), options.timeout ?? 3000);
     const register = () => {
-      if (finished || stopped || child.pid === undefined || groups.has(child.pid) || trees.has(child.pid)) return;
-      if (!groups.size && !trees.size) for (const name of signals) process.on(name, forward);
-      if (!windows) { groups.add(child.pid); return; }
-      trees.set(child.pid, cap => {
-        if (!stopped) { stopped = interrupted = true; child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); }
-        return sweep(Math.min(started + total, cap));
-      });
+      if (finished || stopped || !posix || child.pid === undefined || groups.has(child.pid)) return;
+      if (!groups.size) for (const name of signals) process.on(name, forward);
+      groups.add(child.pid);
     };
     // Register as soon as the PID exists, so a signal arriving before the
     // 'spawn' event still reaps the group; 'spawn' remains the fallback.
@@ -144,21 +110,23 @@ export function run(binary: string, args: string[], options: {
     // a pipe never closes; otherwise 'close' (all output read) completes it.
     // A descendant that keeps the pipes open after the child exits runs into
     // the same deadline and is reaped with the group.
-    // Node closes the child's handle (freeing its PID) only after this event,
-    // so a helper hold reported before it identifies the child itself.
-    child.once('exit', code => { exited = true; if (stopped && !windows) setTimeout(() => finish(code), 100); });
+    child.once('exit', code => { if (stopped) setTimeout(() => finish(code), 100); });
     child.once('close', code => finish(code));
     child.stdin.end(options.input);
   });
 }
 
-// Owned Windows process-tree cleanup for run(). Windows has no detached
-// process group here, and libuv lets descendants silently break away from its
-// kill-on-close job, so a timed-out child's descendants are found by walking
-// parent PIDs. A bare PID is never trusted: every candidate is first opened by
-// a helper that keeps the handle (a held PID cannot be reused), attributed by
-// creation time against an owned parent, and terminated only through that same
-// handle. No taskkill, no PID-only kill, no shell, no caller text in argv.
+// Candidate owned Windows process-tree cleanup backend (#131). NOT selected by
+// run() or any production path: it cannot prove descendant ownership on
+// Windows 10. Every candidate is opened by a helper that keeps the handle (a
+// held PID cannot be reused) and is terminated only through that handle, but
+// attribution compares GetProcessTimes creation/exit times, which are UTC
+// wall-clock instants, not monotonic generations: after a clock rollback a
+// process created under an earlier holder of a parent's PID can look like a
+// child of the current holder. Win32_Process ParentProcessId has the same
+// reuse caveat. A sound boundary needs a Job object the child is created in
+// (suspended, assigned, resumed), which Node's spawn cannot do. Kept, with its
+// tests, as the design record for that follow-up; it must not be enabled.
 
 export type TreeCleanup = 'confirmed' | 'unconfirmed';
 export type TreeReply = { rows: Map<number, number>;
@@ -167,12 +135,6 @@ export type TreeHelper = { pid?: number; request(hold: number[], kill: number[])
 // exited: Node has observed the root's exit (its handle, and so its PID, may
 // then be released). kill: terminate through Node's own handle; idempotent.
 export type TreeRoot = { pid: number; exited: () => boolean; kill: () => void };
-// Cleanup is carved out of the caller's total budget, never added to it. A
-// warm cleanup (helper start, root hold, attribute, kill, confirm) measured
-// 0.97-1.34 s on Windows 10 x64 / PowerShell 5.1; the cap leaves ~1.9x that,
-// and a third of short budgets. A slower (cold) helper reports unconfirmed.
-export const WINDOWS_TREE_RESERVE_MS = 2500;
-export const treeReserve = (total: number) => Math.min(WINDOWS_TREE_RESERVE_MS, Math.max(0, Math.floor(total / 3)));
 
 // Request: "<hold csv|-> <kill csv|->". Reply: "ok <rows> <held> <errors>"
 // with rows pid:ppid, held pid:start:exit (exit empty while running) and errors
@@ -297,6 +259,7 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
   const grace = setTimeout(() => root.kill(), Math.max(0, Math.min(ROOT_HOLD_GRACE_MS, deadline() - now())));
   try { helper = (options.helper ?? windowsTreeHelper)(); } catch { clearTimeout(grace); root.kill(); return 'unconfirmed'; }
   const owned = new Map<number, { start: bigint; exit: bigint | null }>(), foreign = new Set<number>(), unknown = new Set<number>();
+  const listed = new Map<number, number>();
   // An already observed exit means the root PID may be reused: no evidence.
   let hold: number[] = root.exited() ? [] : [root.pid], kill: number[] = [];
   let doubtful = !hold.length, rootPending = hold.length > 0;
@@ -311,6 +274,9 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
     for (;;) {
       const remaining = deadline() - now();
       if (remaining <= 0 || options.signal?.aborted) return 'unconfirmed';
+      // A reply can confirm only if its snapshot followed every kill and the
+      // root's observed exit (the helper snapshots before a request's kills).
+      const settledBefore = !kill.length && root.exited();
       const abort = new AbortController();
       const reply = await Promise.race([helper.request(hold, kill), aborted,
         timers.setTimeout(remaining, undefined, { signal: abort.signal }).catch(() => undefined)]).finally(() => abort.abort());
@@ -336,7 +302,12 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
         const ppid = reply.rows.get(pid);
         if (ppid === undefined) { doubtful = true; unknown.add(pid); }
         else if (ppid !== pid && parentOwns(ppid, state.start)) owned.set(pid, { ...state });
-        else foreign.add(pid);
+        else {
+          // A changed parent means the listed process was replaced before the
+          // hold; whatever it started is no longer visible: doubtful.
+          if (ppid !== listed.get(pid)) doubtful = true;
+          foreign.add(pid);
+        }
       }
       hold = []; kill = [];
       for (const [pid, node] of owned) if (node.exit === null) kill.push(pid);
@@ -344,7 +315,7 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
       for (const [pid, ppid] of reply.rows) {
         if (unknown.has(ppid)) doubtful = true;
         if (pid <= 4 || pid === ppid || pid === self || pid === helper.pid || owned.has(pid) || foreign.has(pid) || unknown.has(pid)) continue;
-        if (owned.has(ppid)) hold.push(pid);
+        if (owned.has(ppid)) { hold.push(pid); listed.set(pid, ppid); }
       }
       // Hold the whole visible tree before killing anything: a dying Node
       // parent's job ends its children, and an unheld one would then vanish
@@ -352,7 +323,8 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
       // (the root by ROOT_HOLD_GRACE_MS).
       if (hold.length) kill = [];
       if (!hold.length && !kill.length) {
-        if (root.exited()) return doubtful ? 'unconfirmed' : 'confirmed';
+        if (root.exited() && settledBefore) return doubtful ? 'unconfirmed' : 'confirmed';
+        if (root.exited()) continue;
         // The root was asked to terminate; give Node a moment to observe it.
         await Promise.race([timers.setTimeout(Math.max(0, Math.min(25, deadline() - now()))), aborted]);
       }

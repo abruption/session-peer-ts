@@ -1,34 +1,40 @@
 # Validation record — updated 2026-10-20 KST
 
 
-## #131 Windows owned process-tree cleanup and storage guard — source, 2026-10-20 KST
+## #131 Windows tree-cleanup backend and storage guard (preparation, not selected) — source, 2026-10-20 KST
 
 This is a source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b`,
-not a release. POSIX behaviour is unchanged.
+not a release. Production behaviour is unchanged on every platform. On Windows,
+`run()` still terminates only the direct child; descendants may linger, the
+child keeps its full timeout, and no new result field or signal handling was
+added.
 
-On win32, `run()` stops a child as follows:
-- A single PowerShell helper first holds a handle to the directly spawned
-  child. It holds every visible descendant, then terminates the child and the
-  proven descendants through held handles. Node kills the child after
-  `ROOT_HOLD_GRACE_MS`, 2 s, if the helper is slow.
-- Ownership is proven only from parent PID and kernel creation/exit times read
-  through held handles, taken from a process snapshot made after the hold. No
-  bare PID, wall-clock stamp, earlier snapshot row, `taskkill`, shell or caller
-  text is involved.
-- Some candidates or branches cannot be proven: a child whose exit was already
-  observed, or a candidate that vanished, was denied or became unlisted. These
-  are not terminated, and the result is `cleanup: unconfirmed`. That result is
-  not evidence of no effect, because the spawned child and proven descendants
-  may already have been terminated.
-- The cleanup reserve is `min(2500, timeout/3)` ms, taken out of the caller's
-  total. A signal caps a cleanup at 2.5 s, including one already in progress.
+Review established a design limit for owning a process tree on Windows 10
+without native code:
+- Descendant ownership cannot be proven. GetProcessTimes creation/exit values
+  are UTC wall-clock instants, not monotonic generations, and Win32_Process
+  ParentProcessId may refer to a reused PID.
+- After a clock rollback, a child of an earlier holder of a parent's PID can
+  satisfy any creation-time ordering. Handle-holding fixes only the current
+  identity.
+- A sound boundary needs the child created inside a Job object (suspended,
+  assigned, resumed), which Node's spawn cannot do.
 
-Windows storage gained a read-only owner-SID/protected-DACL/reparse guard and a
-protected private-leaf creator. Ownership by the token's default owner group
-(an elevated administrator's Administrators) is a weaker, group-wide boundary.
-Creator precheck, creation and postcheck are not atomic. The handoff ledger is
-not connected to this guard and still refuses Windows with
-`handoff_storage_unsupported`.
+The candidate backend `reapWindowsTree` is therefore kept unselected. It uses
+held handles only, holds the visible tree before any kill, and attributes from
+the post-hold snapshot only. Confirmation requires a post-kill snapshot. Any
+observed PID swap or vanished, denied or unlisted candidate makes the result
+unconfirmed, and nothing unproven is killed. Its tests cover the algorithm and
+record the rollback limit as a todo.
+
+The storage guard is a read-only owner-SID/protected-DACL/reparse inspection
+plus a protected private-leaf creator. It is not connected to the handoff
+ledger, which still refuses Windows with `handoff_storage_unsupported`.
+Accepting the token's default owner (an elevated administrator's
+Administrators) is a weaker, group-wide boundary. Creator precheck, creation
+and postcheck are not atomic. Null-DACL, parent-ACL and creator-race handling
+remain unqualified while it is unconnected. Like the existing inspection code,
+it resolves `powershell.exe` through PATH rather than a SystemRoot-pinned path.
 
 Local macOS arm64 / Node 24.16.0, final code:
 - Build, test types, `npm run test:package`, repository checks and
@@ -36,45 +42,26 @@ Local macOS arm64 / Node 24.16.0, final code:
 - `npm test`, with the pinned Python 1.1.0 reference
   `8ca77cf31254c8287a2593fe484bb30a7dba2727`, passed with zero failures.
   Windows-native cases skip there; full counts are in the PR.
-- Each targeted guard was removed in turn, and every removal made its
-  regression test fail. Covered guards: an earlier-row fallback for unlisted
-  candidates (any clock), gone and unlisted candidates, the signal cap, root
-  proof after an observed exit, the kernel creation-time check, and holding the
-  tree before any kill.
+- Each backend guard was removed in turn, and every removal made its
+  regression test fail.
 
-Separately authorized isolated runs used a Windows x64 test host: Windows 10
-19045, PowerShell 5.1.19041.6456, Node 24.16.0 x64. The account was an
-administrator, elevated over SSH. Each run used a dedicated temporary prefix and
-`npm ci --ignore-scripts` (the fs-ext prebuild loaded).
+Isolated runs used a Windows x64 test host: Windows 10 19045, PowerShell 5.1,
+Node 24.16.0 x64, an administrator elevated over SSH, a dedicated temporary
+prefix and the host lock. Earlier heads of this branch ran native tests there
+and fixed real defects:
+- a detached helper exited at once;
+- PowerShell 5.1 wrapped the JSON path array;
+- an elevated administrator's files are owned by Administrators;
+- a Node child's job ends its descendants, so the tree must be held before any
+  kill.
 
-Earlier native runs found and fixed:
-- The detached helper exited at once on its piped stdin.
-- PowerShell 5.1 wrapped the JSON path array.
-- Files created by an elevated administrator are owned by Administrators.
-- A Node child's own libuv job kills its descendants when it exits. Once the
-  earlier-row fallback was removed, killing before the whole tree was held let
-  a job-ended grandchild vanish unattributed.
-
-With the final code on that host:
-- The new native process-tree and storage tests passed, 23 of 26 with 3
-  POSIX-only skips; the native process-tree cases also passed in two more runs.
-  They cover:
-  - Node and non-Node parents (PowerShell starting `PING.EXE` via
-    CreateProcessW) on timeout, overflow and handler-emitted interrupt;
-  - an exited parent with a pipe-holding child, which reports `unconfirmed`
-    and is not killed;
-  - a private directory, an inherited ACL and a junction inside the prefix.
-- `npm run test:windows` passed: 339 total / 198 passed / 0 failed / 141
-  skipped. `npm run test:package` passed.
-- The full cleanup took 973-1278 ms over 20 warm samples.
-- The prefix was removed, and no process with it in its command line remained.
-
-The interrupt cases emit the SIGINT event to the installed handler; they do not
-deliver a console Ctrl+C. The following remain unrun: the Windows CI job (where
-these native tests are registered), non-admin and non-elevated cells, arm64,
-Node 22 on that host, and cold-boot helper latency. Codex 0.155.1 on that host
-is not a qualified profile. No live agent session or message, ACL, policy,
-service or account change was made.
+Results for the final code are in the PR. ACLs of existing paths were not
+changed; the tests set a protected DACL only on new leaves inside the prefix.
+The interrupt behaviour of production `run()` on Windows is unchanged and
+untested here. The Windows CI job (where the native tests are registered),
+non-admin and non-elevated cells, arm64 and cold-boot helper latency remain
+unrun. No live agent session or message, policy, service or account change was
+made.
 
 ## Public 0.4.0 — 2026-10-18 KST
 
