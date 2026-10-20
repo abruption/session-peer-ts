@@ -85,7 +85,7 @@ function world(t: TestContext) {
   const name = identity.name as string;
   const root = join(prefix, 'data/session-peer-ts');
   const state = () => (ok(['dest', 'inspect', ...P]).installs as Out[]).find(install => install.name === name)?.state;
-  return { base, prefix, root, journal, label, name, P, J, file, record, begin, stage, lock, activate, checks, finish, provision, state, bin, identityFile, launches, tree, remoteBin };
+  return { base, prefix, root, journal, label, name, P, J, file, record, begin, stage, lock, activate, checks, finish, provision, state, bin, identityFile, launches, tree, remoteBin, cli };
 }
 
 test('harness refuses non-dedicated prefixes and defaults to dry runs', { skip }, t => {
@@ -498,7 +498,7 @@ test('staging is discarded only by its own run; markerless leftovers need an exp
   rmSync(join(w.root, leftover, '.session-peer-owner.json'));
   refused(['dest', 'discard-staging', ...w.P, '--run', owner, '--staging', leftover, '--execute', '--confirm-destructive'], 'staging_not_owned');
   refused(['dest', 'discard-leftover', ...w.P, '--staging', leftover, '--execute', '--confirm-destructive'], 'leftover_not_declared');
-  refused(['dest', 'discard-leftover', ...w.P, '--staging', staging, '--declare-abandoned', '--execute', '--confirm-destructive'], 'staging_has_owner');
+  refused(['dest', 'discard-leftover', ...w.P, '--staging', staging, '--declare-abandoned', '--execute', '--confirm-destructive'], 'staging_has_marker');
   assert.equal(ok(['dest', 'discard-leftover', ...w.P, '--staging', leftover, '--declare-abandoned', '--execute']).dryRun, true);
   ok(['dest', 'discard-leftover', ...w.P, '--staging', leftover, '--declare-abandoned', '--execute', '--confirm-destructive']);
   ok(['dest', 'discard-staging', ...w.P, '--run', owner, '--staging', staging, '--execute', '--confirm-destructive']);
@@ -575,4 +575,76 @@ test('a break recorded first tombstones that acquisition; recording it later is 
   w.record(recorder, 'lock_broken', { ...broken, prefixId: otherPrefixId, brokenLockId: current.lockId, runId: null });
   w.record(fresh, 'lock_acquired', current);
   w.record(fresh, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', fresh, '--execute']));
+});
+
+function snapshot(dir: string) {
+  return listing(dir).map(entry => {
+    const path = join(dir, entry), stat = statSync(path, { throwIfNoEntry: false });
+    return `${entry}:${stat?.isFile() ? createHash('sha256').update(readFileSync(path)).digest('hex') : stat?.isDirectory() ? 'dir' : 'other'}`;
+  });
+}
+
+test('discard-leftover removes only staging trees with no marker at all', { skip }, t => {
+  const w = world(t);
+  const run = w.begin();
+  const marker = '.session-peer-owner.json';
+  const cases: [string, (dir: string) => void][] = [
+    ['foreign', dir => writeFileSync(join(dir, marker), JSON.stringify({ manager: 'another manager', markerVersion: 1 }))],
+    ['unparsable', dir => writeFileSync(join(dir, marker), 'not json')],
+    ['invalid', dir => writeFileSync(join(dir, marker), JSON.stringify({ ...JSON.parse(readFileSync(join(dir, marker), 'utf8')), identity: { version: '../x' } }))],
+    ['symlink', dir => { rmSync(join(dir, marker)); symlinkSync(join(w.base, 'lock-integrity.json'), join(dir, marker)); }],
+    ['directory', dir => { rmSync(join(dir, marker)); mkdirSync(join(dir, marker)); }]];
+  for (const [, damage] of cases) {
+    const staging = w.stage(run), dir = join(w.root, staging);
+    damage(dir);
+    const before = snapshot(dir);
+    refused(['dest', 'discard-leftover', ...w.P, '--staging', staging, '--declare-abandoned', '--execute', '--confirm-destructive'], 'staging_has_marker');
+    assert.deepEqual(snapshot(dir), before);
+  }
+  const leftover = w.stage(run);
+  rmSync(join(w.root, leftover, marker));
+  ok(['dest', 'discard-leftover', ...w.P, '--staging', leftover, '--declare-abandoned', '--execute', '--confirm-destructive']);
+  assert.equal(existsSync(join(w.root, leftover)), false);
+});
+
+test('the operator dry-run is recorded only after a doctor that follows the latest verify', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const verify = () => w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
+  const bin = ['--remote-bin', w.remoteBin()];
+  const dry = w.cli(['send', '--to', '999999', '--message', 'synthetic deployment check', '--dry-run']), doctor = w.cli(['doctor']);
+  verify();
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'operator_dry_run', '--target', w.name, '--file', w.file('dry', dry), '--execute', ...bin], 'operator_check_order');
+  w.record(run, 'operator_doctor', doctor, w.name, bin);
+  // A re-verify makes the earlier doctor stale.
+  verify();
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'operator_dry_run', '--target', w.name, '--file', w.file('dry', dry), '--execute', ...bin], 'operator_check_order');
+  refused(['op', 'statement', ...w.J, '--kind', 'operator-checks-passed', '--run', run, '--target', w.name], 'operator_checks_incomplete');
+  w.record(run, 'operator_doctor', doctor, w.name, bin);
+  w.record(run, 'operator_dry_run', dry, w.name, bin);
+  assert.equal(ok(['op', 'statement', ...w.J, '--kind', 'operator-checks-passed', '--run', run, '--target', w.name]).kind, 'operator-checks-passed');
+});
+
+test('receipt cleanup and retention results are recordable only under the current lock', { skip }, t => {
+  const w = world(t);
+  w.provision();
+  const receiptPath = join(w.root, '.receipts', `${w.name}.json`);
+  writeFileSync(receiptPath, 'not json');
+  const run = w.begin(); w.lock(run);
+  const dryCleanup = ok(['dest', 'receipt-cleanup', ...w.P, '--run', run, '--name', w.name, '--mode', 'quarantine', '--execute']);
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'receipt_cleaned', '--file', w.file('clean', dryCleanup), '--execute'], 'result_invalid');
+  const cleaned = ok(['dest', 'receipt-cleanup', ...w.P, '--run', run, '--name', w.name, '--mode', 'quarantine', '--execute', '--confirm-destructive']);
+  const other = w.begin();
+  refused(['op', 'record', ...w.J, '--run', other, '--event', 'receipt_cleaned', '--file', w.file('clean', cleaned), '--execute'], 'result_invalid');
+  const entry = w.record(run, 'receipt_cleaned', cleaned).record;
+  assert.deepEqual([entry.target, entry.mode, entry.receipt, entry.ownership, entry.lockId], [w.name, 'quarantine', 'corrupt', 'marker', cleaned.lockId]);
+  const noCaller = w.file('no-caller', ok(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', run, '--target', w.name]));
+  const retired = ok(['dest', 'retire', ...w.P, '--run', run, '--name', w.name, '--statement', noCaller, '--execute', '--confirm-destructive']);
+  const retiredEntry = w.record(run, 'retired', retired).record;
+  assert.deepEqual([retiredEntry.target, retiredEntry.lockId], [w.name, retired.lockId]);
+  w.record(run, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', run, '--execute']));
+  w.lock(run);
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'retired', '--file', w.file('retire', retired), '--execute'], 'result_invalid');
+  // Unknown event names stay usage errors; nothing is accepted loosely.
+  assert.equal(h(['op', 'record', ...w.J, '--run', run, '--event', 'retire', '--file', w.file('retire', retired), '--execute']).code, 2);
 });

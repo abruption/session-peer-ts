@@ -825,8 +825,22 @@ destination result only from the matching executed `dest` command and run.
 Every `dest lock` acquisition gets a fresh random `lockId`. Every lock-bound
 result (`activate`, `verify --run <run> --execute`, `receipt`, `unlock`,
 `rollback`, receipt cleanup, retention), every journal record and every
-statement carries the prefix sentinel ID and that `lockId`. `op record`
-refuses a result from another run, another prefix or an earlier lock,
+statement carries the prefix sentinel ID and that `lockId`. The destination
+results `op record` accepts are exactly these:
+
+- `lock_acquired` (`dest lock`);
+- `activated`;
+- `verified`;
+- `receipt_published`;
+- `lock_released` (`dest unlock`);
+- `rolled_back`;
+- `lock_broken` (`dest break-lock`);
+- `receipt_cleaned` (`dest receipt-cleanup`, keeping mode, receipt state and
+  ownership basis);
+- `retired` (`dest retire`).
+
+Each must be an executed result. Any other event name is a usage error. `op
+record` refuses a result from another run, another prefix or an earlier lock,
 including an earlier lock of the same run acquired at the same timestamp.
 `callers_switched` needs the publishing run's unlock under the same lock that
 published the receipt. The journal records each acquisition (prefix ID and
@@ -853,7 +867,11 @@ of the same target under the same lock:
 - **Dry-run:** `submitted:false` and `consumptionConfirmed:false`, and
   either the intended `no_reachable_target` refusal or a normal `validated`
   result. Transport, host-key, preflight, version and other refusals are
-  rejected.
+  rejected. A dry-run is accepted only after a doctor recorded since the
+  latest `verify` of that target, and the operator-checks statement requires
+  that recorded order (verify, doctor, dry-run). A re-verify makes the earlier
+  doctor stale. This is the order of the journal records, which the operator
+  supplies. It does not prove when the operator commands actually ran.
 
 What the CLI JSON shows is bound. Its `host` must equal the `--dest-host`
 fixed at `op init`. The doctor's `version` must equal the verified install's
@@ -889,7 +907,7 @@ consistency checks between cooperating same-user steps, not authentication.
 | Corrupt, mismatched and orphan receipts | Classified and refused by `dest activate`/`dest receipt` (orphans before the rename). `dest receipt-cleanup` (quarantine or remove) needs the lock and ownership through the marker, or a `receipt-owned` journal statement for orphans |
 | `.receipts` trust | A group/world-accessible directory, a symlinked `.receipts` or a non-regular receipt file is refused; nothing is followed through a link |
 | Unknown or unverifiable lock owner | A lock without `owner.json`, with an unreadable one, or whose run the journal cannot show as ended, is removed only by `dest break-lock --unowned --lock-name .activate.lock --declare-run-ended`, and never touches an install |
-| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` and `owned_receipt_*`. For `owned_receipted`, an executed `dest activate` re-verifies and reports `already_provisioned`, reusing the receipt. This run's staging is kept (`stagingRetained`), and the ADR's "delete only this run's staging" is the explicit `dest discard-staging --run <run> --execute --confirm-destructive` step, allowed only when the staging marker names that run. A staging tree without a valid marker (a stage that failed early) is removed only by `dest discard-leftover --declare-abandoned` with the same gates |
+| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` and `owned_receipt_*`. For `owned_receipted`, an executed `dest activate` re-verifies and reports `already_provisioned`, reusing the receipt. This run's staging is kept (`stagingRetained`), and the ADR's "delete only this run's staging" is the explicit `dest discard-staging --run <run> --execute --confirm-destructive` step, allowed only when the staging marker names that run. A staging tree with no marker entry at all (a stage that failed early) is removed only by `dest discard-leftover --declare-abandoned` with the same gates; any marker entry (another manager's, broken, unreadable, non-regular or symlinked) refuses it as `staging_has_marker` |
 
 **Darwin-local evidence only (2026-10-20).** On macOS 27 arm64 with Node
 24.16.0 and npm 11.15.0, `test/deployment-receipt-harness.test.ts` passed 8 of

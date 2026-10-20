@@ -587,14 +587,17 @@ const dest = {
     rmSync(dir, { recursive: true });
     return { dryRun: false, staging, runId: run, removed: true };
   },
-  // A staging tree without a valid marker (a stage that failed before writing
-  // it) has no owner to check: removal needs an explicit abandonment declaration.
+  // A staging tree with no marker path at all (a stage that failed before
+  // writing it) has no owner to check: removal needs an explicit abandonment
+  // declaration. Any marker entry (this workflow's, another manager's, a broken,
+  // unreadable, non-regular or symlinked one) refuses: the flags are not a
+  // permission to delete what something else may own.
   'discard-leftover'(a) {
     const p = dedicated(a.need('--prefix')), staging = a.need('--staging');
     if (!STAGING.test(staging)) throw new Usage('--staging must be a staging name');
     const dir = inside(p.root, staging);
     trusted(dir, 'staging');
-    if (markerOf(dir).state === 'owned') throw new Refusal('staging_has_owner');
+    if (lstat(join(dir, MARKER))) throw new Refusal('staging_has_marker');
     if (lockState(p).activated?.staging === staging) throw new Refusal('staging_in_activation_intent');
     if (!a.flags.has('--declare-abandoned')) throw new Refusal('leftover_not_declared');
     if (!a.execute || !a.destructive) return { dryRun: true, staging };
@@ -654,8 +657,10 @@ function journalAppend(path, journal, event) {
   try { writeSync(fd, `${line}\n`); } finally { closeSync(fd); }
   return { seq: journal.entries.length, head: sha256(line) };
 }
+// The destination results op record accepts; any other event name is a usage error.
 const RESULT = { lock_acquired: 'dest lock', activated: 'dest activate', verified: 'dest verify', receipt_published: 'dest receipt',
-  lock_released: 'dest unlock', rolled_back: 'dest rollback', lock_broken: 'dest break-lock' };
+  lock_released: 'dest unlock', rolled_back: 'dest rollback', lock_broken: 'dest break-lock', receipt_cleaned: 'dest receipt-cleanup',
+  retired: 'dest retire' };
 function runEvents(journal, run) {
   const events = journal.entries.filter(entry => entry.runId === run);
   if (events[0]?.event !== 'run_started') throw new Refusal('run_unknown');
@@ -744,6 +749,7 @@ const op = {
       if (value.target) record.target = value.target;
       if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId,
         version: value.version });
+      if (event === 'receipt_cleaned') Object.assign(record, { mode: value.mode, receipt: value.receipt, ownership: value.ownership });
     } else if (event === 'operator_doctor' || event === 'operator_dry_run') {
       if (!target || !holding) throw new Refusal('lock_not_recorded');
       const verified = locked.findLast(entry => entry.event === 'verified' && entry.target === target);
@@ -767,6 +773,12 @@ const op = {
       const remoteBin = a.values.get('--remote-bin');
       if (!remoteBin) throw new Usage('--remote-bin required: the exact value passed to the operator CLI');
       if (!remoteBin.split(/[\\/]/).includes(target)) throw new Refusal('operator_check_target_mismatch', { event });
+      // Recorded order: the dry-run only after a doctor recorded since the
+      // latest verify of this target under this lock. This is the order of the
+      // journal records, not proof of when the operator commands ran.
+      const sinceVerify = locked.slice(locked.lastIndexOf(verified) + 1);
+      if (event === 'operator_dry_run' && !sinceVerify.some(entry => entry.event === 'operator_doctor' && entry.target === target))
+        throw new Refusal('operator_check_order');
       Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok', host: value.host, remoteBinAttested: remoteBin,
         prefixId: locked[0].prefixId, lockId: locked[0].lockId });
     } else if (event === 'callers_switched' || event === 'callers_unswitched') {
@@ -799,8 +811,9 @@ const op = {
     if (kind === 'operator-checks-passed') {
       const last = locked.findLastIndex(entry => entry.event === 'verified' && entry.target === target);
       const after = last < 0 ? [] : locked.slice(last + 1);
-      if (last < 0 || !after.some(entry => entry.event === 'operator_doctor' && entry.target === target) ||
-        !after.some(entry => entry.event === 'operator_dry_run' && entry.target === target)) throw new Refusal('operator_checks_incomplete');
+      const doctor = after.findIndex(entry => entry.event === 'operator_doctor' && entry.target === target);
+      if (last < 0 || doctor < 0 || !after.slice(doctor + 1).some(entry => entry.event === 'operator_dry_run' && entry.target === target))
+        throw new Refusal('operator_checks_incomplete');
       if (after.some(entry => entry.event === 'receipt_published' && entry.target === target)) throw new Refusal('receipt_already_recorded');
       const v = locked[last];
       return { ...base, target, prefixId, lockId, identityHash: v.identityHash, manifestSha256: v.manifestSha256 };
