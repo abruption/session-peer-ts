@@ -27,9 +27,12 @@ export const APP_SERVER_EVIDENCE = Object.freeze({
   itemStartedSha256: '7574788d2a352747f50d44be3ef649011cb8de8069da4c655faff14d0aee32c4',
   turnCompletedSha256: '016870158603b0f84bd9f8f65f927161c9fd5128e5ec632087616462dc44e085',
 });
-// Each entry qualifies queue-only mechanics on this exact native version and
-// platform. Neither generated schemas nor isolated unloaded-thread fixtures
-// qualify a live writer endpoint, metadata-only observer or delivery/ACK.
+// Darwin entries qualify queue-only mechanics on that exact native version and
+// platform. The linux-arm64 entry is generated-schema data for the
+// non-selectable candidate only; it is consumed by profile selection and tests
+// and qualifies nothing while no Linux row is selectable. Neither generated
+// schemas nor isolated unloaded-thread fixtures qualify a live writer
+// endpoint, metadata-only observer or delivery/ACK.
 export const APP_SERVER_QUEUE_EVIDENCE = Object.freeze([
   APP_SERVER_EVIDENCE,
   Object.freeze({

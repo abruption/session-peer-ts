@@ -1216,6 +1216,13 @@ with the ledger owner; neither changes ordinary JSON or existing ledgers.
    resume Linux observation (`unsupported`, fail-closed); Darwin records are
    unaffected.
 
+Activation scope also requires an end-to-end CLI test that fails when the
+destination wire request omits the `remote` flag (today only hermetic and a
+since-superseded Linux-host regression cover it), and states that procfs
+lock/device matching was exercised only on ext4; other filesystems
+(btrfs/overlay/tmpfs/NFS) remain unverified and must refuse if `/proc/locks`
+and `stat` device numbers disagree.
+
 Required negative tests: writer exe inode/digest mismatch (gnu or other
 version holding the lock while a pinned musl queue binary is selected);
 deleted/replaced writer executable; same-second PID reuse with identical

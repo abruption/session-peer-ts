@@ -76,7 +76,7 @@
     "bodyOrTranscriptReturned": false
   },
   "limits": [
-    "One controlled Linux arm64 native test qualifies only this exact row; linux-x64, other versions and gnu builds remain unsupported.",
+    "Candidate evidence only: one controlled Linux arm64 native test does not qualify this row (activated: false; see activationBlockers). linux-x64, other versions and gnu builds remain unsupported.",
     "Existing user authentication was used by the native TUI without reading, copying or recording credentials.",
     "Queue receipt, turn completion and visible reply are not ACK.",
     "Observation projects metadata inside SQLite from the body-bearing item_json cell; it does not promise that body bytes are never accessed internally by SQLite.",
