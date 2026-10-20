@@ -71,7 +71,7 @@ function world(t: TestContext) {
   };
   // Destination verification, then operator doctor and dry-run over the stand-in.
   const checks = (run: string) => {
-    record(run, 'verified', ok(['dest', 'verify', ...P, '--name', name, '--execute']));
+    record(run, 'verified', ok(['dest', 'verify', ...P, '--name', name, '--run', run, '--execute']));
     record(run, 'operator_doctor', cli(['doctor']), name, ['--remote-bin', remoteBin()]);
     record(run, 'operator_dry_run', cli(['send', '--to', '999999', '--message', 'synthetic deployment check', '--dry-run']), name, ['--remote-bin', remoteBin()]);
     return file('statement', ok(['op', 'statement', ...J, '--kind', 'operator-checks-passed', '--run', run, '--target', name]));
@@ -123,7 +123,7 @@ test('operator checks precede the receipt, which precedes unlock and caller swit
   w.activate(run, staging);
   refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'unreceipted_activation');
   refused(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--execute'], 'statement_missing');
-  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--execute']));
+  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
   refused(['op', 'statement', ...w.J, '--kind', 'operator-checks-passed', '--run', run, '--target', w.name], 'operator_checks_incomplete');
   refused(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name, '--file', w.file('bad', { ok: false }), '--execute'], 'operator_check_failed');
   refused(['op', 'record', ...w.J, '--run', run, '--event', 'callers_switched', '--target', w.name, '--execute'], 'switch_before_receipt');
@@ -142,9 +142,9 @@ test('operator checks precede the receipt, which precedes unlock and caller swit
   assert.equal(second.outcome, 'already_provisioned');
   // This run's staging is removed only by the explicit, destructive discard step.
   assert.equal(second.stagingRetained, kept); assert.equal(existsSync(join(w.root, kept)), true);
-  assert.equal(ok(['dest', 'discard-staging', ...w.P, '--staging', kept, '--execute']).dryRun, true);
+  assert.equal(ok(['dest', 'discard-staging', ...w.P, '--run', again, '--staging', kept, '--execute']).dryRun, true);
   assert.equal(existsSync(join(w.root, kept)), true);
-  ok(['dest', 'discard-staging', ...w.P, '--staging', kept, '--execute', '--confirm-destructive']);
+  ok(['dest', 'discard-staging', ...w.P, '--run', again, '--staging', kept, '--execute', '--confirm-destructive']);
   assert.equal(existsSync(join(w.root, kept)), false);
   assert.equal(h(['dest', 'path-inventory', '--compare', inventory], env).out.unchanged, true);
 });
@@ -336,7 +336,7 @@ test('stage validates the identity file and stays inside the prefix before any w
 test('operator dry-run records only no_reachable_target or a validated dry run', { skip }, t => {
   const w = world(t);
   const run = w.begin(); w.lock(run); w.activate(run);
-  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--execute']));
+  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
   const base = { ok: false, status: 'refused', submitted: false, consumptionConfirmed: false, host: 'dest.example' };
   for (const error of ['ssh_unreachable', 'ssh_host_key_untrusted', 'ssh_authentication_refused', 'remote_cli_missing', 'remote_version_mismatch',
     'ssh_preflight_failed', 'remote_preparation_unverified', 'invalid_ssh_option'])
@@ -373,7 +373,7 @@ test('dry runs and unexecuted checks launch nothing and create no probe files', 
 test('operator check records bind the destination host, remote version and named install', { skip }, t => {
   const w = world(t);
   const run = w.begin(); w.lock(run); w.activate(run);
-  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--execute']));
+  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
   const doctor = { ok: true, diagnosticCompleted: true, implementation: 'typescript', ready: false, version: '0.4.0', host: 'dest.example' };
   const record = (value: unknown, extra: string[]) => h(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name,
     '--file', w.file('doctor', value), '--execute', ...extra]);
@@ -389,4 +389,59 @@ test('operator check records bind the destination host, remote version and named
   const dry = { ok: false, error: 'no_reachable_target', status: 'refused', submitted: false, consumptionConfirmed: false, host: 'other.example' };
   assert.equal(h(['op', 'record', ...w.J, '--run', run, '--event', 'operator_dry_run', '--target', w.name, '--file', w.file('dry', dry), '--execute', ...bin]).out.error,
     'operator_check_host_mismatch');
+});
+
+test('a verify result is recorded only under the run and lock that produced it', { skip }, t => {
+  const w = world(t);
+  w.provision();
+  const earlier = w.begin(); w.lock(earlier);
+  const result = ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', earlier, '--execute']);
+  w.record(earlier, 'verified', result);
+  w.record(earlier, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', earlier, '--execute']));
+  const later = w.begin(); w.lock(later);
+  refused(['op', 'record', ...w.J, '--run', later, '--event', 'verified', '--file', w.file('verify', result), '--execute'], 'result_invalid');
+  w.record(later, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', later, '--execute']));
+  // The same run under a fresh lock cannot reuse its earlier result either.
+  w.lock(earlier);
+  refused(['op', 'record', ...w.J, '--run', earlier, '--event', 'verified', '--file', w.file('verify', result), '--execute'], 'result_invalid');
+  // Without --run a verify result carries no binding and is not recordable.
+  const unbound = ok(['dest', 'verify', ...w.P, '--name', w.name, '--execute']);
+  refused(['op', 'record', ...w.J, '--run', earlier, '--event', 'verified', '--file', w.file('verify', unbound), '--execute'], 'result_invalid');
+});
+
+test('an activation interrupted around the rename is never unlocked without a receipt', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run);
+  const staging = w.stage(run);
+  const lock = join(w.root, '.activate.lock'), target = join(w.root, w.name);
+  // The lock directory refuses writes, so any record attempted around the
+  // rename fails deterministically.
+  chmodSync(lock, 0o500);
+  const interrupted = h(['dest', 'activate', ...w.P, '--run', run, '--staging', staging, '--execute']);
+  chmodSync(lock, 0o700);
+  assert.notEqual(interrupted.out.ok, true);
+  if (existsSync(target)) refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'unreceipted_activation');
+  // The intent is recorded before the rename, so a failed record never leaves an install behind.
+  assert.equal(existsSync(target), false); assert.equal(existsSync(join(w.root, staging)), true);
+  w.activate(run, staging);
+  assert.equal(JSON.parse(readFileSync(join(lock, 'activation.json'), 'utf8')).target, w.name);
+  refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'unreceipted_activation');
+});
+
+test('staging is discarded only by its own run; markerless leftovers need an explicit declaration', { skip }, t => {
+  const w = world(t);
+  const owner = w.begin(), other = w.begin();
+  const staging = w.stage(owner);
+  refused(['dest', 'discard-staging', ...w.P, '--run', other, '--staging', staging, '--execute', '--confirm-destructive'], 'staging_not_owned');
+  assert.equal(existsSync(join(w.root, staging)), true);
+  assert.equal(h(['dest', 'discard-staging', ...w.P, '--staging', staging, '--execute', '--confirm-destructive']).code, 2);
+  const leftover = w.stage(owner);
+  rmSync(join(w.root, leftover, '.session-peer-owner.json'));
+  refused(['dest', 'discard-staging', ...w.P, '--run', owner, '--staging', leftover, '--execute', '--confirm-destructive'], 'staging_not_owned');
+  refused(['dest', 'discard-leftover', ...w.P, '--staging', leftover, '--execute', '--confirm-destructive'], 'leftover_not_declared');
+  refused(['dest', 'discard-leftover', ...w.P, '--staging', staging, '--declare-abandoned', '--execute', '--confirm-destructive'], 'staging_has_owner');
+  assert.equal(ok(['dest', 'discard-leftover', ...w.P, '--staging', leftover, '--declare-abandoned', '--execute']).dryRun, true);
+  ok(['dest', 'discard-leftover', ...w.P, '--staging', leftover, '--declare-abandoned', '--execute', '--confirm-destructive']);
+  ok(['dest', 'discard-staging', ...w.P, '--run', owner, '--staging', staging, '--execute', '--confirm-destructive']);
+  assert.deepEqual(readdirSync(w.root), []);
 });

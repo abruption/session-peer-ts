@@ -122,6 +122,40 @@ steps, with **0 mismatches**:
 - The user executables were byte-identical. The prefix and test directory were
   removed, with no leftover path or process.
 
+**Second review-fix rerun (same day, same host and approval).** A second
+round of review changes:
+
+- bound executed `verify` results to the run, prefix sentinel ID and current
+  lock;
+- wrote and synced an activation intent inside the lock before the rename,
+  with `unlock` checking the intent against the actual target;
+- restricted `discard-staging` to the run named by the staging marker, with
+  markerless leftovers going to an explicit `discard-leftover
+  --declare-abandoned`.
+
+A minimal rerun with harness SHA-256
+`9d39ce86b9c8b2452b0bad5f3530b543ff1ef4e130349f61ef83533778331f7f`, in a new
+`/tmp` test directory under the host lock, checked 40 expectations over 78
+steps, with **0 mismatches**. It repeated the steps of the first rerun and
+added the following:
+
+- A verify result from one run, recorded under another run's lock, was
+  refused (`result_invalid`).
+- Discarding a staging tree from a different run was refused
+  (`staging_not_owned`).
+- With the lock directory made non-writable (mode 500), activation failed
+  with `EACCES` before the rename: the target stayed absent and the staging
+  was kept. After restoring the mode, activation wrote the intent, and
+  `unlock` was refused with `unreceipted_activation` until a same-run
+  rollback.
+- A markerless leftover was refused by `discard-staging` and by an
+  undeclared `discard-leftover`, and removed only with
+  `--declare-abandoned`.
+
+The user executables were byte-identical, and the test directory was removed
+with no leftover path or process. The first rerun's own record above remains
+the evidence for harness revision `29a46eb…8942`.
+
 The rule cells L3–L8 above (retention, fresh-lock recovery, receipt states,
 journal-confirmed rollback, `.receipts` trust, lock overrides and activation
 rows) were not re-executed with the fixed harness. In particular, they were

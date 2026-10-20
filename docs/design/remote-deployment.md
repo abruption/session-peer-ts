@@ -800,8 +800,9 @@ exact, repeatable steps. It is **not** F6 and changes nothing in the CLI:
   Node. `op` commands run on the operator host and keep the run journal.
 - `dest init-prefix` creates a **new** prefix (it refuses an existing path, a
   non-canonical path and an ancestor that others can write without the sticky
-  bit) and writes a sentinel. Every other `dest` command refuses a path
-  without that sentinel or failing the trust checks. The root is
+  bit) and writes a sentinel. Every `dest` command that inspects or changes
+  a prefix refuses a path without that sentinel or failing the trust checks.
+  `dest identity` and `dest path-inventory` take no prefix and write nothing. The root is
   `<prefix>/data/session-peer-ts`, the ADR layout with
   `XDG_DATA_HOME=<prefix>/data`. Nothing is written outside the prefix or the
   journal, and `dest path-inventory` only hashes the `session-peer` entries on
@@ -821,6 +822,10 @@ exact, repeatable steps. It is **not** F6 and changes nothing in the CLI:
 
 The fixed step 8 order is enforced across both sides. `op record` accepts a
 destination result only from the matching executed `dest` command and run.
+A `verified` result must come from `dest verify --run <run> --execute`, which
+binds it to the prefix's sentinel ID and the creation time of that run's
+current lock. A result from an earlier lock, another run or another prefix is
+refused.
 It accepts the operator results only after a recorded destination `verify`
 of the same target under the same lock:
 
@@ -839,9 +844,12 @@ test shim is placed under a directory with that name). It cannot prove that
 the CLI executed it.
 `op statement --kind operator-checks-passed` exists only after both, and `dest
 receipt` requires that statement, bound to the current lock's creation time,
-the marker's `identityHash` and the recomputed manifest. `dest unlock` refuses
-while this run's activated target has no matching receipt and has not been
-rolled back. `op record --event callers_switched` refuses until the receipt is
+the marker's `identityHash` and the recomputed manifest. `dest activate`
+writes and syncs an activation intent (target and staging) inside the lock
+**before** the rename; if the intent cannot be written, nothing is renamed.
+`dest unlock` reads the intent and the actual target together. It refuses
+while the intended target exists without a matching receipt (including after
+an interruption right after the rename) or the intent is unreadable. `op record --event callers_switched` refuses until the receipt is
 recorded and the publishing run has released its lock. Statements are JSON
 files that the operator carries to the destination. Like the marker, they are
 consistency checks between cooperating same-user steps, not authentication.
@@ -853,7 +861,7 @@ consistency checks between cooperating same-user steps, not authentication.
 | Corrupt, mismatched and orphan receipts | Classified and refused by `dest activate`/`dest receipt` (orphans before the rename). `dest receipt-cleanup` (quarantine or remove) needs the lock and ownership through the marker, or a `receipt-owned` journal statement for orphans |
 | `.receipts` trust | A group/world-accessible directory, a symlinked `.receipts` or a non-regular receipt file is refused; nothing is followed through a link |
 | Unknown or unverifiable lock owner | A lock without `owner.json`, with an unreadable one, or whose run the journal cannot show as ended, is removed only by `dest break-lock --unowned --lock-name .activate.lock --declare-run-ended`, and never touches an install |
-| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` and `owned_receipt_*`. For `owned_receipted`, an executed `dest activate` re-verifies and reports `already_provisioned`, reusing the receipt. This run's staging is kept (`stagingRetained`), and the ADR's "delete only this run's staging" is the explicit `dest discard-staging --execute --confirm-destructive` step |
+| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` and `owned_receipt_*`. For `owned_receipted`, an executed `dest activate` re-verifies and reports `already_provisioned`, reusing the receipt. This run's staging is kept (`stagingRetained`), and the ADR's "delete only this run's staging" is the explicit `dest discard-staging --run <run> --execute --confirm-destructive` step, allowed only when the staging marker names that run. A staging tree without a valid marker (a stage that failed early) is removed only by `dest discard-leftover --declare-abandoned` with the same gates |
 
 **Darwin-local evidence only (2026-10-20).** On macOS 27 arm64 with Node
 24.16.0 and npm 11.15.0, `test/deployment-receipt-harness.test.ts` passed 8 of
@@ -882,7 +890,9 @@ the host, and none was installed. [VALIDATION.md](../../VALIDATION.md#23-deploym
 has the results and the deviations. It also records a minimal same-day rerun
 of the primary order, the `already_provisioned` explicit discard, the
 dry-run no-effect checks and the identity path refusals with the review-fixed
-harness. Cells L3–L8 were run only with the earlier harness revision. This
+harness. A second minimal rerun then covered the run- and lock-bound verify
+results, the activation intent written before the rename, and run-owned
+staging discards. Cells L3–L8 were run only with the earlier harness revision. This
 qualifies exactly the rules in the table above on that one arm64/glibc/Node 24
 cell, with this harness. It does
 not qualify Linux x64 under the current rules, Node 22, concurrent or

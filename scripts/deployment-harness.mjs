@@ -8,7 +8,7 @@
 // is a dry run unless --execute; deletions and lock overrides also require
 // --confirm-destructive. POSIX only; the Windows procedure is documented.
 import { createHash, randomBytes } from 'node:crypto';
-import { chmodSync, closeSync, constants, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync,
+import { chmodSync, closeSync, constants, cpSync, fsyncSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync,
   realpathSync, renameSync, rmSync, rmdirSync, unlinkSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { delimiter, dirname, isAbsolute, join, parse as parsePath, resolve, sep } from 'node:path';
@@ -23,7 +23,7 @@ const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/;
 const INSTALL = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)-([0-9a-f]{16})$/;
 const STAGING = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?-[0-9a-f]{16})\.staging-[0-9a-f]{16}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
-const FLAGS = new Set(['--execute', '--confirm-destructive', '--unowned', '--declare-run-ended']);
+const FLAGS = new Set(['--execute', '--confirm-destructive', '--unowned', '--declare-run-ended', '--declare-abandoned']);
 const VALUES = new Set(['--prefix', '--journal', '--dest-alias', '--dest-host', '--remote-bin', '--run', '--operator-label', '--event', '--file', '--target',
   '--kind', '--version', '--package-sha256', '--lock-integrity', '--identity', '--from-tree', '--npm-cli', '--package-tarball',
   '--staging', '--name', '--statement', '--lock-name', '--mode', '--compare']);
@@ -98,12 +98,15 @@ function dedicated(prefix) {
   const sentinel = readJson(join(prefix, SENTINEL));
   if (sentinel?.harness !== HARNESS || !HEX32.test(sentinel.prefixId ?? '')) throw new Refusal('prefix_not_dedicated');
   trusted(join(prefix, 'data'), 'data'); trusted(p.root, 'root');
-  return p;
+  return { ...p, prefixId: sentinel.prefixId };
 }
 function readJson(path) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return undefined; } }
-function writeExclusive(path, text) {
+function writeExclusive(path, text, durable = false) {
   const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-  try { writeSync(fd, text); } finally { closeSync(fd); }
+  try { writeSync(fd, text); if (durable) fsyncSync(fd); } finally { closeSync(fd); }
+  if (!durable) return;
+  const dir = openSync(dirname(path), 'r');
+  try { fsyncSync(dir); } finally { closeSync(dir); }
 }
 // The only activation/rollback move: rename after lstat ENOENT. rename(2)
 // still replaces an empty directory created in between (ADR guarantee scope).
@@ -240,7 +243,10 @@ function lockState(p) {
   if (!lstat(ownerPath)) return { state: 'held_unowned' };
   const owner = (() => { try { return regular(ownerPath, 'owner') && readJson(ownerPath); } catch { return undefined; } })();
   if (!owner || !HEX32.test(owner.runId ?? '') || typeof owner.createdAt !== 'string') return { state: 'held_unreadable' };
-  const activated = readJson(join(p.lock, 'activated.json'));
+  // The activation intent is written (and synced) before the rename, so a run
+  // interrupted at any point still shows which target it may have created.
+  const intent = join(p.lock, 'activation.json');
+  const activated = lstat(intent) ? readJson(intent) ?? { target: null, unreadable: true } : undefined;
   return { state: 'held', owner, activated };
 }
 function heldBy(p, run) {
@@ -250,7 +256,7 @@ function heldBy(p, run) {
 }
 function clearLock(p) {
   const entries = readdirSync(p.lock);
-  if (entries.some(entry => !['owner.json', 'activated.json'].includes(entry))) throw new Refusal('lock_contents_unexpected');
+  if (entries.some(entry => !['owner.json', 'activation.json'].includes(entry))) throw new Refusal('lock_contents_unexpected');
   for (const entry of entries) unlinkSync(join(p.lock, entry));
   rmdirSync(p.lock);
 }
@@ -390,7 +396,7 @@ const dest = {
     catch (error) { if (error.code === 'EEXIST') throw new Refusal('lock_held', { lock: lockState(p).state, autoStale: false }); throw error; }
     const owner = { runId: run, operatorLabel: label, createdAt: now() };
     writeExclusive(join(p.lock, 'owner.json'), JSON.stringify(owner));
-    return { dryRun: false, runId: run, lockCreatedAt: owner.createdAt };
+    return { dryRun: false, runId: run, lockCreatedAt: owner.createdAt, prefixId: p.prefixId };
   },
   activate(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run')), staging = a.need('--staging');
@@ -420,15 +426,22 @@ const dest = {
     if (!a.execute) return { dryRun: true, target: match[1], plan: ['probe staging (banner, native lock)', 'lstat target ENOENT', 'rename staging to target'] };
     const checks = probe(dir, owned.marker.identity);
     if (!checks.banner || checks.nativeLock !== 'loaded') throw new Refusal('staging_probe_failed', checks);
-    renameNoReplace(dir, join(p.root, match[1]));
-    writeExclusive(join(p.lock, 'activated.json'), JSON.stringify({ target: match[1], staging, at: now() }));
+    const intent = join(p.lock, 'activation.json');
+    writeExclusive(intent, JSON.stringify({ target: match[1], staging, at: now() }), true);
+    try { renameNoReplace(dir, join(p.root, match[1])); }
+    catch (error) { if (!lstat(join(p.root, match[1])) && lstat(dir)) unlinkSync(intent); throw error; }
     return { dryRun: false, outcome: 'activated', runId: run, target: match[1] };
   },
   verify(a) {
     const p = dedicated(a.need('--prefix'));
     // Without --execute: static checks only (no launcher run, no probe file).
+    // With --run, the result is bound to this prefix and the run's current lock;
+    // only a bound result can be recorded.
+    const run = a.values.has('--run') ? runId(a.values.get('--run')) : undefined;
+    const lock = run ? heldBy(p, run) : undefined;
     const result = verify(p, installName(a.need('--name')), a.execute);
-    return a.execute ? result : { ...result, ok: true, verified: false };
+    const binding = lock ? { runId: run, prefixId: p.prefixId, lockCreatedAt: lock.owner.createdAt } : {};
+    return a.execute ? { ...result, ...binding } : { ...result, ...binding, ok: true, verified: false };
   },
   // Step 8 completion: only after the journal shows destination verification,
   // then operator doctor and dry-run, and only while this run holds the lock.
@@ -456,6 +469,9 @@ const dest = {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run'));
     const lock = heldBy(p, run);
     if (lock.activated) {
+      // Released only when the intended target was never created (or was rolled
+      // back) or now has a matching receipt; anything else needs recovery.
+      if (!INSTALL.test(lock.activated.target ?? '')) throw new Refusal('activation_intent_unreadable');
       const target = classify(p, lock.activated.target);
       if (target.state !== 'absent' && target.state !== 'owned_receipted') throw new Refusal('unreceipted_activation', { target: lock.activated.target, state: target.state });
     }
@@ -542,13 +558,31 @@ const dest = {
     if (target.state === 'owned_receipted') unlinkSync(join(p.receipts, `${name}.json`));
     return { dryRun: false, runId: run, target: name, retired: true };
   },
+  // Removes a staging tree whose marker names this run.
   'discard-staging'(a) {
+    const p = dedicated(a.need('--prefix')), run = runId(a.need('--run')), staging = a.need('--staging');
+    if (!STAGING.test(staging)) throw new Usage('--staging must be a staging name');
+    const dir = inside(p.root, staging);
+    trusted(dir, 'staging');
+    const owned = markerOf(dir);
+    if (owned.state !== 'owned' || owned.marker.runId !== run) throw new Refusal('staging_not_owned', { marker: owned.state });
+    if (!a.execute || !a.destructive) return { dryRun: true, staging, runId: run };
+    rmSync(dir, { recursive: true });
+    return { dryRun: false, staging, runId: run, removed: true };
+  },
+  // A staging tree without a valid marker (a stage that failed before writing
+  // it) has no owner to check: removal needs an explicit abandonment declaration.
+  'discard-leftover'(a) {
     const p = dedicated(a.need('--prefix')), staging = a.need('--staging');
     if (!STAGING.test(staging)) throw new Usage('--staging must be a staging name');
-    trusted(join(p.root, staging), 'staging');
+    const dir = inside(p.root, staging);
+    trusted(dir, 'staging');
+    if (markerOf(dir).state === 'owned') throw new Refusal('staging_has_owner');
+    if (lockState(p).activated?.staging === staging) throw new Refusal('staging_in_activation_intent');
+    if (!a.flags.has('--declare-abandoned')) throw new Refusal('leftover_not_declared');
     if (!a.execute || !a.destructive) return { dryRun: true, staging };
-    rmSync(join(p.root, staging), { recursive: true });
-    return { dryRun: false, staging, removed: true };
+    rmSync(dir, { recursive: true });
+    return { dryRun: false, staging, removed: true, declaredAbandoned: true };
   },
   'path-inventory'(a) {
     const entries = [];
@@ -650,9 +684,12 @@ const op = {
       if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || value.dryRun !== false)
         throw new Refusal('result_invalid', { event });
       if (event === 'lock_broken') Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override });
-      else if (event !== 'verified' && value.runId !== run) throw new Refusal('result_invalid', { event });
-      if (event === 'lock_acquired') record.lockCreatedAt = value.lockCreatedAt;
+      else if (value.runId !== run) throw new Refusal('result_invalid', { event, reason: 'run' });
+      if (event === 'lock_acquired') Object.assign(record, { lockCreatedAt: value.lockCreatedAt, prefixId: value.prefixId });
       else if (event !== 'lock_broken' && !holding) throw new Refusal('lock_not_recorded');
+      // A verify result must come from this run's current lock on the same prefix.
+      if (event === 'verified' && (value.lockCreatedAt !== locked[0].lockCreatedAt || value.prefixId !== locked[0].prefixId || !value.prefixId))
+        throw new Refusal('result_invalid', { event, reason: 'stale_or_foreign_lock' });
       if (value.target) record.target = value.target;
       if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId,
         version: value.version });
