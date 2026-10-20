@@ -91,8 +91,8 @@ message/transcript scan manufactures ACK. Ordinary generated Reply-To stays v1.
 
 POSIX opt-in `send --host HOST` performs an exact-version preflight and a
 no-effect preparation before one destination-side send. Both ends must contain
-the same reviewed 0.4.0 implementation: a 0.3.x banner does not establish new
-capability. Initialize the destination's private ledger explicitly; no command
+the same reviewed 0.5.0 implementation. This workflow was introduced in
+0.4.0; a 0.3.x banner does not establish the capability. Initialize the destination's private ledger explicitly; no command
 auto-installs a handler or initializes missing history. The origin does not
 create a local receipt collector. Reconcile with `handoff status`/`wait` on the
 destination that owns the retained intent, without another send.
@@ -193,7 +193,7 @@ requested evidence goal. After any possible RPC write, no legacy fallback or
 second submission occurs.
 
 Selection is by the exact host platform/architecture and native version.
-Unreleased source records a Linux arm64 Codex 0.162.1 candidate (pinned musl
+The 0.5.0 source records a Linux arm64 Codex 0.162.1 candidate (pinned musl
 executable, procfs storage binding, `/proc/locks` writer-owner check) but does
 not activate it. Linux and any other unlisted platform/version have no
 profile, so required delivery refuses before effect and best-effort uses the
