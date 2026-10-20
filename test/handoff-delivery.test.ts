@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {createRequire,syncBuiltinESMExports} from 'node:module';
 import fs from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
-import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,writeFileSync,watch} from 'node:fs';
+import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,statSync,writeFileSync,watch} from 'node:fs';
 import {join,delimiter,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateHandoff} from '../dist/handoff.js';
@@ -18,9 +18,13 @@ CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_or
 CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rollout_byte_offset INTEGER NOT NULL,next_rollout_ordinal INTEGER NOT NULL);`;
 async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-hd-'))),home=join(root,'home'),bin=join(root,'bin');chmodSync(root,0o700);mkdirSync(home,{mode:0o700});mkdirSync(bin,{mode:0o700});mkdirSync(join(home,'thread-writer-locks'),{mode:0o700});
- t.after(()=>rmSync(root,{recursive:true,force:true}));
+ let history:DatabaseSync|undefined;
+ t.after(()=>{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}});
  const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT)');state.prepare('INSERT INTO threads VALUES(?)').run(thread);state.close();
- if(warm){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));db.exec(schema);db.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread,'turn-fixture','completed');db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread,100,100);db.close();}
+ // Model a live warm WAL store: keep the owner connection open so other
+ // fixture connections cannot remove/recreate WAL and SHM between probes.
+ // DELETE-mode writes can expose a rollback journal that the observer refuses.
+ if(warm){const db=history=new DatabaseSync(join(home,'thread_history_1.sqlite'));db.exec('PRAGMA journal_mode=WAL');db.exec(schema);db.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread,'turn-fixture','completed');db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread,100,100);}
  const lock=join(home,'thread-writer-locks',thread+'.lock'),locks=createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt');
  const held=spawn(process.execPath,['-e',"const f=require('fs').openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(f,'exnb');console.log('ready');setInterval(()=>{},1000)",lock,locks]);held.stderr.resume();await once(held.stdout,'data');t.after(async()=>{if(held.exitCode===null&&held.signalCode===null){held.kill('SIGKILL');await once(held,'close');}});
  // The real tools are native executables. Do not spend the bounded owner
@@ -97,6 +101,18 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
  function inject(clientId:string){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));try{db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(thread,'turn-fixture','after-submit-item',1,JSON.stringify({type:'userMessage',id:'after-submit-item',clientId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');}finally{db.close();}}
  return{root,home,codex,env,calls,nativeCalls,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
+test('warm history fixture keeps WAL sidecar identities stable across synthetic injection',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t,'none'),database=join(f.home,'thread_history_1.sqlite');
+ const mode=new DatabaseSync(database,{readOnly:true});
+ try{assert.equal((mode.prepare('PRAGMA journal_mode').get() as {journal_mode?:unknown}|undefined)?.journal_mode,'wal');}finally{mode.close();}
+ // Only the fixture's retained owner connection may keep sidecars alive here.
+ const sidecars=()=>['','-wal','-shm'].map(suffix=>{const value=statSync(database+suffix,{bigint:true});return{suffix,dev:value.dev,ino:value.ino};});
+ const before=sidecars();assert.equal(existsSync(database+'-journal'),false);
+ const id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';f.inject(id);
+ assert.equal(existsSync(database+'-journal'),false);assert.deepEqual(sidecars(),before);
+ const read=new DatabaseSync(database,{readOnly:true});
+ try{assert.equal((read.prepare(`SELECT count(*) AS total FROM thread_items WHERE json_extract(item_json,'$.clientId')=?`).get(id) as {total?:unknown}|undefined)?.total,1);}finally{read.close();}
+});
 test('scripted fixture paths, modes and versions remain literal data', {skip:process.platform==='win32'}, async t=>{
  const payload='\');throw new Error("fixture data executed");//\n\u2028\u2029';
  const f=await fixture(t,payload,payload);
