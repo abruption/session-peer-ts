@@ -422,6 +422,8 @@ test('0.5.0 finite row preserves the four exact 0.4.0 profiles', t => {
     assert.deepEqual(validateSkillMetadata(text.replace('metadata:','metadata: []')),missing);
   }
   // Exact profile support does not publish the companion candidate or its pin.
+  for (const version of ['0.3.1', '0.4.0']) assert.deepEqual(validateSkillMetadata(fixtureText({...fields,version,'runtime-full-version':'0.4.0'})),incompatible);
+  assert.deepEqual(validateSkillMetadata(fixtureText({...fields,version:'0.3.0','runtime-full-version':'0.5.0'})),incompatible);
   const proposed=fixtureText({...fields,version:'0.3.0','runtime-full-version':'0.4.0'});
   for(const runtime of ['0.3.2','0.3.3','0.3.4','0.3.5','0.3.6'])assert.deepEqual(validateSkillMetadata(proposed,runtime),incompatible);
   assert.deepEqual(validateSkillMetadata(proposed),compatible);

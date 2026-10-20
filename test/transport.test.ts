@@ -133,10 +133,12 @@ test('queue failure after spawn is unknown, never retried or leaked', async t =>
   assert.equal(result.codexHomeResolution.reason, 'explicit_live_writer');
   assert.equal(JSON.stringify(result).includes('SECRET-SENTINEL'), false); assert.equal(readFileSync(count, 'utf8'), '1');
 });
-test('SSH refuses a different implementation with the same command name before submission', async t => {
+test('SSH refuses another implementation or the previous TS release before submission', async t => {
   const { path, env } = setup(t);
   const calls = join(path, 'ssh-calls');
-  writeFileSync(join(path, 'ssh'), `#!${process.execPath}\n${sshConfigUser}const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},process.argv.at(-1)+'\\n');console.log('session-peer 1.0.2');`, { mode: 0o700 });
+  for (const banner of ['session-peer 1.0.2', 'session-peer 0.4.0 (typescript)']) {
+  writeFileSync(calls, '');
+  writeFileSync(join(path, 'ssh'), `#!${process.execPath}\n${sshConfigUser}const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},process.argv.at(-1)+'\\n');console.log(${JSON.stringify(banner)});`, { mode: 0o700 });
   const result = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'not-sent'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(result.status, 'refused');
   assert.equal(result.submitted, false);
@@ -144,6 +146,7 @@ test('SSH refuses a different implementation with the same command name before s
   assert.equal(commands.length, 1);
   assert.match(commands[0], /session-peer.*--version$/);
   assert.equal(commands[0].includes('--stdio-request'), false);
+  }
 });
 test('SSH preflight reports allowlisted causes without leaking stderr or sending', async t => {
   const { path, env } = setup(t);

@@ -1,18 +1,18 @@
 # API reference
 
-This reference describes source/package version **0.4.0**. Check registry availability and review the selected release before installation. Dated release evidence is recorded in [VALIDATION.md](../VALIDATION.md); before publication use a reviewed source artifact.
+This reference describes source/package version **0.5.0**. Check registry availability and review the selected release before installation. Dated release evidence is recorded in [VALIDATION.md](../VALIDATION.md); before publication use a reviewed source artifact.
 
 [Back to README](../README.md) · [User guide](guide.md)
 
 The package exposes a small ESM API with TypeScript declarations. Install it
-locally with `npm install --ignore-scripts session-peer@0.4.0` before importing it.
+locally with `npm install --ignore-scripts session-peer@0.5.0` before importing it.
 Importing the package does not execute the CLI or submit a message.
 
 ```js
 import { VERSION, VERSION_LINE, reply, envelope } from 'session-peer';
 
-console.log(VERSION);      // 0.4.0
-console.log(VERSION_LINE); // session-peer 0.4.0 (typescript)
+console.log(VERSION);      // 0.5.0
+console.log(VERSION_LINE); // session-peer 0.5.0 (typescript)
 const address = 'session-peer://v1/reply?agent=claude&session=12345&transport=local';
 console.log(reply(address)); // { to: '12345' }
 console.log(envelope('Please review and reply.', true, address));
@@ -272,6 +272,9 @@ a completed milestone. Exact evidence and limits are in [VALIDATION](../VALIDATI
 <a id="040-candidate-scope"></a>
 
 ## 0.4.0 implementation scope
+
+The 0.5.0 source preserves this supported handoff scope; its Linux and Windows
+groundwork does not enable additional platform or ACK support.
 
 The 0.4.0 implementation includes the qualified macOS arm64 observer and explicit
 `operator_confirmed` receipts on supported POSIX ledgers. Other platforms do not
