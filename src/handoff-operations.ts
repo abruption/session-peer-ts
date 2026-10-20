@@ -12,8 +12,9 @@ import { checkMessage, queueId, send, type SendContext, type SendOptions } from 
 import { Refusal } from './discovery.js';
 import { HomeRefusal } from './writer.js';
 import { executable, run, UnknownOutcome } from './process.js';
+import { currentPlatform, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 
-export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean;
+export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; remote?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
 export type OperationResult = { value: Record<string, unknown>; exitCode: number };
 export function ledgerPath(): string {
@@ -44,6 +45,28 @@ export function correlationEnvelope(message: string, id: string): string {
   if (!canonicalId(id)) throw new Refusal('invalid_correlation_id', 2);
   // A dedicated inert metadata line, not an executable Reply-To extension.
   return message + '\n\n---\nHandoff: ' + JSON.stringify({ schemaVersion: 1, correlationId: id });
+}
+// Exact qualification for this host and native version. A destination wire
+// request may select only rows whose SSH-remote observation is admitted; any
+// other row behaves as unsupported (required goals refuse before effect and
+// best-effort uses the ordinary queue, chosen before an app-server attempt).
+// `table` is a hermetic test hook; production passes no table.
+export function observationQualification(nativeVersion: string, platform: string, remote: boolean,
+  table?: readonly NativeProfile[]): MetadataQualification | undefined {
+  if (!table) {
+    const qualification = metadataQualification(nativeVersion, platform);
+    const profile = qualification && selectNativeProfile(qualification);
+    return profile && profile.commit === qualification.commit && (!remote || profile.sshDestination) ? qualification : undefined;
+  }
+  const exact = typeof nativeVersion === 'string' ? nativeVersion.replace(/^codex-cli /, '') : '';
+  const profile = selectNativeProfile({ platform, version: exact }, validateNativeProfiles(table));
+  return profile && (!remote || profile.sshDestination) ? { version: profile.version, commit: profile.commit, platform: profile.platform } : undefined;
+}
+// Owner probe arguments for an exact profile. A Linux row additionally requires
+// the kernel flock holder to be the same unchanged process; generation is unchanged.
+function ownerProbeArgs(qualification: MetadataQualification | undefined): string[] {
+  const profile = qualification && selectNativeProfile(qualification);
+  return profile?.commit === qualification?.commit && profile?.ownerInspection === 'lsof_ps_procfs_locks' ? ['--procfs-owner'] : [];
 }
 // Nonblocking ledger locks can contend across independent waiters. Retry only
 // within the caller's existing total budget; never replay a native operation.
@@ -77,7 +100,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
   const budget = handoffOptions.budget ?? new HandoffBudget(handoffOptions.seconds ?? 30);
   let handoff: Handoff | undefined, snapshot: Record<string, unknown> | undefined;
   let scope: MetadataScope | undefined, queueScope: AppServerScope | undefined, deliverySupported = false, stopped = false, operationId: string | undefined;
-  let qualification: MetadataQualification | undefined;
+  let qualification: MetadataQualification | undefined, ownerArgs: string[] = [];
   let original: HandoffBinding | undefined, fenced = false, knownNative: Record<string, unknown> | undefined;
   const ownWait = () => {
     if (handoff && operationId) {
@@ -100,7 +123,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
   const verifyOwner = async (target: MetadataScope, signal?: AbortSignal) => {
     if (stopped || signal?.aborted || budget.observationRemainingMs() < 1) return false;
     const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
-    const result = await run(process.execPath, [worker, target.home, target.threadId], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
+    const result = await run(process.execPath, [worker, target.home, target.threadId, ...ownerArgs], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
     if (signal?.aborted || stopped || result.code !== 0 || result.interrupted) return false;
     try { const value = JSON.parse(result.stdout); return value.schemaVersion === 1 && value.ok === true && Object.keys(value).every(key => ['schemaVersion','ok','generation'].includes(key)) && /^[0-9a-f]{64}$/.test(value.generation) && value.generation === target.generation; } catch { return false; }
   };
@@ -119,7 +142,8 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
           queueScope = { codexHome: context.home, threadId: context.target, generation: context.generation, ownerIdentity: context.writerIdentity! };
           const version = await run(executable(options.codexBin ?? 'codex'), ['--version'], { timeout: Math.min(1000, budget.observationRemainingMs()), limit: 4096 });
           const nativeVersion = !version.interrupted && version.code === 0 ? version.stdout.trim().replace(/^codex-cli /, '') : '';
-          qualification = metadataQualification(nativeVersion);
+          // Exact host platform and native version select one profile row, or none.
+          qualification = observationQualification(nativeVersion, currentPlatform(), handoffOptions.remote === true); ownerArgs = ownerProbeArgs(qualification);
           if (qualification && nativeQueueCapability({version:nativeVersion,platform:`${process.platform}-${process.arch}`,scope:queueScope}).queueSupported) deliverySupported = (await metadataCapability(scope, nativeVersion, budget, verifyOwner)).supported;
         }
         handoff = await persist(() => ledger.prepare(original!, { correlationId: handoffOptions.correlationId,
@@ -225,10 +249,11 @@ export async function waitForHandoff(ledger: HandoffLedger, id: string, goal: 'd
   const stop = () => { stopped = true; };
   const persist = <T>(action: () => T) => persistWithinBudget(budget, action);
   const ownWait = () => { if (operationId) handoff = ledger.operationStatus(id, operationId); };
+  const ownerArgs = ownerProbeArgs(context?.qualification);
   const verifyOwner = async (scope: MetadataScope, signal: AbortSignal) => {
     if (stopped || signal.aborted || budget.observationRemainingMs() < 1) return false;
     const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
-    const result = await run(process.execPath, [worker, scope.home, scope.threadId], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
+    const result = await run(process.execPath, [worker, scope.home, scope.threadId, ...ownerArgs], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
     if (stopped || signal.aborted || result.code !== 0 || result.interrupted) return false;
     try {
       const value = JSON.parse(result.stdout);

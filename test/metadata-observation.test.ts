@@ -48,7 +48,7 @@ const observe = (scope: MetadataScope, clientUserMessageId = clientId) => observ
 
 test('native metadata qualification is a finite immutable source/platform tuple, not a SemVer range', () => {
   assert.deepEqual(metadataQualification('0.160.1'), METADATA_RESUME_QUALIFICATION);
-  const current = metadataQualification('codex-cli 0.162.1');
+  const current = metadataQualification('codex-cli 0.162.1', 'darwin-arm64');
   assert.deepEqual(current, { version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d', platform: 'darwin-arm64' });
   assert.equal(Object.isFrozen(current), true);
   for (const version of ['0.162.0', '0.162.2', '0.163.0', '0.162.1+unknown', ' 0.162.1', 'codex-cli 0.162.1\n']) {
@@ -79,11 +79,11 @@ test('0.162.1 structural store fixture retains exact native client ID and body-f
   // Structural fixture coverage on another POSIX platform is not native qualification.
   if (process.platform === 'darwin' && process.arch === 'arm64') {
     assert.deepEqual(await resumeMetadataObservation({ ...f.scope, generation: 'a'.repeat(64), clientUserMessageId: clientId },
-      metadataQualification('0.162.1')!, budget(), owner), { supported: true, injectionObserved: true,
+      metadataQualification('0.162.1', 'darwin-arm64')!, budget(), owner), { supported: true, injectionObserved: true,
       clientUserMessageId: clientId, turn: { id: 'turn-fixture-1', status: 'completed' } });
   } else {
     assert.deepEqual(await resumeMetadataObservation({ ...f.scope, generation: 'a'.repeat(64), clientUserMessageId: clientId },
-      metadataQualification('0.162.1')!, budget(), owner),
+      metadataQualification('0.162.1', 'darwin-arm64')!, budget(), owner),
       { supported: false, injectionObserved: false, reason: 'metadata_platform_unsupported' });
   }
 });
@@ -96,7 +96,7 @@ test('retained observation source qualification rejects unknown versions/commits
   const cases: [MetadataQualification, string][] = [
     [{ ...METADATA_RESUME_QUALIFICATION, version: '0.163.0' }, 'metadata_version_unsupported'],
     [{ ...METADATA_RESUME_QUALIFICATION, commit: 'a'.repeat(40) }, 'metadata_schema_unsupported'],
-    [{ ...metadataQualification('0.162.1')!, commit: METADATA_RESUME_QUALIFICATION.commit }, 'metadata_schema_unsupported'],
+    [{ ...metadataQualification('0.162.1', 'darwin-arm64')!, commit: METADATA_RESUME_QUALIFICATION.commit }, 'metadata_schema_unsupported'],
     [{ ...METADATA_RESUME_QUALIFICATION, platform: 'win32-x64' }, 'metadata_platform_unsupported'],
     [{} as MetadataQualification, 'metadata_scope_invalid'],
     [{ ...METADATA_RESUME_QUALIFICATION, future: true } as MetadataQualification, 'metadata_scope_invalid'],
