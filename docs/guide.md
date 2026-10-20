@@ -307,11 +307,12 @@ session-peer list --host alpha --host user@[2001:db8::1] \
   group before the CLI exits. On Windows the direct child is terminated and then
   its owned descendants, identified by parent PID and creation time through
   handles the CLI holds (never a bare PID or `taskkill`). The child gets the
-  timeout minus a cleanup reserve (half, at most 6 s), so the call, cleanup
+  timeout minus a cleanup reserve (a third, at most 2.5 s), so the call, cleanup
   included, still returns at the original deadline; Ctrl-C or SIGHUP runs the
   same cleanup before the CLI exits. A descendant whose own parent already
   exited cannot be linked and may linger. This Windows cleanup is exercised by
-  the Windows CI suite only, not by live sessions. A preflight
+  the Windows test suite (CI and one isolated Windows 10 x64 administrator run),
+  not by live agent sessions. A preflight
   timeout is a refusal (`ssh_preflight_timeout`); a request timeout is `unknown`
   and is never retried.
 - Each destination gets one preflight and at most one request, in order. A

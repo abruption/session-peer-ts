@@ -164,7 +164,7 @@ test('raw process collection handles split UTF-8 and separately bounded replacem
 });
 
 test('real process timeout keeps complete evidence; byte overflow always invalidates it', async () => {
-  const result = await run(process.execPath, ['-e', 'process.stdout.write(process.argv[1]);setInterval(()=>{},1000);', JSON.stringify(codex)], { rawStdout: true, timeout: process.platform === 'win32' ? 4000 : 300 });
+  const result = await run(process.execPath, ['-e', 'process.stdout.write(process.argv[1]);setInterval(()=>{},1000);', JSON.stringify(codex)], { rawStdout: true, timeout: process.platform === 'win32' ? 2000 : 300 });
   assert.equal(result.stopReason, 'timeout'); assert.equal(responseOutcome(result, request).value.submitted, true);
   const overflow = await run(process.execPath, ['-e', 'process.stdout.write(process.argv[1]);setTimeout(()=>process.stdout.write(" ".repeat(4096)),20);', JSON.stringify(codex)], { rawStdout: true, limit: 1024 });
   assert.equal(overflow.stopReason, 'output_limit'); assert.throws(() => responseOutcome(overflow, request));

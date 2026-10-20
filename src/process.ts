@@ -160,9 +160,12 @@ export type TreeReply = { snapshot: bigint; rows: Map<number, number>;
   held: Map<number, { start: bigint; exit: bigint | null }>; errors: Map<number, 'gone' | 'denied'> };
 export type TreeHelper = { pid?: number; request(hold: number[], kill: number[]): Promise<TreeReply>; close(): void };
 export type TreeRoot = { pid: number; spawnedAt: bigint; exitedAt: () => bigint | undefined };
-// Cleanup is carved out of the caller's total budget, never added to it.
-export const WINDOWS_TREE_RESERVE_MS = 6000;
-export const treeReserve = (total: number) => Math.min(WINDOWS_TREE_RESERVE_MS, Math.max(0, Math.floor(total / 2)));
+// Cleanup is carved out of the caller's total budget, never added to it. A
+// warm helper round (start, attribute, kill, confirm) measured 0.85-1.02 s on
+// Windows 10 x64 / PowerShell 5.1; the cap leaves ~2.5x that, and a third of
+// short budgets. A slower (cold) helper reports unconfirmed, still in time.
+export const WINDOWS_TREE_RESERVE_MS = 2500;
+export const treeReserve = (total: number) => Math.min(WINDOWS_TREE_RESERVE_MS, Math.max(0, Math.floor(total / 3)));
 // FILETIME (100 ns since 1601) of a wall-clock millisecond, the unit of
 // process creation/exit times. Callers pass a floor (spawn) or ceiling (exit).
 export const filetime = (ms: number) => BigInt(Math.floor(ms)) * 10000n + 116444736000000000n;
@@ -236,11 +239,14 @@ export function parseTreeReply(line: string): TreeReply {
   return reply;
 }
 
-// One helper per cleanup, started only after a stop. Detached so a console
-// Ctrl-C aimed at this CLI cannot end the cleanup; it exits on stdin EOF.
+// One helper per cleanup, started only after a stop (so after any Ctrl-C that
+// caused it); it exits on stdin EOF. Not detached: PowerShell started with
+// DETACHED_PROCESS reads EOF from its piped stdin and exits at once (measured
+// on Windows 10 x64 / PowerShell 5.1). A further Ctrl-C during cleanup can end
+// the helper; that cleanup then reports unconfirmed.
 export function windowsTreeHelper(): TreeHelper {
   const helper = childProcess.spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand',
-    Buffer.from(helperScript, 'utf16le').toString('base64')], { shell: false, detached: true, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+    Buffer.from(helperScript, 'utf16le').toString('base64')], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
   let buffer = '', waiting: { resolve: (reply: TreeReply) => void; reject: (error: Error) => void } | undefined, failed = false;
   const fail = () => { failed = true; waiting?.reject(new Error('tree_helper')); waiting = undefined; };
   helper.once('error', fail); helper.once('exit', fail);

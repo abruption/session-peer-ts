@@ -7,22 +7,53 @@ Source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b`; not a
 release. On win32, `run()` now terminates the direct child and then descendants
 attributed by parent PID and creation time through handles held by a single
 PowerShell helper (no bare-PID kill, no `taskkill`, no shell, no caller text in
-argv), carving a cleanup reserve (`min(6000, timeout/2)` ms) out of the caller's
-total; stopped Windows results report `cleanup: confirmed|unconfirmed`. A
-read-only owner-SID/protected-DACL/reparse guard and a protected private-leaf
-creator were added for Windows storage; the handoff ledger itself still refuses
-Windows with `handoff_storage_unsupported`. POSIX behaviour is unchanged.
+argv). It carves a cleanup reserve of `min(2500, timeout/3)` ms out of the
+caller's total, and stopped Windows results report `cleanup: confirmed|unconfirmed`.
+A read-only owner-SID/protected-DACL/reparse guard and a protected
+private-leaf creator were added for Windows storage; the handoff ledger itself
+still refuses Windows with `handoff_storage_unsupported`. POSIX behaviour is
+unchanged.
 
-Local macOS arm64 / Node 24.16.0: build and test types passed; `npm test` with
-the pinned Python 1.1.0 reference `8ca77cf31254c8287a2593fe484bb30a7dba2727`:
-409 total / 401 passed / 0 failed / 8 skipped (the three new skips are
-Windows-native process-tree/storage cases). A first run without the Python
-reference root failed six conformance tests on the missing oracle file only.
-`npm run test:package`, repository checks and `git diff --check` passed.
-Windows behaviour was exercised only through emulated platform/helper fixtures
-on macOS; every native Windows case is unrun locally and awaits the Windows CI
-job. No live session, message, SSH destination, ACL or service was touched;
-Windows observation, ledger storage and #20 jump support remain unqualified.
+Local macOS arm64 / Node 24.16.0: build, test types, `npm run test:package`,
+repository checks and `git diff --check` passed. `npm test` with the pinned
+Python 1.1.0 reference `8ca77cf31254c8287a2593fe484bb30a7dba2727` passed with
+zero failures; Windows-native cases skip there. Full counts are in the PR.
+
+Separately authorized isolated run on a Windows x64 test host (Windows 10
+19045, PowerShell 5.1.19041.6456, Node 24.16.0, x64), administrator account
+elevated over SSH, dedicated temporary prefix, `npm ci --ignore-scripts` (the
+fs-ext prebuild loaded). The first native runs found three real defects, fixed
+before the recorded results:
+- PowerShell started detached read EOF from its piped stdin and exited at once,
+  so every cleanup was unconfirmed. The helper is no longer detached.
+- PowerShell 5.1 returned the JSON path array as one object, so storage
+  inspection failed. The array is now cast, not wrapped.
+- Files created by an elevated administrator are owned by Administrators.
+  Ownership now accepts the token's default owner, but never as an allowed ACE.
+
+The Node-to-Node "parent exits while a child holds the pipes" case does not
+occur on Windows: a Node child's own libuv job kills its descendants when it
+exits. That case is therefore covered with a non-Node parent instead.
+
+After the fixes:
+- The new native process-tree and storage tests passed. These cover Node and
+  non-Node parents (PowerShell starting `PING.EXE` via CreateProcessW), with
+  timeout, exit-while-held, overflow and interrupt, plus a private directory,
+  an inherited ACL and a junction inside the prefix.
+- `npm run test:windows`, first full run: 334 total / 193 passed / 1 failed /
+  140 skipped. The single failure was an update-cache test that does not use
+  `run()`. It passed 3/3 alone, and a second full run passed with
+  334 / 194 / 0 / 140.
+- `npm run test:package` passed.
+- The helper round (start, attribute, kill, confirm) took 845-1014 ms over 20
+  samples. These are warm; a cold-boot helper was not measured.
+- The prefix was removed. No process with the prefix in its command line and
+  no `PING.EXE` remained.
+
+The non-admin and non-elevated cells, arm64, Node 22 on that host, and
+cold-boot helper latency remain unrun. Codex 0.155.1 on that host is not a
+qualified profile, so Windows native observation stays unsupported. No live
+agent session or message, ACL, policy, service or account change was made.
 
 ## Public 0.4.0 — 2026-10-18 KST
 

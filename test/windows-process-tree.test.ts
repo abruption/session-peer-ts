@@ -188,7 +188,7 @@ test('helper replies are parsed strictly', () => {
     'ok 1 - 1:0: -', 'ok 1 - - 1:other', 'ok 1 - - - extra', 'ok 1 12345678901:1 - -']) {
     assert.throws(() => parseTreeReply(line), /tree_reply/, line);
   }
-  assert.equal(treeReserve(3000), 1500); assert.equal(treeReserve(60000), WINDOWS_TREE_RESERVE_MS); assert.equal(treeReserve(1), 0);
+  assert.equal(treeReserve(3000), 1000); assert.equal(treeReserve(60000), WINDOWS_TREE_RESERVE_MS); assert.equal(treeReserve(1), 0);
   assert.equal(filetime(0), 116444736000000000n);
 });
 
@@ -244,7 +244,7 @@ test('win32 run(): a timeout terminates the child and its owned tree within the 
   assert.deepEqual([...new Set(fake.table.kills)].sort(), [9001, 9002]);
   assert.equal(fake.calls.length, 1);
   const call = fake.calls[0]!;
-  assert.equal(call.options.shell, false); assert.equal(call.options.detached, true); assert.equal(call.options.windowsHide, true);
+  assert.equal(call.options.shell, false); assert.equal(call.options.detached, undefined); assert.equal(call.options.windowsHide, true);
   assert.deepEqual(call.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-EncodedCommand']); assert.equal(call.args.length, 4);
   const script = Buffer.from(call.args[3]!, 'base64').toString('utf16le');
   assert.equal(script.includes('private-message-text'), false);
@@ -339,7 +339,10 @@ if(process.argv[2]==='exit')process.exit(0);if(process.argv[2]==='flood')process
 }
 
 test('native win32: timeout and overflow kill the whole owned tree within the total', native, async t => {
-  for (const [mode, options] of [['stay', { timeout: 12000 }], ['exit', { timeout: 12000 }], ['flood', { timeout: 12000, limit: 1024 }]] as const) {
+  // No 'exit' case here: a Node child's own libuv job kills its descendants
+  // when it exits, so nothing holds the pipes (measured); the non-Node test
+  // below covers a parent that exits while its child keeps the pipes.
+  for (const [mode, options] of [['stay', { timeout: 8000 }], ['flood', { timeout: 8000, limit: 1024 }]] as const) {
     const f = tree(t), started = performance.now();
     const done = await run(process.execPath, [f.script, mode], options);
     const elapsed = performance.now() - started;
@@ -366,3 +369,46 @@ const poll = () => existsSync(${JSON.stringify(f.pids)}) ? process.emit('SIGINT'
   assert.deepEqual(await f.gone(), []);
 });
 
+
+// A non-Node native parent (powershell.exe) starts ping.exe via CreateProcessW
+// (Start-Process -NoNewWindow), which inherits and holds the output pipes, like
+// ssh.exe starting a ProxyCommand.
+function nativeTree(t: TestContext, mode: 'stay' | 'exit' | 'flood') {
+  const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wnative-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const pids = join(dir, 'pids.json'), quote = (text: string) => `'${text.replace(/'/g, "''")}'`;
+  const script = `$g = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\PING.EXE') -ArgumentList '-n','600','127.0.0.1' -NoNewWindow -PassThru
+[IO.File]::WriteAllText(${quote(pids)}, (ConvertTo-Json @{child=$PID; grandchild=$g.Id} -Compress))
+if ('${mode}' -eq 'flood') { [Console]::Out.Write('x' * 65536) }
+if ('${mode}' -eq 'exit') { exit 0 }
+Start-Sleep -Seconds 600`;
+  const args = ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')];
+  const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  return { args, pids, async gone() {
+    const all = Object.values(JSON.parse(readFileSync(pids, 'utf8')) as Record<string, number>);
+    assert.equal(all.length, 2);
+    for (let i = 0; i < 100 && all.some(alive); i++) await timers.setTimeout(50);
+    return all.filter(alive);
+  } };
+}
+
+test('native win32: a non-Node parent and its CreateProcessW grandchild are cleaned on timeout, overflow and interrupt', native, async t => {
+  for (const [mode, options] of [['stay', { timeout: 8000 }], ['exit', { timeout: 8000 }], ['flood', { timeout: 8000, limit: 1024 }]] as const) {
+    const f = nativeTree(t, mode), started = performance.now();
+    const done = await run('powershell.exe', f.args, options);
+    const elapsed = performance.now() - started;
+    assert.equal(done.cleanup, 'confirmed', mode); assert.equal(done.stopReason, mode === 'flood' ? 'output_limit' : 'timeout', mode);
+    assert.ok(elapsed < options.timeout + 500, `${mode}: ${elapsed} ms`);
+    assert.deepEqual(await f.gone(), [], mode);
+  }
+  const f = nativeTree(t, 'stay'), runner = join(realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wrunner-'))), 'runner.mjs');
+  t.after(() => rmSync(join(runner, '..'), { recursive: true, force: true }));
+  writeFileSync(runner, `import { existsSync } from 'node:fs';
+import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'dist/process.js')).href)};
+void run('powershell.exe', ${JSON.stringify(f.args)}, { timeout: 60000 });
+const poll = () => existsSync(${JSON.stringify(f.pids)}) ? process.emit('SIGINT', 'SIGINT') : setTimeout(poll, 20); poll();`);
+  const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
+  const [code] = await once(child, 'close');
+  assert.equal(code, 1);
+  assert.deepEqual(await f.gone(), []);
+});

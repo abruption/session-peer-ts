@@ -16,7 +16,7 @@ const own = (extra: Partial<WindowsAce> = {}): WindowsAce => ({ sid: USER, allow
 function report(leaf: Partial<WindowsStorageEntry>, ancestors: Partial<WindowsStorageEntry>[] = []): WindowsStorageReport {
   const paths = ['C:\\', 'C:\\Users', 'C:\\Users\\fixture', 'C:\\Users\\fixture\\ledger'];
   const parents = paths.slice(0, -1).map((path, index) => ({ path, exists: true, directory: true, reparse: false, ...ancestors[index] }));
-  return { user: USER, entries: [...parents, { path: paths.at(-1)!, exists: true, directory: true, reparse: false,
+  return { user: USER, tokenOwner: USER, entries: [...parents, { path: paths.at(-1)!, exists: true, directory: true, reparse: false,
     owner: USER, protected: true, nullDacl: false, rules: [own()], ...leaf }] };
 }
 
@@ -34,6 +34,11 @@ test('Windows private storage requires owner SID, an owner-only protected DACL a
   assert.equal(windowsStorageFailure(report({ rules: [own(), { ...own(), sid: 'S-1-1-0', allow: false }] }), 'directory'), undefined);
   // Files inherit the private directory's owner-only ACE.
   assert.equal(windowsStorageFailure(report({ directory: false, protected: false, rules: [own({ inherited: true, inherits: false })] }), 'file'), undefined);
+  // An elevated administrator's token owner is Administrators: accepted as owner
+  // only when it is the token's default owner, never as an allowed ACE.
+  const elevated = { ...report({ owner: ADMINS }), tokenOwner: ADMINS };
+  assert.equal(windowsStorageFailure(elevated, 'directory'), undefined);
+  assert.equal(windowsStorageFailure({ ...elevated, entries: elevated.entries.map((e, i, all) => i === all.length - 1 ? { ...e, rules: [own(), own({ sid: ADMINS })] } : e) }, 'directory'), 'acl_broad');
   const cases: [WindowsStorageReport, 'directory' | 'file', string][] = [
     [report({ reparse: true }), 'directory', 'reparse_point'],
     [report({}, [{}, { reparse: true }]), 'directory', 'reparse_point'],
@@ -52,7 +57,7 @@ test('Windows private storage requires owner SID, an owner-only protected DACL a
     [report({ directory: false, rules: [own(), own({ sid: 'S-1-3-0', inherited: true })] }), 'file', 'acl_broad'],
     [report({ protected: false }), 'directory', 'acl_inherited'],
     [report({ rules: [own({ inherited: true })] }), 'directory', 'acl_inherited'],
-    [{ user: USER, entries: [] }, 'directory', 'inspection_failed'],
+    [{ user: USER, tokenOwner: USER, entries: [] }, 'directory', 'inspection_failed'],
   ];
   for (const [value, kind, reason] of cases) assert.equal(windowsStorageFailure(value, kind), reason, JSON.stringify(value.entries.at(-1)));
   let calls = 0;
@@ -85,7 +90,7 @@ test('Windows storage inspection is read-only, path-encoded and strictly parsed'
   assert.equal(calls[0]!.input.includes('private ledger'), false, 'the path travels base64-encoded only');
   assert.doesNotMatch(calls[0]!.input, /Set-Acl|SetAccessControl|icacls|takeown/i);
   const broken: unknown[] = [
-    { ...value, user: 'fixture' }, { ...value, entries: value.entries.slice(1) },
+    { ...value, user: 'fixture' }, { ...value, tokenOwner: undefined }, { ...value, entries: value.entries.slice(1) },
     { ...value, entries: value.entries.map((entry, index) => index === 1 ? { ...entry, path: 'C:\\other' } : entry) },
     { ...value, entries: value.entries.map((entry, index) => index === value.entries.length - 1 ? { ...entry, rules: [{ sid: USER }] } : entry) },
     { ...value, entries: value.entries.map((entry, index) => index === value.entries.length - 1 ? { ...entry, owner: 'Everyone' } : entry) },

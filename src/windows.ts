@@ -188,13 +188,14 @@ export async function postWindowsPipe(pipe: string, pid: number, text: string): 
 export type WindowsAce = { sid: string; allow: boolean; rights: number; inherited: boolean; inherits: boolean };
 export type WindowsStorageEntry = { path: string; exists: boolean; directory?: boolean; reparse?: boolean;
   owner?: string; protected?: boolean; nullDacl?: boolean; rules?: WindowsAce[] };
-export type WindowsStorageReport = { user: string; entries: WindowsStorageEntry[] };
+export type WindowsStorageReport = { user: string; tokenOwner: string; entries: WindowsStorageEntry[] };
 export type WindowsStorageFailure = 'path_unsupported' | 'inspection_failed' | 'missing' | 'reparse_point' | 'not_directory' |
   'not_file' | 'owner_mismatch' | 'acl_missing' | 'acl_inherited' | 'acl_broad';
 const storageScript = String.raw`
 $ErrorActionPreference = 'Stop'
 $sid = [Security.Principal.SecurityIdentifier]
-$user = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$user = $identity.User.Value; $tokenOwner = $identity.Owner.Value
 $entries = @()
 foreach ($path in $paths) {
   $item = Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
@@ -211,7 +212,7 @@ foreach ($path in $paths) {
   }
   $entries += $entry
 }
-[Console]::Out.Write((ConvertTo-Json -InputObject @{user=$user; entries=@($entries)} -Compress -Depth 5))
+[Console]::Out.Write((ConvertTo-Json -InputObject @{user=$user; tokenOwner=$tokenOwner; entries=@($entries)} -Compress -Depth 5))
 `;
 // Every component from the drive root to the leaf, for reparse checks. UNC,
 // device (\\?\, \\.\) and relative paths are not private-storage candidates.
@@ -224,6 +225,7 @@ const sidPattern = /^S-1-[0-9]+(?:-[0-9]+){1,14}$/;
 function storageReport(value: unknown, paths: string[]): WindowsStorageReport | undefined {
   const report = value as WindowsStorageReport;
   if (!report || typeof report !== 'object' || typeof report.user !== 'string' || !sidPattern.test(report.user) ||
+      typeof report.tokenOwner !== 'string' || !sidPattern.test(report.tokenOwner) ||
       !Array.isArray(report.entries) || report.entries.length !== paths.length) return undefined;
   for (const [index, entry] of report.entries.entries()) {
     if (!entry || entry.path !== paths[index] || typeof entry.exists !== 'boolean') return undefined;
@@ -237,7 +239,9 @@ function storageReport(value: unknown, paths: string[]): WindowsStorageReport | 
   }
   return report;
 }
-// The leaf must be owned by the current user SID; every allow ACE, inherited
+// The leaf must be owned by the current user SID or the token's default owner
+// (an elevated administrator's new files are owned by Administrators; measured
+// on Windows 10 x64), but every allow ACE, inherited
 // or inheritable included, must name that SID; a directory's DACL must be
 // protected from its parent. No component may be a reparse point (symlink,
 // junction, mount point or other tag), checked by attribute, not lstat.
@@ -247,7 +251,7 @@ export function windowsStorageFailure(report: WindowsStorageReport, kind: 'direc
   if (entries.some(entry => entry.exists && entry.reparse)) return 'reparse_point';
   if (!leaf.exists || entries.some(entry => !entry.exists)) return 'missing';
   if (kind === 'directory' ? !leaf.directory : leaf.directory) return kind === 'directory' ? 'not_directory' : 'not_file';
-  if (leaf.owner !== report.user) return 'owner_mismatch';
+  if (leaf.owner !== report.user && leaf.owner !== report.tokenOwner) return 'owner_mismatch';
   if (leaf.nullDacl) return 'acl_missing';
   if (leaf.rules!.some(rule => rule.allow && rule.sid !== report.user)) return 'acl_broad';
   if (kind === 'directory' && (!leaf.protected || leaf.rules!.some(rule => rule.inherited))) return 'acl_inherited';
@@ -258,7 +262,8 @@ export function inspectWindowsStorage(path: string): WindowsStorageReport {
   const paths = windowsAncestors(path);
   if (!paths) throw new Refusal('handoff_storage_untrusted', 1);
   const encoded = Buffer.from(JSON.stringify(paths), 'utf8').toString('base64');
-  const code = `$paths = @(ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'))))\ntry {\n${storageScript}\n} catch { exit 1 }`;
+  // PowerShell 5.1 emits a JSON array as one object; cast, do not wrap in @().
+  const code = `$paths = [string[]](ConvertFrom-Json ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}'))))\ntry {\n${storageScript}\n} catch { exit 1 }`;
   const done = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
     '$script = [Console]::In.ReadToEnd(); Invoke-Expression $script'],
     { input: code, encoding: 'utf8', timeout: START_PROBE_TIMEOUT_MS, maxBuffer: 1024 * 1024, windowsHide: true });
