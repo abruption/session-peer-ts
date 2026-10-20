@@ -8,8 +8,8 @@
 // is a dry run unless --execute; deletions and lock overrides also require
 // --confirm-destructive. POSIX only; the Windows procedure is documented.
 import { createHash, randomBytes } from 'node:crypto';
-import { chmodSync, closeSync, constants, cpSync, fsyncSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync,
-  realpathSync, renameSync, rmSync, rmdirSync, unlinkSync, writeSync } from 'node:fs';
+import { appendFileSync, chmodSync, closeSync, constants, cpSync, fsyncSync, existsSync, ftruncateSync, fstatSync, lstatSync, mkdirSync, openSync,
+  readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, rmdirSync, unlinkSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { delimiter, dirname, isAbsolute, join, parse as parsePath, resolve, sep } from 'node:path';
 
@@ -101,12 +101,36 @@ function dedicated(prefix) {
   return { ...p, prefixId: sentinel.prefixId };
 }
 function readJson(path) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return undefined; } }
+// Test hooks only (never set in real runs): trace each fsync path in order,
+// fail the fsync of a path ending with a given suffix (EIO), or cap each write
+// at a few bytes to exercise short writes. They add failures, never skip work.
+const TEST_TRACE = process.env.SESSION_PEER_TS_HARNESS_TEST_FSYNC_TRACE, TEST_FAIL = process.env.SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL;
+const TEST_SHORT = process.env.SESSION_PEER_TS_HARNESS_TEST_SHORT_WRITE === '1';
+// Optional: fail only the first N matching fsyncs; fail the journal truncate.
+let testFailures = Number(process.env.SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT ?? Infinity);
+const TEST_TRUNCATE_FAIL = process.env.SESSION_PEER_TS_HARNESS_TEST_TRUNCATE_FAIL === '1';
+function syncFd(fd, path) {
+  if (TEST_TRACE) appendFileSync(TEST_TRACE, `${path}\n`);
+  if (TEST_FAIL && path.endsWith(TEST_FAIL) && testFailures-- > 0) throw Object.assign(new Error('injected fsync failure'), { code: 'EIO' });
+  fsyncSync(fd);
+}
+function syncPath(path) {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try { syncFd(fd, path); } finally { closeSync(fd); }
+}
+// Writes every byte (short writes continue) or throws.
+function writeAll(fd, text) {
+  const bytes = Buffer.from(text);
+  for (let offset = 0; offset < bytes.length;) {
+    const written = writeSync(fd, bytes, offset, TEST_SHORT ? Math.min(7, bytes.length - offset) : bytes.length - offset);
+    if (written <= 0) throw Object.assign(new Error('write made no progress'), { code: 'EIO' });
+    offset += written;
+  }
+}
 function writeExclusive(path, text, durable = false) {
   const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-  try { writeSync(fd, text); if (durable) fsyncSync(fd); } finally { closeSync(fd); }
-  if (!durable) return;
-  const dir = openSync(dirname(path), 'r');
-  try { fsyncSync(dir); } finally { closeSync(dir); }
+  try { writeAll(fd, text); if (durable) syncFd(fd, path); } finally { closeSync(fd); }
+  if (durable) syncPath(dirname(path));
 }
 // The only activation/rollback move: rename after lstat ENOENT. rename(2)
 // still replaces an empty directory created in between (ADR guarantee scope).
@@ -155,7 +179,8 @@ function inside(root, name) {
   return path;
 }
 function manifestOf(dir) {
-  const files = {}, links = {};
+  // Null-prototype maps: a root entry named __proto__ is an ordinary key.
+  const files = Object.create(null), links = Object.create(null);
   const walk = rel => {
     for (const entry of readdirSync(join(dir, rel)).sort()) {
       const path = rel ? `${rel}/${entry}` : entry;
@@ -248,7 +273,19 @@ function lockState(p) {
   // exactly this lock's record is `invalid`, never treated as absent.
   const intent = join(p.lock, 'activation.json');
   const activated = lstat(intent) ? validIntent(intent, owner) : undefined;
-  return { state: 'held', owner, activated };
+  // A staging tree this lock kept after `already_provisioned`; like the intent,
+  // a present but invalid record is `invalid`, never absent.
+  const retainedPath = join(p.lock, 'retained.json');
+  const retained = lstat(retainedPath) ? validRetained(retainedPath, owner) : undefined;
+  return { state: 'held', owner, activated, retained };
+}
+function validRetained(path, owner) {
+  let value;
+  try { value = regular(path, 'retained') && JSON.parse(readFileSync(path, 'utf8')); } catch { value = undefined; }
+  const ok = !!value && typeof value === 'object' && !Array.isArray(value) &&
+    JSON.stringify(Object.keys(value)) === JSON.stringify(['target', 'staging', 'runId', 'lockId']) &&
+    INSTALL.test(value.target ?? '') && STAGING.exec(value.staging ?? '')?.[1] === value.target && value.runId === owner.runId && value.lockId === owner.lockId;
+  return ok ? value : { invalid: true };
 }
 function validIntent(path, owner) {
   let value;
@@ -286,6 +323,26 @@ function staticVerified(checked) {
 function describes(checked, receipt) {
   return staticVerified(checked) && checked.markerRunId === receipt.runId && checked.identityHash === receipt.identityHash && checked.manifestSha256 === receipt.manifestSha256;
 }
+function publicationSynced(p, pub) {
+  const path = join(p.lock, 'publication.synced.json');
+  let value;
+  try { value = lstat(path) && regular(path, 'synced') && JSON.parse(readFileSync(path, 'utf8')); } catch { return false; }
+  return !!value && value.target === pub.target && value.receiptSha256 === sha256(pub.receipt);
+}
+// Syncs the receipt file, its directory and the root (which holds .receipts),
+// then records that durably under the lock. Nothing is reported as published
+// before this completes.
+// Order on every executed write, completion, replay or adoption: the existing
+// intent and the lock directory, then the receipt, .receipts and the root, then
+// the synced marker (written, or the existing one) and the lock directory.
+function syncPublication(p, pub) {
+  syncPath(join(p.lock, 'publication.json')); syncPath(p.lock);
+  syncPath(join(p.receipts, `${pub.target}.json`)); syncPath(p.receipts); syncPath(p.root);
+  const path = join(p.lock, 'publication.synced.json');
+  if (publicationSynced(p, pub)) { syncPath(path); syncPath(p.lock); return; }
+  if (lstat(path)) throw new Refusal('publication_intent_unreadable');
+  writeExclusive(path, JSON.stringify({ target: pub.target, receiptSha256: sha256(pub.receipt) }), true);
+}
 const lockBinding = (p, lock) => ({ prefixId: p.prefixId, lockId: lock.owner.lockId });
 const sameLock = (proof, p, lock) => proof?.prefixId === p.prefixId && proof?.lockId === lock.owner.lockId && HEX32.test(proof.lockId ?? '');
 function heldBy(p, run) {
@@ -296,7 +353,7 @@ function heldBy(p, run) {
 // Removes only the known metadata entries of the trusted lock directory. Each
 // is a file, a symlink (unlinked, never followed) or an empty directory; any
 // other entry or a non-empty directory refuses before anything is removed.
-const LOCK_ENTRIES = ['owner.json', 'activation.json', 'publication.json'];
+const LOCK_ENTRIES = ['owner.json', 'activation.json', 'publication.json', 'publication.synced.json', 'retained.json'];
 function clearLock(p) {
   trusted(p.lock, 'lock');
   const entries = readdirSync(p.lock);
@@ -325,7 +382,8 @@ function verify(p, name, execute) {
   const c = classify(p, name);
   const lock = lockState(p);
   const checks = { realDirectory: false, owned: false, markerConsistent: false, manifest: false, banner: false, nativeLock: 'not_run',
-    stagingGone: lock.activated?.target === name ? !lstat(join(p.root, lock.activated.staging)) : 'not_applicable' };
+    stagingGone: lock.activated?.target === name ? !lstat(join(p.root, lock.activated.staging))
+      : lock.retained?.invalid ? false : lock.retained?.target === name ? !lstat(join(p.root, lock.retained.staging)) : 'not_applicable' };
   const s = lstat(target);
   checks.realDirectory = !!s && s.isDirectory() && !s.isSymbolicLink() && s.uid === uid() && (s.mode & 0o077) === 0;
   checks.owned = !!c.marker;
@@ -457,6 +515,7 @@ const dest = {
     const lock = heldBy(p, run);
     if (lock.activated?.invalid) throw new Refusal('activation_intent_unreadable');
     if (lock.activated) throw new Refusal('already_activated_under_lock');
+    if (lock.retained) throw new Refusal(lock.retained.invalid ? 'retained_staging_unreadable' : 'retained_staging_pending');
     // One publication scope per acquisition: a rollback must not let the same
     // lock recreate a target and complete it using an earlier publication proof.
     if (lstat(join(p.lock, 'publication.json'))) throw new Refusal('publication_pending');
@@ -474,7 +533,11 @@ const dest = {
       const checked = verify(p, match[1], true);
       // The existing receipt is reused. This run's staging stays until the
       // explicit `discard-staging --confirm-destructive` step.
-      if (checked.ok) return { dryRun: false, outcome: 'already_provisioned', runId: run, ...lockBinding(p, lock), target: match[1], receiptReused: true, stagingRetained: staging };
+      if (checked.ok) {
+        // The kept staging is tracked under this lock until it is discarded.
+        writeExclusive(join(p.lock, 'retained.json'), JSON.stringify({ target: match[1], staging, runId: run, lockId: lock.owner.lockId }), true);
+        return { dryRun: false, outcome: 'already_provisioned', runId: run, ...lockBinding(p, lock), target: match[1], receiptReused: true, stagingRetained: staging };
+      }
       throw new Refusal('existing_install_failed_verification', { target: match[1] });
     }
     if (target.state !== 'absent') throw new Refusal('target_not_absent', { target: match[1], state: target.state, reason: target.reason });
@@ -528,12 +591,16 @@ const dest = {
         const checked = verify(p, name, a.execute);
         if (!describes(checked, committed) || (a.execute && !checked.ok)) throw new Refusal('publication_target_changed', { state: checked.state });
         if (!a.execute) return { dryRun: true, target: name, plan: ['write the committed receipt bytes'] };
-        writeExclusive(receiptPath, pub.receipt);
+        // An earlier intent write may have failed its sync. Reconfirm it
+        // before creating or syncing the missing receipt on this attempt.
+        syncPath(pubPath); syncPath(p.lock);
+        writeExclusive(receiptPath, pub.receipt, true);
         if (receiptState(p, name).state !== 'matching') throw new Refusal('receipt_present', { receipt: receiptState(p, name).state });
       } else if (!regular(receiptPath, 'receipt') || sha256(readFileSync(receiptPath)) !== sha256(pub.receipt) || present.state !== 'matching' ||
         !describes(verify(p, name, false), committed))
         throw new Refusal('receipt_present', { receipt: present.state });
       if (!a.execute) return { dryRun: true, target: name, replayed: true };
+      syncPublication(p, pub);
       return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt: committed, recovery: committed.runId !== run, replayed: true };
     }
     const state = receiptState(p, name).state;
@@ -551,7 +618,9 @@ const dest = {
       if (proof.identityHash !== existing.identityHash || proof.manifestSha256 !== existing.manifestSha256)
         throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'install' });
       if (!a.execute) return { dryRun: true, target: name, plan: ['record a publication intent with the existing receipt bytes'] };
-      writeExclusive(pubPath, JSON.stringify({ target: name, receipt: bytes, runId: run, lockId: lock.owner.lockId }), true);
+      const adopted = { target: name, receipt: bytes, runId: run, lockId: lock.owner.lockId };
+      writeExclusive(pubPath, JSON.stringify(adopted), true);
+      syncPublication(p, adopted);
       return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt: existing, recovery: existing.runId !== run, adopted: true };
     }
     if (state !== 'none') throw new Refusal('receipt_present', { receipt: state });
@@ -564,8 +633,10 @@ const dest = {
     if (!a.execute) return { dryRun: true, target: name, receipt, recovery: checked.markerRunId !== run };
     if (!lstat(p.receipts)) { mkdirSync(p.receipts, { mode: 0o700 }); trusted(p.receipts, 'receipts'); }
     const text = JSON.stringify(receipt);
-    writeExclusive(pubPath, JSON.stringify({ target: name, receipt: text, runId: run, lockId: lock.owner.lockId }), true);
-    writeExclusive(receiptPath, text);
+    const pub = { target: name, receipt: text, runId: run, lockId: lock.owner.lockId };
+    writeExclusive(pubPath, JSON.stringify(pub), true);
+    writeExclusive(receiptPath, text, true);
+    syncPublication(p, pub);
     return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt, recovery: checked.markerRunId !== run };
   },
   unlock(a) {
@@ -577,6 +648,17 @@ const dest = {
       if (lock.activated.invalid) throw new Refusal('activation_intent_unreadable');
       const target = classify(p, lock.activated.target);
       if (target.state !== 'absent' && target.state !== 'owned_receipted') throw new Refusal('unreceipted_activation', { target: lock.activated.target, state: target.state });
+    }
+    if (lock.retained?.invalid) throw new Refusal('retained_staging_unreadable');
+    if (lock.retained && lstat(join(p.root, lock.retained.staging))) throw new Refusal('retained_staging_pending', { staging: lock.retained.staging });
+    // Publication evidence stays while a receipt or its install exists but the
+    // receipt was not confirmed synced.
+    const pubPath = join(p.lock, 'publication.json');
+    if (lstat(pubPath)) {
+      const pub = validPublication(pubPath, lock.owner);
+      if (!pub) throw new Refusal('publication_intent_unreadable');
+      if (!publicationSynced(p, pub) && (lstat(join(p.receipts, `${pub.target}.json`)) || lstat(join(p.root, pub.target))))
+        throw new Refusal('publication_unsynced', { target: pub.target });
     }
     if (!a.execute) return { dryRun: true, plan: ['remove owner.json', 'rmdir lock'] };
     clearLock(p);
@@ -739,10 +821,29 @@ function journalRead(path) {
   if (entries[0]?.event !== 'journal_created') throw new Refusal('journal_corrupt');
   return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost };
 }
+// A record succeeds only once the whole line is written and synced. On a
+// failure the journal is truncated back to its previous length and synced:
+// `journal_append_failed` (rollback `restored`) only when that is confirmed;
+// otherwise `journal_append_unknown` (rollback `unconfirmed`), and the operator
+// must inspect the journal before any next step. A failure never promises the
+// record is absent, and the append is never retried.
 function journalAppend(path, journal, event) {
   const line = JSON.stringify({ seq: journal.entries.length, prev: journal.head, at: now(), ...event });
   const fd = openSync(path, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
-  try { writeSync(fd, `${line}\n`); } finally { closeSync(fd); }
+  try {
+    const size = fstatSync(fd).size;
+    try { writeAll(fd, `${line}\n`); syncFd(fd, path); }
+    catch (error) {
+      let rollbackError;
+      try {
+        if (TEST_TRUNCATE_FAIL) throw Object.assign(new Error('injected truncate failure'), { code: 'EIO' });
+        ftruncateSync(fd, size); syncFd(fd, path);
+        if (fstatSync(fd).size !== size) rollbackError = 'size_mismatch';
+      } catch (failure) { rollbackError = failure?.code ?? 'unknown'; }
+      throw new Refusal(rollbackError ? 'journal_append_unknown' : 'journal_append_failed',
+        { reason: error?.code ?? 'unknown', rollback: rollbackError ? 'unconfirmed' : 'restored', ...(rollbackError ? { rollbackError } : {}) });
+    }
+  } finally { closeSync(fd); }
   return { seq: journal.entries.length, head: sha256(line) };
 }
 // Destination-result event mappings. Operator events are handled separately below.

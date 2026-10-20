@@ -966,6 +966,51 @@ obtain fresh checks under a new lock.
   has ended gets only `run-ended`. A statement that was already issued becomes
   invalid at the destination once the lock changes, because every statement is
   bound to the prefix and `lockId`. Nothing is revoked remotely.
+- **Retained staging.** When `dest activate` reports `already_provisioned`,
+  it records the staging tree it kept in the lock (`retained.json`, bound to
+  run, lock and target). Until that tree is removed by `dest discard-staging
+  --run <run> --confirm-destructive`, several steps are refused:
+  - the final `dest verify` (`stagingGone:false`; no probe runs);
+  - adoption and receipts, which depend on it;
+  - `dest unlock` and further activations (`retained_staging_pending`).
+
+  A present but invalid record is refused, not treated as absent
+  (`retained_staging_unreadable`). The internal existing-target check inside
+  `activate` is separate and unchanged. This only blocks while the kept tree
+  is pending. After the explicit discard, the lock's existing statements are
+  usable as before, and no new proof is required. An explicit break removes the record
+  with the lock. The kept tree then stays as an owned leftover for its run's
+  explicit discard.
+- **Manifest names.** The manifest's file and link maps have no prototype, so
+  a root entry named `__proto__` (file or symlink) is recorded and checked
+  like any other.
+- **Durability.** Before a receipt is reported as written, completed,
+  replayed or adopted, the following are synced in order: the publication
+  intent and the lock directory, then the receipt file, the `.receipts`
+  directory and the root, and finally a `publication.synced.json` marker in
+  the lock, followed by the lock directory again. A replay or an adoption
+  syncs the existing intent and an existing valid marker again; it does not
+  skip them. A failed intent sync stops before the receipt is synced. A failed
+  marker sync comes after the receipt and its directories were already
+  synced; it fails the step but does not by itself mean the receipt is lost. While a receipt or its install exists without that marker, `dest
+  unlock` refuses (`publication_unsynced`) and keeps the evidence; rerunning
+  the same receipt command completes the syncs. An existing receipt is
+  synced, never rewritten. A journal record succeeds only after the whole line
+  is written (short writes continue) and synced. On a failure the harness
+  attempts a rollback: it truncates the journal to its previous length and
+  syncs it.
+  - If that is confirmed, the result is `journal_append_failed` with rollback
+    `restored`.
+  - Otherwise the result is `journal_append_unknown` with rollback
+    `unconfirmed`, keeping both the original error and the rollback error.
+    The operator must inspect the journal before any next step.
+
+  A failed record never promises that the line is absent, and the append is
+  never retried. I/O errors are reported, not retried. Test-only environment hooks can trace the fsync order, fail one
+  fsync or force short writes. These hooks only add failures. Neither the
+  hooks nor these fixtures qualify behavior under real power loss. The limits
+  stated above for unknown crashes, atomic file-system behavior and same-user
+  processes still apply.
 - **Old journal records.** Journals whose caller records carry no prefix
   (from before the prefix binding) are not supported for caller decisions.
   Such a record for a name makes `no-caller` and the switch count unusable
