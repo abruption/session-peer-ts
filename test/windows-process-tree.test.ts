@@ -5,9 +5,9 @@
 // They test the candidate (provisional, UTC-ordering) classifier and record
 // its design limits; they are not evidence that descendant ownership can be
 // proven on Windows.
-import { test, type TestContext } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import childProcess, { spawn } from 'node:child_process';
+import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
@@ -332,8 +332,9 @@ test('candidate backend: the helper transport speaks the line protocol with a fi
   assert.match(script, /GetProcessById/); assert.doesNotMatch(script, /taskkill|Stop-Process|Invoke-Expression|UtcNow/i);
 });
 
-// Production: no path starts the helper, so run() cannot kill anything but the
-// child it spawned, on any platform (on Windows the descendants may linger).
+// Production: no path starts the helper. On Windows run() therefore kills only
+// the child it spawned (descendants may linger); POSIX keeps its own owned
+// process-group reap, which this test does not change.
 test('production run() never starts the tree helper on timeout, overflow or completion', async t => {
   let helpers = 0;
   const original = childProcess.spawn;
@@ -352,49 +353,43 @@ test('production run() never starts the tree helper on timeout, overflow or comp
 
 // Native Windows. Unrun on non-Windows hosts.
 const native = { skip: process.platform !== 'win32' };
-// A non-Node native parent (powershell.exe) starts ping.exe via CreateProcessW
+// A non-Node parent (powershell.exe) starts PING.EXE via CreateProcessW
 // (Start-Process -NoNewWindow), which inherits and holds the output pipes, like
-// ssh.exe starting a ProxyCommand.
-function nativeTree(t: TestContext, mode: 'stay' | 'exit') {
+// ssh.exe starting a ProxyCommand. The grandchild has a short, explicit
+// lifetime (-n 12, about 11 s). The test never kills it by PID: a bare PID may
+// already belong to another process. It only waits for it to end on its own,
+// and the parent is terminated only through its own ChildProcess handle.
+const GRANDCHILD_SECONDS = 11;
+test('native win32: production run() kills only the direct child; its CreateProcessW grandchild is left alone', native, async t => {
   const dir = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-wnative-')));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const pids = join(dir, 'pids.json'), quote = (text: string) => `'${text.replace(/'/g, "''")}'`;
-  const script = `$g = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\PING.EXE') -ArgumentList '-n','600','127.0.0.1' -NoNewWindow -PassThru
+  const script = `$g = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\\PING.EXE') -ArgumentList '-n','${GRANDCHILD_SECONDS + 1}','127.0.0.1' -NoNewWindow -PassThru
 [IO.File]::WriteAllText(${quote(pids)}, (ConvertTo-Json @{child=$PID; grandchild=$g.Id} -Compress))
-if ('${mode}' -eq 'exit') { exit 0 }
 Start-Sleep -Seconds 600`;
   const args = ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')];
   const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  const read = () => JSON.parse(readFileSync(pids, 'utf8')) as { child: number; grandchild: number };
-  // The test's own fixture processes, removed whatever the outcome.
-  t.after(() => { try { for (const pid of Object.values(read())) try { process.kill(pid); } catch { /* Gone. */ } } catch { /* Never started. */ } });
-  return { args, pids, read, alive, async gone(all: number[]) {
-    for (let i = 0; i < 100 && all.some(alive); i++) await timers.setTimeout(50);
-    return all.filter(alive);
-  } };
-}
-
-test('native win32: production run() kills only the direct child; its CreateProcessW grandchild is left alone', native, async t => {
-  const f = nativeTree(t, 'stay'), started = performance.now();
-  const done = await run('powershell.exe', f.args, { timeout: 8000 });
+  // One cleanup path: observe the grandchild end on its own (observation only,
+  // never a kill), then remove the directory. If it is still running, the
+  // directory and PID file are kept as evidence and the test fails.
+  t.after(async () => {
+    if (!existsSync(pids)) { rmSync(dir, { recursive: true, force: true }); return; }
+    const { grandchild } = JSON.parse(readFileSync(pids, 'utf8')) as { grandchild: number };
+    for (let i = 0; i < (GRANDCHILD_SECONDS + 10) * 10 && alive(grandchild); i++) await timers.setTimeout(100);
+    if (alive(grandchild)) throw new Error(`fixture grandchild ${grandchild} still running; evidence kept in ${dir}`);
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const started = performance.now();
+  const done = await run('powershell.exe', args, { timeout: 8000 });
   assert.equal(done.stopReason, 'timeout'); assert.equal('cleanup' in done, false);
   assert.ok(performance.now() - started < 8800);
-  const { child, grandchild } = f.read();
-  assert.deepEqual(await f.gone([child]), []);
-  assert.equal(f.alive(grandchild), true, 'production does not kill descendants');
+  assert.ok(existsSync(pids), 'the fixture recorded its PIDs');
+  const { child, grandchild } = JSON.parse(readFileSync(pids, 'utf8')) as { child: number; grandchild: number };
+  t.diagnostic(`fixture child ${child}, grandchild ${grandchild}`);
+  for (let i = 0; i < 50 && alive(child); i++) await timers.setTimeout(50);
+  assert.equal(alive(child), false, 'the direct child is terminated');
+  assert.equal(alive(grandchild), true, 'production does not kill descendants');
 });
-
-test('native win32: candidate backend holds and cleans a non-Node tree; an exited parent is left unclassified', native, async t => {
-  for (const mode of ['stay', 'exit'] as const) {
-    const f = nativeTree(t, mode), child = spawn('powershell.exe', f.args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
-    let exited = false; child.once('exit', () => { exited = true; });
-    for (let i = 0; i < 400 && !existsSync(f.pids); i++) await timers.setTimeout(25);
-    if (mode === 'exit') for (let i = 0; i < 400 && !exited; i++) await timers.setTimeout(25);
-    const deadline = performance.now() + 8000;
-    const outcome = await reapWindowsTree({ pid: child.pid!, exited: () => exited, kill: () => child.kill() }, () => deadline);
-    const { grandchild } = f.read();
-    if (mode === 'stay') { assert.equal(outcome, 'confirmed'); assert.deepEqual(await f.gone([child.pid!, grandchild]), []); }
-    else { assert.equal(outcome, 'unconfirmed'); assert.equal(f.alive(grandchild), true, 'not killed without evidence'); }
-    child.stdout!.destroy();
-  }
-});
+// The known-unsound candidate backend is not run natively: its kills cannot be
+// bounded to fixture identities on Windows, and an isolated host approval does
+// not authorize terminating foreign processes. Its algorithm is covered only by
+// the virtual-table cases above.

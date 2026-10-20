@@ -39,32 +39,64 @@ and postcheck are not atomic. Null-DACL, parent-ACL and creator-race handling
 remain unqualified while it is unconnected. Like the existing inspection code,
 it resolves `powershell.exe` through PATH rather than a SystemRoot-pinned path.
 
-Local macOS arm64 / Node 24.16.0, final code:
-- Build, test types, `npm run test:package`, repository checks and
-  `git diff --check` passed.
-- `npm test`, with the pinned Python 1.1.0 reference
-  `8ca77cf31254c8287a2593fe484bb30a7dba2727`, passed with zero failures.
-  Windows-native cases skip there; full counts are in the PR.
-- Each backend guard was removed in turn, and every removal made its
-  regression test fail.
+Checkpoints. Each result belongs to the commit it was run on:
+- Full local suite, macOS arm64 / Node 24.16.0, at `3dc405d`:
+  - build, test types, `npm run test:package`, repository checks and
+    `git diff --check` passed;
+  - `npm test`, with the pinned Python 1.1.0 reference
+    `8ca77cf31254c8287a2593fe484bb30a7dba2727`, passed with zero failures.
+- Mutation checks, on the `f06041d` tree. Each guard was removed in turn, and
+  every removal made its regression test fail. The eight guards are:
+  - confirm only after a post-kill snapshot;
+  - doubt on an observed PID swap;
+  - no earlier-row inheritance for unlisted candidates;
+  - doubt on gone or denied candidates;
+  - doubt on unlisted candidates;
+  - reject a root after an observed exit;
+  - the creation-time check;
+  - hold the visible tree before any kill.
+- Comment, wording and test-name changes only, at `534d3fb`: light checks.
+- At the final head, the native process-tree fixture was redesigned. Light
+  checks, the focused local files and a Windows rerun of the two new test files
+  cover it (below).
 
-Isolated runs used a Windows x64 test host: Windows 10 19045, PowerShell 5.1,
-Node 24.16.0 x64, an administrator elevated over SSH, a dedicated temporary
-prefix and the host lock. Earlier heads of this branch ran native tests there
-and fixed real defects:
+Separately authorized isolated runs used a Windows x64 test host: Windows 10
+19045, PowerShell 5.1, Node 24.16.0 x64. The account was an administrator,
+elevated over SSH. Each run used a dedicated temporary prefix and the host lock.
+
+Runs on earlier heads, with the backend selected or exercised natively, found
+and fixed:
 - a detached helper exited at once;
 - PowerShell 5.1 wrapped the JSON path array;
 - an elevated administrator's files are owned by Administrators;
-- a Node child's job ends its descendants, so the tree must be held before any
-  kill.
+- a Node child's job ends its descendants.
 
-Results for the final code are in the PR. ACLs of existing paths were not
-changed; the tests set a protected DACL only on new leaves inside the prefix.
-The interrupt behaviour of production `run()` on Windows is unchanged and
-untested here. The Windows CI job (where the native tests are registered),
-non-admin and non-elevated cells, arm64 and cold-boot helper latency remain
-unrun. No live agent session or message, policy, service or account change was
-made.
+Those earlier native backend runs let the classifier terminate processes it
+accepted on the test host. The final head no longer runs the backend natively:
+its kills cannot be bounded to fixture identities, and isolated-host approval
+does not authorize terminating foreign processes.
+
+At `f06041d`, `npm run test:windows` and `npm run test:package` passed on that
+host.
+
+At the final head, only the two new test files were rerun there, in a new
+prefix:
+- The production case passed, and so did the storage cases (private
+  directory, inherited ACL, and a junction inside the prefix).
+- In the production case, `run()` terminates only the direct PowerShell child.
+  The child's `PING.EXE` grandchild (finite lifetime, about 11 s) is left
+  alone.
+- The test never kills the grandchild by PID; it only observes it end on its
+  own before removing its directory.
+- A read-only listing afterwards showed neither fixture PID remaining.
+- The prefix was removed, and no process with it in its command line remained.
+
+ACLs of existing paths were not changed; the tests set a protected DACL only on
+new leaves inside the prefix. The interrupt behaviour of production `run()` on
+Windows is unchanged and untested here. The following remain unrun: the Windows
+CI job (where the native tests are registered), non-admin and non-elevated
+cells, arm64 and cold-boot helper latency. No live agent session or message,
+policy, service or account change was made.
 
 ## Public 0.4.0 — 2026-10-18 KST
 
