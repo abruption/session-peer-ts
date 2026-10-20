@@ -24,7 +24,7 @@ const INSTALL = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)-([0-9a-f]{16})$/;
 const STAGING = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?-[0-9a-f]{16})\.staging-[0-9a-f]{16}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
 const FLAGS = new Set(['--execute', '--confirm-destructive', '--unowned', '--declare-run-ended', '--declare-abandoned']);
-const VALUES = new Set(['--prefix', '--journal', '--dest-alias', '--dest-host', '--remote-bin', '--run', '--operator-label', '--event', '--file', '--target',
+const VALUES = new Set(['--prefix', '--prefix-id', '--journal', '--dest-alias', '--dest-host', '--remote-bin', '--run', '--operator-label', '--event', '--file', '--target',
   '--kind', '--version', '--package-sha256', '--lock-integrity', '--identity', '--from-tree', '--npm-cli', '--package-tarball',
   '--staging', '--name', '--statement', '--lock-name', '--mode', '--compare']);
 const MULTI = new Set(['--dependency-tarball']);
@@ -262,6 +262,15 @@ function validIntent(path, owner) {
 }
 // Every lock-bound result, record and statement carries this pair; a fresh
 // random lockId per acquisition distinguishes re-acquisitions by the same run.
+function validPublication(path, owner) {
+  let value;
+  try { value = regular(path, 'publication') && JSON.parse(readFileSync(path, 'utf8')); } catch { return undefined; }
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+    JSON.stringify(Object.keys(value)) !== JSON.stringify(['target', 'receipt', 'runId', 'lockId']) || !INSTALL.test(value.target ?? '') ||
+    typeof value.receipt !== 'string' || value.runId !== owner.runId || value.lockId !== owner.lockId) return undefined;
+  try { const receipt = JSON.parse(value.receipt); if (!HEX32.test(receipt.runId ?? '')) return undefined; } catch { return undefined; }
+  return value;
+}
 const lockBinding = (p, lock) => ({ prefixId: p.prefixId, lockId: lock.owner.lockId });
 const sameLock = (proof, p, lock) => proof?.prefixId === p.prefixId && proof?.lockId === lock.owner.lockId && HEX32.test(proof.lockId ?? '');
 function heldBy(p, run) {
@@ -269,10 +278,20 @@ function heldBy(p, run) {
   if (lock.state !== 'held' || lock.owner.runId !== run) throw new Refusal('lock_not_owned', { lock: lock.state });
   return lock;
 }
+// Removes only the known metadata entries of the trusted lock directory. Each
+// is a file, a symlink (unlinked, never followed) or an empty directory; any
+// other entry or a non-empty directory refuses before anything is removed.
+const LOCK_ENTRIES = ['owner.json', 'activation.json', 'publication.json'];
 function clearLock(p) {
+  trusted(p.lock, 'lock');
   const entries = readdirSync(p.lock);
-  if (entries.some(entry => !['owner.json', 'activation.json'].includes(entry))) throw new Refusal('lock_contents_unexpected');
-  for (const entry of entries) unlinkSync(join(p.lock, entry));
+  if (entries.some(entry => !LOCK_ENTRIES.includes(entry))) throw new Refusal('lock_contents_unexpected');
+  const kinds = entries.map(entry => {
+    const s = lstatSync(join(p.lock, entry));
+    if (s.isDirectory() && !s.isSymbolicLink() && readdirSync(join(p.lock, entry)).length) throw new Refusal('lock_contents_unexpected');
+    return [entry, s.isDirectory() && !s.isSymbolicLink()];
+  });
+  for (const [entry, dir] of kinds) (dir ? rmdirSync : unlinkSync)(join(p.lock, entry));
   rmdirSync(p.lock);
 }
 
@@ -296,8 +315,10 @@ function verify(p, name, execute) {
   checks.owned = !!c.marker;
   checks.markerConsistent = !!c.marker && c.state !== 'inconsistent_marker';
   checks.manifest = !!c.manifest;
-  if (!execute) Object.assign(checks, { banner: 'not_run', nativeLock: 'not_run' });
-  else if (checks.manifest) Object.assign(checks, probe(target, c.marker.identity));
+  // Probes launch code: only after every applicable static check has passed.
+  const staticOk = checks.realDirectory && checks.owned && checks.markerConsistent && checks.manifest && checks.stagingGone !== false;
+  if (!execute || !staticOk) Object.assign(checks, { banner: 'not_run', nativeLock: 'not_run' });
+  else Object.assign(checks, probe(target, c.marker.identity));
   const ok = checks.realDirectory && checks.owned && checks.markerConsistent && checks.manifest && checks.banner &&
     checks.nativeLock === 'loaded' && checks.stagingGone !== false;
   return { ok, ...(execute ? { dryRun: false } : { dryRun: true }), target: name, state: c.state, checks, markerRunId: c.marker?.runId,
@@ -469,6 +490,27 @@ const dest = {
     const proof = statement(a.values.get('--statement'), 'operator-checks-passed', run, name);
     if (!sameLock(proof, p, lock)) throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'lock' });
     if (lstat(p.receipts)) trusted(p.receipts, 'receipts');
+    const receiptPath = join(p.receipts, `${name}.json`);
+    // A publication intent written by this lock (synced before the receipt)
+    // lets a retry after a lost response replay, or complete, exactly the
+    // committed bytes. Nothing is rewritten, and a later lock never replays.
+    const pubPath = join(p.lock, 'publication.json');
+    if (lstat(pubPath)) {
+      const pub = validPublication(pubPath, lock.owner);
+      if (!pub) throw new Refusal('publication_intent_unreadable');
+      if (pub.target !== name) throw new Refusal('receipt_for_other_target');
+      const committed = JSON.parse(pub.receipt);
+      if (proof.identityHash !== committed.identityHash || proof.manifestSha256 !== committed.manifestSha256)
+        throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'install' });
+      const present = receiptState(p, name);
+      if (present.state === 'none') {
+        if (!a.execute) return { dryRun: true, target: name, plan: ['write the committed receipt bytes'] };
+        writeExclusive(receiptPath, pub.receipt);
+      } else if (!regular(receiptPath, 'receipt') || sha256(readFileSync(receiptPath)) !== sha256(pub.receipt) || present.state !== 'matching')
+        throw new Refusal('receipt_present', { receipt: present.state });
+      if (!a.execute) return { dryRun: true, target: name, replayed: true };
+      return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt: committed, recovery: committed.runId !== run, replayed: true };
+    }
     const state = receiptState(p, name).state;
     if (state !== 'none') throw new Refusal('receipt_present', { receipt: state });
     const checked = verify(p, name, a.execute);
@@ -479,7 +521,9 @@ const dest = {
     const receipt = { receiptVersion: 1, runId: checked.markerRunId, identityHash: checked.identityHash, manifestSha256: checked.manifestSha256, verifiedAt: now() };
     if (!a.execute) return { dryRun: true, target: name, receipt, recovery: checked.markerRunId !== run };
     if (!lstat(p.receipts)) { mkdirSync(p.receipts, { mode: 0o700 }); trusted(p.receipts, 'receipts'); }
-    writeExclusive(join(p.receipts, `${name}.json`), JSON.stringify(receipt));
+    const text = JSON.stringify(receipt);
+    writeExclusive(pubPath, JSON.stringify({ target: name, receipt: text, runId: run, lockId: lock.owner.lockId }), true);
+    writeExclusive(receiptPath, text);
     return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt, recovery: checked.markerRunId !== run };
   },
   unlock(a) {
@@ -606,9 +650,11 @@ const dest = {
   },
   'path-inventory'(a) {
     const entries = [];
-    for (const dir of (process.env.PATH ?? '').split(delimiter).filter(Boolean)) {
+    // An empty PATH component (leading, trailing or doubled separator) means
+    // the current directory, which is what a shell would execute.
+    for (const dir of (process.env.PATH ?? '').split(delimiter)) {
       for (const name of ['session-peer']) {
-        const path = join(dir, name);
+        const path = dir ? join(dir, name) : `.${sep}${name}`;
         if (!lstat(path)) continue;
         let real, digest;
         try { real = realpathSync(path); digest = sha256(readFileSync(real)); } catch { real = null; digest = null; }
@@ -674,9 +720,11 @@ function acquisitionClosed(journal, acquired) {
      (entry.event === 'lock_broken' && entry.closesLockId === acquired.lockId)));
 }
 function since(events, event) { const index = events.findLastIndex(entry => entry.event === event); return index < 0 ? [] : events.slice(index); }
-function switches(journal, target) {
+// Caller state is per (prefix, install name): two prefixes can hold the same name.
+function switches(journal, prefixId, target) {
   let count = 0;
-  for (const entry of journal.entries) if (entry.target === target) count += entry.event === 'callers_switched' ? 1 : entry.event === 'callers_unswitched' ? -1 : 0;
+  for (const entry of journal.entries) if (entry.prefixId === prefixId && entry.target === target)
+    count += entry.event === 'callers_switched' ? 1 : entry.event === 'callers_unswitched' ? -1 : 0;
   return count;
 }
 const op = {
@@ -750,6 +798,8 @@ const op = {
       if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId,
         version: value.version });
       if (event === 'receipt_cleaned') Object.assign(record, { mode: value.mode, receipt: value.receipt, ownership: value.ownership });
+      if (event === 'receipt_published' && locked.some(entry => entry.event === 'receipt_published' && entry.target === value.target))
+        throw new Refusal('receipt_already_recorded');
     } else if (event === 'operator_doctor' || event === 'operator_dry_run') {
       if (!target || !holding) throw new Refusal('lock_not_recorded');
       const verified = locked.findLast(entry => entry.event === 'verified' && entry.target === target);
@@ -782,15 +832,20 @@ const op = {
       Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok', host: value.host, remoteBinAttested: remoteBin,
         prefixId: locked[0].prefixId, lockId: locked[0].lockId });
     } else if (event === 'callers_switched' || event === 'callers_unswitched') {
-      if (!target) throw new Usage('--target required');
+      // Caller configuration is local and not under a destination lock, so the
+      // prefix is explicit and must be one this journal has acquired a lock on.
+      const prefixId = a.values.get('--prefix-id');
+      if (!target || !HEX32.test(prefixId ?? '')) throw new Usage('--target and --prefix-id required');
+      if (!journal.entries.some(entry => entry.event === 'lock_acquired' && entry.prefixId === prefixId)) throw new Refusal('prefix_unknown_to_journal');
       if (event === 'callers_switched') {
-        const published = journal.entries.findLastIndex(entry => entry.event === 'receipt_published' && entry.target === target);
-        if (published < 0) throw new Refusal('switch_before_receipt');
-        const { runId: publisher, lockId: publishedUnder } = journal.entries[published];
-        if (!journal.entries.slice(published).some(entry => entry.event === 'lock_released' && entry.runId === publisher && entry.lockId === publishedUnder))
-          throw new Refusal('switch_before_unlock');
-      } else if (switches(journal, target) < 1) throw new Refusal('no_switch_recorded');
-      record.target = target;
+        const published = journal.entries.findLast(entry => entry.event === 'receipt_published' && entry.prefixId === prefixId && entry.target === target);
+        if (!published) throw new Refusal('switch_before_receipt');
+        // The publishing acquisition must be closed: by its run's unlock or by a
+        // recorded break that closed exactly that (prefix, lockId).
+        const acquired = journal.entries.find(entry => entry.event === 'lock_acquired' && entry.prefixId === prefixId && entry.lockId === published.lockId);
+        if (!acquired || !acquisitionClosed(journal, acquired)) throw new Refusal('switch_before_unlock');
+      } else if (switches(journal, prefixId, target) < 1) throw new Refusal('no_switch_recorded');
+      Object.assign(record, { target, prefixId });
     } else if (event !== 'run_ended') throw new Usage(`unknown --event ${event}`);
     if (!a.execute) return { dryRun: true, record };
     journalAppend(path, journal, record);
@@ -803,10 +858,13 @@ const op = {
     const base = { harness: HARNESS, statementVersion: 1, kind, runId: run, operatorLabel: journal.operatorLabel, journalHead: journal.head, issuedAt: now() };
     const lockId = locked[0]?.lockId ?? null, prefixId = locked[0]?.prefixId ?? null;
     const holding = !!locked.length && !acquisitionClosed(journal, locked[0]);
+    const ended = events.some(entry => entry.event === 'run_ended');
     if (kind === 'run-ended') {
-      if (!events.some(entry => entry.event === 'run_ended')) throw new Refusal('run_not_ended');
+      if (!ended) throw new Refusal('run_not_ended');
       return { ...base, prefixId, lockId };
     }
+    // An ended run issues nothing else, even if its lock is still on disk.
+    if (ended) throw new Refusal('run_ended');
     if (!target || !holding) throw new Refusal('lock_not_recorded');
     if (kind === 'operator-checks-passed') {
       const last = locked.findLastIndex(entry => entry.event === 'verified' && entry.target === target);
@@ -821,13 +879,15 @@ const op = {
     if (kind === 'no-caller') {
       // Positive confirmation: this journal knows the target and records no
       // outstanding caller switch. A missing receipt is not such evidence.
-      if (!journal.entries.some(entry => entry.target === target && ['activated', 'verified', 'receipt_published'].includes(entry.event)))
+      // Scoped to the prefix of the current lock.
+      if (!journal.entries.some(entry => entry.prefixId === prefixId && entry.target === target && ['activated', 'verified', 'receipt_published'].includes(entry.event)))
         throw new Refusal('target_unknown_to_journal');
-      if (switches(journal, target) !== 0) throw new Refusal('configured_for_caller');
+      if (switches(journal, prefixId, target) !== 0) throw new Refusal('configured_for_caller');
       return { ...base, target, prefixId, lockId };
     }
     if (kind === 'receipt-owned') {
-      if (!journal.entries.some(entry => entry.event === 'receipt_published' && entry.target === target)) throw new Refusal('receipt_unknown_to_journal');
+      if (!journal.entries.some(entry => entry.event === 'receipt_published' && entry.prefixId === prefixId && entry.target === target))
+        throw new Refusal('receipt_unknown_to_journal');
       return { ...base, target, prefixId, lockId };
     }
     throw new Usage(`unknown --kind ${kind}`);

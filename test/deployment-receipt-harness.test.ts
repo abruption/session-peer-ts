@@ -18,8 +18,8 @@ const skip = process.platform === 'win32' ? 'POSIX harness; the Windows procedur
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
 const lockIntegrity = JSON.parse(readFileSync(join(repo, 'package-lock.json'), 'utf8')).packages;
 
-function h(args: string[], env: NodeJS.ProcessEnv = process.env): { code: number | null; out: Out } {
-  const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', timeout: 60000, env });
+function h(args: string[], env: NodeJS.ProcessEnv = process.env, cwd?: string): { code: number | null; out: Out } {
+  const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', timeout: 60000, env, cwd });
   return { code: result.status, out: result.stdout.trim() ? JSON.parse(result.stdout) : { stderr: result.stderr } };
 }
 function ok(args: string[]) { const r = h(args); assert.equal(r.out.ok, true, JSON.stringify(r.out)); assert.equal(r.code, 0); return r.out; }
@@ -51,6 +51,7 @@ function world(t: TestContext) {
     `let input='';try{input=require('node:fs').readFileSync(0);}catch{}const r=require('node:child_process').spawnSync('/bin/sh',['-c',a.at(-1)],{input,env:${JSON.stringify(remoteEnv)}});` +
     'process.stdout.write(r.stdout);process.exit(r.status??1);', { mode: 0o700 });
   ok(['dest', 'init-prefix', '--prefix', prefix, '--execute']);
+  const prefixId = JSON.parse(readFileSync(join(prefix, '.session-peer-ts-harness.json'), 'utf8')).prefixId as string;
   const identityFile = join(base, 'identity.json');
   const identity = ok(['dest', 'identity', '--version', JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).version,
     '--package-sha256', sha('prepared-tree fixture'), '--lock-integrity', integrity]);
@@ -85,7 +86,7 @@ function world(t: TestContext) {
   const name = identity.name as string;
   const root = join(prefix, 'data/session-peer-ts');
   const state = () => (ok(['dest', 'inspect', ...P]).installs as Out[]).find(install => install.name === name)?.state;
-  return { base, prefix, root, journal, label, name, P, J, file, record, begin, stage, lock, activate, checks, finish, provision, state, bin, identityFile, launches, tree, remoteBin, cli };
+  return { base, prefix, root, journal, label, name, P, J, file, record, begin, stage, lock, activate, checks, finish, provision, state, bin, identityFile, launches, tree, remoteBin, cli, prefixId };
 }
 
 test('harness refuses non-dedicated prefixes and defaults to dry runs', { skip }, t => {
@@ -126,14 +127,14 @@ test('operator checks precede the receipt, which precedes unlock and caller swit
   w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
   refused(['op', 'statement', ...w.J, '--kind', 'operator-checks-passed', '--run', run, '--target', w.name], 'operator_checks_incomplete');
   refused(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name, '--file', w.file('bad', { ok: false }), '--execute'], 'operator_check_failed');
-  refused(['op', 'record', ...w.J, '--run', run, '--event', 'callers_switched', '--target', w.name, '--execute'], 'switch_before_receipt');
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'callers_switched', '--target', w.name, '--prefix-id', w.prefixId, '--execute'], 'switch_before_receipt');
   const statement = w.checks(run);
   const receipt = ok(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement, '--execute']);
   assert.equal(receipt.receipt.runId, run); assert.equal(receipt.recovery, false);
   w.record(run, 'receipt_published', receipt);
-  refused(['op', 'record', ...w.J, '--run', run, '--event', 'callers_switched', '--target', w.name, '--execute'], 'switch_before_unlock');
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'callers_switched', '--target', w.name, '--prefix-id', w.prefixId, '--execute'], 'switch_before_unlock');
   w.record(run, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', run, '--execute']));
-  w.record(run, 'callers_switched', undefined, w.name);
+  w.record(run, 'callers_switched', undefined, w.name, ['--prefix-id', w.prefixId]);
   assert.equal(w.state(), 'owned_receipted');
   // A second run of the same identity reuses the receipt and changes nothing.
   const again = w.begin(); w.lock(again);
@@ -194,11 +195,11 @@ test('rollback needs the same run or positive journal confirmation that no calle
   w.record(recovery, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', recovery, '--execute']));
   // A configured caller blocks the no-caller statement until it is switched back.
   w.provision();
-  w.record(w.begin(), 'callers_switched', undefined, w.name);
+  w.record(w.begin(), 'callers_switched', undefined, w.name, ['--prefix-id', w.prefixId]);
   const retire = w.begin(); w.lock(retire);
   refused(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', retire, '--target', w.name], 'configured_for_caller');
   refused(['dest', 'retire', ...w.P, '--run', retire, '--name', w.name, '--execute', '--confirm-destructive'], 'configured_for_caller_or_unconfirmed');
-  w.record(retire, 'callers_unswitched', undefined, w.name);
+  w.record(retire, 'callers_unswitched', undefined, w.name, ['--prefix-id', w.prefixId]);
   ok(['dest', 'retire', ...w.P, '--run', retire, '--name', w.name, '--execute', '--confirm-destructive', '--statement',
     w.file('no-caller', ok(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', retire, '--target', w.name]))]);
   assert.equal(existsSync(join(w.root, '.receipts', `${w.name}.json`)), false);
@@ -647,4 +648,155 @@ test('receipt cleanup and retention results are recordable only under the curren
   refused(['op', 'record', ...w.J, '--run', run, '--event', 'retired', '--file', w.file('retire', retired), '--execute'], 'result_invalid');
   // Unknown event names stay usage errors; nothing is accepted loosely.
   assert.equal(h(['op', 'record', ...w.J, '--run', run, '--event', 'retire', '--file', w.file('retire', retired), '--execute']).code, 2);
+});
+
+// Full publication on an extra prefix with the same identity (same install name).
+function publishOn(w: ReturnType<typeof world>, prefix: string) {
+  const P = ['--prefix', prefix];
+  ok(['dest', 'init-prefix', ...P, '--execute']);
+  const prefixId = JSON.parse(readFileSync(join(prefix, '.session-peer-ts-harness.json'), 'utf8')).prefixId as string;
+  const run = w.begin();
+  w.record(run, 'lock_acquired', ok(['dest', 'lock', ...P, '--run', run, '--operator-label', w.label, '--execute']));
+  const staging = ok(['dest', 'stage', ...P, '--run', run, '--identity', w.identityFile, '--from-tree', w.tree, '--execute']).staging;
+  w.record(run, 'activated', ok(['dest', 'activate', ...P, '--run', run, '--staging', staging, '--execute']));
+  w.record(run, 'verified', ok(['dest', 'verify', ...P, '--name', w.name, '--run', run, '--execute']));
+  const bin = ['--remote-bin', join(prefix, 'data/session-peer-ts', w.name, 'session-peer')];
+  w.record(run, 'operator_doctor', w.cli(['doctor']), w.name, bin);
+  w.record(run, 'operator_dry_run', w.cli(['send', '--to', '999999', '--message', 'synthetic deployment check', '--dry-run']), w.name, bin);
+  const statement = w.file('statement', ok(['op', 'statement', ...w.J, '--kind', 'operator-checks-passed', '--run', run, '--target', w.name]));
+  w.record(run, 'receipt_published', ok(['dest', 'receipt', ...P, '--run', run, '--name', w.name, '--statement', statement, '--execute']));
+  w.record(run, 'lock_released', ok(['dest', 'unlock', ...P, '--run', run, '--execute']));
+  return prefixId;
+}
+
+test('caller switches and no-caller/receipt-owned statements are bound to the prefix, not the name alone', { skip }, t => {
+  const w = world(t);
+  w.provision();
+  const second = publishOn(w, join(w.base, 'prefix2'));
+  const switcher = w.begin();
+  const caller = (event: string, prefixId: string) => h(['op', 'record', ...w.J, '--run', switcher, '--event', event, '--target', w.name, '--prefix-id', prefixId, '--execute']).out;
+  assert.equal(caller('callers_switched', w.prefixId).ok, true);
+  // An unswitch on the other prefix cannot cancel this prefix's switch.
+  assert.equal(caller('callers_unswitched', second).error, 'no_switch_recorded');
+  assert.equal(h(['op', 'record', ...w.J, '--run', switcher, '--event', 'callers_switched', '--target', w.name, '--execute']).code, 2);
+  assert.equal(caller('callers_switched', 'f'.repeat(32)).error, 'prefix_unknown_to_journal');
+  // A prefix whose lock is recorded but where this name was never published.
+  const third = join(w.base, 'prefix3');
+  ok(['dest', 'init-prefix', '--prefix', third, '--execute']);
+  const thirdId = JSON.parse(readFileSync(join(third, '.session-peer-ts-harness.json'), 'utf8')).prefixId;
+  const holder = w.begin();
+  w.record(holder, 'lock_acquired', ok(['dest', 'lock', '--prefix', third, '--run', holder, '--operator-label', w.label, '--execute']));
+  assert.equal(caller('callers_switched', thirdId).error, 'switch_before_receipt');
+  refused(['op', 'statement', ...w.J, '--kind', 'receipt-owned', '--run', holder, '--target', w.name], 'receipt_unknown_to_journal');
+  refused(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', holder, '--target', w.name], 'target_unknown_to_journal');
+  // Under a lock on the first prefix the outstanding switch blocks no-caller; on the second it does not.
+  const first = w.begin(); w.lock(first);
+  refused(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', first, '--target', w.name], 'configured_for_caller');
+  const other = w.begin();
+  w.record(other, 'lock_acquired', ok(['dest', 'lock', '--prefix', join(w.base, 'prefix2'), '--run', other, '--operator-label', w.label, '--execute']));
+  assert.equal(ok(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', other, '--target', w.name]).prefixId, second);
+});
+
+test('verify probes nothing unless every static check passes', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run);
+  const staging = w.stage(run);
+  w.activate(run, staging);
+  // The staging path named by the intent reappears: static check stagingGone fails.
+  mkdirSync(join(w.root, staging), { mode: 0o700 });
+  const before = w.launches();
+  const failed = h(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']).out;
+  assert.equal(failed.ok, false); assert.equal(failed.checks.stagingGone, false); assert.equal(failed.checks.banner, 'not_run');
+  assert.equal(w.launches(), before);
+  rmSync(join(w.root, staging), { recursive: true });
+  assert.equal(ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']).checks.banner, true);
+  assert.ok(w.launches() > before);
+});
+
+test('an explicit override removes only known lock metadata entries, without following links', { skip }, t => {
+  const w = world(t);
+  const lock = join(w.root, '.activate.lock');
+  const outside = join(w.base, 'outside.json'); writeFileSync(outside, 'keep');
+  const override = ['dest', 'break-lock', ...w.P, '--unowned', '--lock-name', '.activate.lock', '--declare-run-ended', '--execute', '--confirm-destructive'];
+  for (const make of [() => mkdirSync(join(lock, 'owner.json')), () => symlinkSync(outside, join(lock, 'owner.json')),
+    () => { writeFileSync(join(lock, 'owner.json'), 'x'); mkdirSync(join(lock, 'activation.json')); }, () => symlinkSync(outside, join(lock, 'activation.json'))]) {
+    mkdirSync(lock, { mode: 0o700 }); make();
+    assert.equal(ok(override).override, true);
+    assert.equal(existsSync(lock), false); assert.equal(readFileSync(outside, 'utf8'), 'keep');
+  }
+  for (const make of [() => { mkdirSync(join(lock, 'owner.json')); writeFileSync(join(lock, 'owner.json', 'inner'), 'x'); }, () => writeFileSync(join(lock, 'extra'), 'x')]) {
+    mkdirSync(lock, { mode: 0o700 }); make();
+    refused(override, 'lock_contents_unexpected');
+    assert.equal(existsSync(lock), true);
+    rmSync(lock, { recursive: true });
+  }
+});
+
+test('a receipt whose response was lost is replayed for the same lock without rewriting it', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const statement = w.checks(run);
+  const args = ['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement, '--execute'];
+  ok(args); // The response is lost: nothing is recorded.
+  const receiptPath = join(w.root, '.receipts', `${w.name}.json`);
+  const bytes = readFileSync(receiptPath, 'utf8');
+  const replay = ok(args);
+  assert.equal(replay.replayed, true); assert.equal(readFileSync(receiptPath, 'utf8'), bytes);
+  assert.equal(replay.receipt.verifiedAt, JSON.parse(bytes).verifiedAt);
+  // A write lost between the publication intent and the receipt is completed with the same bytes.
+  rmSync(receiptPath);
+  assert.equal(ok(args).replayed, true); assert.equal(readFileSync(receiptPath, 'utf8'), bytes);
+  w.record(run, 'receipt_published', replay);
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'receipt_published', '--file', w.file('receipt', replay), '--execute'], 'receipt_already_recorded');
+  // Changed receipt bytes are not replayed.
+  writeFileSync(receiptPath, JSON.stringify({ ...JSON.parse(bytes), verifiedAt: 'x' }));
+  refused(args, 'receipt_present');
+  writeFileSync(receiptPath, bytes);
+  w.record(run, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', run, '--execute']));
+  w.record(run, 'callers_switched', undefined, w.name, ['--prefix-id', w.prefixId]);
+  // A later lock has no publication of its own: the same proof is stale and nothing is replayed.
+  w.lock(run);
+  refused(args, 'statement_mismatch');
+});
+
+test('after run_ended only a run-ended statement is issued', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  w.checks(run);
+  w.record(run, 'run_ended');
+  for (const kind of ['operator-checks-passed', 'no-caller', 'receipt-owned'])
+    refused(['op', 'statement', ...w.J, '--kind', kind, '--run', run, '--target', w.name], 'run_ended');
+  assert.equal(ok(['op', 'statement', ...w.J, '--kind', 'run-ended', '--run', run]).kind, 'run-ended');
+});
+
+test('callers switch after the publishing lock was closed by its exact recorded break', { skip }, t => {
+  const w = world(t);
+  const publisher = w.begin(); w.lock(publisher); w.activate(publisher);
+  const statement = w.checks(publisher);
+  w.record(publisher, 'receipt_published', ok(['dest', 'receipt', ...w.P, '--run', publisher, '--name', w.name, '--statement', statement, '--execute']));
+  w.record(publisher, 'run_ended');
+  const recovery = w.begin();
+  const switching = () => h(['op', 'record', ...w.J, '--run', recovery, '--event', 'callers_switched', '--target', w.name, '--prefix-id', w.prefixId, '--execute']).out;
+  // A break on another prefix closes nothing.
+  const other = join(w.base, 'prefix2');
+  ok(['dest', 'init-prefix', '--prefix', other, '--execute']);
+  const elsewhere = w.begin();
+  ok(['dest', 'lock', '--prefix', other, '--run', elsewhere, '--operator-label', w.label, '--execute']);
+  w.record(recovery, 'lock_broken', ok(['dest', 'break-lock', '--prefix', other, '--unowned', '--lock-name', '.activate.lock', '--declare-run-ended', '--execute', '--confirm-destructive']));
+  assert.equal(switching().error, 'switch_before_unlock');
+  const ended = w.file('ended', ok(['op', 'statement', ...w.J, '--kind', 'run-ended', '--run', publisher]));
+  w.record(recovery, 'lock_broken', ok(['dest', 'break-lock', ...w.P, '--statement', ended, '--execute', '--confirm-destructive']));
+  assert.equal(switching().ok, true);
+});
+
+test('empty PATH components inventory the current directory', { skip }, t => {
+  const w = world(t);
+  const cwd = join(w.base, 'cwd'); mkdirSync(cwd, { mode: 0o700 });
+  writeFileSync(join(cwd, 'session-peer'), '#!/bin/sh\necho other\n', { mode: 0o700 });
+  const digest = sha(readFileSync(join(cwd, 'session-peer')));
+  for (const path of [':/usr/bin', '/usr/bin:', '/usr/bin::/bin']) {
+    const entries = h(['dest', 'path-inventory'], { ...process.env, PATH: path }, cwd).out.entries as Out[];
+    const local = entries.filter(entry => entry.path === './session-peer');
+    assert.equal(local.length, 1, path); assert.equal(local[0]!.sha256, digest); assert.equal(local[0]!.realpath, join(cwd, 'session-peer'));
+  }
 });

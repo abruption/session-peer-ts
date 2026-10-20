@@ -845,8 +845,18 @@ destination-result event such as `retire` is not recordable. The new cleanup
 and retirement records are audit entries; they do not invalidate earlier
 receipt records or change switch/statement eligibility. `op record` refuses a result from another run, another prefix or an earlier lock,
 including an earlier lock of the same run acquired at the same timestamp.
-`callers_switched` needs the publishing run's unlock under the same lock that
-published the receipt. The journal records each acquisition (prefix ID and
+Caller state is keyed by prefix and install name, because two dedicated
+prefixes can hold the same identity-derived name. `callers_switched` and
+`callers_unswitched` take an explicit `--prefix-id`, which must be a prefix
+this journal has acquired a lock on. A switch on one prefix is never
+cancelled by an unswitch on another. `no-caller` and `receipt-owned`
+statements are scoped to the prefix of the run's current lock.
+`callers_switched` needs a receipt published on that prefix. It also needs
+the publishing acquisition to be closed, either by its run's unlock or by a
+recorded break that closed exactly that prefix and `lockId`. Breaks of other
+prefixes, stale breaks and unknown closures do not count. Once a run has
+ended, it gets only a `run-ended` statement, even while its lock is still on
+disk. The journal records each acquisition (prefix ID and
 `lockId`) exactly once. Re-recording one, whether replayed after it closed or
 repeated while current, is refused (`acquisition_replayed`), never
 deduplicated. An acquisition stays current until this run's unlock of the
@@ -902,6 +912,29 @@ rename. `op record --event callers_switched` refuses until the receipt is
 recorded and the publishing run has released its lock. Statements are JSON
 files that the operator carries to the destination. Like the marker, they are
 consistency checks between cooperating same-user steps, not authentication.
+
+Further harness rules:
+
+- **Receipt publication intent.** `dest receipt` writes and syncs a
+  publication intent inside the lock, holding the exact receipt bytes, before
+  writing the receipt. If the response is lost, rerunning the same command
+  under the same lock and proof does one of two things:
+  - it replays the committed receipt (`replayed:true`), keeping the receipt
+    bytes and `verifiedAt` unchanged;
+  - if the receipt write itself was lost, it writes those same bytes.
+
+  A changed or corrupt receipt, a stale proof, another target and any later
+  lock all fail closed. `op record` accepts only one `receipt_published` per
+  target under a lock.
+- **Probe gating.** `dest verify --execute` runs the launcher and native
+  probes only after every static check passes: a real owned directory, a
+  consistent marker, the manifest and, after an activation, the staging gone.
+- **Lock overrides.** The explicit override removes only the lock's known
+  metadata entries. Each must be a file, a symlink (unlinked, never followed)
+  or an empty directory; anything else is refused before any removal.
+- **PATH inventory.** `dest path-inventory` treats an empty `PATH` component
+  (leading, trailing or doubled separator) as the current directory and
+  inventories `./session-peer` there.
 
 | Rule | Harness command and outcome |
 | --- | --- |
