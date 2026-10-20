@@ -1,38 +1,66 @@
 # Validation record — updated 2026-10-18 KST
 
 
-## Unreleased Linux observation machinery — #130, 2026-10-20 KST
+## Unreleased Linux arm64 observation profile — #130, 2026-10-20 KST
 
-Source-only follow-up on the published 0.4.0 runtime; no version change. Native
-profile selection is now one exact `(process.platform-process.arch, native
-version, source commit, platformOs, storage binding, owner inspection,
-artifact)` table. Production still contains only the two historical
-darwin-arm64 rows (0.160.1, 0.162.1); there is no version range, libc/arch
-fallback or cross-platform inheritance, and every Linux tuple is unsupported.
-A new row must pin its extracted executable SHA-256 and target triple.
+Source-only follow-up on the published 0.4.0 runtime; no version change.
+Native selection is one exact `(process.platform-process.arch, native version,
+source commit, platformOs, storage binding, owner inspection, artifact)` table
+with no version range, libc/arch fallback or cross-platform inheritance. Rows:
+the two historical darwin-arm64 rows and one new **linux-arm64 / Codex 0.162.1
+/ `092d3acd…`** row pinned to the upstream `aarch64-unknown-linux-musl`
+executable. linux-x64, other Linux versions, gnu builds and SSH-remote
+observation remain unsupported.
 
-Linux mechanics exist for a future evidence-backed row but qualify nothing:
-owned app-server storage binding from that child's `/proc/<pid>` only (direct
-child, own process group, all four UIDs, `/proc/<pid>/exe` equal to the selected
-executable inode, unchanged start time across the descriptor walk, exact
-canonical state/queue paths with deleted descriptors refused); writer owner
-evidence requiring `/proc/locks` to name the lsof owner as the sole granted
-exclusive `flock` holder (Codex `File::try_lock`) with stable start time/UIDs,
-without changing the lsof/ps generation; ELF/Mach-O artifact digests within the
-original deadline. Retained qualifications keep their original platform, and a
-foreign-platform record terminates `unsupported` before any probe.
+Linux mechanics: owned app-server storage binding reads only that child's
+`/proc/<pid>` (direct child, own group, all UIDs, exe inode, stable start time,
+exact canonical paths, deleted descriptors refused); writer owner evidence
+also requires `/proc/locks` to name the lsof owner as the sole exclusive
+`flock` holder (Codex `File::try_lock`) without changing the generation; the
+executable digest is checked within the original deadline.
 
-Local checks on Darwin 27.0 arm64, Node 24.16: `npm run build`, `npm run
-test:types` and the full `npm test` (with the pinned Python reference extracted
-read-only) passed 397, failed 0, skipped 10, including the new
-`test/linux-observation.test.ts` (13 passed, 5 Linux-only skipped). Fakes cover
-procfs parsing, stale/changing/wrong owners, lock-table ambiguity, schema/OS
-drift and table validation. A compiled stand-in (not Codex) exercised exact
-artifact pinning with Darwin lsof binding. The Linux-only native cases (real
-procfs child/flock, compiled procfs binding, CLI refusal/downgrade and fake-SSH
-complete/partial results) were unrun locally and run only in Linux CI. No real
-Codex, model, user session, remote host or live delivery was used; the live
-approval request for any Linux profile is separate.
+Evidence on a Linux arm64 test host (kernel 7.0 aarch64, Node 24.18.0, ext4),
+recorded in `test/fixtures/linux-observation-native-evidence.json`:
+
+- Artifact: the user-owned standalone binary's SHA-256 `071cbe8d…cabe5` equals
+  the executable extracted from upstream `rust-v0.162.1`
+  `codex-aarch64-unknown-linux-musl.tar.gz` (`bf3ca271…`) and `.zst`.
+- Schema: `codex app-server generate-json-schema --experimental` with empty
+  isolated HOME/CODEX_HOME produced queue/add params/response, item/started
+  and turn/completed hashes and an 84-method notification set identical to
+  the darwin 0.162.1 evidence.
+- Live injection, separately user-approved, in one new dedicated TUI thread
+  started by absolute path with `--sandbox read-only --ask-for-approval never`
+  (trust via a `-c` override; `config.toml` unchanged). No other Codex writer
+  was live. The TUI showed an "Update available" menu with "Update now"
+  preselected; it was dismissed with Esc and nothing was updated.
+- A new thread is not saved (no `threads` row or history projection) until its
+  first turn; a dry-run first refused `thread_not_yet_persisted`. One synthetic
+  bootstrap prompt was therefore typed (turn 1). Whether the earlier Darwin
+  dedicated threads had such a prior turn is **not recorded** in their evidence.
+- The first send was refused **before effect** (`evidence_unsupported`,
+  `submitted=false`): the structural capability check used a version-only
+  lookup that became ambiguous once 0.162.1 had two platform rows. It was fixed
+  (regression test fails before, passes after) and exactly one approved resend
+  of the same synthetic probe followed.
+- That send exited 0 with `status=queued`, `submitted=true`,
+  `consumptionConfirmed=false`, state `delivered`, wait satisfied: one
+  matching client-ID row (native item ID different), linked turn, writer
+  generation unchanged and kernel flock holder equal to the lsof owner.
+  `handoff status` and an independent `handoff wait` exited 0. ACK remained
+  `not_requested`; the model's reply was not answered or treated as ACK.
+  Two model turns ran in total.
+- Cleanup: only the owned tmux session was killed; the codex PID and its
+  `/proc/locks` entries were gone, and the private prefix and ledger were
+  removed. The native thread record and Codex's own empty lock files remain;
+  Codex removed one earlier stale empty lock file itself at startup.
+
+Tests: on Darwin 27.0 arm64 / Node 24.16 the full `npm test` (with the pinned
+Python reference) passed 399, failed 0, skipped 8 (5 Windows-only, 3
+Linux-only). On the Linux arm64 test host the full suite at the final tree
+passed 374, failed 0, skipped 28 (Darwin-qualified and Windows-only), with
+every Linux-only native case passing. Queued/delivered remain distinct from
+receipt ACK or work completion.
 
 ## Public 0.4.0 — 2026-10-18 KST
 

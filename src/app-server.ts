@@ -40,6 +40,17 @@ export const APP_SERVER_QUEUE_EVIDENCE = Object.freeze([
     itemStartedSha256: '692c5876f44a4c12a9b9211912860ceddb65d34497ab4fe9aa46cbebe1a63166',
     turnCompletedSha256: '69413578ec3ecd02691424bdeb9d640c7244b4ca4c5c3ef26f69a2efe7c37db8',
   }),
+  // Generated on the Linux arm64 host from the exact pinned musl artifact with
+  // an isolated CODEX_HOME; byte-identical to the darwin-arm64 0.162.1 schemas.
+  Object.freeze({
+    version: '0.162.1', inspectedPlatform: 'linux-arm64',
+    officialSourceCommit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
+    scope: 'generated_schema_only',
+    queueAddParamsSha256: '60f25b7d3e3357c215bef9d2fe7047200f545e030dca9e00527ac0620cd0c88f',
+    queueAddResponseSha256: 'c11b9772788427b19c9f9decf0765e2b41cbdead1aa9c3d39f42fdd70b339314',
+    itemStartedSha256: '692c5876f44a4c12a9b9211912860ceddb65d34497ab4fe9aa46cbebe1a63166',
+    turnCompletedSha256: '69413578ec3ecd02691424bdeb9d640c7244b4ca4c5c3ef26f69a2efe7c37db8',
+  }),
 ]);
 // Exact (version, platform) schema evidence; another platform's row is never inherited.
 function queueEvidence(version: string, platform: string) {

@@ -154,7 +154,10 @@ async function inspect(scope: MetadataScope, mode: 'capability' | 'observe', bud
 }
 export async function metadataCapability(scope: MetadataScope, version: string, budget: MetadataBudget | undefined,
   verifyOwner: VerifyMetadataOwner): Promise<MetadataCapability> {
-  if (!metadataQualification(version)) return { supported: false, reason: 'metadata_version_unsupported' };
+  // Structural store check: any exact row's version. Platform selection is the
+  // caller's exact metadataQualification(version, platform), never inferred here.
+  const exact = typeof version === 'string' && version.startsWith('codex-cli ') ? version.slice('codex-cli '.length) : version;
+  if (!metadataQualifications.some(row => row.version === exact)) return { supported: false, reason: 'metadata_version_unsupported' };
   const result = await inspect(scope, 'capability', budget, verifyOwner);
   return { supported: result.supported, ...(result.reason === undefined ? {} : { reason: result.reason }) };
 }

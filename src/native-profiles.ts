@@ -3,8 +3,8 @@
 // Lookup is by exact `${process.platform}-${process.arch}` and exact version:
 // there is no SemVer range, no libc/arch fallback and no cross-platform
 // inheritance. A schema, matching version, ordinary queue result or fixture on
-// another platform never adds a row. Linux rows are intentionally absent until
-// a dedicated live client-ID injection test pins one (see #130).
+// another platform never adds a row; each Linux row requires a dedicated live
+// client-ID injection test on that exact tuple (see #130).
 export type NativeProfile = Readonly<{
   platform: string; version: string; commit: string;
   // initialize.platformOs reported by the queue process (std::env::consts::OS).
@@ -49,6 +49,12 @@ export const NATIVE_PROFILES: readonly NativeProfile[] = validateNativeProfiles(
     platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', artifact: null },
   { platform: 'darwin-arm64', version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
     platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', artifact: null },
+  // Linux arm64 test host, 2026-10-20: upstream rust-v0.162.1 musl artifact
+  // (extracted digest below), Linux-generated schema/opt-out evidence and one
+  // dedicated-thread client-ID injection. See linux-observation-native-evidence.json.
+  { platform: 'linux-arm64', version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
+    platformOs: 'linux', storageBinding: 'linux_procfs', ownerInspection: 'lsof_ps_procfs_locks',
+    artifact: { target: 'aarch64-unknown-linux-musl', sha256: '071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5' } },
 ]);
 export const currentPlatform = () => `${process.platform}-${process.arch}`;
 export function selectNativeProfile(query: NativeProfileQuery, table: readonly NativeProfile[] = NATIVE_PROFILES): NativeProfile | undefined {

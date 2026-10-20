@@ -17,7 +17,7 @@
 
 **文档和源码版本：0.4.0。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](VALIDATION.md)，发布流程见 [RELEASING.md](RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 0.4.0 会拒绝彼此的 SSH 预检。
 
-**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。
+**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 未发布源码（不含于 0.4.0）新增一个精确的 Linux 配置：Linux arm64 上的 Codex 0.162.1，使用固定的上游 `aarch64-unknown-linux-musl` 可执行文件；其他 Linux 架构和版本仍不支持。
 
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。

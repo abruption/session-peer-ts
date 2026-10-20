@@ -1180,15 +1180,17 @@ Queue and observation selection use one exact
 `(host platform-arch, native version, source commit)` row with its
 `initialize.platformOs`, storage-binding and owner-inspection method and a
 pinned executable artifact (historical darwin-arm64 rows predate artifact
-pinning). Production rows remain darwin-arm64 Codex 0.160.1/0.162.1 only.
-Linux procfs storage binding, `/proc/locks` writer-owner cross-checks and
-artifact digests are implemented and fixture/CI tested, but no Linux row is
-qualified: a Linux host with a matching version refuses required delivery
-before effect and chooses the ordinary queue for best-effort observation
-before any app-server attempt. Upstream Linux artifacts are musl only
-(`codex-{aarch64,x86_64}-unknown-linux-musl`); a row needs a dedicated live
-client-ID injection test per claimed profile. Historical KR/US ordinary queue
-results are not injection evidence.
+pinning). Rows: darwin-arm64 Codex 0.160.1/0.162.1, and **linux-arm64 Codex
+0.162.1** with the upstream `codex-aarch64-unknown-linux-musl` executable
+SHA-256 `071cbe8d…cabe5`. The Linux row uses owned-child procfs storage
+binding and a `/proc/locks` writer-owner cross-check; its Linux-generated
+schema/notification evidence equals the darwin 0.162.1 hashes, and one
+dedicated-thread client-ID injection was observed on a Linux arm64 test host
+(`test/fixtures/linux-observation-native-evidence.json`). linux-x64, other
+versions, gnu builds and SSH-remote observation remain unsupported; a Linux
+host without an exact row refuses required delivery before effect and uses
+the ordinary queue for best-effort observation. Historical KR/US ordinary
+queue results are not injection evidence.
 
 ## 0.4.0 candidate release scope
 

@@ -17,7 +17,7 @@
 
 **文書・ソースのバージョン: 0.4.0。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と 0.4.0 は互いの SSH 事前確認を拒否します。
 
-**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。
+**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 未リリースのソース（0.4.0 には含まれない）は厳密な Linux プロファイルを 1 つ追加します: Linux arm64 の Codex 0.162.1 と固定された上流 `aarch64-unknown-linux-musl` 実行ファイルです。その他の Linux アーキテクチャ・バージョンは未対応です。
 
 **実行中の Claude Code・Codex セッションを見つけ、ローカルまたは SSH でメッセージを送信します。**
 Python 不要の Node.js クライアントです。パッケージ名とコマンド名は `session-peer` です。

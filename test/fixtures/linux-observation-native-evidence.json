@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "nativeProfile": {
+    "platform": "linux-arm64",
+    "version": "0.162.1",
+    "commit": "092d3acd6bec3e3a14bdc7e7a2810ab628ab759d",
+    "platformOs": "linux",
+    "storageBinding": "linux_procfs",
+    "ownerInspection": "lsof_ps_procfs_locks",
+    "artifact": {
+      "target": "aarch64-unknown-linux-musl",
+      "sha256": "071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5"
+    }
+  },
+  "date": "2026-10-20",
+  "host": "Linux arm64 test host (kernel 7.0 aarch64, Node 24.18.0, ext4); identifiers omitted",
+  "upstreamArtifact": {
+    "release": "rust-v0.162.1",
+    "archive": "codex-aarch64-unknown-linux-musl.tar.gz",
+    "archiveSha256": "bf3ca2719f1143b1440fbd85c149379e696c782c50ad7991f8bfcec60b2600c1",
+    "zstSha256": "ed893c7b0eb337621590c433aa2ca90b7a7f66f189530bb23b1c52814c24b677",
+    "extractedBinarySha256": "071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5",
+    "hostBinarySha256Equal": true,
+    "hostBinaryFormat": "static ELF aarch64, user-owned standalone install, unmodified"
+  },
+  "generatedSchema": {
+    "command": "codex app-server generate-json-schema --experimental --out <isolated directory>",
+    "isolation": "env -i with dedicated empty HOME and CODEX_HOME in a private prefix; both remained empty",
+    "queueAddParamsSha256": "60f25b7d3e3357c215bef9d2fe7047200f545e030dca9e00527ac0620cd0c88f",
+    "queueAddResponseSha256": "c11b9772788427b19c9f9decf0765e2b41cbdead1aa9c3d39f42fdd70b339314",
+    "itemStartedSha256": "692c5876f44a4c12a9b9211912860ceddb65d34497ab4fe9aa46cbebe1a63166",
+    "turnCompletedSha256": "69413578ec3ecd02691424bdeb9d640c7244b4ca4c5c3ef26f69a2efe7c37db8",
+    "serverNotificationSha256": "071ecc89ba71ce215e1ac01f6e05be509eafa533b2ba6fac43f4c05330305a83",
+    "notificationMethods": 84,
+    "notificationSetEqualsDarwin0162": true
+  },
+  "liveFixture": {
+    "existingWritersBefore": 0,
+    "newDedicatedThread": true,
+    "tuiFlags": "--sandbox read-only --ask-for-approval never; trust via -c override; config.toml unchanged",
+    "updateMenuSkippedWithEscape": true,
+    "bootstrapTurns": 1,
+    "bootstrapReason": "a new thread is not saved (no threads row, no history projection) until its first turn; the send refused thread_not_yet_persisted before bootstrap",
+    "preEffectRefusalFoundByLiveRun": {
+      "error": "evidence_unsupported",
+      "submitted": false,
+      "cause": "structural metadataCapability used a version-only lookup that became ambiguous once 0.162.1 had two platform rows",
+      "fixedBeforeResend": true
+    },
+    "queueAttemptsWithEffect": 1,
+    "positiveNativeReceipt": true,
+    "matchingClientIdRows": 1,
+    "nativeItemIdEqualsClientId": false,
+    "kernelFlockHolderEqualsLsofOwner": true,
+    "generationUnchanged": true,
+    "injectionObserved": true,
+    "linkedTurnStatusAtObservation": "running",
+    "linkedTurnStatusLater": "completed",
+    "independentWaitSatisfied": true,
+    "statusExit": 0,
+    "acknowledged": false,
+    "modelTurnsTotal": 2,
+    "cleanup": "owned tmux session killed, codex pid absent, no /proc/locks entries, prefix and ledger removed; native thread record and Codex's own empty lock file retained",
+    "bodyOrTranscriptReturned": false
+  },
+  "limits": [
+    "One controlled Linux arm64 native test qualifies only this exact row; linux-x64, other versions and gnu builds remain unsupported.",
+    "Existing user authentication was used by the native TUI without reading, copying or recording credentials.",
+    "Queue receipt, turn completion and visible reply are not ACK.",
+    "Observation projects metadata inside SQLite from the body-bearing item_json cell; it does not promise that body bytes are never accessed internally by SQLite.",
+    "SSH-remote native observation was not live-tested."
+  ]
+}
