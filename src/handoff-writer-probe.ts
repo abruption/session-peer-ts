@@ -7,6 +7,13 @@
 // `--procfs-owner` (Linux profile rows only) adds kernel evidence without
 // changing the generation: /proc/locks must name exactly the lsof owner as
 // the single exclusive flock holder, with the same start time/UIDs per sample.
+// Guarantee boundary: the retained generation still binds only the lock file
+// fingerprint, lsof pid/uid/command and ps lstart (1-second resolution). The
+// kernel tick start time is compared within one probe invocation, not against
+// the original send; the writer's executable bytes are not pinned (only the
+// owned queue child's are). Retaining a separate Linux kernel identity needs a
+// ledger-schema field and is a follow-up.
+
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';

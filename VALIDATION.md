@@ -55,12 +55,40 @@ recorded in `test/fixtures/linux-observation-native-evidence.json`:
   removed. The native thread record and Codex's own empty lock files remain;
   Codex removed one earlier stale empty lock file itself at startup.
 
-Tests: on Darwin 27.0 arm64 / Node 24.16 the full `npm test` (with the pinned
-Python reference) passed 399, failed 0, skipped 8 (5 Windows-only, 3
-Linux-only). On the Linux arm64 test host the full suite at the final tree
-passed 374, failed 0, skipped 28 (Darwin-qualified and Windows-only), with
-every Linux-only native case passing. Queued/delivered remain distinct from
-receipt ACK or work completion.
+Review follow-ups (same date):
+
+- SSH destination requests cannot select a Linux row (`sshDestination: false`);
+  a qualified linux-arm64 destination refuses required delivery before effect
+  with zero queue calls and keeps the best-effort ordinary send. Darwin keeps
+  its 0.4.0 destination behaviour. A Linux-host regression showed the old code
+  entering the row path over SSH and the fixed code refusing.
+- Executable digest and procfs binding now run in an owned worker: the
+  worker's group is killed at the original remaining budget and the caller
+  refuses at that deadline even if a worker is still blocked in
+  uninterruptible kernel I/O (which cannot be reaped until the kernel
+  returns). This is a refusal-at-deadline guarantee, not a bound on how long a
+  blocked kernel call takes. The `--procfs-owner` reads run inside the already
+  deadline-bounded writer-probe process. Canonical-path `lstat` checks remain
+  in the caller, as on Darwin.
+- Retained identity: the generation still binds the lock fingerprint, lsof
+  pid/uid/command and `ps lstart` (1-second resolution). The kernel tick start
+  time and flock holder are checked within each probe invocation, not against
+  the original send, and the TUI writer's executable bytes are not pinned
+  (only the owned queue child's artifact is). PID reuse within the same second
+  by another `codex` that re-acquires the unchanged lock inode would not be
+  detected. A retained Linux kernel identity needs a ledger-schema field and
+  is a follow-up; generation compatibility was kept.
+- External review inputs received summaries of the native send/status/wait
+  JSON and generation values, not the raw records; the root review audited the
+  raw private records separately.
+
+Tests (after the review follow-ups): on Darwin 27.0 arm64 / Node 24.16 the
+full `npm test` (with the pinned Python reference) passed 400, failed 0,
+skipped 9 (5 Windows-only, 4 Linux-host-only). On the Linux arm64 test host
+it passed 376, failed 0, skipped 28 (Darwin-qualified and Windows-only), with
+every Linux-only native case passing; that rerun used only fixtures in a
+private prefix, with no credentials, model turn or install change.
+Queued/delivered remain distinct from receipt ACK or work completion.
 
 ## Public 0.4.0 — 2026-10-18 KST
 

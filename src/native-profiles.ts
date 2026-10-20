@@ -13,6 +13,10 @@ export type NativeProfile = Readonly<{
   storageBinding: 'darwin_lsof' | 'linux_procfs';
   // Writer owner evidence required in addition to the lsof/ps generation.
   ownerInspection: 'lsof_ps' | 'lsof_ps_procfs_locks';
+  // Whether an SSH destination request may select this row. Darwin keeps the
+  // existing 0.4.0 destination behaviour; Linux rows have no SSH-remote
+  // observation evidence and stay fail-closed for wire requests.
+  sshDestination: boolean;
   // Exact extracted native executable. Historical Darwin rows predate artifact
   // pinning; every newly added row must pin its executable bytes.
   artifact: Readonly<{ target: string; sha256: string }> | null;
@@ -31,12 +35,13 @@ export function validateNativeProfiles(table: readonly NativeProfile[]): readonl
   const keys = new Set<string>();
   for (const row of table) {
     if (!row || typeof row !== 'object' || Object.keys(row).sort().join() !==
-        'artifact,commit,ownerInspection,platform,platformOs,storageBinding,version') throw new Error('invalid native profile');
+        'artifact,commit,ownerInspection,platform,platformOs,sshDestination,storageBinding,version') throw new Error('invalid native profile');
     const [os, arch, extra] = row.platform.split('-'), kind = kinds[os as keyof typeof kinds];
     const target = kind?.targets[arch as keyof typeof kind.targets] as string | undefined;
     if (!kind || !target || extra !== undefined || !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(row.version) ||
         !/^[0-9a-f]{40}$/.test(row.commit) || row.platformOs !== kind.platformOs || row.storageBinding !== kind.storageBinding ||
-        row.ownerInspection !== kind.ownerInspection) throw new Error('invalid native profile');
+        row.ownerInspection !== kind.ownerInspection || typeof row.sshDestination !== 'boolean' ||
+        (os === 'linux' && row.sshDestination)) throw new Error('invalid native profile');
     const key = row.platform + '/' + row.version;
     if (keys.has(key)) throw new Error('ambiguous native profile'); keys.add(key);
     if (row.artifact === null ? !historical.has(key) : Object.keys(row.artifact).sort().join() !== 'sha256,target' ||
@@ -46,14 +51,14 @@ export function validateNativeProfiles(table: readonly NativeProfile[]): readonl
 }
 export const NATIVE_PROFILES: readonly NativeProfile[] = validateNativeProfiles([
   { platform: 'darwin-arm64', version: '0.160.1', commit: 'd27764b82f7118f674371e6d6e76271d9d606edb',
-    platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', artifact: null },
+    platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', sshDestination: true, artifact: null },
   { platform: 'darwin-arm64', version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
-    platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', artifact: null },
+    platformOs: 'macos', storageBinding: 'darwin_lsof', ownerInspection: 'lsof_ps', sshDestination: true, artifact: null },
   // Linux arm64 test host, 2026-10-20: upstream rust-v0.162.1 musl artifact
   // (extracted digest below), Linux-generated schema/opt-out evidence and one
   // dedicated-thread client-ID injection. See linux-observation-native-evidence.json.
   { platform: 'linux-arm64', version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d',
-    platformOs: 'linux', storageBinding: 'linux_procfs', ownerInspection: 'lsof_ps_procfs_locks',
+    platformOs: 'linux', storageBinding: 'linux_procfs', ownerInspection: 'lsof_ps_procfs_locks', sshDestination: false,
     artifact: { target: 'aarch64-unknown-linux-musl', sha256: '071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5' } },
 ]);
 export const currentPlatform = () => `${process.platform}-${process.arch}`;

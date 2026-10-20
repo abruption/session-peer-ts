@@ -1187,7 +1187,8 @@ binding and a `/proc/locks` writer-owner cross-check; its Linux-generated
 schema/notification evidence equals the darwin 0.162.1 hashes, and one
 dedicated-thread client-ID injection was observed on a Linux arm64 test host
 (`test/fixtures/linux-observation-native-evidence.json`). linux-x64, other
-versions, gnu builds and SSH-remote observation remain unsupported; a Linux
+versions, gnu builds and SSH-remote observation remain unsupported (SSH
+destination requests cannot select the Linux row); a Linux
 host without an exact row refuses required delivery before effect and uses
 the ordinary queue for best-effort observation. Historical KR/US ordinary
 queue results are not injection evidence.

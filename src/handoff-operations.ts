@@ -14,7 +14,7 @@ import { HomeRefusal } from './writer.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { currentPlatform, selectNativeProfile } from './native-profiles.js';
 
-export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean;
+export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; remote?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
 export type OperationResult = { value: Record<string, unknown>; exitCode: number };
 export function ledgerPath(): string {
@@ -45,6 +45,15 @@ export function correlationEnvelope(message: string, id: string): string {
   if (!canonicalId(id)) throw new Refusal('invalid_correlation_id', 2);
   // A dedicated inert metadata line, not an executable Reply-To extension.
   return message + '\n\n---\nHandoff: ' + JSON.stringify({ schemaVersion: 1, correlationId: id });
+}
+// Exact qualification for this host and native version. A destination wire
+// request may select only rows whose SSH-remote observation is admitted; any
+// other row behaves as unsupported (required goals refuse before effect and
+// best-effort uses the ordinary queue, chosen before an app-server attempt).
+export function observationQualification(nativeVersion: string, platform: string, remote: boolean): MetadataQualification | undefined {
+  const qualification = metadataQualification(nativeVersion, platform);
+  const profile = qualification && selectNativeProfile(qualification);
+  return profile && profile.commit === qualification.commit && (!remote || profile.sshDestination) ? qualification : undefined;
 }
 // Owner probe arguments for an exact profile. A Linux row additionally requires
 // the kernel flock holder to be the same unchanged process; generation is unchanged.
@@ -127,7 +136,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
           const version = await run(executable(options.codexBin ?? 'codex'), ['--version'], { timeout: Math.min(1000, budget.observationRemainingMs()), limit: 4096 });
           const nativeVersion = !version.interrupted && version.code === 0 ? version.stdout.trim().replace(/^codex-cli /, '') : '';
           // Exact host platform and native version select one profile row, or none.
-          qualification = metadataQualification(nativeVersion, currentPlatform()); ownerArgs = ownerProbeArgs(qualification);
+          qualification = observationQualification(nativeVersion, currentPlatform(), handoffOptions.remote === true); ownerArgs = ownerProbeArgs(qualification);
           if (qualification && nativeQueueCapability({version:nativeVersion,platform:`${process.platform}-${process.arch}`,scope:queueScope}).queueSupported) deliverySupported = (await metadataCapability(scope, nativeVersion, budget, verifyOwner)).supported;
         }
         handoff = await persist(() => ledger.prepare(original!, { correlationId: handoffOptions.correlationId,

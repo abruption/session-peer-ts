@@ -7,6 +7,7 @@
     "platformOs": "linux",
     "storageBinding": "linux_procfs",
     "ownerInspection": "lsof_ps_procfs_locks",
+    "sshDestination": false,
     "artifact": {
       "target": "aarch64-unknown-linux-musl",
       "sha256": "071cbe8d821cf1b02b6d8ba6c8b7991b228fcb8519dcb68a37d31222bb8cabe5"

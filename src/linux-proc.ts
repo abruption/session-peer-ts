@@ -3,12 +3,11 @@
 // owner) and the kernel lock table; they never scan /proc/<pid> inventories.
 // All parsing is closed: an unrecognized row that names the inspected inode, a
 // changed start time, a foreign UID or an unexpected executable refuses.
-// No Linux native profile is qualified; this is the machinery a future
-// evidence-backed row selects, unit-tested with injected readers. The artifact
-// digest helper below also serves any future pinned Darwin (Mach-O) row.
-import { closeSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, statSync } from 'node:fs';
-import { createHash } from 'node:crypto';
-import { open } from 'node:fs/promises';
+// Exact profile rows select this machinery (see native-profiles.ts); it is
+// unit-tested with injected readers. Synchronous reads here run in the owned
+// linux-native-probe worker under the caller's original deadline, or inside
+// the already deadline-bounded writer-probe process.
+import { readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 
 export type ProcStat = { dev: bigint; ino: bigint };
 export type ProcReader = {
@@ -122,17 +121,4 @@ export function nativeExecutable(header: Buffer, platform: string, arch: string)
     [2, 3].includes(header.readUInt16LE(16)) && header.readUInt16LE(18) === machine[0];
   return platform === 'darwin' && header.readUInt32LE(0) === 0xfeedfacf && header.readUInt32LE(4) === machine[1] &&
     header.readUInt32LE(12) === 2;
-}
-export async function artifactDigest(path: string, platform: string, arch: string, deadlineMs: number, now: () => number,
-  maxBytes = 512 * 1024 * 1024): Promise<string> {
-  const fd = openSync(path, 'r'); let header: Buffer;
-  try { header = Buffer.alloc(20); if (readSync(fd, header, 0, 20, 0) !== 20 || !nativeExecutable(header, platform, arch)) refuse(); }
-  finally { closeSync(fd); }
-  const handle = await open(path, 'r'), hash = createHash('sha256'); let total = 0;
-  try {
-    for await (const chunk of handle.createReadStream({ highWaterMark: 1024 * 1024 }) as AsyncIterable<Buffer>) {
-      total += chunk.length; if (total > maxBytes || now() >= deadlineMs) refuse(); hash.update(chunk);
-    }
-  } finally { await handle.close().catch(() => {}); }
-  return hash.digest('hex');
 }

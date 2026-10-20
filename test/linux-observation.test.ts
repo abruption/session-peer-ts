@@ -14,16 +14,16 @@ import { delimiter, join, resolve } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { NATIVE_PROFILES, nativeProfileRefusal, selectNativeProfile, validateNativeProfiles, type NativeProfile } from '../dist/native-profiles.js';
-import { artifactDigest, devParts, nativeExecutable, parseProcStat, parseProcStatusUid, procFlockOwner, procLockHolders,
+import { devParts, nativeExecutable, parseProcStat, parseProcStatusUid, procFlockOwner, procLockHolders,
   procOpenedFiles, procOwnedFiles, procOwner, ProcRefusal, type ProcReader } from '../dist/linux-proc.js';
-import { AppServerFault, BoundedAppServerClient, appServerCapability, nativeQueueCapability, nativeQueueOnce,
+import { AppServerFault, BoundedAppServerClient, appServerCapability, artifactDigest, nativeQueueCapability, nativeQueueOnce,
   nativeQueueOnceWithProfiles, verifyProcfsSqliteBinding, type AppServerScope, type MetadataOnlyTransport } from '../dist/app-server.js';
 import { metadataCapability, metadataQualification, resumeMetadataObservation, METADATA_RESUME_QUALIFICATION,
   METADATA_SOURCE } from '../dist/metadata-observation.js';
 import { DatabaseSync } from 'node:sqlite';
 import { HandoffLedger, payloadDigest, type HandoffBinding } from '../dist/handoff-ledger.js';
 import { HandoffBudget } from '../dist/handoff.js';
-import { waitForHandoff } from '../dist/handoff-operations.js';
+import { observationQualification, waitForHandoff } from '../dist/handoff-operations.js';
 import { run } from '../dist/process.js';
 
 const posix = { skip: process.platform === 'win32' };
@@ -36,7 +36,7 @@ const temp = (t: TestContext, prefix: string) => {
   t.after(() => rmSync(root, { recursive: true, force: true })); return root;
 };
 const linuxRow = (patch: Partial<NativeProfile> = {}): NativeProfile => ({ platform: 'linux-arm64', version: '0.162.1', commit: current,
-  platformOs: 'linux', storageBinding: 'linux_procfs', ownerInspection: 'lsof_ps_procfs_locks',
+  platformOs: 'linux', storageBinding: 'linux_procfs', ownerInspection: 'lsof_ps_procfs_locks', sshDestination: false,
   artifact: { target: 'aarch64-unknown-linux-musl', sha256: 'a'.repeat(64) }, ...patch });
 const refused = (error: unknown) => error instanceof ProcRefusal;
 function fault(code: string, attempted = false) {
@@ -136,6 +136,8 @@ test('profile table validation requires one exact evidence-backed artifact tuple
     ['inherited macOS handshake', linuxRow({ platformOs: 'macos' })],
     ['inherited lsof binding', linuxRow({ storageBinding: 'darwin_lsof' })],
     ['owner without kernel lock evidence', linuxRow({ ownerInspection: 'lsof_ps' })],
+    ['Linux SSH-remote observation without evidence', linuxRow({ sshDestination: true })],
+    ['missing SSH destination policy', { ...linuxRow(), sshDestination: undefined }],
     ['version range', linuxRow({ version: '0.162.x' })],
     ['leading zero', linuxRow({ version: '0.162.01' })],
     ['libc platform alias', linuxRow({ platform: 'linux-arm64-musl' })],
@@ -279,7 +281,7 @@ test('owned procfs storage binding requires direct child, own group, UID, exact 
   assert.throws(() => procOpenedFiles(900, denied), refused);
 });
 
-test('procfs binding projection reuses exact canonical SQLite path and inode checks with deleted/foreign refusal', posix, t => {
+test('procfs binding projection reuses exact canonical SQLite path and inode checks with deleted/foreign refusal', posix, async t => {
   const root = temp(t, 'codex-procfs-binding-'), home = join(root, 'home'), other = join(root, 'other');
   mkdirSync(home, { mode: 0o700 }); mkdirSync(other, { mode: 0o700 });
   for (const dir of [home, other]) for (const file of ['state_5.sqlite', 'state_5.sqlite-wal', 'queue_1.sqlite', 'queue_1.sqlite-wal']) writeFileSync(join(dir, file), '');
@@ -293,7 +295,7 @@ test('procfs binding projection reuses exact canonical SQLite path and inode che
   };
   const ok = [join(home, 'state_5.sqlite'), join(home, 'queue_1.sqlite'), join(home, 'queue_1.sqlite-wal')];
   const later = () => performance.now() + 1000;
-  verifyProcfsSqliteBinding(900, home, later(), process.execPath, reader(ok));
+  await verifyProcfsSqliteBinding(900, home, later(), process.execPath, reader(ok));
   const rejected: [string, ProcReader, string?][] = [
     ['opened other home', reader([join(other, 'state_5.sqlite'), join(other, 'queue_1.sqlite')])],
     ['missing queue store', reader([join(home, 'state_5.sqlite')])],
@@ -304,10 +306,10 @@ test('procfs binding projection reuses exact canonical SQLite path and inode che
   ];
   writeFileSync(join(root, 'not-the-binary'), '');
   for (const [name, fake, binary] of rejected) {
-    assert.throws(() => verifyProcfsSqliteBinding(900, home, later(), binary ?? process.execPath, fake), fault('storage_binding_unverified'), name);
+    await assert.rejects(verifyProcfsSqliteBinding(900, home, later(), binary ?? process.execPath, fake), fault('storage_binding_unverified'), name);
   }
-  assert.throws(() => verifyProcfsSqliteBinding(900, home, performance.now() - 1, process.execPath, reader(ok)), fault('storage_binding_unverified'));
-  assert.throws(() => verifyProcfsSqliteBinding(undefined, home, later(), process.execPath, reader(ok)), fault('storage_binding_unverified'));
+  await assert.rejects(verifyProcfsSqliteBinding(900, home, performance.now() - 1, process.execPath, reader(ok)), fault('storage_binding_unverified'));
+  await assert.rejects(verifyProcfsSqliteBinding(undefined, home, later(), process.execPath, reader(ok)), fault('storage_binding_unverified'));
 });
 
 test('artifact identity accepts only the host-native executable format and hashes complete bytes within the deadline', posix, async t => {
@@ -319,12 +321,22 @@ test('artifact identity accepts only the host-native executable format and hashe
   assert.equal(nativeExecutable(macho(0x0100000c), 'darwin', 'arm64'), true); assert.equal(nativeExecutable(macho(0x0100000c, 6), 'darwin', 'arm64'), false);
   assert.equal(nativeExecutable(macho(0x0100000c), 'linux', 'arm64'), false);
   assert.equal(nativeExecutable(Buffer.from('#!/usr/bin/env node\n' + ' '.repeat(40)), 'linux', 'arm64'), false);
-  const path = join(root, 'codex'), body = Buffer.concat([elf(183), Buffer.alloc(3 * 1024 * 1024, 7)]);
-  writeFileSync(path, body);
-  assert.equal(await artifactDigest(path, 'linux', 'arm64', Infinity, () => 0), createHash('sha256').update(body).digest('hex'));
-  await assert.rejects(artifactDigest(path, 'linux', 'x64', Infinity, () => 0), refused);
-  await assert.rejects(artifactDigest(path, 'linux', 'arm64', 10, () => 10), refused);
-  await assert.rejects(artifactDigest(path, 'linux', 'arm64', Infinity, () => 0, 1024 * 1024), refused);
+  // The digest runs in the owned worker under the caller's original deadline.
+  const native = process.platform === 'linux' ? elf(process.arch === 'arm64' ? 183 : 62) : macho(process.arch === 'arm64' ? 0x0100000c : 0x01000007);
+  const foreign = process.platform === 'linux' ? macho(0x0100000c) : elf(183);
+  const path = join(root, 'codex'), body = Buffer.concat([native, Buffer.alloc(3 * 1024 * 1024, 7)]);
+  writeFileSync(path, body); writeFileSync(join(root, 'foreign'), Buffer.concat([foreign, Buffer.alloc(1024)]));
+  const later = () => performance.now() + 5000;
+  assert.equal(await artifactDigest(path, later()), createHash('sha256').update(body).digest('hex'));
+  await assert.rejects(artifactDigest(join(root, 'foreign'), later()), fault('unsupported_version'));
+  await assert.rejects(artifactDigest(join(root, 'missing'), later()), fault('unsupported_version'));
+  await assert.rejects(artifactDigest(path, later(), 1024 * 1024), fault('unsupported_version'));
+  await assert.rejects(artifactDigest(path, performance.now() - 1), fault('deadline'));
+  // Expiry while the worker is still running refuses at the original deadline.
+  const big = join(root, 'big'); writeFileSync(big, Buffer.concat([native, Buffer.alloc(256 * 1024 * 1024, 1)]));
+  const started = performance.now();
+  await assert.rejects(artifactDigest(big, started + 30), fault('deadline'));
+  assert.ok(performance.now() - started < 1000);
 });
 
 function hermetic(t: TestContext, platformOs: string, version = '0.162.1') {
@@ -400,7 +412,7 @@ function syntheticRow(binary: string, patch: Partial<NativeProfile> = {}): Nativ
   const target = process.platform === 'linux' ? (process.arch === 'arm64' ? 'aarch64-unknown-linux-musl' : 'x86_64-unknown-linux-musl') : 'aarch64-apple-darwin';
   return { platform: host, version: '0.162.1', commit: current, platformOs: process.platform === 'linux' ? 'linux' : 'macos',
     storageBinding: process.platform === 'linux' ? 'linux_procfs' : 'darwin_lsof',
-    ownerInspection: process.platform === 'linux' ? 'lsof_ps_procfs_locks' : 'lsof_ps',
+    ownerInspection: process.platform === 'linux' ? 'lsof_ps_procfs_locks' : 'lsof_ps', sshDestination: process.platform !== 'linux',
     artifact: { target, sha256: sha(binary) }, ...patch };
 }
 async function compiledRun(t: TestContext) {
@@ -464,13 +476,13 @@ test('Linux procfs owner/storage readers inspect a real owned child and its kern
   const owner = procOwner(child.pid!, undefined, true);
   assert.equal(owner.ppid, process.pid); assert.equal(owner.pgrp, child.pid); assert.equal(owner.uid, process.getuid!());
   assert.equal(procFlockOwner(lock), child.pid);
-  verifyProcfsSqliteBinding(child.pid, home, performance.now() + 1000, process.execPath);
+  await verifyProcfsSqliteBinding(child.pid, home, performance.now() + 2000, process.execPath);
   // The selected binary must be the inode the owned PID executes, not a shim.
   const shim = join(root, 'node-shim'); writeFileSync(shim, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} "$@"\n`, { mode: 0o700 });
-  assert.throws(() => verifyProcfsSqliteBinding(child.pid, home, performance.now() + 1000, shim), fault('storage_binding_unverified'));
-  assert.throws(() => verifyProcfsSqliteBinding(child.pid, join(root, 'other'), performance.now() + 1000, process.execPath), fault('storage_binding_unverified'));
+  await assert.rejects(verifyProcfsSqliteBinding(child.pid, home, performance.now() + 2000, shim), fault('storage_binding_unverified'));
+  await assert.rejects(verifyProcfsSqliteBinding(child.pid, join(root, 'other'), performance.now() + 2000, process.execPath), fault('storage_binding_unverified'));
   process.kill(-child.pid!, 'SIGKILL'); await once(child, 'close');
-  assert.throws(() => verifyProcfsSqliteBinding(child.pid, home, performance.now() + 1000, process.execPath), fault('storage_binding_unverified'));
+  await assert.rejects(verifyProcfsSqliteBinding(child.pid, home, performance.now() + 2000, process.execPath), fault('storage_binding_unverified'));
   assert.throws(() => procFlockOwner(lock), refused);
 });
 
@@ -511,11 +523,19 @@ test('writer probe kernel mode is Linux-only and keeps the lsof/ps generation by
 // CLI-level Linux behaviour with an exact Darwin-qualified version installed:
 // required delivery refuses before any effect; best-effort falls back to the
 // ordinary queue chosen before an app-server attempt; nothing is resent.
-async function cliFixture(t: TestContext, version = '0.162.1') {
+async function cliFixture(t: TestContext, version = '0.162.1', warm = false) {
   const root = temp(t, 'codex-linux-cli-'), home = join(root, 'home'), bin = join(root, 'bin');
   mkdirSync(home, { mode: 0o700 }); mkdirSync(bin, { mode: 0o700 }); mkdirSync(join(home, 'thread-writer-locks'), { mode: 0o700 });
   const { DatabaseSync } = await import('node:sqlite');
   const state = new DatabaseSync(join(home, 'state_5.sqlite')); state.exec('CREATE TABLE threads(id TEXT)'); state.prepare('INSERT INTO threads VALUES(?)').run(thread); state.close();
+  if (warm) {
+    const history = new DatabaseSync(join(home, 'thread_history_1.sqlite'));
+    history.exec(`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
+CREATE TABLE thread_items(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,item_id TEXT NOT NULL,rollout_ordinal INTEGER NOT NULL,item_json TEXT NOT NULL,item_type TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id,item_id));
+CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_ordinal) WHERE item_type='userMessage';
+CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rollout_byte_offset INTEGER NOT NULL,next_rollout_ordinal INTEGER NOT NULL);`);
+    history.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread, 1, 1); history.close();
+  }
   const locks = createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt');
   const held = spawn(process.execPath, [resolve('test/fixtures/ssh-codex-lock-holder.cjs'), join(home, 'thread-writer-locks', thread + '.lock'), locks]);
   held.stderr.resume(); await once(held.stdout, 'data');
@@ -568,8 +588,8 @@ for (const version of ['0.160.1', '0.162.1'].filter(version => !selectNativeProf
 
 // Fake SSH to a Linux destination running this checkout: complete results
 // carry the destination's pre-effect refusal; partial preparation never sends.
-async function sshFixture(t: TestContext) {
-  const f = await cliFixture(t, '0.160.1'), root = temp(t, 'codex-linux-ssh-'), log = join(root, 'requests.jsonl'); writeFileSync(log, '');
+async function sshFixture(t: TestContext, version = '0.160.1', warm = false) {
+  const f = await cliFixture(t, version, warm), root = temp(t, 'codex-linux-ssh-'), log = join(root, 'requests.jsonl'); writeFileSync(log, '');
   const ssh = join(root, 'ssh');
   writeFileSync(ssh, `#!${process.execPath}
 const fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2);
@@ -607,4 +627,42 @@ test('SSH to a Linux destination: complete result keeps pre-effect refusal; part
   assert.deepEqual(f.queueCalls(), [{ method: 'legacy' }]);
   assert.equal(f.nativeCalls().some(call => call.command === 'app-server'), false);
   for (const secret of ['PRIVATE_SSH_CODEX_BODY_SENTINEL', 'observationQualification', 'payloadDigest']) assert.equal(best.stdout.includes(secret), false);
+});
+
+test('SSH destination requests cannot select a Linux row; local and Darwin selection are unchanged', () => {
+  assert.deepEqual(observationQualification('0.162.1', 'linux-arm64', false), { version: '0.162.1', commit: current, platform: 'linux-arm64' });
+  assert.equal(observationQualification('0.162.1', 'linux-arm64', true), undefined);
+  assert.equal(observationQualification('codex-cli 0.162.1', 'linux-arm64', true), undefined);
+  for (const remote of [false, true]) {
+    assert.deepEqual(observationQualification('0.162.1', 'darwin-arm64', remote), { version: '0.162.1', commit: current, platform: 'darwin-arm64' });
+    assert.equal(observationQualification('0.162.1', 'linux-x64', remote), undefined);
+    assert.equal(observationQualification('0.160.1', 'linux-arm64', remote), undefined);
+  }
+});
+
+// Regression: a qualified linux-arm64 row reached the app-server path over SSH.
+test('SSH to a qualified linux-arm64 row stays fail-closed before effect and keeps best-effort ordinary send', {
+  skip: host !== 'linux-arm64',
+}, async t => {
+  const f = await sshFixture(t, '0.162.1', true);
+  const invoke = async (args: string[], wire: boolean) => {
+    const child = spawn(process.execPath, [resolve('dist/cli.js'), 'send', ...(wire ? ['--host', 'fixture'] : []), ...args.slice(1), '--json'],
+      { env: { ...f.env, ...(wire ? f.ssh : {}) } });
+    let stdout = '', stderr = ''; child.stdout.on('data', c => { stdout += c; }); child.stderr.on('data', c => { stderr += c; }); child.stdin.end();
+    const timer = setTimeout(() => child.kill('SIGKILL'), 20000); const [code, signal] = await once(child, 'close'); clearTimeout(timer);
+    assert.equal(signal, null, stderr); return { code, value: JSON.parse(stdout), stdout };
+  };
+  const required = await invoke([...f.args, '--wait-for', 'delivered', '--wait-timeout', '15'], true);
+  assert.equal(required.code, 1, required.stdout); assert.equal(required.value.submitted, false);
+  assert.equal(required.value.error, 'evidence_unsupported'); assert.equal(required.value.handoff.wait.status, 'unsupported');
+  assert.deepEqual(f.queueCalls(), []); assert.equal(f.nativeCalls().some(call => call.command === 'app-server'), false);
+  const best = await invoke([...f.args, '--observe-delivery'], true);
+  assert.equal(best.code, 0, best.stdout); assert.equal(best.value.status, 'queued');
+  assert.equal(best.value.handoff.observation.status, 'unsupported'); assert.deepEqual(f.queueCalls(), [{ method: 'legacy' }]);
+  // Local control: the same host/version selects the row (and this script is
+  // not the pinned artifact, so the app-server path refuses before effect).
+  const local = await invoke([...f.args, '--wait-for', 'delivered', '--wait-timeout', '15'], false);
+  assert.equal(local.code, 1, local.stdout); assert.equal(local.value.submitted, false);
+  assert.equal(local.value.error, 'app_server_unsupported_version');
+  assert.deepEqual(f.queueCalls(), [{ method: 'legacy' }]); assert.equal(f.nativeCalls().some(call => call.command === 'app-server'), false);
 });

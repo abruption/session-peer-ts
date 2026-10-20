@@ -15,7 +15,8 @@ import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
 import { run } from './process.js';
 import { NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
-import { artifactDigest, procOwnedFiles, procfs, type OpenedFile, type ProcReader } from './linux-proc.js';
+import { procOwnedFiles, type OpenedFile, type ProcReader } from './linux-proc.js';
+import { fileURLToPath } from 'node:url';
 
 export const APP_SERVER_EVIDENCE = Object.freeze({
   version: '0.160.1', inspectedPlatform: 'darwin-arm64',
@@ -560,18 +561,54 @@ function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
     }
   }
 }
+// Synchronous native-profile I/O (executable digest, procfs binding) runs in
+// an owned worker. Hard execution bound: run() reaps its group at the original
+// remaining budget, and beforeDeadline() refuses at that deadline even if the
+// kernel has not yet released a worker blocked in uninterruptible I/O.
+async function nativeWorker(args: string[], deadlineMs: number): Promise<Record<string, unknown> | undefined> {
+  const extension = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
+  const worker = fileURLToPath(new URL('./linux-native-probe' + extension, import.meta.url));
+  return beforeDeadline(deadlineMs, async () => {
+    const result = await run(process.execPath, [...(extension === '.ts' ? ['--experimental-strip-types'] : []), worker, ...args], {
+      timeout: Math.max(1, deadlineMs - performance.now()), limit: 1024 * 1024,
+      env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C' } });
+    if (result.code !== 0 || result.interrupted) return undefined;
+    const value = JSON.parse(result.stdout) as Record<string, unknown>;
+    return value && value.ok === true ? value : undefined;
+  }, 'unsupported_version');
+}
+// Complete pinned-executable digest within the original deadline.
+export async function artifactDigest(path: string, deadlineMs: number, maxBytes = 512 * 1024 * 1024): Promise<string> {
+  const value = await nativeWorker(['digest', path, process.platform, process.arch, String(maxBytes)], deadlineMs);
+  if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
+  if (typeof value?.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(value.sha256)) throw new AppServerFault('unsupported_version', false);
+  return value.sha256;
+}
 // Linux: read only the owned child's /proc entries. The executable inode is the
 // selected native artifact, so a script/npm shim whose exe is an interpreter is
-// refused rather than trusted to have exec'd the right storage owner.
-export function verifyProcfsSqliteBinding(pid: number | undefined, home: string, deadlineMs: number, binary: string,
-  reader: ProcReader = procfs): void {
+// refused rather than trusted to have exec'd the right storage owner. An
+// injected reader (hermetic tests) runs in-process; production uses the worker.
+export async function verifyProcfsSqliteBinding(pid: number | undefined, home: string, deadlineMs: number, binary: string,
+  reader?: ProcReader): Promise<void> {
   if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
   let files: OpenedFile[];
-  try {
-    const uid = process.getuid?.(), exe = statSync(realpathSync(binary), { bigint: true });
-    if (uid === undefined) throw new Error('uid unavailable');
-    files = procOwnedFiles(pid, process.pid, uid, { dev: exe.dev, ino: exe.ino }, reader);
-  } catch { throw new AppServerFault('storage_binding_unverified', false); }
+  const uid = process.getuid?.();
+  if (uid === undefined) throw new AppServerFault('storage_binding_unverified', false);
+  if (reader) {
+    try {
+      const exe = statSync(realpathSync(binary), { bigint: true });
+      files = procOwnedFiles(pid, process.pid, uid, { dev: exe.dev, ino: exe.ino }, reader);
+    } catch { throw new AppServerFault('storage_binding_unverified', false); }
+  } else {
+    let value: Record<string, unknown> | undefined;
+    try { value = await nativeWorker(['bind', String(pid), String(process.pid), String(uid), binary], deadlineMs); }
+    catch (error) { throw error instanceof AppServerFault && error.code === 'deadline' ? error : new AppServerFault('storage_binding_unverified', false); }
+    if (!Array.isArray(value?.files)) throw new AppServerFault('storage_binding_unverified', false);
+    try {
+      files = (value.files as { name: string; dev: string; ino: string; deleted: boolean }[]).map(file => ({
+        name: file.name, dev: BigInt(file.dev), ino: BigInt(file.ino), deleted: file.deleted === true }));
+    } catch { throw new AppServerFault('storage_binding_unverified', false); }
+  }
   if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
   verifyOpenedSqlite(files, home);
 }
@@ -649,7 +686,7 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
     // Pinned executable bytes, hashed within the original deadline; the stable
     // identity check below proves the hashed inode is the one spawned next.
     let digest: string;
-    try { digest = await artifactDigest(realpathSync(options.binary), process.platform, process.arch, options.deadlineMs, () => performance.now()); }
+    try { digest = await artifactDigest(realpathSync(options.binary), options.deadlineMs); }
     catch { throw new AppServerFault(performance.now() >= options.deadlineMs ? 'deadline' : 'unsupported_version', false); }
     if (digest !== profile.artifact.sha256) throw new AppServerFault('unsupported_version', false);
     verifyExecutableIdentity(options.binary, binaryIdentity);
@@ -702,9 +739,8 @@ function releaseOwned(pid: number | undefined): void {
   for (const name of terminationSignals) process.removeListener(name, terminateOwned);
   process.removeListener('exit', processExit);
 }
-// POSIX groups reap owned descendants. Only darwin-arm64 has native queue
-// mechanics qualification; Linux uses the same owned group with no profile row
-// yet. Windows resource cleanup remains unqualified.
+// POSIX groups reap owned descendants on the exact darwin-arm64 and
+// linux-arm64 profile rows. Windows resource cleanup remains unqualified.
 function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Omit<MetadataOnlyTransport, 'qualification'> & { pid?: number } {
   if (process.platform === 'win32') throw new AppServerFault('unsupported_transport', false);
   const child = spawn(binary, args, { env, cwd, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
