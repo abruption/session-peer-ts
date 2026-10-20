@@ -915,6 +915,14 @@ consistency checks between cooperating same-user steps, not authentication.
 
 Further harness rules:
 
+All receipt consumers use the same closed schema, including a canonical UTC
+`verifiedAt` timestamp. Malformed completion records are corrupt and cannot
+authorize reuse, adoption or unlock. Replay and dry-run completion also require
+the activation staging path to remain absent. A lock containing publication
+evidence refuses every further activate operation, including an already-provisioned
+reuse or a same-identity replacement after rollback; release the acquisition and
+obtain fresh checks under a new lock.
+
 - **Receipt publication intent.** `dest receipt` writes and syncs a
   publication intent inside the lock, holding the exact receipt bytes, before
   writing the receipt. If the response is lost, rerunning the same command

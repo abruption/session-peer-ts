@@ -190,8 +190,7 @@ function receiptState(p, name) {
   if (!s) return { state: 'none' };
   if (!s.isFile() || s.uid !== uid()) return { state: 'untrusted_receipt' };
   const receipt = readJson(path);
-  if (!receipt || receipt.receiptVersion !== 1 || !HEX32.test(receipt.runId ?? '') || !/^[0-9a-f]{64}$/.test(receipt.identityHash ?? '') ||
-    !/^[0-9a-f]{64}$/.test(receipt.manifestSha256 ?? '')) return { state: 'corrupt' };
+  if (!validReceipt(receipt)) return { state: 'corrupt' };
   const target = join(p.root, name);
   if (!lstat(target)) return { state: 'orphan', receipt };
   const owned = markerOf(target);
@@ -275,14 +274,17 @@ function validPublication(path, owner) {
 function validReceipt(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value) &&
     JSON.stringify(Object.keys(value)) === JSON.stringify(['receiptVersion', 'runId', 'identityHash', 'manifestSha256', 'verifiedAt']) &&
-    value.receiptVersion === 1 && HEX32.test(value.runId ?? '') && /^[0-9a-f]{64}$/.test(value.identityHash ?? '') &&
-    /^[0-9a-f]{64}$/.test(value.manifestSha256 ?? '') && typeof value.verifiedAt === 'string' &&
+    value.receiptVersion === 1 && typeof value.runId === 'string' && HEX32.test(value.runId) &&
+    typeof value.identityHash === 'string' && /^[0-9a-f]{64}$/.test(value.identityHash) &&
+    typeof value.manifestSha256 === 'string' && /^[0-9a-f]{64}$/.test(value.manifestSha256) && typeof value.verifiedAt === 'string' &&
     !Number.isNaN(Date.parse(value.verifiedAt)) && new Date(value.verifiedAt).toISOString() === value.verifiedAt;
+}
+function staticVerified(checked) {
+  return checked.checks.realDirectory && checked.checks.owned && checked.checks.markerConsistent && checked.checks.manifest && checked.checks.stagingGone !== false;
 }
 // The install a committed receipt names must still be at the target, unchanged.
 function describes(checked, receipt) {
-  return checked.checks.realDirectory && checked.checks.owned && checked.checks.markerConsistent && checked.checks.manifest &&
-    checked.markerRunId === receipt.runId && checked.identityHash === receipt.identityHash && checked.manifestSha256 === receipt.manifestSha256;
+  return staticVerified(checked) && checked.markerRunId === receipt.runId && checked.identityHash === receipt.identityHash && checked.manifestSha256 === receipt.manifestSha256;
 }
 const lockBinding = (p, lock) => ({ prefixId: p.prefixId, lockId: lock.owner.lockId });
 const sameLock = (proof, p, lock) => proof?.prefixId === p.prefixId && proof?.lockId === lock.owner.lockId && HEX32.test(proof.lockId ?? '');
@@ -455,6 +457,9 @@ const dest = {
     const lock = heldBy(p, run);
     if (lock.activated?.invalid) throw new Refusal('activation_intent_unreadable');
     if (lock.activated) throw new Refusal('already_activated_under_lock');
+    // One publication scope per acquisition: a rollback must not let the same
+    // lock recreate a target and complete it using an earlier publication proof.
+    if (lstat(join(p.lock, 'publication.json'))) throw new Refusal('publication_pending');
     const dir = join(p.root, staging);
     trusted(dir, 'staging');
     const owned = markerOf(dir);
@@ -551,7 +556,7 @@ const dest = {
     }
     if (state !== 'none') throw new Refusal('receipt_present', { receipt: state });
     const checked = verify(p, name, a.execute);
-    if (a.execute ? !checked.ok : !checked.checks.manifest || !checked.checks.markerConsistent)
+    if (!staticVerified(checked) || (a.execute && !checked.ok))
       throw new Refusal('verification_failed', { checks: checked.checks, state: checked.state });
     if (proof.identityHash !== checked.identityHash || proof.manifestSha256 !== checked.manifestSha256)
       throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'install' });

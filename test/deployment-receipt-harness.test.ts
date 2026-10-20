@@ -894,3 +894,109 @@ test('caller records without a prefix make no-caller unconfirmable instead of co
   const run = w.begin(); w.lock(run);
   refused(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', run, '--target', w.name], 'caller_history_unusable');
 });
+
+
+test('all receipt consumers reject an incomplete or malformed completion record', { skip }, t => {
+  const reused = world(t);
+  reused.provision();
+  const path = join(reused.root, '.receipts', `${reused.name}.json`);
+  const original = JSON.parse(readFileSync(path, 'utf8'));
+  const invalid = (receipt: Out) => {
+    const { verifiedAt: _verifiedAt, ...withoutTime } = receipt;
+    return [withoutTime, { ...receipt, verifiedAt: 'yesterday' }, { ...receipt, extra: true },
+      { ...receipt, identityHash: [receipt.identityHash] }];
+  };
+  const run = reused.begin(); reused.lock(run);
+  const reuseProof = reused.checks(run);
+  const staging = reused.stage(run);
+  for (const value of invalid(original)) {
+    writeFileSync(path, JSON.stringify(value));
+    assert.equal(reused.state(), 'owned_receipt_corrupt');
+    const launched = reused.launches();
+    refused(['dest', 'activate', ...reused.P, '--run', run, '--staging', staging, '--execute'], 'target_not_absent');
+    assert.equal(reused.launches(), launched, 'invalid completion records are not reused or probed');
+    refused(['dest', 'receipt', ...reused.P, '--run', run, '--name', reused.name, '--statement', reuseProof, '--adopt-existing', '--execute'], 'receipt_present');
+    assert.equal(existsSync(join(reused.root, '.activate.lock', 'publication.json')), false);
+  }
+  const active = world(t);
+  const owner = active.begin(); active.lock(owner); active.activate(owner);
+  const proof = active.checks(owner);
+  const result = ok(['dest', 'receipt', ...active.P, '--run', owner, '--name', active.name, '--statement', proof, '--execute']);
+  active.record(owner, 'receipt_published', result);
+  const completion = join(active.root, '.receipts', `${active.name}.json`);
+  const good = readFileSync(completion, 'utf8');
+  for (const value of invalid(JSON.parse(good))) {
+    writeFileSync(completion, JSON.stringify(value));
+    assert.equal(active.state(), 'owned_receipt_corrupt');
+    refused(['dest', 'unlock', ...active.P, '--run', owner, '--execute'], 'unreceipted_activation');
+    assert.equal(existsSync(join(active.root, '.activate.lock')), true);
+  }
+  writeFileSync(completion, good);
+  active.record(owner, 'lock_released', ok(['dest', 'unlock', ...active.P, '--run', owner, '--execute']));
+});
+
+test('publication replay and dry-run completion require staging to remain gone', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run);
+  const staging = w.stage(run); w.activate(run, staging);
+  const proof = w.checks(run);
+  const args = ['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', proof];
+  ok([...args, '--execute']);
+  const path = join(w.root, '.receipts', `${w.name}.json`), bytes = readFileSync(path, 'utf8');
+  mkdirSync(join(w.root, staging), { mode: 0o700 });
+  refused([...args, '--execute'], 'receipt_present');
+  assert.equal(readFileSync(path, 'utf8'), bytes);
+  rmSync(path);
+  refused(args, 'publication_target_changed');
+  refused([...args, '--execute'], 'publication_target_changed');
+  assert.equal(existsSync(path), false);
+});
+
+
+test('a lock with publication evidence cannot reactivate a rolled-back target using the old proof', { skip }, t => {
+  const w = world(t);
+  const run = w.provision();
+  // A second acquisition can recover this existing install without an activation intent.
+  w.lock(run);
+  const receiptPath = join(w.root, '.receipts', `${w.name}.json`);
+  writeFileSync(receiptPath, 'corrupt');
+  w.record(run, 'receipt_cleaned', ok(['dest', 'receipt-cleanup', ...w.P, '--run', run, '--name', w.name,
+    '--mode', 'remove', '--execute', '--confirm-destructive']));
+  const oldProof = w.checks(run);
+  ok(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', oldProof, '--execute']);
+  rmSync(receiptPath); // Simulate the receipt write being lost after publication intent persistence.
+  const noCaller = w.file('no-caller', ok(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', run, '--target', w.name]));
+  ok(['dest', 'rollback', ...w.P, '--run', run, '--name', w.name, '--statement', noCaller, '--execute', '--confirm-destructive']);
+  const staging = w.stage(run);
+  const publication = join(w.root, '.activate.lock', 'publication.json'), bytes = readFileSync(publication, 'utf8');
+  refused(['dest', 'activate', ...w.P, '--run', run, '--staging', staging, '--execute'], 'publication_pending');
+  assert.equal(existsSync(join(w.root, w.name)), false);
+  assert.equal(existsSync(receiptPath), false);
+  assert.equal(readFileSync(publication, 'utf8'), bytes);
+  // Finishing the acquisition invalidates its proof; a fresh activation needs fresh checks.
+  w.record(run, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', run, '--execute']));
+  w.lock(run); w.activate(run, staging);
+  refused(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', oldProof, '--execute'], 'statement_mismatch');
+  w.finish(run);
+  assert.equal(w.state(), 'owned_receipted');
+});
+
+
+test('initial receipt dry-run requires every static check before proposing publication', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run);
+  const staging = w.stage(run); w.activate(run, staging);
+  const proof = w.checks(run);
+  const args = ['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', proof];
+  const publication = join(w.root, '.activate.lock', 'publication.json'), receiptPath = join(w.root, '.receipts', `${w.name}.json`);
+  mkdirSync(join(w.root, staging), { mode: 0o700 });
+  const launched = w.launches();
+  refused(args, 'verification_failed');
+  refused([...args, '--execute'], 'verification_failed');
+  assert.equal(w.launches(), launched);
+  assert.equal(existsSync(publication), false); assert.equal(existsSync(receiptPath), false);
+  rmSync(join(w.root, staging), { recursive: true });
+  assert.equal(ok(args).dryRun, true);
+  assert.equal(existsSync(publication), false); assert.equal(existsSync(receiptPath), false);
+  w.finish(run);
+});
