@@ -1179,7 +1179,7 @@ function runAsync(args: string[], env: NodeJS.ProcessEnv) {
   return { done: once(child, 'close').then(([code]) => ({ code: code as number, out: JSON.parse(stdout) as Out })) };
 }
 
-test('a held journal lock refuses every journal command without waiting or writing', { skip }, t => {
+test('a held journal lock refuses every journal command without waiting or changing the journal', { skip }, t => {
   const j = journalOnly(t);
   const before = readFileSync(j.journal);
   mkdirSync(`${j.journal}.lock`, { mode: 0o700 });
@@ -1216,13 +1216,15 @@ test('a failing append rolls back only its own line while another writer is held
     { ...process.env, SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK: release, SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl', SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT: '1' });
   await waitFor(`${release}.held`);
   assert.equal(j.record({}).out.error, 'journal_busy');
+  // A statement cannot snapshot the journal while an append may still be rolled back.
+  refused(['op', 'statement', ...j.J, '--kind', 'run-ended', '--run', j.run], 'journal_busy');
   writeFileSync(release, '');
   const result = await failing.done;
   assert.equal(result.out.error, 'journal_append_failed'); assert.equal(result.out.rollback, 'restored');
   assert.deepEqual(readFileSync(j.journal), before);
 });
 
-test('the attested remote-bin must normalize to exactly the verified wrapper', { skip }, t => {
+test('the attested remote-bin must be exactly the canonical verified wrapper', { skip }, t => {
   const w = world(t);
   const run = w.begin(); w.lock(run); w.activate(run);
   w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--run', run, '--execute']));
@@ -1230,9 +1232,10 @@ test('the attested remote-bin must normalize to exactly the verified wrapper', {
   const record = (bin: string) => h(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name, '--file', w.file('doctor', doctor), '--remote-bin', bin, '--execute']).out;
   const other = `${w.name.slice(0, -16)}0000000000000000`;
   for (const bin of [join(w.root, w.name, '..', other, 'session-peer'), join(w.root, other, w.name, 'session-peer'), join(w.base, 'elsewhere', w.name, 'session-peer'),
-    `data/session-peer-ts/${w.name}/session-peer`, join(w.root, w.name, 'other-wrapper')])
+    `data/session-peer-ts/${w.name}/session-peer`, join(w.root, w.name, 'other-wrapper'), `${w.root}/./${w.name}//session-peer`,
+    `${w.root}/${w.name}/../${w.name}/session-peer`])
     assert.equal(record(bin).error, 'operator_check_target_mismatch', bin);
-  assert.equal(record(`${w.root}/./${w.name}//session-peer`).ok, true);
+  assert.equal(record(w.remoteBin()).ok, true);
 });
 
 test('manifest links must resolve inside the install before anything runs', { skip }, t => {
@@ -1255,6 +1258,13 @@ test('manifest links must resolve inside the install before anything runs', { sk
   symlinkSync('session-peer/dist/cli.js', join(w.tree, 'node_modules/.cli-link'));
   const run = w.begin(); w.lock(run); w.activate(run);
   const link = join(w.root, w.name, 'node_modules/.cli-link');
+  // The internal link survived the activation rename; its referent's bytes are covered too.
+  const referent = join(w.root, w.name, 'node_modules/session-peer/dist/cli.js'), bytes = readFileSync(referent);
+  assert.equal(readFileSync(link).equals(bytes), true);
+  writeFileSync(referent, Buffer.concat([bytes, Buffer.from('\n// changed\n')]));
+  assert.equal(w.state(), 'owned_failed_verification');
+  writeFileSync(referent, bytes);
+  assert.equal(w.state(), 'owned_no_receipt');
   rmSync(link); symlinkSync('session-peer/dist/help.js', link);
   assert.equal(w.state(), 'owned_failed_verification');
 });
@@ -1358,7 +1368,7 @@ test('caller-state fences on shaped destination results: open acquisitions and s
   assert.equal(caller(other, 'callers_switched').ok, true);
 });
 
-test('remote-bin attestation on shaped results: normalized path must equal the verified wrapper', { skip }, t => {
+test('remote-bin attestation on shaped results: only the exact canonical wrapper passes', { skip }, t => {
   const j = journalOnly(t);
   const prefixId = 'c'.repeat(32), lockId = 'd'.repeat(32), target = `${packageVersion}-${'e'.repeat(16)}`;
   const wrapper = `/dest/root/data/session-peer-ts/${target}/session-peer`;
@@ -1371,8 +1381,11 @@ test('remote-bin attestation on shaped results: normalized path must equal the v
     identityHash: 'f'.repeat(64), manifestSha256: '0'.repeat(64), markerRunId: j.run, version: packageVersion, wrapper })]);
   const doctor = file({ ok: true, diagnosticCompleted: true, implementation: 'typescript', ready: false, version: packageVersion, host: 'dest.example' });
   const attest = (bin: string) => h(['op', 'record', ...j.J, '--run', j.run, '--event', 'operator_doctor', '--target', target, '--file', doctor, '--remote-bin', bin, '--execute']).out;
+  // Only the exact canonical wrapper passes: a path that merely normalizes to
+  // it (through `.`, `//` or `link/..`) is refused, since a shell follows links.
   for (const bin of [`/dest/root/data/session-peer-ts/${target}/../other/session-peer`, `/dest/root/data/session-peer-ts/other/${target}/session-peer`,
-    `dest/root/data/session-peer-ts/${target}/session-peer`, `/elsewhere/${target}/session-peer`])
+    `dest/root/data/session-peer-ts/${target}/session-peer`, `/elsewhere/${target}/session-peer`, `/dest/root/data/./session-peer-ts//${target}/session-peer`,
+    `/dest/root/data/session-peer-ts/link/../${target}/session-peer`, `${wrapper}/`])
     assert.equal(attest(bin).error, 'operator_check_target_mismatch', bin);
-  assert.equal(attest(`/dest/root/data/./session-peer-ts//${target}/session-peer`).ok, true);
+  assert.equal(attest(wrapper).ok, true);
 });

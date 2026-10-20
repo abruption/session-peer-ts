@@ -843,7 +843,9 @@ Each destination result must be executed. Operator checks, caller-switch
 attestations and run-ended events are handled separately. An unrecognized
 destination-result event such as `retire` is not recordable. Cleanup,
 retirement, rollback and a new activation (not an `already_provisioned`
-reuse) of a prefix and name are lifecycle events. A publication of that name
+reuse) of a prefix and name are lifecycle events. An `activated` record
+without an outcome, as written by earlier harness revisions, is treated as a
+new activation. A publication of that name
 on that prefix recorded before such an event is superseded
 (`publication_superseded`): `callers_switched` then needs a newer completed
 publication. Nothing is migrated or re-associated. `op record` refuses a result from another run, another prefix or an earlier lock,
@@ -896,10 +898,12 @@ What the CLI JSON shows is bound. Its `host` must equal the `--dest-host`
 fixed at `op init`. The doctor's `version` must equal the verified install's
 version. Which `--remote-bin` the CLI ran is **not** in the JSON. The operator
 supplies it to `op record`, and it is stored as `remoteBinAttested`. The
-attested value must be an absolute POSIX path that, after lexical
-normalization (no remote resolution), equals exactly the wrapper path that the
-verified destination result reports for that target. A `..` detour, another
-wrapper or another prefix is refused. The harness still cannot prove that the
+attested value must already be a canonical absolute POSIX path (no `.` or `..`
+segment, no repeated or trailing `/`). It must also equal exactly the wrapper
+path that the verified destination result reports for that target. A path
+that only normalizes to it is refused, because a shell resolves `link/..`
+through the link. Other wrappers and other prefixes are refused too, and the
+path is never resolved locally or remotely. The harness still cannot prove that the
 CLI executed it.
 `op statement --kind operator-checks-passed` exists only after both, and `dest
 receipt` requires that statement, bound to the current prefix and `lockId`,
@@ -993,9 +997,12 @@ obtain fresh checks under a new lock.
   a root entry named `__proto__` (file or symlink) is recorded and checked
   like any other.
 - **Manifest links.** Links are recorded by their text, so each must resolve
-  inside the install, including through a chain of links. Absolute link
-  texts, links resolving outside the install, and dangling, looping or
-  unreadable links are refused (`unsafe_link`). This check runs during
+  inside the install, including through a chain of links. Absolute link texts
+  are always refused, even when they point into the staging tree, because they
+  go stale or point outside after the activation rename. Links resolving
+  outside the install, and dangling, looping or unreadable links, are refused
+  as well (`unsafe_link`). Relative internal links stay valid across the
+  rename, and their referents are covered by the manifest. This check runs during
   staging, before anything reads through the tree, and before every probe.
   Bounded internal relative links, such as npm's, are allowed, and their
   texts are covered by the manifest.
@@ -1004,18 +1011,17 @@ obtain fresh checks under a new lock.
   read as an npm option, and the hashed path is exactly the one npm receives.
   `--offline`, `--ignore-scripts`, the private cache, config files, prefix and
   environment are unchanged.
-- **Journal coordination.** An executed `op begin` or `op record` creates
-  `<journal>.lock` exclusively (`mkdir`). It holds the lock across reading,
-  validation, the append and any rollback, then removes it. While the lock is
-  present, the following are refused (`journal_busy`), and none of them waits
-  or writes:
-  - every other executed `begin` or `record`;
-  - their dry runs;
-  - `op statement`.
-
-  Nothing steals the lock or kills a process. A lock left by a crashed
-  command is not judged stale: the operator confirms that no op command is
-  running and removes it by hand. This coordinates cooperating harness
+- **Journal coordination.** Every `op begin`, `op record` and `op statement`
+  (dry runs included) creates `<journal>.lock` exclusively (`mkdir`) and
+  removes it when done. Executed commands hold it across reading, validation,
+  the append and any rollback. Dry runs and statements hold it across their
+  read, so they never see a line that a concurrent failed append later rolls
+  back. The only effect is this ephemeral directory; dry runs and statements
+  change no journal or destination state. A crash can leave the directory
+  behind. While it is present, every journal command except `op init` is
+  refused (`journal_busy`) without waiting. Nothing steals the lock or kills a
+  process. A leftover lock is not judged stale: the operator confirms that no
+  op command is running and removes it by hand. This coordinates cooperating harness
   commands only; it does not stop a hostile same-user writer and does not
   qualify power-loss behavior.
 - **Durability.** Before a receipt is reported as written, completed,

@@ -845,16 +845,13 @@ function journalRead(path) {
   return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost };
 }
 // Cooperative journal coordination: `<journal>.lock`, created exclusively by
-// mkdir, held by an executed begin/record across read, validation, append and
-// rollback. A held lock refuses (`journal_busy`); nothing waits, steals or
-// kills. A lock left by a crashed command is not judged stale: the operator
-// checks that no op command is running and removes it by hand. This
-// coordinates cooperating harness commands only, not a hostile same-user writer.
+// mkdir and removed afterwards, held by every begin, record and statement
+// (dry runs included). Its only effect is this ephemeral directory; a crash
+// can leave it behind. A held lock refuses (`journal_busy`); nothing waits,
+// steals or kills, and a leftover lock is removed by the operator after
+// checking that no op command is running. This coordinates cooperating
+// harness commands only, not a hostile same-user writer.
 const journalLock = path => `${path}.lock`;
-function journalIdle(path) {
-  if (!isAbsolute(path ?? '')) throw new Usage('--journal must be absolute');
-  if (lstat(journalLock(path))) throw new Refusal('journal_busy');
-}
 function withJournalLock(path, work) {
   if (!isAbsolute(path ?? '')) throw new Usage('--journal must be absolute');
   trusted(dirname(path), 'journal_dir');
@@ -948,23 +945,24 @@ const op = {
   },
   begin(a) {
     const path = a.need('--journal');
-    if (!a.execute) { journalIdle(path); journalRead(path); return { dryRun: true }; }
+    if (!a.execute) return withJournalLock(path, () => { journalRead(path); return { dryRun: true }; });
     return withJournalLock(path, () => {
       const journal = journalRead(path), run = hex(16);
       journalAppend(path, journal, { event: 'run_started', runId: run });
       return { dryRun: false, runId: run, operatorLabel: journal.operatorLabel };
     });
   },
-  // Executed records hold the journal lock across read, validation, append
-  // and rollback; dry runs take no lock and refuse while one is held.
+  // Every journal command except init holds the journal lock: executed
+  // records across read, validation, append and rollback; dry runs and
+  // statements across their read, so they never see a line that a concurrent
+  // failed append later rolls back.
   record(a) {
     const path = a.need('--journal');
-    if (!a.execute) { journalIdle(path); return recordUnderLock(a, path); }
     return withJournalLock(path, () => recordUnderLock(a, path));
   },
   statement(a) {
-    journalIdle(a.need('--journal'));
-    return statementOf(a);
+    const path = a.need('--journal');
+    return withJournalLock(path, () => statementOf(a));
   }
 };
 function recordUnderLock(a, path) {
@@ -1043,9 +1041,12 @@ function recordUnderLock(a, path) {
     if (event === 'operator_doctor' && value.version !== verified.version) throw new Refusal('operator_check_version_mismatch');
     const remoteBin = a.values.get('--remote-bin');
     if (!remoteBin) throw new Usage('--remote-bin required: the exact value passed to the operator CLI');
-    // The attested path, normalized as POSIX, must be exactly the verified
-    // target's wrapper (no `..` detour). It is not resolved remotely.
-    if (!remoteBin.startsWith('/') || typeof verified.wrapper !== 'string' || posix.normalize(remoteBin) !== verified.wrapper)
+    // The attested path must already be canonical (absolute POSIX, no `.`,
+    // `..`, repeated or trailing `/`) and equal exactly the verified target's
+    // wrapper. Normalizing is not enough: a shell resolves `link/..` through
+    // the link. The path is never resolved, locally or remotely.
+    if (!remoteBin.startsWith('/') || posix.normalize(remoteBin) !== remoteBin || remoteBin.endsWith('/') ||
+      typeof verified.wrapper !== 'string' || remoteBin !== verified.wrapper)
       throw new Refusal('operator_check_target_mismatch', { event });
     // Recorded order: the dry-run only after a doctor recorded since the
     // latest verify of this target under this lock. This is the order of the
