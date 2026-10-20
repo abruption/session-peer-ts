@@ -21,10 +21,12 @@ without native code:
   assigned, resumed), which Node's spawn cannot do.
 
 The candidate backend `reapWindowsTree` is therefore kept unselected. It uses
-held handles only, holds the visible tree before any kill, and attributes from
-the post-hold snapshot only. Confirmation requires a post-kill snapshot. Any
-observed PID swap or vanished, denied or unlisted candidate makes the result
-unconfirmed, and nothing unproven is killed. Its tests cover the algorithm and
+held handles only, holds the visible tree before any kill, and classifies from
+the post-hold snapshot only, by UTC creation-time ordering. That classifier is
+provisional, not an ownership proof, and is known to be unsound under a clock
+rollback. Confirmation requires a post-kill snapshot. Any observed PID swap, or
+any vanished, denied or unlisted candidate, makes the result unconfirmed. Only
+classifier-accepted candidates are killed. Its tests cover the algorithm and
 record the rollback limit as a todo named as an unresolved design limit
 (never counted as a pass or skip).
 

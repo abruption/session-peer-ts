@@ -2,8 +2,9 @@
 // Windows and never starts the tree helper; that is pinned here. The rest
 // tests the candidate tree backend (reapWindowsTree), which no production
 // path selects: virtual-table cases run everywhere, native ones only on win32.
-// They test the candidate algorithm and record its design limits; they are not
-// evidence that descendant ownership can be proven on Windows.
+// They test the candidate (provisional, UTC-ordering) classifier and record
+// its design limits; they are not evidence that descendant ownership can be
+// proven on Windows.
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import childProcess, { spawn } from 'node:child_process';
@@ -75,7 +76,7 @@ const reap = (table: Table, root: ReturnType<typeof rooted>, deadlineMs = 2000, 
   return reapWindowsTree(root, () => deadline, { helper: () => helper, self: SELF });
 };
 
-test('the root is held first; an owned child and grandchild are killed through held handles; unrelated processes are never touched', async () => {
+test('candidate backend: the root is held first; accepted child and grandchild are killed through held handles; unrelated processes are not touched', async () => {
   const table = new Table(), root = rooted(table);
   table.add(101, ROOT); table.add(102, 101); table.add(200, 1); table.add(300, SELF); table.add(4, 0);
   assert.equal(await reap(table, root), 'confirmed');
@@ -87,7 +88,8 @@ test('the root is held first; an owned child and grandchild are killed through h
 });
 
 test('candidate backend: creation-time ordering excludes earlier PID holders under shifted clock bases (not under a rollback; see the todo)', async () => {
-  // Kernel times far from any wall-clock value, as after a clock step.
+  // UTC times far from the current wall clock, with the whole base shifted;
+  // this does not cover a rollback (see the todo).
   for (const clock of [5n, filetime(Date.now() + 86400000)]) {
     const table = new Table(); table.clock = clock;
     const root = rooted(table), start = table.procs.get(ROOT)!.start;
@@ -99,7 +101,7 @@ test('candidate backend: creation-time ordering excludes earlier PID holders und
   }
 });
 
-test('a root whose exit Node already observed, or whose PID was reused before the hold, proves nothing', async () => {
+test('a root whose exit Node already observed, or whose PID was reused before the hold, is left unidentified', async () => {
   let table = new Table(), root = rooted(table, { exited: true });
   table.add(101, ROOT);
   assert.equal(await reap(table, root), 'unconfirmed');
@@ -382,7 +384,7 @@ test('native win32: production run() kills only the direct child; its CreateProc
   assert.equal(f.alive(grandchild), true, 'production does not kill descendants');
 });
 
-test('native win32: candidate backend holds and cleans a non-Node tree; an exited parent proves nothing', native, async t => {
+test('native win32: candidate backend holds and cleans a non-Node tree; an exited parent is left unclassified', native, async t => {
   for (const mode of ['stay', 'exit'] as const) {
     const f = nativeTree(t, mode), child = spawn('powershell.exe', f.args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     let exited = false; child.once('exit', () => { exited = true; });

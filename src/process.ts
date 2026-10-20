@@ -116,8 +116,8 @@ export function run(binary: string, args: string[], options: {
   });
 }
 
-// Candidate owned Windows process-tree cleanup backend (#131). NOT selected by
-// run() or any production path: it cannot prove descendant ownership on
+// Candidate Windows process-tree cleanup backend (#131). NOT selected by run()
+// or any production path: its classifier is not an ownership proof on
 // Windows 10. Every candidate is opened by a helper that keeps the handle (a
 // held PID cannot be reused) and is terminated only through that handle, but
 // attribution compares GetProcessTimes creation/exit times, which are UTC
@@ -239,15 +239,19 @@ export function windowsTreeHelper(): TreeHelper {
   };
 }
 
-// Attribution uses only kernel creation/exit times read through held handles,
-// never wall-clock time. The root is identified first: Node holds its handle
-// until Node observes its exit, so a hold that completes before that holds the
-// root itself (the root is terminated only after this and after its listed
-// children are held, or after ROOT_HOLD_GRACE_MS if the helper is slow). A descendant C is owned iff its parent P is owned
-// and P.start <= C.start <= P.exit, P being held and so stable. Anything else is
-// held but never killed. When the root's identity, a candidate's identity or
-// a candidate's parent cannot be established (root exited first, vanished,
-// denied, unlisted), nothing under it is killed and the result is unconfirmed.
+// A provisional classifier, not an ownership proof. It compares creation/exit
+// times read through held handles; those are UTC wall-clock instants, so the
+// ordering is known to be unsound under a clock rollback, which is why no
+// production path selects this backend. The root is identified first: Node
+// holds its handle until Node observes its exit, so a hold that completes
+// before that holds the root itself (the root is terminated only after this
+// and after its listed children are held, or after ROOT_HOLD_GRACE_MS if the
+// helper is slow). A descendant C is accepted when its parent P was accepted
+// and P.start <= C.start <= P.exit by those UTC times, P being held and so
+// stable. Only accepted candidates are killed; anything else is held but not
+// killed. When the root's identity, a candidate's identity or a candidate's
+// parent cannot be established (root exited first, vanished, denied, unlisted),
+// nothing under it is killed and the result is unconfirmed.
 // A descendant whose own parent exited and was released before cleanup began
 // is not linked to the root at all; it is neither killed nor detectable here.
 // close() asks the helper to exit; it does not await its termination.
@@ -287,18 +291,18 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
         if (rootPending && pid === root.pid) {
           // Still unobserved by Node now, so it was the root when opened.
           rootPending = false;
-          // A proven root is terminated through the held handle once the
+          // An identified root is terminated through the held handle once the
           // visible tree is held (Node's own kill would let a Node child's job
           // end them first, unheld); the grace timer stays as the backstop.
-          // An unproven root is killed now.
+          // An unidentified root is killed now (through Node's handle).
           if (state && !root.exited()) owned.set(pid, { ...state }); else { doubtful = true; unknown.add(pid); clearTimeout(grace); root.kill(); }
           continue;
         }
         if (!state) { doubtful = true; unknown.add(pid); continue; }
         // Only this snapshot, taken after the hold, describes the held process.
         // An earlier row may belong to a previous holder of the PID, and no
-        // wall-clock stamp can prove otherwise: an unlisted (already exited)
-        // candidate stays unattributed, and nothing under it is killed.
+        // wall-clock stamp can show otherwise: an unlisted (already exited)
+        // candidate stays unclassified, and nothing under it is killed.
         const ppid = reply.rows.get(pid);
         if (ppid === undefined) { doubtful = true; unknown.add(pid); }
         else if (ppid !== pid && parentOwns(ppid, state.start)) owned.set(pid, { ...state });
@@ -311,7 +315,7 @@ export async function reapWindowsTree(root: TreeRoot, deadline: () => number, op
       }
       hold = []; kill = [];
       for (const [pid, node] of owned) if (node.exit === null) kill.push(pid);
-      // An unproven root already made the result doubtful; its PID is in unknown.
+      // An unidentified root already made the result doubtful; its PID is in unknown.
       for (const [pid, ppid] of reply.rows) {
         if (unknown.has(ppid)) doubtful = true;
         if (pid <= 4 || pid === ppid || pid === self || pid === helper.pid || owned.has(pid) || foreign.has(pid) || unknown.has(pid)) continue;
