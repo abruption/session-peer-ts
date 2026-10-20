@@ -1,6 +1,113 @@
 # Validation record — updated 2026-10-20 KST
 
 
+## #131 Windows tree-cleanup backend and storage guard (preparation, not selected) — source, 2026-10-20 KST
+
+This is a source change on top of main `98074a0fb8c4aa6dbab32203fee79ac8244faf0b`,
+not a release. Production behaviour is unchanged on every platform. On Windows,
+`run()` still terminates only the direct child; descendants may linger, the
+child keeps its full timeout, and no new result field or signal handling was
+added.
+
+Review established a design limit for owning a process tree on Windows 10
+without native code:
+- Descendant ownership cannot be proven. GetProcessTimes creation/exit values
+  are UTC wall-clock instants, not monotonic generations, and Win32_Process
+  ParentProcessId may refer to a reused PID.
+- After a clock rollback, a child of an earlier holder of a parent's PID can
+  satisfy any creation-time ordering. Handle-holding fixes only the current
+  identity.
+- A sound boundary needs the child created inside a Job object (suspended,
+  assigned, resumed), which Node's spawn cannot do.
+
+The candidate backend `reapWindowsTree` is therefore kept unselected. It uses
+held handles only, holds the visible tree before any kill, and classifies from
+the post-hold snapshot only, by UTC creation-time ordering. That classifier is
+provisional, not an ownership proof, and is known to be unsound under a clock
+rollback. Confirmation requires a post-kill snapshot. Any observed PID swap, or
+any vanished, denied or unlisted candidate, makes the result unconfirmed. Only
+classifier-accepted candidates are killed. Its tests cover the algorithm and
+record the rollback limit as a todo named as an unresolved design limit
+(never counted as a pass or skip).
+
+The storage guard is a read-only owner-SID/protected-DACL/reparse inspection
+plus a protected private-leaf creator. It is not connected to the handoff
+ledger, which still refuses Windows with `handoff_storage_unsupported`.
+Accepting the token's default owner (an elevated administrator's
+Administrators) is a weaker, group-wide boundary. Creator precheck, creation
+and postcheck are not atomic. Null-DACL, parent-ACL and creator-race handling
+remain unqualified while it is unconnected. Like the existing inspection code,
+it resolves `powershell.exe` through PATH rather than a SystemRoot-pinned path.
+
+Checkpoints. Each result belongs to the commit it was run on:
+- Full local suite, macOS arm64 / Node 24.16.0, at `3dc405d`:
+  - build, test types, `npm run test:package`, repository checks and
+    `git diff --check` passed;
+  - `npm test`, with the pinned Python 1.1.0 reference
+    `8ca77cf31254c8287a2593fe484bb30a7dba2727`, passed with zero failures.
+- Mutation checks, on the `f06041d` tree. Each guard was removed in turn, and
+  every removal made its regression test fail. The eight guards are:
+  - confirm only after a post-kill snapshot;
+  - doubt on an observed PID swap;
+  - no earlier-row inheritance for unlisted candidates;
+  - doubt on gone or denied candidates;
+  - doubt on unlisted candidates;
+  - reject a root after an observed exit;
+  - the creation-time check;
+  - hold the visible tree before any kill.
+- Comment, wording and test-name changes only, at `534d3fb`: light checks.
+- At the final head, the native process-tree fixture was redesigned. Light
+  checks, the focused local files and a Windows rerun of the two new test files
+  cover it (below).
+
+Separately authorized isolated runs used a Windows x64 test host: Windows 10
+19045, PowerShell 5.1, Node 24.16.0 x64. The account was an administrator,
+elevated over SSH. Each run used a dedicated temporary prefix and the host lock.
+
+Runs on earlier heads, with the backend selected or exercised natively, found
+and fixed:
+- a detached helper exited at once;
+- PowerShell 5.1 wrapped the JSON path array;
+- an elevated administrator's files are owned by Administrators;
+- a Node child's job ends its descendants.
+
+Those earlier native backend runs let the classifier terminate processes it
+accepted on the test host. The final head no longer runs the backend natively:
+its kills cannot be bounded to fixture identities, and isolated-host approval
+does not authorize terminating foreign processes.
+
+At `f06041d`, `npm run test:windows` and `npm run test:package` passed on that
+host.
+
+Earlier fixture heads, through `534d3fb`, started a `PING.EXE` with a 600 s
+lifetime and cleaned it up by PID. A grandchild could therefore have outlived a
+run. Afterwards, cleanup was checked only through process command lines
+containing the prefix (and later a read-only `PING.EXE` listing). Those checks
+showed nothing, but no actual leak was observed or ruled out beyond them.
+
+From the final fixture onward:
+- The child and grandchild have explicit lifetimes: about 25 s for the child
+  (`run()` ends it earlier through its own handle) and about 11 s for PING.
+- They are never killed by PID; the test only observes PID presence until
+  both are absent, then removes its directory last.
+- Unreadable PIDs, or a PID still present or unknown, keep the evidence and
+  fail the cleanup.
+- Presence is not identity: a reused PID can look present, and an error other
+  than ESRCH is reported as unknown.
+- The mocked helper-transport test is skipped on win32, so a mock that misses
+  can never open its fake PIDs there.
+
+The native tests on Windows are the production baseline and the storage cases;
+the reruns of the two new files are in the PR.
+
+ACLs of existing paths were not changed; the tests set a protected DACL only on
+new leaves inside the prefix. The interrupt behaviour of production `run()` on
+Windows is unchanged and untested here. The following remain unrun: the Windows
+CI job (where the native tests are registered), non-admin and non-elevated
+cells, arm64 and cold-boot helper latency. No live agent session or message,
+policy, service or account change was made.
+
+
 ## Unreleased Linux arm64 observation candidate — #130, 2026-10-20 KST
 
 Source-only follow-up on the published 0.4.0 runtime; no version change.
