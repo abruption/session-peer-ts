@@ -47,9 +47,10 @@ the recorded cells were all individually successful.
 This is evidence for quoting only. Windows `--ssh-jump` stays refused: no hop
 or destination connection, version other than 9.5p1, non-administrator
 account, or #131 owned-process-tree cleanup (timeout, overflow, interrupt) was
-exercised. In particular, an outer `ssh.exe` that exits while its
-`ProxyCommand` still holds the pipes leaves that process running with an
-unconfirmed cleanup; enabling must report that as an unknown effect.
+exercised. Production Windows `run()` kills only the direct child; #131
+leaves tree cleanup as an unselected preparation backend, so cleanup of a
+`ProxyCommand` descendant is not guaranteed and blocks enabling. A stop
+there remains an unknown effect with no resend.
 
 ## Public 0.4.0 — 2026-10-18 KST
 

@@ -151,11 +151,12 @@ export function parse(args: string[]): Options {
     // cleanup are unverified. Enabling also needs: an analysis of real ssh.exe not
     // exiting with pipe stdin in a non-interactive session (run() uses pipe stdin);
     // the same absolute, resolved ssh.exe from executable() as the outer binary and
-    // the ProxyCommand program; a run() `cleanup: 'unconfirmed'` stop reported as an
-    // unknown effect (no resend, no success), including an outer ssh.exe that exited
-    // while its ProxyCommand still holds the pipes and keeps running; #131 cleanup
-    // verified with this ssh.exe -> ProxyCommand ssh.exe shape (its native tests use
-    // a PowerShell -> PING stand-in); and the builder called here, before ssh -G.
+    // the ProxyCommand program; owned-process-tree cleanup on Windows: run() kills
+    // only the direct child, so a ProxyCommand ssh.exe may outlive a timeout, an
+    // overflow or an interrupt (#131 keeps tree cleanup as an unselected candidate
+    // backend, whose native tests use a PowerShell -> PING stand-in, never this
+    // ssh.exe -> ProxyCommand ssh.exe shape); any such stop stays an unknown effect
+    // with no resend; and the builder called here, before ssh -G.
     if (process.platform === 'win32') throw new Refusal('ssh_jump_unsupported_platform');
   }
   if (values.has('--ssh-control-path')) {
