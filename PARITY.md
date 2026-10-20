@@ -2,8 +2,7 @@
 
 ## 0.5.0 release scope — 2026-10-20 KST
 
-The 0.5.0 source carries platform-qualification groundwork and operator-invoked
-remote-maintenance validation. It does not activate additional observation or
+The 0.5.0 source carries platform-qualification groundwork. It does not activate additional observation or
 Windows jump support. #130, #131, #20 and #23 remain partial follow-ups:
 
 - #153: exact platform/native-version selection and procfs inspection groundwork;
@@ -13,9 +12,9 @@ Windows jump support. #130, #131, #20 and #23 remain partial follow-ups:
   handoff storage/native observation remain unsupported.
 - #154: Win32-OpenSSH ProxyCommand construction and no-network quoting evidence;
   Windows-client jump still refuses before effect.
-- #155: POSIX repository-only, default-dry-run deployment receipt/recovery
-  harness. It is excluded from the npm package and does not install anything
-  during ordinary CLI commands.
+- #155 is deferred for minimum-contract redesign and is excluded from this
+  release. Its harness, authority/recovery logic and qualification claims
+  are not included; #23 remains open.
 
 The finite 0.5.0 doctor matrix preserves the four exact profiles reviewed for
 0.4.0. This is metadata-only compatibility, not additional feature or platform
