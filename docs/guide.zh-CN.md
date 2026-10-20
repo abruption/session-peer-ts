@@ -6,7 +6,7 @@
 
 **文档和源码版本：0.4.0。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](../VALIDATION.md)，发布流程见 [RELEASING.md](../RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 0.4.0 会拒绝彼此的 SSH 预检。
 
-**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。
+**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 未发布源码（不含于 0.4.0）记录了 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但未启用；Linux native 观测仍不支持。
 
 这是 0.4.0 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。此前的发布记录见 [0.3.1 公开发布证据](../VALIDATION.md#public-031--2026-10-04-kst)；下文 0.1.0 的说明用于旧版本对比。
 
@@ -339,4 +339,4 @@ native 观测仅支持 macOS arm64 上的精确 Codex 0.160.1/0.162.1 和已有�
 
 [Observation](api.md#unreleased-local-delivery-observation--72)
 
-Linux、Windows 的 native 注入观察尚不支持。支持的 POSIX ledger 可将操作人员明确确认的收件事实记录为 `operator_confirmed`，但这不是自动 ACK 收集。0.4.0 范围是已验证的 macOS 观察和操作人员的明确确认。Linux、Windows 观察及 receipt bootstrap 分别作为 [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) 的后续工作。
+Linux、Windows 的 native 注入观察尚不支持。 未发布源码（不含于 0.4.0）记录了 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但未启用；Linux native 观测仍不支持。支持的 POSIX ledger 可将操作人员明确确认的收件事实记录为 `operator_confirmed`，但这不是自动 ACK 收集。0.4.0 范围是已验证的 macOS 观察和操作人员的明确确认。Linux、Windows 观察及 receipt bootstrap 分别作为 [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) 的后续工作。

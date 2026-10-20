@@ -4,6 +4,16 @@
 // separate groups and defeat the supervisor's cleanup.
 // Keep the sample/identity algorithm aligned with writer.ts inspectWriter.
 // Its byte-for-byte identity SHA is covered by a real-lock synthetic fixture.
+// `--procfs-owner` (Linux profile rows only) adds kernel evidence without
+// changing the generation: /proc/locks must name exactly the lsof owner as
+// the single exclusive flock holder, with the same start time/UIDs per sample.
+// Guarantee boundary: the retained generation still binds only the lock file
+// fingerprint, lsof pid/uid/command and ps lstart (1-second resolution). The
+// kernel tick start time is compared within one probe invocation, not against
+// the original send; the writer's executable bytes are not pinned (only the
+// owned queue child's are). Retaining a separate Linux kernel identity needs a
+// ledger-schema field and is a follow-up.
+
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstatSync, realpathSync } from 'node:fs';
@@ -11,6 +21,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 type Owner = { pid: number; uid?: number; command?: string; start?: string };
+type Kernel = { pid: number; starttime: string; uid: number } | undefined;
 type Output = { schemaVersion: 1; ok: true; generation: string } |
   { schemaVersion: 1; ok: false; error: 'writer_probe_invalid' | 'writer_probe_unsupported' | 'writer_probe_unverified' };
 const safe = (value: unknown, bytes: number): value is string => typeof value === 'string' && value.length > 0 &&
@@ -48,17 +59,26 @@ function command(binary: string, args: string[], env = process.env): Promise<{ v
 async function main(args: string[]): Promise<Output> {
   const refusal = (error: 'writer_probe_invalid' | 'writer_probe_unsupported' | 'writer_probe_unverified'): Output => ({ schemaVersion: 1, ok: false, error });
   if (!['darwin', 'linux'].includes(process.platform) || process.getuid?.() === undefined) return refusal('writer_probe_unsupported');
-  const [home, rawId] = args;
-  if (args.length !== 2 || !safe(home, 2048) || !safe(rawId, 128) || !isAbsolute(home) || resolve(home) !== home ||
+  const [home, rawId, mode] = args, kernel = args.length === 3 && mode === '--procfs-owner';
+  if (kernel && process.platform !== 'linux') return refusal('writer_probe_unsupported');
+  if ((args.length !== 2 && !kernel) || !safe(home, 2048) || !safe(rawId, 128) || !isAbsolute(home) || resolve(home) !== home ||
       !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(rawId)) return refusal('writer_probe_invalid');
   try {
     const id = rawId.toLowerCase(), directory = join(home, 'thread-writer-locks'), path = join(directory, id + '.lock');
     if (realpathSync(home) !== home || !owned(home, true) || !owned(directory, true) || !owned(path, false)) return refusal('writer_probe_unverified');
     // Dynamic import keeps dependency failures inside the sanitized boundary.
     const { probeLock } = await import('./writer.js');
+    const proc = kernel ? await import('./linux-proc.js') : undefined;
+    // Kernel holder/start/UID evidence for the one reported owner, read only.
+    const inspect = (pid: number): Kernel => {
+      if (!proc) return undefined;
+      const holder = proc.procFlockOwner(path), owner = proc.procOwner(pid);
+      if (holder !== pid) throw new Error('kernel lock owner differs');
+      return { pid, starttime: owner.starttime, uid: owner.uid };
+    };
     async function sample() {
       const state = await probeLock(path);
-      if (state !== 'held') return { state, fingerprint: state === 'free' ? fingerprint(path) : '', owners: [] as Owner[], valid: true };
+      if (state !== 'held') return { state, fingerprint: state === 'free' ? fingerprint(path) : '', owners: [] as Owner[], valid: true, kernel: undefined as Kernel };
       const stamp = fingerprint(path);
       const listed = await command('lsof', ['-nP', '-F0pcu', '--', path]);
       const owners: Owner[] = []; let current: Owner | undefined;
@@ -71,13 +91,13 @@ async function main(args: string[]): Promise<Output> {
         if (current && token[0] === 'c') current.command = value;
       }
       // Ambiguous owners need no further tools and cannot produce a generation.
-      if (owners.length !== 1) return { state, fingerprint: stamp, owners, valid: false };
+      if (owners.length !== 1) return { state, fingerprint: stamp, owners, valid: false, kernel: undefined as Kernel };
       for (const owner of owners) {
         if (!Number.isSafeInteger(owner.pid) || owner.pid <= 1) continue;
         const started = await command('ps', ['-p', String(owner.pid), '-o', 'lstart='], { ...process.env, LC_ALL: 'C' });
         if (started.valid) owner.start = started.stdout.trim();
       }
-      return { state, fingerprint: stamp, owners, valid: listed.valid };
+      return { state, fingerprint: stamp, owners, valid: listed.valid, kernel: inspect(owners[0]!.pid) };
     }
     const before = await sample();
     if (before.state !== 'held') return refusal('writer_probe_unverified');
@@ -86,7 +106,9 @@ async function main(args: string[]): Promise<Output> {
     if (!before.valid || !after.valid || before.state !== after.state || before.fingerprint !== after.fingerprint ||
         before.owners.length !== 1 || after.owners.length !== 1 || JSON.stringify(before.owners) !== JSON.stringify(after.owners) ||
         !owner?.start || !safe(owner.start, 256) || uid === undefined || owner.uid !== uid ||
-        !/^codex(?:\.exe|-|$)/i.test(owner.command ?? '') || !owned(path, false)) return refusal('writer_probe_unverified');
+        !/^codex(?:\.exe|-|$)/i.test(owner.command ?? '') || !owned(path, false) ||
+        (kernel && (!before.kernel || !after.kernel || JSON.stringify(before.kernel) !== JSON.stringify(after.kernel) ||
+          after.kernel.uid !== uid))) return refusal('writer_probe_unverified');
     const identity = JSON.stringify({ fingerprint: after.fingerprint, ...owner });
     return { schemaVersion: 1, ok: true, generation: createHash('sha256').update(identity).digest('hex') };
   } catch { return refusal('writer_probe_unverified'); }

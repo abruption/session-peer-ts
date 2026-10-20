@@ -146,7 +146,17 @@ export function parse(args: string[]): Options {
     jump = sshJump(values.get('--ssh-jump')!);
     // An existing control master would bypass the hop entirely.
     if (values.has('--ssh-control-path')) throw new Refusal('conflicting_ssh_jump');
-    // Win32-OpenSSH starts ProxyCommand without a POSIX shell; not yet proven.
+    // Win32-OpenSSH starts ProxyCommand without a POSIX shell. windowsProxyCommand's
+    // quoting matched an isolated no-connection 9.5p1 probe; a connected hop and
+    // cleanup are unverified. Enabling also needs: an analysis of real ssh.exe not
+    // exiting with pipe stdin in a non-interactive session (run() uses pipe stdin);
+    // the same absolute, resolved ssh.exe from executable() as the outer binary and
+    // the ProxyCommand program; owned-process-tree cleanup on Windows: run() kills
+    // only the direct child, so a ProxyCommand ssh.exe may outlive a timeout, an
+    // overflow or an interrupt (#131 keeps tree cleanup as an unselected candidate
+    // backend, whose native tests use a PowerShell -> PING stand-in, never this
+    // ssh.exe -> ProxyCommand ssh.exe shape); any such stop stays an unknown effect
+    // with no resend; and the builder called here, before ssh -G.
     if (process.platform === 'win32') throw new Refusal('ssh_jump_unsupported_platform');
   }
   if (values.has('--ssh-control-path')) {
@@ -461,7 +471,7 @@ try {
       const settings = { to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') };
       const enabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
       if (wireContext?.preparation) ({ value: result, exitCode } = await prepareHandoff(settings, undefined, options.values.get('--correlation-id'), handoffBudget));
-      else if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget, resultOverhead: Buffer.byteLength(JSON.stringify(routing)) + 1024 }));
+      else if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { remote: wireContext !== undefined, correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget, resultOverhead: Buffer.byteLength(JSON.stringify(routing)) + 1024 }));
       else result = await send(settings);
     }
     else if (command === 'update') result = options.flags.has('--check') ? await checkUpdate(options.values.get('--channel')) : refuseSelfUpdate(options.values.get('--channel'));

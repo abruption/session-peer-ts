@@ -22,7 +22,7 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 **문서·소스 기준 버전: 0.4.0.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6과 0.4.0은 서로의 SSH 사전 확인을 거부합니다.
 
-**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다.
+**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 미배포 소스(0.4.0 미포함)는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하지만 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.
 
 <a id="demo"></a>
 ## 시연
