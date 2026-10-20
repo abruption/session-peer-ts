@@ -976,7 +976,9 @@ obtain fresh checks under a new lock.
 
   A present but invalid record is refused, not treated as absent
   (`retained_staging_unreadable`). The internal existing-target check inside
-  `activate` is separate and unchanged. An explicit break removes the record
+  `activate` is separate and unchanged. This only blocks while the kept tree
+  is pending. After the explicit discard, the lock's existing statements are
+  usable as before, and no new proof is required. An explicit break removes the record
   with the lock. The kept tree then stays as an owned leftover for its run's
   explicit discard.
 - **Manifest names.** The manifest's file and link maps have no prototype, so
@@ -986,13 +988,25 @@ obtain fresh checks under a new lock.
   replayed or adopted, the following are synced in order: the publication
   intent and the lock directory, then the receipt file, the `.receipts`
   directory and the root, and finally a `publication.synced.json` marker in
-  the lock. While a receipt or its install exists without that marker, `dest
+  the lock, followed by the lock directory again. A replay or an adoption
+  syncs the existing intent and an existing valid marker again; it does not
+  skip them. A failed intent sync stops before the receipt is synced. A failed
+  marker sync comes after the receipt and its directories were already
+  synced; it fails the step but does not by itself mean the receipt is lost. While a receipt or its install exists without that marker, `dest
   unlock` refuses (`publication_unsynced`) and keeps the evidence; rerunning
   the same receipt command completes the syncs. An existing receipt is
   synced, never rewritten. A journal record succeeds only after the whole line
-  is written (short writes continue) and synced; on a failure the journal is
-  truncated back to its previous length. I/O errors are reported, not
-  retried. Test-only environment hooks can trace the fsync order, fail one
+  is written (short writes continue) and synced. On a failure the harness
+  attempts a rollback: it truncates the journal to its previous length and
+  syncs it.
+  - If that is confirmed, the result is `journal_append_failed` with rollback
+    `restored`.
+  - Otherwise the result is `journal_append_unknown` with rollback
+    `unconfirmed`, keeping both the original error and the rollback error.
+    The operator must inspect the journal before any next step.
+
+  A failed record never promises that the line is absent, and the append is
+  never retried. I/O errors are reported, not retried. Test-only environment hooks can trace the fsync order, fail one
   fsync or force short writes. These hooks only add failures. Neither the
   hooks nor these fixtures qualify behavior under real power loss. The limits
   stated above for unknown crashes, atomic file-system behavior and same-user

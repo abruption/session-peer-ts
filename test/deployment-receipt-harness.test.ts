@@ -1077,13 +1077,66 @@ test('a first receipt write syncs the intent, then the receipt and its directori
   assert.deepEqual([...sequence].sort((x, y) => at(x) - at(y)), sequence);
 });
 
+// Journal-only fixture: no destination prefix, so it also runs where a prefix's
+// ancestors would be refused; only the private journal directory is checked.
+function journalOnly(t: TestContext) {
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-journal-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const dir = join(base, 'operator'); mkdirSync(dir, { mode: 0o700 });
+  const journal = join(dir, 'journal.jsonl'), J = ['--journal', journal];
+  ok(['op', 'init', ...J, '--dest-alias', 'fixture-dest', '--dest-host', 'dest.example', '--execute']);
+  const run = ok(['op', 'begin', ...J, '--execute']).runId as string;
+  const record = (env: NodeJS.ProcessEnv) => h(['op', 'record', ...J, '--run', run, '--event', 'run_ended', '--execute'], { ...process.env, ...env });
+  return { journal, J, run, record };
+}
+
 test('journal records are written completely and synced before success', { skip }, t => {
-  const w = world(t);
-  const run = w.begin();
-  const before = readFileSync(w.journal);
-  const failed = h(['op', 'record', ...w.J, '--run', run, '--event', 'run_ended', '--execute'], { ...process.env, SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl' });
-  assert.equal(failed.code, 1); assert.deepEqual(readFileSync(w.journal), before);
-  const short = h(['op', 'record', ...w.J, '--run', run, '--event', 'run_ended', '--execute'], { ...process.env, SESSION_PEER_TS_HARNESS_TEST_SHORT_WRITE: '1' });
+  const j = journalOnly(t);
+  const before = readFileSync(j.journal);
+  // Append fsync fails once; the rollback truncates and syncs, and says so.
+  const restored = j.record({ SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl', SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT: '1' });
+  assert.equal(restored.code, 1); assert.equal(restored.out.error, 'journal_append_failed');
+  assert.equal(restored.out.reason, 'EIO'); assert.equal(restored.out.rollback, 'restored');
+  assert.deepEqual(readFileSync(j.journal), before);
+  const short = j.record({ SESSION_PEER_TS_HARNESS_TEST_SHORT_WRITE: '1' });
   assert.equal(short.out.ok, true);
-  assert.equal(ok(['op', 'statement', ...w.J, '--kind', 'run-ended', '--run', run]).kind, 'run-ended');
+  assert.equal(ok(['op', 'statement', ...j.J, '--kind', 'run-ended', '--run', j.run]).kind, 'run-ended');
+});
+
+test('a journal rollback that cannot be confirmed is reported as unknown, never as absence', { skip }, t => {
+  for (const [env, rollbackError] of [
+    [{ SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl' }, 'EIO'],
+    [{ SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: 'journal.jsonl', SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT: '1', SESSION_PEER_TS_HARNESS_TEST_TRUNCATE_FAIL: '1' }, 'EIO']] as const) {
+    const j = journalOnly(t);
+    const failed = j.record(env);
+    assert.equal(failed.code, 1); assert.equal(failed.out.error, 'journal_append_unknown');
+    assert.equal(failed.out.reason, 'EIO'); assert.equal(failed.out.rollback, 'unconfirmed'); assert.equal(failed.out.rollbackError, rollbackError);
+  }
+});
+
+test('replays and adoption resync the existing intent and synced marker around the receipt', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const statement = w.checks(run);
+  const args = ['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement, '--execute'];
+  ok(args);
+  const lock = join(w.root, '.activate.lock'), trace = join(w.base, 'replay.log');
+  const intent = join(lock, 'publication.json'), marker = join(lock, 'publication.synced.json'), receipt = join(w.root, '.receipts', `${w.name}.json`);
+  assert.equal(h(args, { ...process.env, SESSION_PEER_TS_HARNESS_TEST_FSYNC_TRACE: trace }).out.replayed, true);
+  const order = readFileSync(trace, 'utf8').split('\n').filter(Boolean);
+  const first = (path: string) => order.indexOf(path), last = (path: string) => order.lastIndexOf(path);
+  assert.ok(first(intent) >= 0 && first(intent) < first(lock) && first(lock) < first(receipt));
+  assert.ok(first(receipt) < first(join(w.root, '.receipts')) && first(join(w.root, '.receipts')) < first(w.root) && first(w.root) < first(marker));
+  assert.ok(last(lock) > first(marker));
+  const bytes = readFileSync(receipt, 'utf8');
+  for (const failing of ['publication.json', 'publication.synced.json']) {
+    rmSync(trace, { force: true });
+    const failed = h(args, { ...process.env, SESSION_PEER_TS_HARNESS_TEST_FSYNC_TRACE: trace, SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL: failing });
+    assert.equal(failed.code, 1, failing); assert.equal(failed.out.reason, 'EIO', failing);
+    const seen = readFileSync(trace, 'utf8').split('\n').filter(Boolean);
+    // An intent failure stops before the receipt sync; a marker failure comes after it.
+    assert.equal(seen.includes(receipt), failing === 'publication.synced.json', failing);
+    assert.equal(readFileSync(receipt, 'utf8'), bytes);
+  }
+  assert.equal(ok(args).replayed, true);
 });

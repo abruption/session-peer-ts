@@ -106,9 +106,12 @@ function readJson(path) { try { return JSON.parse(readFileSync(path, 'utf8')); }
 // at a few bytes to exercise short writes. They add failures, never skip work.
 const TEST_TRACE = process.env.SESSION_PEER_TS_HARNESS_TEST_FSYNC_TRACE, TEST_FAIL = process.env.SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL;
 const TEST_SHORT = process.env.SESSION_PEER_TS_HARNESS_TEST_SHORT_WRITE === '1';
+// Optional: fail only the first N matching fsyncs; fail the journal truncate.
+let testFailures = Number(process.env.SESSION_PEER_TS_HARNESS_TEST_FSYNC_FAIL_COUNT ?? Infinity);
+const TEST_TRUNCATE_FAIL = process.env.SESSION_PEER_TS_HARNESS_TEST_TRUNCATE_FAIL === '1';
 function syncFd(fd, path) {
   if (TEST_TRACE) appendFileSync(TEST_TRACE, `${path}\n`);
-  if (TEST_FAIL && path.endsWith(TEST_FAIL)) throw Object.assign(new Error('injected fsync failure'), { code: 'EIO' });
+  if (TEST_FAIL && path.endsWith(TEST_FAIL) && testFailures-- > 0) throw Object.assign(new Error('injected fsync failure'), { code: 'EIO' });
   fsyncSync(fd);
 }
 function syncPath(path) {
@@ -329,13 +332,16 @@ function publicationSynced(p, pub) {
 // Syncs the receipt file, its directory and the root (which holds .receipts),
 // then records that durably under the lock. Nothing is reported as published
 // before this completes.
+// Order on every executed write, completion, replay or adoption: the existing
+// intent and the lock directory, then the receipt, .receipts and the root, then
+// the synced marker (written, or the existing one) and the lock directory.
 function syncPublication(p, pub) {
+  syncPath(join(p.lock, 'publication.json')); syncPath(p.lock);
   syncPath(join(p.receipts, `${pub.target}.json`)); syncPath(p.receipts); syncPath(p.root);
-  if (!publicationSynced(p, pub)) {
-    const path = join(p.lock, 'publication.synced.json');
-    if (lstat(path)) throw new Refusal('publication_intent_unreadable');
-    writeExclusive(path, JSON.stringify({ target: pub.target, receiptSha256: sha256(pub.receipt) }), true);
-  }
+  const path = join(p.lock, 'publication.synced.json');
+  if (publicationSynced(p, pub)) { syncPath(path); syncPath(p.lock); return; }
+  if (lstat(path)) throw new Refusal('publication_intent_unreadable');
+  writeExclusive(path, JSON.stringify({ target: pub.target, receiptSha256: sha256(pub.receipt) }), true);
 }
 const lockBinding = (p, lock) => ({ prefixId: p.prefixId, lockId: lock.owner.lockId });
 const sameLock = (proof, p, lock) => proof?.prefixId === p.prefixId && proof?.lockId === lock.owner.lockId && HEX32.test(proof.lockId ?? '');
@@ -812,15 +818,29 @@ function journalRead(path) {
   if (entries[0]?.event !== 'journal_created') throw new Refusal('journal_corrupt');
   return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost };
 }
-// A record succeeds only once the whole line is written and synced; on any
-// failure the journal is truncated back to its previous length.
+// A record succeeds only once the whole line is written and synced. On a
+// failure the journal is truncated back to its previous length and synced:
+// `journal_append_failed` (rollback `restored`) only when that is confirmed;
+// otherwise `journal_append_unknown` (rollback `unconfirmed`), and the operator
+// must inspect the journal before any next step. A failure never promises the
+// record is absent, and the append is never retried.
 function journalAppend(path, journal, event) {
   const line = JSON.stringify({ seq: journal.entries.length, prev: journal.head, at: now(), ...event });
   const fd = openSync(path, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
-  const size = fstatSync(fd).size;
-  try { writeAll(fd, `${line}\n`); syncFd(fd, path); }
-  catch (error) { try { ftruncateSync(fd, size); fsyncSync(fd); } catch {} throw error; }
-  finally { closeSync(fd); }
+  try {
+    const size = fstatSync(fd).size;
+    try { writeAll(fd, `${line}\n`); syncFd(fd, path); }
+    catch (error) {
+      let rollbackError;
+      try {
+        if (TEST_TRUNCATE_FAIL) throw Object.assign(new Error('injected truncate failure'), { code: 'EIO' });
+        ftruncateSync(fd, size); syncFd(fd, path);
+        if (fstatSync(fd).size !== size) rollbackError = 'size_mismatch';
+      } catch (failure) { rollbackError = failure?.code ?? 'unknown'; }
+      throw new Refusal(rollbackError ? 'journal_append_unknown' : 'journal_append_failed',
+        { reason: error?.code ?? 'unknown', rollback: rollbackError ? 'unconfirmed' : 'restored', ...(rollbackError ? { rollbackError } : {}) });
+    }
+  } finally { closeSync(fd); }
   return { seq: journal.entries.length, head: sha256(line) };
 }
 // Destination-result event mappings. Operator events are handled separately below.
