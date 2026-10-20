@@ -192,6 +192,11 @@ false` even when the explicit wait fails. The separate handoff describes the
 requested evidence goal. After any possible RPC write, no legacy fallback or
 second submission occurs.
 
+Selection is by the exact host platform/architecture and native version; a
+matching version on Linux (or any unlisted platform) has no profile, so
+required delivery refuses before effect and best-effort uses the ordinary
+queue. Linux procfs binding exists in source but no Linux profile is qualified.
+
 Before an opted-in native effect, original saved thread/home/writer evidence,
 default SQLite storage, exact native version and a warm supported metadata
 schema are checked. Required unsupported observation refuses before effect.

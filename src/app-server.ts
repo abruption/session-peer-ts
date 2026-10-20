@@ -14,6 +14,8 @@ import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
 import { run } from './process.js';
+import { NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
+import { artifactDigest, procOwnedFiles, procfs, type OpenedFile, type ProcReader } from './linux-proc.js';
 
 export const APP_SERVER_EVIDENCE = Object.freeze({
   version: '0.160.1', inspectedPlatform: 'darwin-arm64',
@@ -39,7 +41,12 @@ export const APP_SERVER_QUEUE_EVIDENCE = Object.freeze([
     turnCompletedSha256: '69413578ec3ecd02691424bdeb9d640c7244b4ca4c5c3ef26f69a2efe7c37db8',
   }),
 ]);
-function queueEvidence(version: string) { return APP_SERVER_QUEUE_EVIDENCE.find(profile => profile.version === version); }
+// Exact (version, platform) schema evidence; another platform's row is never inherited.
+function queueEvidence(version: string, platform: string) {
+  return APP_SERVER_QUEUE_EVIDENCE.find(profile => profile.version === version && profile.inspectedPlatform === platform);
+}
+// Every production profile row must carry its own exact schema evidence row.
+if (NATIVE_PROFILES.some(row => !queueEvidence(row.version, row.platform))) throw new Error('native profile lacks queue evidence');
 export const APP_SERVER_LIMITS = Object.freeze({
   frameBytes: 65536, receivedBytes: 1024 * 1024, sentBytes: 256 * 1024,
   frames: 512, notifications: 256, requests: 16, observations: 64, messageBytes: 32768,
@@ -54,8 +61,8 @@ export type AppServerCapability = {
   reason: 'metadata_only_owner_route_unvalidated' | 'version_unqualified'; attempted: false; queueSupported: boolean;
 };
 export function appServerCapability(context: AppServerContext): AppServerCapability {
-  const profile = queueEvidence(context.version);
-  const qualified = profile !== undefined && profile.inspectedPlatform === context.platform;
+  const qualified = selectNativeProfile({ platform: context.platform, version: context.version }) !== undefined &&
+    queueEvidence(context.version, context.platform) !== undefined;
   return { supported: false, schema: qualified ? 'version_qualified' : 'version_unqualified', route: 'route_unsupported',
     reason: qualified ? 'metadata_only_owner_route_unvalidated' : 'version_unqualified', attempted: false, queueSupported: qualified };
 }
@@ -273,19 +280,23 @@ export class BoundedAppServerClient implements AppServerPort {
   }
   // Hermetic test hook for the exact native RPC profile. It does not qualify a
   // binary, platform or writer. Production callers use nativeQueueOnce instead.
+  // The profile table defaults to the frozen production rows; a hermetic test
+  // may supply a validated synthetic table, which never qualifies production.
   static async connectNativeQueueFixture(scope: AppServerScope, transport: MetadataOnlyTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>,
-    nativeVersion: string = APP_SERVER_EVIDENCE.version): Promise<NativeQueuePort> {
-    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, nativeVersion);
+    nativeVersion: string = APP_SERVER_EVIDENCE.version, platform: string = APP_SERVER_EVIDENCE.inspectedPlatform,
+    profiles: readonly NativeProfile[] = NATIVE_PROFILES): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect,
+      selectNativeProfile({ platform, version: nativeVersion }, validateNativeProfiles(profiles)));
   }
   static async connectNativeQueueWire(scope: AppServerScope, transport: NativeQueueTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>,
-    nativeVersion: string = APP_SERVER_EVIDENCE.version): Promise<NativeQueuePort> {
-    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, nativeVersion);
+    profile: NativeProfile): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, profile);
   }
   private static async connectWire(scope: AppServerScope, transport: ClientTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, nativeQueue: boolean,
-    beforeEffect: () => Promise<void> = async () => {}, nativeVersion: string = APP_SERVER_EVIDENCE.version): Promise<BoundedAppServerClient> {
+    beforeEffect: () => Promise<void> = async () => {}, profile?: NativeProfile): Promise<BoundedAppServerClient> {
     let original: AppServerScope;
     try { original = scopeValue(scope); } catch { await disposeTransport(transport); throw new AppServerFault('invalid_scope', false); }
     if (transport.qualification !== 'hermetic_fixture_only' && !(nativeQueue && transport.qualification === 'native_queue_only_stdio')) {
@@ -299,12 +310,13 @@ export class BoundedAppServerClient implements AppServerPort {
     try {
       await client.owner();
       if (nativeQueue) {
-        const notifications = nativeNotifications(nativeVersion);
+        if (!profile) throw new AppServerFault('unsupported_version', false);
+        const nativeVersion = profile.version, notifications = nativeNotifications(nativeVersion);
         const hello = object(await client.request('initialize', {
           clientInfo: { name: 'session-peer-native-queue', version: '1' },
           capabilities: { experimentalApi: true, optOutNotificationMethods: [...notifications] },
         }), ['codexHome', 'platformFamily', 'platformOs', 'userAgent']);
-        if (hello.codexHome !== original.codexHome || hello.platformFamily !== 'unix' || hello.platformOs !== 'macos' ||
+        if (hello.codexHome !== original.codexHome || hello.platformFamily !== 'unix' || hello.platformOs !== profile.platformOs ||
             !safeId(hello.userAgent, 4096)) throw new AppServerFault('owner_changed', false);
         // The queue process itself reports its compiled build; the earlier
         // pathname's --version process cannot qualify a replacement process.
@@ -493,6 +505,9 @@ async function beforeDeadline<T>(deadlineMs: number, operation: () => Promise<T>
 }
 async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, deadlineMs: number): Promise<void> {
   if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
+  verifyOpenedSqlite(await darwinOpenedFiles(pid, deadlineMs), home);
+}
+async function darwinOpenedFiles(pid: number, deadlineMs: number): Promise<OpenedFile[]> {
   // Only the owned app-server PID is queried, never a session inventory/PID scan.
   // An exact managed requirement can override both env and CLI sqlite_home.
   // initialize.codexHome does not attest to effective SQLite storage; require
@@ -505,8 +520,7 @@ async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, d
   });
   if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
   if (result.code !== 0 || result.interrupted) throw new AppServerFault('storage_binding_unverified', false);
-  const required = ['state_5.sqlite', 'queue_1.sqlite'];
-  const files: { name?: string; dev?: bigint; ino?: bigint }[] = [];
+  const files: { name?: string; dev?: bigint; ino?: bigint; deleted?: boolean }[] = [];
   let current: typeof files[number] | undefined;
   for (const raw of result.stdout.split('\0')) {
     const field = raw.replace(/^\n/, '');
@@ -515,12 +529,18 @@ async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, d
     else if (current && /^D0x[0-9a-f]+$/i.test(field)) current.dev = BigInt(field.slice(1));
     else if (current && /^i[0-9]+$/.test(field)) current.ino = BigInt(field.slice(1));
   }
+  return files as OpenedFile[];
+}
+// Exact canonical state/queue paths (and only their own WAL/SHM sidecars) must
+// be opened by the owned PID with the inode now at that canonical path.
+function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
+  const required = ['state_5.sqlite', 'queue_1.sqlite'];
   for (const file of required) {
     const expected = join(home, file);
     const opened = files.filter(row => row.name && [file, file + '-wal', file + '-shm'].includes(basename(row.name)));
     if (!opened.some(row => row.name === expected)) throw new AppServerFault('storage_binding_unverified', false);
     for (const row of opened) {
-      if (![expected, expected + '-wal', expected + '-shm'].includes(row.name!)) throw new AppServerFault('storage_binding_unverified', false);
+      if (row.deleted || ![expected, expected + '-wal', expected + '-shm'].includes(row.name!)) throw new AppServerFault('storage_binding_unverified', false);
       try {
         const canonical = lstatSync(row.name!, { bigint: true });
         if (!canonical.isFile() || canonical.isSymbolicLink() || row.dev !== canonical.dev || row.ino !== canonical.ino)
@@ -528,7 +548,21 @@ async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, d
       } catch { throw new AppServerFault('storage_binding_unverified', false); }
     }
   }
-
+}
+// Linux: read only the owned child's /proc entries. The executable inode is the
+// selected native artifact, so a script/npm shim whose exe is an interpreter is
+// refused rather than trusted to have exec'd the right storage owner.
+export function verifyProcfsSqliteBinding(pid: number | undefined, home: string, deadlineMs: number, binary: string,
+  reader: ProcReader = procfs): void {
+  if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
+  let files: OpenedFile[];
+  try {
+    const uid = process.getuid?.(), exe = statSync(realpathSync(binary), { bigint: true });
+    if (uid === undefined) throw new Error('uid unavailable');
+    files = procOwnedFiles(pid, process.pid, uid, { dev: exe.dev, ino: exe.ino }, reader);
+  } catch { throw new AppServerFault('storage_binding_unverified', false); }
+  if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
+  verifyOpenedSqlite(files, home);
 }
 // lsof field output escapes backslashes and non-ASCII bytes even with NUL field
 // delimiters. Decode the protected system tool's filename representation, then
@@ -564,9 +598,15 @@ function verifyExecutableIdentity(binary: string, expected: string): void {
 // in a network-denied synthetic home. This is not a live delivery/ACK claim.
 // Root integration owns generation, canonical home, storage and writer guards.
 // This function never invokes thread start/resume/read/list or a model turn.
-export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ queueId: string; clientUserMessageId: string }> {
-  const platform = `${process.platform}-${process.arch}`;
-  if (platform !== APP_SERVER_EVIDENCE.inspectedPlatform) throw new AppServerFault('unsupported_transport', false);
+export function nativeQueueOnce(options: NativeQueueOptions): Promise<{ queueId: string; clientUserMessageId: string }> {
+  return nativeQueueOnceWithProfiles(options, NATIVE_PROFILES);
+}
+// Hermetic test hook: a synthetic, validated profile table exercises another
+// platform's selection and binding path. Production uses only NATIVE_PROFILES.
+export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
+  table: readonly NativeProfile[]): Promise<{ queueId: string; clientUserMessageId: string }> {
+  const profiles = validateNativeProfiles(table), platform = `${process.platform}-${process.arch}`;
+  if (!platformProfiled(platform, profiles)) throw new AppServerFault('unsupported_transport', false);
   let original: AppServerScope;
   try { original = scopeValue(options.scope); } catch { throw new AppServerFault('invalid_scope', false); }
   if (!isAbsolute(options.binary) || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(original.threadId)) throw new AppServerFault('invalid_input', false);
@@ -588,11 +628,25 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
   });
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
   const nativeVersion = version.stdout.trim().slice('codex-cli '.length);
-  if (version.interrupted || version.code !== 0 || !queueEvidence(nativeVersion) || version.stdout.trim() !== `codex-cli ${nativeVersion}`) {
+  const profile = selectNativeProfile({ platform, version: nativeVersion }, profiles);
+  if (version.interrupted || version.code !== 0 || !profile || version.stdout.trim() !== `codex-cli ${nativeVersion}`) {
     throw new AppServerFault('unsupported_version', false);
   }
   verifyExecutableIdentity(options.binary, binaryIdentity);
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  if (profile.artifact) {
+    // Pinned executable bytes, hashed within the original deadline; the stable
+    // identity check below proves the hashed inode is the one spawned next.
+    let digest: string;
+    try { digest = await artifactDigest(realpathSync(options.binary), process.platform, process.arch, options.deadlineMs, () => performance.now()); }
+    catch { throw new AppServerFault(performance.now() >= options.deadlineMs ? 'deadline' : 'unsupported_version', false); }
+    if (digest !== profile.artifact.sha256) throw new AppServerFault('unsupported_version', false);
+    verifyExecutableIdentity(options.binary, binaryIdentity);
+    if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  }
+  const bind = async (pid: number | undefined) => profile.storageBinding === 'linux_procfs' ?
+    verifyProcfsSqliteBinding(pid, original.codexHome, options.deadlineMs, options.binary) :
+    verifyOwnedSqliteBinding(pid, original.codexHome, options.deadlineMs);
   const transport: NativeQueueTransport = { qualification: 'native_queue_only_stdio',
     ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false',
       '-c', `sqlite_home=${JSON.stringify(original.codexHome)}`], env, original.codexHome) };
@@ -606,11 +660,11 @@ export async function nativeQueueOnce(options: NativeQueueOptions): Promise<{ qu
         // Run after the LAST asynchronous owner verification. The durable guard
         // and owner probe can both await I/O and change canonical file bindings.
         verifyExecutableIdentity(options.binary, binaryIdentity);
-        await verifyOwnedSqliteBinding(transport.pid, original.codexHome, options.deadlineMs);
+        await bind(transport.pid);
       }
       return valid;
-    }, async () => { await options.beforeEffect(); effectGuarded = true; }, nativeVersion);
-    await verifyOwnedSqliteBinding(transport.pid, original.codexHome, options.deadlineMs);
+    }, async () => { await options.beforeEffect(); effectGuarded = true; }, profile);
+    await bind(transport.pid);
     return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
   } finally { if (client) await client.close(); else await disposeTransport(transport); }
 }
@@ -638,7 +692,8 @@ function releaseOwned(pid: number | undefined): void {
   process.removeListener('exit', processExit);
 }
 // POSIX groups reap owned descendants. Only darwin-arm64 has native queue
-// mechanics qualification; Windows resource cleanup remains unqualified.
+// mechanics qualification; Linux uses the same owned group with no profile row
+// yet. Windows resource cleanup remains unqualified.
 function spawnOwnedStdio(binary: string, args: string[], env: NodeJS.ProcessEnv, cwd?: string): Omit<MetadataOnlyTransport, 'qualification'> & { pid?: number } {
   if (process.platform === 'win32') throw new AppServerFault('unsupported_transport', false);
   const child = spawn(binary, args, { env, cwd, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });

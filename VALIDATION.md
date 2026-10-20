@@ -1,6 +1,39 @@
 # Validation record — updated 2026-10-18 KST
 
 
+## Unreleased Linux observation machinery — #130, 2026-10-20 KST
+
+Source-only follow-up on the published 0.4.0 runtime; no version change. Native
+profile selection is now one exact `(process.platform-process.arch, native
+version, source commit, platformOs, storage binding, owner inspection,
+artifact)` table. Production still contains only the two historical
+darwin-arm64 rows (0.160.1, 0.162.1); there is no version range, libc/arch
+fallback or cross-platform inheritance, and every Linux tuple is unsupported.
+A new row must pin its extracted executable SHA-256 and target triple.
+
+Linux mechanics exist for a future evidence-backed row but qualify nothing:
+owned app-server storage binding from that child's `/proc/<pid>` only (direct
+child, own process group, all four UIDs, `/proc/<pid>/exe` equal to the selected
+executable inode, unchanged start time across the descriptor walk, exact
+canonical state/queue paths with deleted descriptors refused); writer owner
+evidence requiring `/proc/locks` to name the lsof owner as the sole granted
+exclusive `flock` holder (Codex `File::try_lock`) with stable start time/UIDs,
+without changing the lsof/ps generation; ELF/Mach-O artifact digests within the
+original deadline. Retained qualifications keep their original platform, and a
+foreign-platform record terminates `unsupported` before any probe.
+
+Local checks on Darwin 27.0 arm64, Node 24.16: `npm run build`, `npm run
+test:types` and the full `npm test` (with the pinned Python reference extracted
+read-only) passed 397, failed 0, skipped 10, including the new
+`test/linux-observation.test.ts` (13 passed, 5 Linux-only skipped). Fakes cover
+procfs parsing, stale/changing/wrong owners, lock-table ambiguity, schema/OS
+drift and table validation. A compiled stand-in (not Codex) exercised exact
+artifact pinning with Darwin lsof binding. The Linux-only native cases (real
+procfs child/flock, compiled procfs binding, CLI refusal/downgrade and fake-SSH
+complete/partial results) were unrun locally and run only in Linux CI. No real
+Codex, model, user session, remote host or live delivery was used; the live
+approval request for any Linux profile is separate.
+
 ## Public 0.4.0 — 2026-10-18 KST
 
 `session-peer@0.4.0` is public. Registry checks confirmed `latest=0.4.0` and

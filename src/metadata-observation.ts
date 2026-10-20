@@ -3,6 +3,7 @@
 import childProcess, { type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { NATIVE_PROFILES } from './native-profiles.js';
 
 export const METADATA_SOURCE = Object.freeze({ version: '0.160.1',
   commit: 'd27764b82f7118f674371e6d6e76271d9d606edb',
@@ -17,14 +18,18 @@ export const METADATA_RESUME_QUALIFICATION = Object.freeze({ version: METADATA_S
 export type MetadataQualification = Readonly<{ version: string; commit: string; platform: string }>;
 // Exact native qualification is separate from POSIX structural-store fixtures.
 // No version range, current PATH inference or schema-only upgrade is permitted.
-const metadataQualifications: readonly MetadataQualification[] = Object.freeze([
-  METADATA_RESUME_QUALIFICATION,
-  Object.freeze({ version: '0.162.1', commit: '092d3acd6bec3e3a14bdc7e7a2810ab628ab759d', platform: 'darwin-arm64' }),
-]);
-export function metadataQualification(version: string): MetadataQualification | undefined {
-  if (typeof version !== 'string') return undefined;
+// Rows are projected from the exact platform-aware native profile table.
+const metadataQualifications: readonly MetadataQualification[] = Object.freeze(NATIVE_PROFILES.map(row =>
+  row.platform === METADATA_RESUME_QUALIFICATION.platform && row.version === METADATA_RESUME_QUALIFICATION.version &&
+  row.commit === METADATA_RESUME_QUALIFICATION.commit ? METADATA_RESUME_QUALIFICATION :
+    Object.freeze({ version: row.version, commit: row.commit, platform: row.platform })));
+// With a platform, selection is the exact (platform, version) row. Without one
+// (structural store checks only) a version must name exactly one platform's row.
+export function metadataQualification(version: string, platform?: string): MetadataQualification | undefined {
+  if (typeof version !== 'string' || (platform !== undefined && typeof platform !== 'string')) return undefined;
   const exact = version.startsWith('codex-cli ') ? version.slice('codex-cli '.length) : version;
-  return metadataQualifications.find(profile => profile.version === exact);
+  const rows = metadataQualifications.filter(profile => profile.version === exact && (platform === undefined || profile.platform === platform));
+  return rows.length === 1 ? rows[0] : undefined;
 }
 export type MetadataBudget = { observationRemainingMs(): number };
 // The caller owns any resources used by this verifier and must honor its signal.
@@ -169,15 +174,18 @@ export function resumeMetadataObservation(scope: MetadataScope & { clientUserMes
       Object.keys(qualification).some(key => !['version', 'commit', 'platform'].includes(key))) {
     return Promise.resolve(unsupported('metadata_scope_invalid'));
   }
-  const expected = metadataQualification(qualification.version);
-  // Retained records use the canonical native version, not a CLI banner.
-  if (!expected || qualification.version !== expected.version) {
+  // Retained records use the canonical native version, not a CLI banner. The
+  // exact retained (version, commit, platform) row is required; a same-version
+  // row for another platform is not inherited.
+  const versions = metadataQualifications.filter(row => row.version === qualification.version);
+  if (!versions.length) {
     return Promise.resolve(unsupported('metadata_version_unsupported'));
   }
-  if (qualification.commit !== expected.commit) {
+  const commits = versions.filter(row => row.commit === qualification.commit);
+  if (!commits.length) {
     return Promise.resolve(unsupported('metadata_schema_unsupported'));
   }
-  if (qualification.platform !== expected.platform ||
+  if (!commits.some(row => row.platform === qualification.platform) ||
       qualification.platform !== `${process.platform}-${process.arch}`) {
     return Promise.resolve(unsupported('metadata_platform_unsupported'));
   }

@@ -1174,6 +1174,22 @@ range, Linux/Windows qualification, live delivery or ACK follows from these
 queue-only fixtures. Initial harness failures are recorded separately and were
 never retried with an already-attempted intent.
 
+### Platform-aware native profile table — #130 (unreleased source)
+
+Queue and observation selection use one exact
+`(host platform-arch, native version, source commit)` row with its
+`initialize.platformOs`, storage-binding and owner-inspection method and a
+pinned executable artifact (historical darwin-arm64 rows predate artifact
+pinning). Production rows remain darwin-arm64 Codex 0.160.1/0.162.1 only.
+Linux procfs storage binding, `/proc/locks` writer-owner cross-checks and
+artifact digests are implemented and fixture/CI tested, but no Linux row is
+qualified: a Linux host with a matching version refuses required delivery
+before effect and chooses the ordinary queue for best-effort observation
+before any app-server attempt. Upstream Linux artifacts are musl only
+(`codex-{aarch64,x86_64}-unknown-linux-musl`); a row needs a dedicated live
+client-ID injection test per claimed profile. Historical KR/US ordinary queue
+results are not injection evidence.
+
 ## 0.4.0 candidate release scope
 
 On 2026-10-11 the user approved keeping #69/#70/#71/#72 together in 0.4.0,
