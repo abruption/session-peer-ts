@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -15,7 +15,9 @@ import { fileURLToPath } from 'node:url';
 
 type Out = Record<string, any>;
 const repo = fileURLToPath(new URL('..', import.meta.url));
-const script = join(repo, 'scripts/deployment-harness.mjs');
+// Test-only override to run these fixtures against another revision's copy of
+// the harness (for before/after comparisons) without touching the worktree.
+const script = process.env.DEPLOYMENT_HARNESS_SCRIPT ?? join(repo, 'scripts/deployment-harness.mjs');
 const skip = process.platform === 'win32' ? 'POSIX harness; the Windows procedure is documented in the ADR' : false;
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
 const lockIntegrity = JSON.parse(readFileSync(join(repo, 'package-lock.json'), 'utf8')).packages;
@@ -1410,4 +1412,133 @@ test('a statement cannot use an appended acquisition that is rolled back afterwa
   assert.equal(result.out.error, 'journal_append_failed'); assert.equal(result.out.rollback, 'restored');
   assert.deepEqual(readFileSync(j.journal), before);
   refused(['op', 'statement', ...j.J, '--kind', 'no-caller', '--run', j.run, '--target', target], 'lock_not_recorded');
+});
+
+// Filesystem unit (no prefix): the harness's own link check, imported directly.
+test('a link chain must stay inside the install at every step, not only at its end', { skip }, async t => {
+  const { manifestOf, resolvesInside } = await import(script);
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-links-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const top = join(base, 'install'), pkg = join(top, 'node_modules/session-peer');
+  mkdirSync(join(pkg, 'dist'), { recursive: true }); mkdirSync(join(base, 'outside'));
+  writeFileSync(join(pkg, 'dist/cli.js'), 'original');
+  mkdirSync(join(top, 'node_modules/.bin'));
+  const link = (text: string, path: string) => { symlinkSync(text, path); return path; };
+  // Out through another location and back in: refused although the end is inside.
+  link('../install/node_modules/session-peer', join(base, 'outside/back'));
+  assert.equal(resolvesInside(top, link('../outside/back', join(top, 'alias'))), false);
+  assert.equal(resolvesInside(top, link('../../install/node_modules/session-peer', join(top, 'node_modules/dotdot'))), false);
+  assert.equal(resolvesInside(top, link(join(pkg, 'dist/cli.js'), join(top, 'absolute'))), false);
+  assert.equal(resolvesInside(top, link('missing', join(top, 'dangling'))), false);
+  link('loop-b', join(top, 'loop-a')); link('loop-a', join(top, 'loop-b'));
+  assert.equal(resolvesInside(top, join(top, 'loop-a')), false);
+  assert.equal(resolvesInside(top, link('dist/cli.js/x', join(pkg, 'through-file'))), false);
+  for (const name of ['alias', 'node_modules/dotdot', 'absolute', 'dangling', 'loop-a', 'loop-b', 'node_modules/session-peer/through-file']) rmSync(join(top, name));
+  // A bounded internal npm-style link survives a rename and its referent is covered.
+  const internal = link('../session-peer/dist/cli.js', join(top, 'node_modules/.bin/session-peer'));
+  assert.equal(resolvesInside(top, internal), true);
+  const before = manifestOf(top);
+  renameSync(top, join(base, 'renamed'));
+  const renamed = join(base, 'renamed');
+  assert.equal(resolvesInside(renamed, join(renamed, 'node_modules/.bin/session-peer')), true);
+  assert.equal(manifestOf(renamed), before);
+  writeFileSync(join(renamed, 'node_modules/session-peer/dist/cli.js'), 'changed');
+  assert.notEqual(manifestOf(renamed), before);
+  link('../outside/back', join(renamed, 'escape'));
+  assert.throws(() => manifestOf(renamed));
+});
+
+test('npm receives the file the OS selects, even through a symlinked ancestor and ..', { skip }, t => {
+  const w = world(t);
+  // base/link -> base/outside/sub: the OS reads link/../pkg as base/outside/pkg, not base/pkg.
+  mkdirSync(join(w.base, 'outside/sub'), { recursive: true });
+  symlinkSync(join(w.base, 'outside/sub'), join(w.base, 'link'));
+  writeFileSync(join(w.base, 'pkg'), 'decoy bytes'); writeFileSync(join(w.base, 'outside/pkg'), 'selected bytes');
+  writeFileSync(join(w.base, 'dep.tgz'), 'dependency bytes');
+  const integrity = join(w.base, 'npm-integrity.json');
+  writeFileSync(integrity, JSON.stringify({ dep: `sha512-${createHash('sha512').update('dependency bytes').digest('base64')}` }));
+  const identity = ok(['dest', 'identity', '--version', packageVersion, '--package-sha256', sha('selected bytes'), '--lock-integrity', integrity]);
+  const argvFile = join(w.base, 'npm-argv.json'), fakeNpm = join(w.base, 'fake-npm-cli.js');
+  writeFileSync(fakeNpm, `require('node:fs').writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(process.argv.slice(2))); process.exit(1);\n`);
+  const result = h(['dest', 'stage', ...w.P, '--run', w.begin(), '--identity', w.file('npm-identity', identity), '--npm-cli', fakeNpm,
+    '--package-tarball', 'link/../pkg', '--dependency-tarball', 'dep.tgz', '--execute'], process.env, w.base);
+  assert.equal(result.out.error, 'npm_install_failed');
+  const argv = JSON.parse(readFileSync(argvFile, 'utf8')) as string[];
+  assert.ok(argv.includes(realpathSync(join(w.base, 'outside/pkg')))); assert.ok(!argv.includes(join(w.base, 'pkg')));
+});
+
+test('a hard-linked journal is refused before any read or change', { skip }, async t => {
+  const j = journalOnly(t);
+  const before = readFileSync(j.journal);
+  const alias = `${j.journal}.alias`;
+  linkSync(j.journal, alias);
+  for (const path of [j.journal, alias]) {
+    refused(['op', 'begin', '--journal', path, '--execute'], 'journal_aliased');
+    refused(['op', 'statement', '--journal', path, '--kind', 'run-ended', '--run', j.run], 'journal_aliased');
+    refused(['op', 'record', '--journal', path, '--run', j.run, '--event', 'run_ended', '--execute'], 'journal_aliased');
+  }
+  assert.deepEqual(readFileSync(j.journal), before);
+  rmSync(alias);
+  // An alias created while a writer holds the lock is caught before its read.
+  const release = `${j.journal}.release`;
+  const writer = runAsync(['op', 'begin', ...j.J, '--execute'], { ...process.env, SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK: release });
+  await waitFor(`${release}.held`);
+  linkSync(j.journal, alias);
+  writeFileSync(release, '');
+  assert.equal((await writer.done).out.error, 'journal_aliased');
+  assert.deepEqual(readFileSync(j.journal), before);
+});
+
+test('a destructive lifecycle event closes a lock\'s later publication record', { skip }, t => {
+  for (const [event, command] of [['retired', 'dest retire'], ['rolled_back', 'dest rollback'], ['receipt_cleaned', 'dest receipt-cleanup']] as const) {
+    const j = journalOnly(t);
+    const prefixId = 'a'.repeat(32), target = `${packageVersion}-${'b'.repeat(16)}`;
+    const dir = dirname(j.journal);
+    let n = 0;
+    const result = (cmd: string, run: string, lockId: string, extra: Record<string, unknown> = {}) =>
+      ({ harness: 'session-peer-ts deployment validation harness', command: cmd, ok: true, dryRun: false, runId: run, prefixId, lockId, ...extra });
+    const rec = (run: string, ev: string, value?: unknown, extra: string[] = []) => {
+      const args = ['op', 'record', ...j.J, '--run', run, '--event', ev, '--execute', ...extra];
+      if (value) { const file = join(dir, `r${n++}.json`); writeFileSync(file, JSON.stringify(value)); args.push('--file', file); }
+      return h(args).out;
+    };
+    const first = '1'.repeat(32);
+    assert.equal(rec(j.run, 'lock_acquired', result('dest lock', j.run, first)).ok, true);
+    assert.equal(rec(j.run, 'activated', result('dest activate', j.run, first, { target, outcome: 'activated' })).ok, true);
+    assert.equal(rec(j.run, event, result(command, j.run, first, { target })).ok, true);
+    // The receipt response arrives late, after the destructive event under the same lock.
+    assert.equal(rec(j.run, 'receipt_published', result('dest receipt', j.run, first, { target })).error, 'publication_closed', event);
+    assert.equal(rec(j.run, 'lock_released', result('dest unlock', j.run, first)).ok, true);
+    const switcher = ok(['op', 'begin', ...j.J, '--execute']).runId as string;
+    assert.equal(rec(switcher, 'callers_switched', undefined, ['--target', target, '--prefix-id', prefixId]).error, 'switch_before_receipt', event);
+    // Recovery needs a new lock with its own publication.
+    const run = ok(['op', 'begin', ...j.J, '--execute']).runId as string, second = '2'.repeat(32);
+    assert.equal(rec(run, 'lock_acquired', result('dest lock', run, second)).ok, true);
+    assert.equal(rec(run, 'activated', result('dest activate', run, second, { target, outcome: 'activated' })).ok, true);
+    assert.equal(rec(run, 'receipt_published', result('dest receipt', run, second, { target })).ok, true);
+    assert.equal(rec(run, 'lock_released', result('dest unlock', run, second)).ok, true);
+    assert.equal(rec(switcher, 'callers_switched', undefined, ['--target', target, '--prefix-id', prefixId]).ok, true, event);
+  }
+});
+
+test('init holds the journal lock until its header line is complete', { skip }, async t => {
+  const base = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-deploy-init-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const dir = join(base, 'operator'); mkdirSync(dir, { mode: 0o700 });
+  const journal = join(dir, 'journal.jsonl'), J = ['--journal', journal], release = join(base, 'release');
+  const init = ['op', 'init', ...J, '--dest-alias', 'fixture-dest', '--dest-host', 'dest.example', '--execute'];
+  const first = runAsync(init, { ...process.env, SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_INIT_HEADER: release });
+  await waitFor(`${release}.held`);
+  // The complete header JSON is on disk without its newline: nothing may use it.
+  const partial = readFileSync(journal, 'utf8');
+  assert.equal(partial.endsWith('\n'), false); assert.equal(JSON.parse(partial).event, 'journal_created');
+  refused(['op', 'begin', ...J, '--execute'], 'journal_busy');
+  refused(init, 'journal_busy');
+  refused(['op', 'init', ...J, '--dest-alias', 'fixture-dest', '--dest-host', 'dest.example'], 'journal_busy');
+  writeFileSync(release, '');
+  assert.equal((await first.done).out.ok, true);
+  assert.equal(readFileSync(journal, 'utf8').endsWith('\n'), true);
+  refused(init, 'journal_exists');
+  const run = ok(['op', 'begin', ...J, '--execute']).runId;
+  refused(['op', 'statement', ...J, '--kind', 'run-ended', '--run', run], 'run_not_ended');
 });

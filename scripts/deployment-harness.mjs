@@ -11,6 +11,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { appendFileSync, chmodSync, closeSync, constants, cpSync, fsyncSync, existsSync, ftruncateSync, fstatSync, lstatSync, mkdirSync, openSync,
   readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, rmdirSync, unlinkSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { delimiter, dirname, isAbsolute, join, parse as parsePath, posix, resolve, sep } from 'node:path';
 
 const HARNESS = 'session-peer-ts deployment validation harness';
@@ -178,6 +179,37 @@ function inside(root, name) {
   if (dirname(path) !== root || name.includes(sep)) throw new Refusal('path_outside_root');
   return path;
 }
+// Follows a link the way the OS would, one component and one link at a time,
+// and requires every intermediate location (not only the end) to stay inside
+// `top`: no absolute link text, no `..` above `top` (even to come back), no
+// dangling or looping link. `top` and every directory walked are real paths,
+// so `..` here is the physical parent, as for the OS.
+function resolvesInside(top, link) {
+  const inside = path => path === top || path.startsWith(`${top}${sep}`);
+  const first = readlinkSync(link);
+  if (first.startsWith('/')) return false;
+  let current = dirname(link), hops = 0;
+  const pending = first.split('/');
+  while (pending.length) {
+    const part = pending.shift();
+    if (part === '' || part === '.') continue;
+    if (part === '..') { current = dirname(current); if (!inside(current)) return false; continue; }
+    const next = join(current, part);
+    const s = lstat(next);
+    if (!s) return false;
+    if (s.isSymbolicLink()) {
+      if (++hops > 40) return false;
+      const text = readlinkSync(next);
+      if (text.startsWith('/')) return false;
+      pending.unshift(...text.split('/'));
+      continue;
+    }
+    if (pending.some(item => item !== '' && item !== '.') && !s.isDirectory()) return false;
+    current = next;
+    if (!inside(current)) return false;
+  }
+  return inside(current);
+}
 function manifestOf(dir) {
   // Null-prototype maps: a root entry named __proto__ is an ordinary key.
   const files = Object.create(null), links = Object.create(null);
@@ -192,9 +224,7 @@ function manifestOf(dir) {
         // install (through any chain): absolute, escaping, dangling or looping
         // links are refused before anything follows them.
         const text = readlinkSync(join(dir, path));
-        let real;
-        try { real = realpathSync(join(dir, path)); } catch { throw new Refusal('unsafe_link', { path }); }
-        if (isAbsolute(text) || (real !== top && !real.startsWith(`${top}${sep}`))) throw new Refusal('unsafe_link', { path });
+        if (!resolvesInside(top, join(top, path))) throw new Refusal('unsafe_link', { path });
         links[path] = text;
       }
       else if (s.isDirectory()) walk(path);
@@ -459,10 +489,14 @@ const dest = {
     // hashed path is exactly the path npm receives.
     const given = [a.values.get('--package-tarball'), ...(a.multi.get('--dependency-tarball') ?? [])];
     if (npmCli && !given[0]) throw new Usage('--npm-cli needs --package-tarball and --dependency-tarball');
+    // The given path is interpreted by the OS, never lexically (a symlink
+    // ancestor followed by `..` must select what the OS would read). Its
+    // final component must be a regular file, not a symlink, and npm gets its
+    // absolute real path: no value can be read as an npm option.
     const tarballs = npmCli ? given.map(file => {
-      const path = resolve(file);
-      const st = lstat(path);
-      if (!st || !st.isFile() || st.isSymbolicLink() || !path.startsWith('/')) throw new Refusal('tarball_invalid');
+      let st, path;
+      try { st = lstatSync(file); path = realpathSync(file); } catch { throw new Refusal('tarball_invalid'); }
+      if (!st.isFile() || st.isSymbolicLink() || !path.startsWith('/') || !lstatSync(path).isFile()) throw new Refusal('tarball_invalid');
       return path;
     }) : [];
     if (npmCli) {
@@ -832,7 +866,11 @@ function receiptsList(p) {
 function journalRead(path) {
   if (!isAbsolute(path ?? '')) throw new Usage('--journal must be absolute');
   trusted(dirname(path), 'journal_dir');
-  if (!regular(path, 'journal')) throw new Refusal('journal_absent');
+  const st = regular(path, 'journal');
+  if (!st) throw new Refusal('journal_absent');
+  // The coordination lock is per path: a hard-linked journal would have two
+  // locks for one file, so a journal must have exactly one link.
+  if (st.nlink !== 1) throw new Refusal('journal_aliased');
   const lines = readFileSync(path, 'utf8').split('\n').filter(Boolean);
   let prev = '0'.repeat(64);
   const entries = lines.map((line, seq) => {
@@ -842,7 +880,13 @@ function journalRead(path) {
     return entry;
   });
   if (entries[0]?.event !== 'journal_created') throw new Refusal('journal_corrupt');
-  return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost };
+  return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost, dev: st.dev, ino: st.ino, size: st.size };
+}
+// Before an append (and its rollback) the open file must still be the single-
+// link journal that was read, with nothing appended since.
+function sameJournal(fd, journal) {
+  const s = fstatSync(fd);
+  return s.nlink === 1 && s.dev === journal.dev && s.ino === journal.ino;
 }
 // Cooperative journal coordination: `<journal>.lock`, created exclusively by
 // mkdir and removed afterwards, held by every begin, record and statement
@@ -888,6 +932,7 @@ function journalAppend(path, journal, event) {
   const line = JSON.stringify({ seq: journal.entries.length, prev: journal.head, at: now(), ...event });
   const fd = openSync(path, constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW);
   try {
+    if (!sameJournal(fd, journal) || fstatSync(fd).size !== journal.size) throw new Refusal('journal_aliased');
     const size = fstatSync(fd).size;
     try { writeAll(fd, `${line}\n`); syncFd(fd, path); }
     catch (error) {
@@ -895,6 +940,7 @@ function journalAppend(path, journal, event) {
       testPause('SESSION_PEER_TS_HARNESS_TEST_PAUSE_BEFORE_ROLLBACK', path);
       try {
         if (TEST_TRUNCATE_FAIL) throw Object.assign(new Error('injected truncate failure'), { code: 'EIO' });
+        if (!sameJournal(fd, journal)) throw Object.assign(new Error('journal identity changed'), { code: 'journal_aliased' });
         ftruncateSync(fd, size); syncFd(fd, path);
         if (fstatSync(fd).size !== size) rollbackError = 'size_mismatch';
       } catch (failure) { rollbackError = failure?.code ?? 'unknown'; }
@@ -939,11 +985,21 @@ const op = {
     if (!/^[A-Za-z0-9._-]{1,64}$/.test(alias)) throw new Usage('--dest-alias must be a short local alias');
     if (!/^[A-Za-z0-9_.@:[\]-]{1,255}$/.test(destHost)) throw new Usage('--dest-host must be the --host value the operator CLI uses');
     trusted(dirname(path), 'journal_dir');
-    if (lstat(path)) throw new Refusal('journal_exists');
-    if (!a.execute) return { dryRun: true, plan: ['create journal exclusively'] };
-    const label = hex(16);
-    writeExclusive(path, `${JSON.stringify({ seq: 0, prev: '0'.repeat(64), at: now(), event: 'journal_created', operatorLabel: label, destAlias: alias, destHost })}\n`);
-    return { dryRun: false, operatorLabel: label };
+    // Under the journal lock from the exclusive create until the header line
+    // (with its newline) is written and synced; a dry run holds it only to read.
+    return withJournalLock(path, () => {
+      if (lstat(path)) throw new Refusal('journal_exists');
+      if (!a.execute) return { dryRun: true, plan: ['create journal exclusively'] };
+      const label = hex(16);
+      const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      try {
+        writeAll(fd, JSON.stringify({ seq: 0, prev: '0'.repeat(64), at: now(), event: 'journal_created', operatorLabel: label, destAlias: alias, destHost }));
+        testPause('SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_INIT_HEADER', path);
+        writeAll(fd, '\n'); syncFd(fd, path);
+      } finally { closeSync(fd); }
+      syncPath(dirname(path));
+      return { dryRun: false, operatorLabel: label };
+    });
   },
   begin(a) {
     const path = a.need('--journal');
@@ -1021,6 +1077,12 @@ function recordUnderLock(a, path) {
     if (event === 'receipt_cleaned') Object.assign(record, { mode: value.mode, receipt: value.receipt, ownership: value.ownership });
     if (event === 'receipt_published' && locked.some(entry => entry.event === 'receipt_published' && entry.target === value.target))
       throw new Refusal('receipt_already_recorded');
+    // A destructive lifecycle event for this prefix and name recorded since
+    // this acquisition closes its publication, even if the receipt response
+    // arrives later; recovery needs a new lock and new checks.
+    if (event === 'receipt_published' && journal.entries.some(entry => entry.seq > locked[0].seq && entry.prefixId === value.prefixId &&
+      entry.target === value.target && ['rolled_back', 'retired', 'receipt_cleaned'].includes(entry.event)))
+      throw new Refusal('publication_closed');
   } else if (event === 'operator_doctor' || event === 'operator_dry_run') {
     if (!target || !holding) throw new Refusal('lock_not_recorded');
     const verified = locked.findLast(entry => entry.event === 'verified' && entry.target === target);
@@ -1148,4 +1210,6 @@ function main(argv) {
     return 1;
   }
 }
-process.exitCode = main(process.argv.slice(2));
+// Runs as a command; imported (by its tests), it only exposes pure helpers.
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));
+export { manifestOf, resolvesInside };
