@@ -1434,6 +1434,18 @@ test('a link chain must stay inside the install at every step, not only at its e
   assert.equal(resolvesInside(top, join(top, 'loop-a')), false);
   assert.equal(resolvesInside(top, link('dist/cli.js/x', join(pkg, 'through-file'))), false);
   for (const name of ['alias', 'node_modules/dotdot', 'absolute', 'dangling', 'loop-a', 'loop-b', 'node_modules/session-peer/through-file']) rmSync(join(top, name));
+  // A trailing slash or dot still requires a directory under OS semantics.
+  for (const text of ['dist/cli.js/', 'dist/cli.js/.']) {
+    const invalid = link(text, join(pkg, 'non-directory'));
+    assert.equal(resolvesInside(top, invalid), false, text);
+    assert.throws(() => manifestOf(top), /unsafe_link/);
+    rmSync(invalid);
+  }
+  for (const text of ['dist/', 'dist/.']) {
+    const directory = link(text, join(pkg, 'directory-alias'));
+    assert.equal(resolvesInside(top, directory), true, text);
+    rmSync(directory);
+  }
   // A bounded internal npm-style link survives a rename and its referent is covered.
   const internal = link('../session-peer/dist/cli.js', join(top, 'node_modules/.bin/session-peer'));
   assert.equal(resolvesInside(top, internal), true);
@@ -1541,4 +1553,22 @@ test('init holds the journal lock until its header line is complete', { skip }, 
   refused(init, 'journal_exists');
   const run = ok(['op', 'begin', ...J, '--execute']).runId;
   refused(['op', 'statement', ...J, '--kind', 'run-ended', '--run', run], 'run_not_ended');
+});
+
+
+test('an unterminated journal record is refused without further mutation', { skip }, t => {
+  const j = journalOnly(t);
+  const complete = readFileSync(j.journal);
+  assert.equal(complete.at(-1), 10);
+  const incomplete = complete.subarray(0, -1);
+  writeFileSync(j.journal, incomplete);
+  for (const args of [
+    ['op', 'begin', ...j.J, '--execute'],
+    ['op', 'begin', ...j.J],
+    ['op', 'statement', ...j.J, '--run', j.run, '--kind', 'run-ended'],
+    ['op', 'record', ...j.J, '--run', j.run, '--event', 'run_ended', '--execute']
+  ]) {
+    refused(args, 'journal_corrupt');
+    assert.deepEqual(readFileSync(j.journal), incomplete);
+  }
 });

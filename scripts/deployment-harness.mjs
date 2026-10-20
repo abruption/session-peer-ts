@@ -204,7 +204,7 @@ function resolvesInside(top, link) {
       pending.unshift(...text.split('/'));
       continue;
     }
-    if (pending.some(item => item !== '' && item !== '.') && !s.isDirectory()) return false;
+    if (pending.length && !s.isDirectory()) return false;
     current = next;
     if (!inside(current)) return false;
   }
@@ -495,7 +495,7 @@ const dest = {
     // absolute real path: no value can be read as an npm option.
     const tarballs = npmCli ? given.map(file => {
       let st, path;
-      try { st = lstatSync(file); path = realpathSync(file); } catch { throw new Refusal('tarball_invalid'); }
+      try { st = lstatSync(file); path = realpathSync.native(file); } catch { throw new Refusal('tarball_invalid'); }
       if (!st.isFile() || st.isSymbolicLink() || !path.startsWith('/') || !lstatSync(path).isFile()) throw new Refusal('tarball_invalid');
       return path;
     }) : [];
@@ -871,7 +871,9 @@ function journalRead(path) {
   // The coordination lock is per path: a hard-linked journal would have two
   // locks for one file, so a journal must have exactly one link.
   if (st.nlink !== 1) throw new Refusal('journal_aliased');
-  const lines = readFileSync(path, 'utf8').split('\n').filter(Boolean);
+  const text = readFileSync(path, 'utf8');
+  if (!text.endsWith('\n')) throw new Refusal('journal_corrupt');
+  const lines = text.split('\n').filter(Boolean);
   let prev = '0'.repeat(64);
   const entries = lines.map((line, seq) => {
     let entry; try { entry = JSON.parse(line); } catch { throw new Refusal('journal_corrupt'); }
@@ -882,14 +884,14 @@ function journalRead(path) {
   if (entries[0]?.event !== 'journal_created') throw new Refusal('journal_corrupt');
   return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost, dev: st.dev, ino: st.ino, size: st.size };
 }
-// Before an append (and its rollback) the open file must still be the single-
-// link journal that was read, with nothing appended since.
+// Before append or rollback, retain the same single-link journal identity.
+// The append caller also checks its size against the saved read snapshot.
 function sameJournal(fd, journal) {
   const s = fstatSync(fd);
   return s.nlink === 1 && s.dev === journal.dev && s.ino === journal.ino;
 }
 // Cooperative journal coordination: `<journal>.lock`, created exclusively by
-// mkdir and removed afterwards, held by every begin, record and statement
+// mkdir and removed afterwards, held by every init, begin, record and statement
 // (dry runs included). Its only effect is this ephemeral directory; a crash
 // can leave it behind. A held lock refuses (`journal_busy`); nothing waits,
 // steals or kills, and a leftover lock is removed by the operator after
@@ -1010,7 +1012,7 @@ const op = {
       return { dryRun: false, runId: run, operatorLabel: journal.operatorLabel };
     });
   },
-  // Every journal command except init holds the journal lock: executed
+  // Every journal command holds the journal lock: executed
   // records across read, validation, append and rollback; dry runs and
   // statements across their read, so they never see a line that a concurrent
   // failed append later rolls back.

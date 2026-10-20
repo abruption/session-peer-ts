@@ -1028,13 +1028,16 @@ obtain fresh checks under a new lock.
   reads a partial header. Its dry run holds it only to check for an existing
   journal. Because the lock is per path, a journal must have exactly one link:
   a hard-linked journal is refused (`journal_aliased`) before it is read.
-  Before an append, and before its rollback, the open file must still be that
-  same single-link file with nothing appended since. Executed commands hold it across reading, validation,
+  An unterminated header or final record is refused (`journal_corrupt`) before
+  any further append. The harness does not repair or truncate such input.
+  Before append or rollback, the open file must retain that same single-link
+  identity; before append, its size must also match the read snapshot.
+  Executed commands hold the lock across reading, validation,
   the append and any rollback. Dry runs and statements hold it across their
   read, so they never see a line that a concurrent failed append later rolls
-  back. The only effect is this ephemeral directory; dry runs and statements
-  change no journal or destination state. A crash can leave the directory
-  behind. While it is present, every journal command except `op init` is
+  back. For dry runs and statements, the only effect is this ephemeral
+  directory; they change no journal or destination state. A crash can leave the directory
+  behind. While it is present, every journal command is
   refused (`journal_busy`) without waiting. Nothing steals the lock or kills a
   process. A leftover lock is not judged stale: the operator confirms that no
   op command is running and removes it by hand. This coordinates cooperating harness
