@@ -11,8 +11,9 @@ and permits deployments from `main` only.
 
 ## 0.5.0 stable release procedure — 2026-10-20 KST
 
-The 0.5.0 source includes platform-qualification groundwork and the repository-only
-remote-maintenance harness from #153–#156. Linux native observation, Windows
+The 0.5.0 source includes platform-qualification groundwork from #153, #156
+and #154. The #155 remote-maintenance harness is deferred for minimum-contract
+redesign under #158 and is excluded from this release. Linux native observation, Windows
 handoff storage/observation, Windows-client jump and automated receipt ACK are
 not enabled. #130/#131/#20/#23 retain their remaining acceptance gates.
 Experiments #82/#142 are excluded. Runtime publication does not publish, install
