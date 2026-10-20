@@ -23,7 +23,7 @@ const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/;
 const INSTALL = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)-([0-9a-f]{16})$/;
 const STAGING = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?-[0-9a-f]{16})\.staging-[0-9a-f]{16}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
-const FLAGS = new Set(['--execute', '--confirm-destructive', '--unowned', '--declare-run-ended', '--declare-abandoned']);
+const FLAGS = new Set(['--execute', '--confirm-destructive', '--unowned', '--declare-run-ended', '--declare-abandoned', '--adopt-existing']);
 const VALUES = new Set(['--prefix', '--prefix-id', '--journal', '--dest-alias', '--dest-host', '--remote-bin', '--run', '--operator-label', '--event', '--file', '--target',
   '--kind', '--version', '--package-sha256', '--lock-integrity', '--identity', '--from-tree', '--npm-cli', '--package-tarball',
   '--staging', '--name', '--statement', '--lock-name', '--mode', '--compare']);
@@ -268,8 +268,21 @@ function validPublication(path, owner) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
     JSON.stringify(Object.keys(value)) !== JSON.stringify(['target', 'receipt', 'runId', 'lockId']) || !INSTALL.test(value.target ?? '') ||
     typeof value.receipt !== 'string' || value.runId !== owner.runId || value.lockId !== owner.lockId) return undefined;
-  try { const receipt = JSON.parse(value.receipt); if (!HEX32.test(receipt.runId ?? '')) return undefined; } catch { return undefined; }
+  try { if (!validReceipt(JSON.parse(value.receipt))) return undefined; } catch { return undefined; }
   return value;
+}
+// Closed receipt schema (ADR "Completion receipt").
+function validReceipt(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value) &&
+    JSON.stringify(Object.keys(value)) === JSON.stringify(['receiptVersion', 'runId', 'identityHash', 'manifestSha256', 'verifiedAt']) &&
+    value.receiptVersion === 1 && HEX32.test(value.runId ?? '') && /^[0-9a-f]{64}$/.test(value.identityHash ?? '') &&
+    /^[0-9a-f]{64}$/.test(value.manifestSha256 ?? '') && typeof value.verifiedAt === 'string' &&
+    !Number.isNaN(Date.parse(value.verifiedAt)) && new Date(value.verifiedAt).toISOString() === value.verifiedAt;
+}
+// The install a committed receipt names must still be at the target, unchanged.
+function describes(checked, receipt) {
+  return checked.checks.realDirectory && checked.checks.owned && checked.checks.markerConsistent && checked.checks.manifest &&
+    checked.markerRunId === receipt.runId && checked.identityHash === receipt.identityHash && checked.manifestSha256 === receipt.manifestSha256;
 }
 const lockBinding = (p, lock) => ({ prefixId: p.prefixId, lockId: lock.owner.lockId });
 const sameLock = (proof, p, lock) => proof?.prefixId === p.prefixId && proof?.lockId === lock.owner.lockId && HEX32.test(proof.lockId ?? '');
@@ -288,8 +301,9 @@ function clearLock(p) {
   if (entries.some(entry => !LOCK_ENTRIES.includes(entry))) throw new Refusal('lock_contents_unexpected');
   const kinds = entries.map(entry => {
     const s = lstatSync(join(p.lock, entry));
-    if (s.isDirectory() && !s.isSymbolicLink() && readdirSync(join(p.lock, entry)).length) throw new Refusal('lock_contents_unexpected');
-    return [entry, s.isDirectory() && !s.isSymbolicLink()];
+    const dir = s.isDirectory() && !s.isSymbolicLink();
+    if (!(s.isFile() || s.isSymbolicLink() || dir) || (dir && readdirSync(join(p.lock, entry)).length)) throw new Refusal('lock_contents_unexpected');
+    return [entry, dir];
   });
   for (const [entry, dir] of kinds) (dir ? rmdirSync : unlinkSync)(join(p.lock, entry));
   rmdirSync(p.lock);
@@ -504,14 +518,37 @@ const dest = {
         throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'install' });
       const present = receiptState(p, name);
       if (present.state === 'none') {
+        // Completing a lost write: only for the same, unchanged install (all
+        // static checks, and probes when executed), never after a rollback.
+        const checked = verify(p, name, a.execute);
+        if (!describes(checked, committed) || (a.execute && !checked.ok)) throw new Refusal('publication_target_changed', { state: checked.state });
         if (!a.execute) return { dryRun: true, target: name, plan: ['write the committed receipt bytes'] };
         writeExclusive(receiptPath, pub.receipt);
-      } else if (!regular(receiptPath, 'receipt') || sha256(readFileSync(receiptPath)) !== sha256(pub.receipt) || present.state !== 'matching')
+        if (receiptState(p, name).state !== 'matching') throw new Refusal('receipt_present', { receipt: receiptState(p, name).state });
+      } else if (!regular(receiptPath, 'receipt') || sha256(readFileSync(receiptPath)) !== sha256(pub.receipt) || present.state !== 'matching' ||
+        !describes(verify(p, name, false), committed))
         throw new Refusal('receipt_present', { receipt: present.state });
       if (!a.execute) return { dryRun: true, target: name, replayed: true };
       return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt: committed, recovery: committed.runId !== run, replayed: true };
     }
     const state = receiptState(p, name).state;
+    if (a.flags.has('--adopt-existing')) {
+      // Explicit, non-destructive recovery: a receipt that still matches the
+      // install (for example after its publishing run ended with a lost
+      // response and its lock was broken) is published under this lock, on
+      // fresh checks of this lock. The bytes and verifiedAt stay as written.
+      if (state !== 'matching') throw new Refusal(state === 'none' ? 'nothing_to_adopt' : 'receipt_present', { receipt: state });
+      const bytes = readFileSync(receiptPath, 'utf8');
+      let existing; try { existing = JSON.parse(bytes); } catch { existing = undefined; }
+      if (!validReceipt(existing)) throw new Refusal('receipt_present', { receipt: 'invalid' });
+      const checked = verify(p, name, a.execute);
+      if (!describes(checked, existing) || (a.execute && !checked.ok)) throw new Refusal('verification_failed', { checks: checked.checks, state: checked.state });
+      if (proof.identityHash !== existing.identityHash || proof.manifestSha256 !== existing.manifestSha256)
+        throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'install' });
+      if (!a.execute) return { dryRun: true, target: name, plan: ['record a publication intent with the existing receipt bytes'] };
+      writeExclusive(pubPath, JSON.stringify({ target: name, receipt: bytes, runId: run, lockId: lock.owner.lockId }), true);
+      return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt: existing, recovery: existing.runId !== run, adopted: true };
+    }
     if (state !== 'none') throw new Refusal('receipt_present', { receipt: state });
     const checked = verify(p, name, a.execute);
     if (a.execute ? !checked.ok : !checked.checks.manifest || !checked.checks.markerConsistent)
@@ -721,7 +758,11 @@ function acquisitionClosed(journal, acquired) {
 }
 function since(events, event) { const index = events.findLastIndex(entry => entry.event === event); return index < 0 ? [] : events.slice(index); }
 // Caller state is per (prefix, install name): two prefixes can hold the same name.
+// Older journals recorded caller events without a prefix; such history for this
+// name cannot be attributed, so it makes the count unusable rather than zero.
 function switches(journal, prefixId, target) {
+  if (journal.entries.some(entry => ['callers_switched', 'callers_unswitched'].includes(entry.event) && entry.target === target && !entry.prefixId))
+    throw new Refusal('caller_history_unusable');
   let count = 0;
   for (const entry of journal.entries) if (entry.prefixId === prefixId && entry.target === target)
     count += entry.event === 'callers_switched' ? 1 : entry.event === 'callers_unswitched' ? -1 : 0;

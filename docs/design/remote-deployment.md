@@ -924,14 +924,45 @@ Further harness rules:
   - if the receipt write itself was lost, it writes those same bytes.
 
   A changed or corrupt receipt, a stale proof, another target and any later
-  lock all fail closed. `op record` accepts only one `receipt_published` per
-  target under a lock.
+  lock all fail closed. Before a lost receipt write is completed, every
+  static check must pass, plus the probes when executed. The current marker
+  `runId`, `identityHash` and recomputed manifest must also equal the
+  committed receipt; a rolled-back or changed target is refused
+  (`publication_target_changed`). The intent's embedded receipt must match the
+  closed receipt schema:
+
+  - exactly the receipt keys;
+  - `receiptVersion` 1;
+  - a 32-hex `runId`;
+  - 64-hex hashes;
+  - an ISO 8601 `verifiedAt`.
+
+  A lock holds at most one publication intent, so one target per lock. The
+  journal separately accepts one `receipt_published` per target under a lock.
+- **Adopting a receipt.** `dest receipt --adopt-existing` covers the case
+  where a run wrote a receipt, lost the response and ended, and its lock was
+  then broken (which removes its publication intent). A new run takes a fresh
+  lock and fresh checks: `verify`, doctor and dry-run under that lock. Adoption
+  then publishes the still-matching receipt under the new lock. The receipt
+  bytes, its original `runId` and `verifiedAt` are kept, and nothing is
+  rewritten. A receipt that does not match the marker and manifest is refused,
+  and so are an earlier lock's proof and an invalid receipt schema.
 - **Probe gating.** `dest verify --execute` runs the launcher and native
   probes only after every static check passes: a real owned directory, a
   consistent marker, the manifest and, after an activation, the staging gone.
 - **Lock overrides.** The explicit override removes only the lock's known
-  metadata entries. Each must be a file, a symlink (unlinked, never followed)
-  or an empty directory; anything else is refused before any removal.
+  metadata entries. Each must be a regular file, a symlink (unlinked, never
+  followed) or an empty directory. Other file types (FIFO, socket, device),
+  non-empty directories and unknown entries are refused before any removal.
+- **Statement scope.** Statements are issued on the operator side: a run that
+  has ended gets only `run-ended`. A statement that was already issued becomes
+  invalid at the destination once the lock changes, because every statement is
+  bound to the prefix and `lockId`. Nothing is revoked remotely.
+- **Old journal records.** Journals whose caller records carry no prefix
+  (from before the prefix binding) are not supported for caller decisions.
+  Such a record for a name makes `no-caller` and the switch count unusable
+  (`caller_history_unusable`); it is never counted as zero. No binding is
+  inferred and no migration is done.
 - **PATH inventory.** `dest path-inventory` treats an empty `PATH` component
   (leading, trailing or doubled separator) as the current directory and
   inventories `./session-peer` there.

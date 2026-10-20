@@ -65,8 +65,8 @@ function world(t: TestContext) {
   const stage = (run: string) => ok(['dest', 'stage', ...P, '--run', run, '--identity', identityFile, '--from-tree', tree, '--execute']).staging as string;
   const lock = (run: string) => record(run, 'lock_acquired', ok(['dest', 'lock', ...P, '--run', run, '--operator-label', label, '--execute']));
   const remoteBin = () => join(prefix, 'data/session-peer-ts', name, 'session-peer');
-  const cli = (args: string[]) => {
-    const result = spawnSync(process.execPath, [join(repo, 'dist/cli.js'), ...args, '--host', 'dest.example', '--remote-bin', remoteBin(), '--json'],
+  const cli = (args: string[], target = remoteBin()) => {
+    const result = spawnSync(process.execPath, [join(repo, 'dist/cli.js'), ...args, '--host', 'dest.example', '--remote-bin', target, '--json'],
       { encoding: 'utf8', timeout: 60000, env: { PATH: `${bin}:/usr/bin:/bin`, HOME: opDir, SESSION_PEER_TAILSCALE: 'off', CLAUDE_CONFIG_DIR: join(opDir, '.claude'), SESSION_PEER_CODEX_HOMES: '[]' } });
     return JSON.parse(result.stdout);
   };
@@ -660,9 +660,10 @@ function publishOn(w: ReturnType<typeof world>, prefix: string) {
   const staging = ok(['dest', 'stage', ...P, '--run', run, '--identity', w.identityFile, '--from-tree', w.tree, '--execute']).staging;
   w.record(run, 'activated', ok(['dest', 'activate', ...P, '--run', run, '--staging', staging, '--execute']));
   w.record(run, 'verified', ok(['dest', 'verify', ...P, '--name', w.name, '--run', run, '--execute']));
-  const bin = ['--remote-bin', join(prefix, 'data/session-peer-ts', w.name, 'session-peer')];
-  w.record(run, 'operator_doctor', w.cli(['doctor']), w.name, bin);
-  w.record(run, 'operator_dry_run', w.cli(['send', '--to', '999999', '--message', 'synthetic deployment check', '--dry-run']), w.name, bin);
+  // The operator CLI runs against this prefix's own install wrapper.
+  const wrapper = join(prefix, 'data/session-peer-ts', w.name, 'session-peer'), bin = ['--remote-bin', wrapper];
+  w.record(run, 'operator_doctor', w.cli(['doctor'], wrapper), w.name, bin);
+  w.record(run, 'operator_dry_run', w.cli(['send', '--to', '999999', '--message', 'synthetic deployment check', '--dry-run'], wrapper), w.name, bin);
   const statement = w.file('statement', ok(['op', 'statement', ...w.J, '--kind', 'operator-checks-passed', '--run', run, '--target', w.name]));
   w.record(run, 'receipt_published', ok(['dest', 'receipt', ...P, '--run', run, '--name', w.name, '--statement', statement, '--execute']));
   w.record(run, 'lock_released', ok(['dest', 'unlock', ...P, '--run', run, '--execute']));
@@ -799,4 +800,97 @@ test('empty PATH components inventory the current directory', { skip }, t => {
     const local = entries.filter(entry => entry.path === './session-peer');
     assert.equal(local.length, 1, path); assert.equal(local[0]!.sha256, digest); assert.equal(local[0]!.realpath, join(cwd, 'session-peer'));
   }
+});
+
+test('a matching receipt left by an ended run is adopted under a new lock only with fresh checks', { skip }, t => {
+  const w = world(t);
+  const lost = w.begin(); w.lock(lost); w.activate(lost);
+  const oldStatement = w.checks(lost);
+  ok(['dest', 'receipt', ...w.P, '--run', lost, '--name', w.name, '--statement', oldStatement, '--execute']); // response lost
+  const receiptPath = join(w.root, '.receipts', `${w.name}.json`);
+  const bytes = readFileSync(receiptPath, 'utf8');
+  w.record(lost, 'run_ended');
+  const recovery = w.begin();
+  const ended = w.file('ended', ok(['op', 'statement', ...w.J, '--kind', 'run-ended', '--run', lost]));
+  w.record(recovery, 'lock_broken', ok(['dest', 'break-lock', ...w.P, '--statement', ended, '--execute', '--confirm-destructive']));
+  w.lock(recovery);
+  const adopt = (statement: string) => ['dest', 'receipt', ...w.P, '--run', recovery, '--name', w.name, '--statement', statement, '--adopt-existing', '--execute'];
+  refused(adopt(oldStatement), 'statement_mismatch');
+  const fresh = w.checks(recovery);
+  refused(['dest', 'receipt', ...w.P, '--run', recovery, '--name', w.name, '--statement', fresh, '--execute'], 'receipt_present');
+  const adopted = ok(adopt(fresh));
+  assert.equal(adopted.adopted, true); assert.equal(readFileSync(receiptPath, 'utf8'), bytes);
+  assert.equal(adopted.receipt.verifiedAt, JSON.parse(bytes).verifiedAt); assert.equal(adopted.receipt.runId, lost);
+  assert.equal(ok(adopt(fresh)).replayed, true);
+  w.record(recovery, 'receipt_published', adopted);
+  w.record(recovery, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', recovery, '--execute']));
+  w.record(recovery, 'callers_switched', undefined, w.name, ['--prefix-id', w.prefixId]);
+});
+
+test('an invalid existing receipt is never adopted', { skip }, t => {
+  const w = world(t);
+  w.provision();
+  const receiptPath = join(w.root, '.receipts', `${w.name}.json`);
+  writeFileSync(receiptPath, JSON.stringify({ ...JSON.parse(readFileSync(receiptPath, 'utf8')), runId: 'e'.repeat(32) }));
+  const run = w.begin(); w.lock(run);
+  const fresh = w.checks(run);
+  refused(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', fresh, '--adopt-existing', '--execute'], 'receipt_present');
+  assert.equal(existsSync(join(w.root, '.activate.lock', 'publication.json')), false);
+});
+
+test('a recorded publication is not completed once the target was rolled back or changed', { skip }, t => {
+  for (const change of ['rollback', 'manifest'] as const) {
+    const w = world(t);
+    const run = w.begin(); w.lock(run); w.activate(run);
+    const statement = w.checks(run);
+    const args = ['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement, '--execute'];
+    ok(args);
+    // As if the receipt write never happened after the synced intent.
+    rmSync(join(w.root, '.receipts', `${w.name}.json`));
+    if (change === 'rollback') ok(['dest', 'rollback', ...w.P, '--run', run, '--name', w.name, '--execute', '--confirm-destructive']);
+    else writeFileSync(join(w.root, w.name, 'node_modules/session-peer/dist/help.js'), '// changed\n', { flag: 'a' });
+    refused(args, 'publication_target_changed');
+    assert.equal(existsSync(join(w.root, '.receipts', `${w.name}.json`)), false);
+  }
+});
+
+test('a publication intent with valid JSON but an invalid receipt is refused before any write', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const statement = w.checks(run);
+  const args = ['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement, '--execute'];
+  ok(args);
+  const pubPath = join(w.root, '.activate.lock', 'publication.json'), receiptPath = join(w.root, '.receipts', `${w.name}.json`);
+  const pub = JSON.parse(readFileSync(pubPath, 'utf8')), good = JSON.parse(pub.receipt);
+  const { receiptVersion, ...noVersion } = good;
+  assert.equal(receiptVersion, 1);
+  const variants: [unknown, string][] = [[noVersion, 'publication_intent_unreadable'], [{ ...good, receiptVersion: 2 }, 'publication_intent_unreadable'],
+    [{ ...good, identityHash: 'x' }, 'publication_intent_unreadable'], [{ ...good, extra: 1 }, 'publication_intent_unreadable'],
+    [{ ...good, verifiedAt: 'yesterday' }, 'publication_intent_unreadable'], [{ ...good, runId: 'e'.repeat(32) }, 'publication_target_changed']];
+  for (const [receipt, error] of variants) {
+    rmSync(receiptPath, { force: true });
+    writeFileSync(pubPath, JSON.stringify({ ...pub, receipt: JSON.stringify(receipt) }));
+    refused(args, error);
+    assert.equal(existsSync(receiptPath), false);
+  }
+});
+
+test('lock metadata of other file types is refused before removal', { skip }, t => {
+  const w = world(t);
+  const lock = join(w.root, '.activate.lock');
+  mkdirSync(lock, { mode: 0o700 });
+  assert.equal(spawnSync('mkfifo', [join(lock, 'owner.json')]).status, 0);
+  refused(['dest', 'break-lock', ...w.P, '--unowned', '--lock-name', '.activate.lock', '--declare-run-ended', '--execute', '--confirm-destructive'], 'lock_contents_unexpected');
+  assert.equal(statSync(join(lock, 'owner.json')).isFIFO(), true);
+});
+
+test('caller records without a prefix make no-caller unconfirmable instead of counting as zero', { skip }, t => {
+  const w = world(t);
+  w.provision();
+  // A legacy record (pre-prefix journal format), appended with a valid hash chain.
+  const lines = readFileSync(w.journal, 'utf8').split('\n').filter(Boolean);
+  const legacy = JSON.stringify({ seq: lines.length, prev: sha(lines.at(-1)!), at: new Date().toISOString(), event: 'callers_switched', runId: JSON.parse(lines.at(-1)!).runId, target: w.name });
+  writeFileSync(w.journal, `${lines.join('\n')}\n${legacy}\n`);
+  const run = w.begin(); w.lock(run);
+  refused(['op', 'statement', ...w.J, '--kind', 'no-caller', '--run', run, '--target', w.name], 'caller_history_unusable');
 });
