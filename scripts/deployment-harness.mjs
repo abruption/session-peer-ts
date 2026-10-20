@@ -242,13 +242,28 @@ function lockState(p) {
   const ownerPath = join(p.lock, 'owner.json');
   if (!lstat(ownerPath)) return { state: 'held_unowned' };
   const owner = (() => { try { return regular(ownerPath, 'owner') && readJson(ownerPath); } catch { return undefined; } })();
-  if (!owner || !HEX32.test(owner.runId ?? '') || typeof owner.createdAt !== 'string') return { state: 'held_unreadable' };
+  if (!owner || !HEX32.test(owner.runId ?? '') || !HEX32.test(owner.lockId ?? '') || typeof owner.createdAt !== 'string') return { state: 'held_unreadable' };
   // The activation intent is written (and synced) before the rename, so a run
   // interrupted at any point still shows which target it may have created.
+  // Its presence and its validity are separate: any present intent that is not
+  // exactly this lock's record is `invalid`, never treated as absent.
   const intent = join(p.lock, 'activation.json');
-  const activated = lstat(intent) ? readJson(intent) ?? { target: null, unreadable: true } : undefined;
+  const activated = lstat(intent) ? validIntent(intent, owner) : undefined;
   return { state: 'held', owner, activated };
 }
+function validIntent(path, owner) {
+  let value;
+  try { value = regular(path, 'intent') && JSON.parse(readFileSync(path, 'utf8')); } catch { value = undefined; }
+  const ok = !!value && typeof value === 'object' && !Array.isArray(value) &&
+    JSON.stringify(Object.keys(value)) === JSON.stringify(['target', 'staging', 'runId', 'lockId', 'at']) &&
+    INSTALL.test(value.target ?? '') && STAGING.exec(value.staging ?? '')?.[1] === value.target &&
+    value.runId === owner.runId && value.lockId === owner.lockId && typeof value.at === 'string';
+  return ok ? value : { invalid: true };
+}
+// Every lock-bound result, record and statement carries this pair; a fresh
+// random lockId per acquisition distinguishes re-acquisitions by the same run.
+const lockBinding = (p, lock) => ({ prefixId: p.prefixId, lockId: lock.owner.lockId });
+const sameLock = (proof, p, lock) => proof?.prefixId === p.prefixId && proof?.lockId === lock.owner.lockId && HEX32.test(proof.lockId ?? '');
 function heldBy(p, run) {
   const lock = lockState(p);
   if (lock.state !== 'held' || lock.owner.runId !== run) throw new Refusal('lock_not_owned', { lock: lock.state });
@@ -394,15 +409,16 @@ const dest = {
     if (!a.execute) return { dryRun: true, plan: [`mkdir ${LOCK} (EEXIST refuses)`, 'write owner.json exclusively'] };
     try { mkdirSync(p.lock, { mode: 0o700 }); }
     catch (error) { if (error.code === 'EEXIST') throw new Refusal('lock_held', { lock: lockState(p).state, autoStale: false }); throw error; }
-    const owner = { runId: run, operatorLabel: label, createdAt: now() };
+    const owner = { runId: run, lockId: hex(16), operatorLabel: label, createdAt: now() };
     writeExclusive(join(p.lock, 'owner.json'), JSON.stringify(owner));
-    return { dryRun: false, runId: run, lockCreatedAt: owner.createdAt, prefixId: p.prefixId };
+    return { dryRun: false, runId: run, prefixId: p.prefixId, lockId: owner.lockId };
   },
   activate(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run')), staging = a.need('--staging');
     const match = STAGING.exec(staging);
     if (!match) throw new Usage('--staging must be a staging name');
     const lock = heldBy(p, run);
+    if (lock.activated?.invalid) throw new Refusal('activation_intent_unreadable');
     if (lock.activated) throw new Refusal('already_activated_under_lock');
     const dir = join(p.root, staging);
     trusted(dir, 'staging');
@@ -418,7 +434,7 @@ const dest = {
       const checked = verify(p, match[1], true);
       // The existing receipt is reused. This run's staging stays until the
       // explicit `discard-staging --confirm-destructive` step.
-      if (checked.ok) return { dryRun: false, outcome: 'already_provisioned', target: match[1], receiptReused: true, stagingRetained: staging };
+      if (checked.ok) return { dryRun: false, outcome: 'already_provisioned', runId: run, ...lockBinding(p, lock), target: match[1], receiptReused: true, stagingRetained: staging };
       throw new Refusal('existing_install_failed_verification', { target: match[1] });
     }
     if (target.state !== 'absent') throw new Refusal('target_not_absent', { target: match[1], state: target.state, reason: target.reason });
@@ -427,10 +443,10 @@ const dest = {
     const checks = probe(dir, owned.marker.identity);
     if (!checks.banner || checks.nativeLock !== 'loaded') throw new Refusal('staging_probe_failed', checks);
     const intent = join(p.lock, 'activation.json');
-    writeExclusive(intent, JSON.stringify({ target: match[1], staging, at: now() }), true);
+    writeExclusive(intent, JSON.stringify({ target: match[1], staging, runId: run, lockId: lock.owner.lockId, at: now() }), true);
     try { renameNoReplace(dir, join(p.root, match[1])); }
     catch (error) { if (!lstat(join(p.root, match[1])) && lstat(dir)) unlinkSync(intent); throw error; }
-    return { dryRun: false, outcome: 'activated', runId: run, target: match[1] };
+    return { dryRun: false, outcome: 'activated', runId: run, ...lockBinding(p, lock), target: match[1] };
   },
   verify(a) {
     const p = dedicated(a.need('--prefix'));
@@ -440,7 +456,7 @@ const dest = {
     const run = a.values.has('--run') ? runId(a.values.get('--run')) : undefined;
     const lock = run ? heldBy(p, run) : undefined;
     const result = verify(p, installName(a.need('--name')), a.execute);
-    const binding = lock ? { runId: run, prefixId: p.prefixId, lockCreatedAt: lock.owner.createdAt } : {};
+    const binding = lock ? { runId: run, ...lockBinding(p, lock) } : {};
     return a.execute ? { ...result, ...binding } : { ...result, ...binding, ok: true, verified: false };
   },
   // Step 8 completion: only after the journal shows destination verification,
@@ -448,9 +464,10 @@ const dest = {
   receipt(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run')), name = installName(a.need('--name'));
     const lock = heldBy(p, run);
+    if (lock.activated?.invalid) throw new Refusal('activation_intent_unreadable');
     if (lock.activated && lock.activated.target !== name) throw new Refusal('receipt_for_other_target');
     const proof = statement(a.values.get('--statement'), 'operator-checks-passed', run, name);
-    if (proof.lockCreatedAt !== lock.owner.createdAt) throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'lock' });
+    if (!sameLock(proof, p, lock)) throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'lock' });
     if (lstat(p.receipts)) trusted(p.receipts, 'receipts');
     const state = receiptState(p, name).state;
     if (state !== 'none') throw new Refusal('receipt_present', { receipt: state });
@@ -463,7 +480,7 @@ const dest = {
     if (!a.execute) return { dryRun: true, target: name, receipt, recovery: checked.markerRunId !== run };
     if (!lstat(p.receipts)) { mkdirSync(p.receipts, { mode: 0o700 }); trusted(p.receipts, 'receipts'); }
     writeExclusive(join(p.receipts, `${name}.json`), JSON.stringify(receipt));
-    return { dryRun: false, runId: run, target: name, receipt, recovery: checked.markerRunId !== run };
+    return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt, recovery: checked.markerRunId !== run };
   },
   unlock(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run'));
@@ -471,13 +488,13 @@ const dest = {
     if (lock.activated) {
       // Released only when the intended target was never created (or was rolled
       // back) or now has a matching receipt; anything else needs recovery.
-      if (!INSTALL.test(lock.activated.target ?? '')) throw new Refusal('activation_intent_unreadable');
+      if (lock.activated.invalid) throw new Refusal('activation_intent_unreadable');
       const target = classify(p, lock.activated.target);
       if (target.state !== 'absent' && target.state !== 'owned_receipted') throw new Refusal('unreceipted_activation', { target: lock.activated.target, state: target.state });
     }
     if (!a.execute) return { dryRun: true, plan: ['remove owner.json', 'rmdir lock'] };
     clearLock(p);
-    return { dryRun: false, runId: run, released: true };
+    return { dryRun: false, runId: run, ...lockBinding(p, lock), released: true };
   },
   rollback(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run')), name = installName(a.need('--name'));
@@ -489,13 +506,13 @@ const dest = {
       let proof;
       try { proof = statement(a.values.get('--statement'), 'no-caller', run, name); }
       catch { throw new Refusal('rollback_unconfirmed', { allowed: 'reverify_only' }); }
-      if (proof.lockCreatedAt !== lock.owner.createdAt) throw new Refusal('rollback_unconfirmed', { allowed: 'reverify_only' });
+      if (!sameLock(proof, p, lock)) throw new Refusal('rollback_unconfirmed', { allowed: 'reverify_only' });
     }
     const failed = `${name}.failed-${hex(8)}`;
     if (!a.execute || !a.destructive) return { dryRun: true, target: name, sameRun, plan: [`rename to ${failed}`, 'delete it'] };
     renameNoReplace(join(p.root, name), join(p.root, failed));
     rmSync(join(p.root, failed), { recursive: true });
-    return { dryRun: false, runId: run, target: name, rolledBack: true, sameRun };
+    return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, rolledBack: true, sameRun };
   },
   'break-lock'(a) {
     const p = dedicated(a.need('--prefix'));
@@ -510,11 +527,11 @@ const dest = {
     } else {
       if (lock.state !== 'held') throw new Refusal('owner_unconfirmable', { lock: lock.state });
       const proof = statement(a.values.get('--statement'), 'run-ended', lock.owner.runId);
-      if (proof.lockCreatedAt !== lock.owner.createdAt) throw new Refusal('statement_mismatch', { kind: 'run-ended', reason: 'lock' });
+      if (!sameLock(proof, p, lock)) throw new Refusal('statement_mismatch', { kind: 'run-ended', reason: 'lock' });
     }
     if (!a.execute || !a.destructive) return { dryRun: true, lock: lock.state, override, plan: ['remove lock only; installs untouched'] };
     clearLock(p);
-    return { dryRun: false, broken: true, lock: lock.state, override, runId: lock.owner?.runId };
+    return { dryRun: false, broken: true, lock: lock.state, override, runId: lock.owner?.runId, prefixId: p.prefixId, brokenLockId: lock.owner?.lockId ?? null };
   },
   'receipt-cleanup'(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run')), name = installName(a.need('--name')), mode = a.need('--mode');
@@ -530,7 +547,7 @@ const dest = {
       let proof;
       try { proof = statement(a.values.get('--statement'), 'receipt-owned', run, name); }
       catch { throw new Refusal('receipt_ownership_unconfirmed'); }
-      if (proof.lockCreatedAt !== lock.owner.createdAt) throw new Refusal('receipt_ownership_unconfirmed');
+      if (!sameLock(proof, p, lock)) throw new Refusal('receipt_ownership_unconfirmed');
     }
     const quarantined = `${name}.${hex(8)}.json`;
     if (!a.execute || !a.destructive) return { dryRun: true, receipt: state, mode, ownership: markerOwned ? 'marker' : 'journal' };
@@ -540,7 +557,7 @@ const dest = {
       trusted(p.quarantine, 'quarantine');
       renameNoReplace(path, join(p.quarantine, quarantined));
     }
-    return { dryRun: false, runId: run, target: name, receipt: state, mode, ownership: markerOwned ? 'marker' : 'journal' };
+    return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, receipt: state, mode, ownership: markerOwned ? 'marker' : 'journal' };
   },
   retire(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run')), name = installName(a.need('--name'));
@@ -550,13 +567,13 @@ const dest = {
     let proof;
     try { proof = statement(a.values.get('--statement'), 'no-caller', run, name); }
     catch { throw new Refusal('configured_for_caller_or_unconfirmed'); }
-    if (proof.lockCreatedAt !== lock.owner.createdAt) throw new Refusal('configured_for_caller_or_unconfirmed');
+    if (!sameLock(proof, p, lock)) throw new Refusal('configured_for_caller_or_unconfirmed');
     const retired = `${name}.retired-${hex(8)}`;
     if (!a.execute || !a.destructive) return { dryRun: true, target: name, plan: ['rename aside', 'delete it', 'remove its matching receipt'] };
     renameNoReplace(join(p.root, name), join(p.root, retired));
     rmSync(join(p.root, retired), { recursive: true });
     if (target.state === 'owned_receipted') unlinkSync(join(p.receipts, `${name}.json`));
-    return { dryRun: false, runId: run, target: name, retired: true };
+    return { dryRun: false, runId: run, ...lockBinding(p, lock), target: name, retired: true };
   },
   // Removes a staging tree whose marker names this run.
   'discard-staging'(a) {
@@ -683,13 +700,19 @@ const op = {
     if (RESULT[event]) {
       if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || value.dryRun !== false)
         throw new Refusal('result_invalid', { event });
-      if (event === 'lock_broken') Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override });
+      if (event === 'lock_broken') Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override, prefixId: value.prefixId, brokenLockId: value.brokenLockId });
       else if (value.runId !== run) throw new Refusal('result_invalid', { event, reason: 'run' });
-      if (event === 'lock_acquired') Object.assign(record, { lockCreatedAt: value.lockCreatedAt, prefixId: value.prefixId });
-      else if (event !== 'lock_broken' && !holding) throw new Refusal('lock_not_recorded');
-      // A verify result must come from this run's current lock on the same prefix.
-      if (event === 'verified' && (value.lockCreatedAt !== locked[0].lockCreatedAt || value.prefixId !== locked[0].prefixId || !value.prefixId))
-        throw new Refusal('result_invalid', { event, reason: 'stale_or_foreign_lock' });
+      if (event === 'lock_acquired') {
+        if (holding || !HEX32.test(value.lockId ?? '') || !HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
+        Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });
+      } else if (event !== 'lock_broken') {
+        // Every lock-bound result must come from this run's current lock on
+        // the same prefix; an earlier lock's result (even of the same run) is stale.
+        if (!holding) throw new Refusal('lock_not_recorded');
+        if (value.prefixId !== locked[0].prefixId || value.lockId !== locked[0].lockId)
+          throw new Refusal('result_invalid', { event, reason: 'stale_or_foreign_lock' });
+        Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });
+      }
       if (value.target) record.target = value.target;
       if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId,
         version: value.version });
@@ -716,14 +739,16 @@ const op = {
       const remoteBin = a.values.get('--remote-bin');
       if (!remoteBin) throw new Usage('--remote-bin required: the exact value passed to the operator CLI');
       if (!remoteBin.split(/[\\/]/).includes(target)) throw new Refusal('operator_check_target_mismatch', { event });
-      Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok', host: value.host, remoteBinAttested: remoteBin });
+      Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok', host: value.host, remoteBinAttested: remoteBin,
+        prefixId: locked[0].prefixId, lockId: locked[0].lockId });
     } else if (event === 'callers_switched' || event === 'callers_unswitched') {
       if (!target) throw new Usage('--target required');
       if (event === 'callers_switched') {
         const published = journal.entries.findLastIndex(entry => entry.event === 'receipt_published' && entry.target === target);
         if (published < 0) throw new Refusal('switch_before_receipt');
-        const publisher = journal.entries[published].runId;
-        if (!journal.entries.slice(published).some(entry => entry.event === 'lock_released' && entry.runId === publisher)) throw new Refusal('switch_before_unlock');
+        const { runId: publisher, lockId: publishedUnder } = journal.entries[published];
+        if (!journal.entries.slice(published).some(entry => entry.event === 'lock_released' && entry.runId === publisher && entry.lockId === publishedUnder))
+          throw new Refusal('switch_before_unlock');
       } else if (switches(journal, target) < 1) throw new Refusal('no_switch_recorded');
       record.target = target;
     } else if (event !== 'run_ended') throw new Usage(`unknown --event ${event}`);
@@ -736,11 +761,11 @@ const op = {
     const events = runEvents(journal, run), target = a.values.get('--target');
     const locked = since(events, 'lock_acquired');
     const base = { harness: HARNESS, statementVersion: 1, kind, runId: run, operatorLabel: journal.operatorLabel, journalHead: journal.head, issuedAt: now() };
-    const lockCreatedAt = locked[0]?.lockCreatedAt;
+    const lockId = locked[0]?.lockId ?? null, prefixId = locked[0]?.prefixId ?? null;
     const holding = locked.length && !locked.some(entry => ['lock_released', 'lock_broken'].includes(entry.event));
     if (kind === 'run-ended') {
       if (!events.some(entry => entry.event === 'run_ended')) throw new Refusal('run_not_ended');
-      return { ...base, lockCreatedAt: lockCreatedAt ?? null };
+      return { ...base, prefixId, lockId };
     }
     if (!target || !holding) throw new Refusal('lock_not_recorded');
     if (kind === 'operator-checks-passed') {
@@ -750,7 +775,7 @@ const op = {
         !after.some(entry => entry.event === 'operator_dry_run' && entry.target === target)) throw new Refusal('operator_checks_incomplete');
       if (after.some(entry => entry.event === 'receipt_published' && entry.target === target)) throw new Refusal('receipt_already_recorded');
       const v = locked[last];
-      return { ...base, target, lockCreatedAt, identityHash: v.identityHash, manifestSha256: v.manifestSha256 };
+      return { ...base, target, prefixId, lockId, identityHash: v.identityHash, manifestSha256: v.manifestSha256 };
     }
     if (kind === 'no-caller') {
       // Positive confirmation: this journal knows the target and records no
@@ -758,11 +783,11 @@ const op = {
       if (!journal.entries.some(entry => entry.target === target && ['activated', 'verified', 'receipt_published'].includes(entry.event)))
         throw new Refusal('target_unknown_to_journal');
       if (switches(journal, target) !== 0) throw new Refusal('configured_for_caller');
-      return { ...base, target, lockCreatedAt };
+      return { ...base, target, prefixId, lockId };
     }
     if (kind === 'receipt-owned') {
       if (!journal.entries.some(entry => entry.event === 'receipt_published' && entry.target === target)) throw new Refusal('receipt_unknown_to_journal');
-      return { ...base, target, lockCreatedAt };
+      return { ...base, target, prefixId, lockId };
     }
     throw new Usage(`unknown --kind ${kind}`);
   }

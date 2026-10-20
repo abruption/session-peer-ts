@@ -409,23 +409,82 @@ test('a verify result is recorded only under the run and lock that produced it',
   refused(['op', 'record', ...w.J, '--run', earlier, '--event', 'verified', '--file', w.file('verify', unbound), '--execute'], 'result_invalid');
 });
 
-test('an activation interrupted around the rename is never unlocked without a receipt', { skip }, t => {
+test('a failed intent write before the rename leaves no install and nothing to release', { skip }, t => {
   const w = world(t);
   const run = w.begin(); w.lock(run);
   const staging = w.stage(run);
   const lock = join(w.root, '.activate.lock'), target = join(w.root, w.name);
-  // The lock directory refuses writes, so any record attempted around the
-  // rename fails deterministically.
+  // The lock directory refuses writes, so the intent write fails before any rename.
   chmodSync(lock, 0o500);
-  const interrupted = h(['dest', 'activate', ...w.P, '--run', run, '--staging', staging, '--execute']);
+  const failed = h(['dest', 'activate', ...w.P, '--run', run, '--staging', staging, '--execute']);
   chmodSync(lock, 0o700);
-  assert.notEqual(interrupted.out.ok, true);
-  if (existsSync(target)) refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'unreceipted_activation');
-  // The intent is recorded before the rename, so a failed record never leaves an install behind.
+  assert.equal(failed.code, 1); assert.equal(failed.out.reason, 'EACCES');
   assert.equal(existsSync(target), false); assert.equal(existsSync(join(w.root, staging)), true);
-  w.activate(run, staging);
-  assert.equal(JSON.parse(readFileSync(join(lock, 'activation.json'), 'utf8')).target, w.name);
+  assert.deepEqual(readdirSync(lock), ['owner.json']);
+  assert.equal(ok(['dest', 'unlock', ...w.P, '--run', run, '--execute']).released, true);
+});
+
+// No crash is injected between the rename and a later write: after this
+// change nothing is written after the rename, so the state a crash right
+// after it leaves is exactly the persisted state of a completed activation.
+test('after a completed rename the persisted intent alone blocks unlock', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const lock = join(w.root, '.activate.lock');
+  assert.deepEqual(readdirSync(lock).sort(), ['activation.json', 'owner.json']);
   refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'unreceipted_activation');
+});
+
+test('a present but invalid activation intent is refused, never treated as absent', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const intent = join(w.root, '.activate.lock', 'activation.json');
+  const original = JSON.parse(readFileSync(intent, 'utf8'));
+  const { at, ...withoutAt } = original;
+  const contents = ['false', '0', '""', 'null', '[]', '{', '{}', JSON.stringify({ ...original, runId: 'f'.repeat(32) }),
+    JSON.stringify({ ...original, lockId: '0'.repeat(32) }), JSON.stringify({ ...original, staging: `${w.name.slice(0, -16)}0000000000000000.staging-0000000000000000` }),
+    JSON.stringify({ ...original, extra: 1 }), JSON.stringify(withoutAt), JSON.stringify({ ...original, target: 'x' })];
+  assert.equal(typeof at, 'string');
+  for (const content of contents) {
+    writeFileSync(intent, content);
+    refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'activation_intent_unreadable');
+    refused(['dest', 'activate', ...w.P, '--run', run, '--staging', w.stage(run), '--execute'], 'activation_intent_unreadable');
+  }
+  rmSync(intent); mkdirSync(intent);
+  refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'activation_intent_unreadable');
+  rmSync(intent, { recursive: true }); writeFileSync(intent, JSON.stringify(original), { mode: 0o600 });
+  refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'unreceipted_activation');
+});
+
+test('results and statements of an earlier lock of the same run, or of another prefix, are refused', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  const lockOwner = join(w.root, '.activate.lock', 'owner.json');
+  const first = JSON.parse(readFileSync(lockOwner, 'utf8'));
+  const statement = w.checks(run);
+  const receipt = ok(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement, '--execute']);
+  w.record(run, 'receipt_published', receipt);
+  const unlock = ok(['dest', 'unlock', ...w.P, '--run', run, '--execute']);
+  w.record(run, 'lock_released', unlock);
+  w.lock(run);
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'receipt_published', '--file', w.file('receipt', receipt), '--execute'], 'result_invalid');
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'lock_released', '--file', w.file('unlock', unlock), '--execute'], 'result_invalid');
+  // Same run re-acquiring at the same timestamp: only the random lockId differs.
+  const second = JSON.parse(readFileSync(lockOwner, 'utf8'));
+  assert.notEqual(second.lockId, first.lockId);
+  writeFileSync(lockOwner, JSON.stringify({ ...second, createdAt: first.createdAt }));
+  refused(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement, '--execute'], 'statement_mismatch');
+  // A verify result produced under a lock on another prefix.
+  const other = join(w.base, 'prefix2'), P2 = ['--prefix', other];
+  ok(['dest', 'init-prefix', ...P2, '--execute']);
+  const elsewhere = w.begin();
+  ok(['dest', 'lock', ...P2, '--run', elsewhere, '--operator-label', w.label, '--execute']);
+  const staged = ok(['dest', 'stage', ...P2, '--run', elsewhere, '--identity', w.identityFile, '--from-tree', w.tree, '--execute']).staging;
+  ok(['dest', 'activate', ...P2, '--run', elsewhere, '--staging', staged, '--execute']);
+  const foreign = ok(['dest', 'verify', ...P2, '--name', w.name, '--run', elsewhere, '--execute']);
+  w.record(run, 'lock_released', ok(['dest', 'unlock', ...w.P, '--run', run, '--execute']));
+  w.lock(elsewhere);
+  refused(['op', 'record', ...w.J, '--run', elsewhere, '--event', 'verified', '--file', w.file('verify', foreign), '--execute'], 'result_invalid');
 });
 
 test('staging is discarded only by its own run; markerless leftovers need an explicit declaration', { skip }, t => {

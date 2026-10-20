@@ -822,10 +822,14 @@ exact, repeatable steps. It is **not** F6 and changes nothing in the CLI:
 
 The fixed step 8 order is enforced across both sides. `op record` accepts a
 destination result only from the matching executed `dest` command and run.
-A `verified` result must come from `dest verify --run <run> --execute`, which
-binds it to the prefix's sentinel ID and the creation time of that run's
-current lock. A result from an earlier lock, another run or another prefix is
-refused.
+Every `dest lock` acquisition gets a fresh random `lockId`. Every lock-bound
+result (`activate`, `verify --run <run> --execute`, `receipt`, `unlock`,
+`rollback`, receipt cleanup, retention), every journal record and every
+statement carries the prefix sentinel ID and that `lockId`. `op record`
+refuses a result from another run, another prefix or an earlier lock,
+including an earlier lock of the same run acquired at the same timestamp.
+`callers_switched` needs the publishing run's unlock under the same lock that
+published the receipt.
 It accepts the operator results only after a recorded destination `verify`
 of the same target under the same lock:
 
@@ -843,13 +847,21 @@ harness checks only that the path names the verified install directory (a
 test shim is placed under a directory with that name). It cannot prove that
 the CLI executed it.
 `op statement --kind operator-checks-passed` exists only after both, and `dest
-receipt` requires that statement, bound to the current lock's creation time,
+receipt` requires that statement, bound to the current prefix and `lockId`,
 the marker's `identityHash` and the recomputed manifest. `dest activate`
 writes and syncs an activation intent (target and staging) inside the lock
 **before** the rename; if the intent cannot be written, nothing is renamed.
-`dest unlock` reads the intent and the actual target together. It refuses
-while the intended target exists without a matching receipt (including after
-an interruption right after the rename) or the intent is unreadable. `op record --event callers_switched` refuses until the receipt is
+Nothing is written after the rename, so an interruption right after it leaves
+the same state as a completed activation. `dest unlock` reads the intent and
+the actual target together. It refuses while the intended target exists
+without a matching receipt. Its presence and validity are separate checks: an
+intent that is present but not exactly this lock's record (wrong type,
+malformed, empty, extra or missing keys, or another run, lock, target or
+staging) refuses unlock, activation and receipts as
+`activation_intent_unreadable`. Such an intent is never treated as absent. No
+crash was physically injected between files; the fixtures make the intent
+write fail before the rename, and check the persisted state after a completed
+rename. `op record --event callers_switched` refuses until the receipt is
 recorded and the publishing run has released its lock. Statements are JSON
 files that the operator carries to the destination. Like the marker, they are
 consistency checks between cooperating same-user steps, not authentication.
@@ -887,14 +899,23 @@ arm64 workstation over the existing pinned SSH trust. The `dest` side ran over
 SSH with the recorded Node. 185 harness/operator steps checked 89 expected
 outcomes, all as expected. Step 6 was not run because no Node 22 exists on
 the host, and none was installed. [VALIDATION.md](../../VALIDATION.md#23-deployment-validation-harness--linux-arm64-test-host-2026-10-20-kst)
-has the results and the deviations. It also records a minimal same-day rerun
-of the primary order, the `already_provisioned` explicit discard, the
-dry-run no-effect checks and the identity path refusals with the review-fixed
-harness. A second minimal rerun then covered the run- and lock-bound verify
-results, the activation intent written before the rename, and run-owned
-staging discards. Cells L3–L8 were run only with the earlier harness revision. This
-qualifies exactly the rules in the table above on that one arm64/glibc/Node 24
-cell, with this harness. It does
+has the results and the deviations. That full run used harness revision
+`210759a1…41e7` (commit `cc7fe23`). It is the only Linux evidence for cells
+L3–L8: retention, fresh-lock recovery without a receipt, the receipt states,
+journal-confirmed rollback, `.receipts` trust, lock-owner overrides and the
+activation rows. Three later same-day minimal reruns used the review-fixed
+revisions. The final one used `afe2c7f5…d809`. They covered only this subset:
+
+- the primary order;
+- the explicit `already_provisioned` discard;
+- dry-run no-effect;
+- identity path refusals;
+- run- and lock-bound results, including stale same-run lock results;
+- the activation intent, including invalid-intent refusals;
+- run-owned staging discards.
+
+On that one arm64/glibc/Node 24 cell, this qualifies the table's rules with
+the earlier revision, and the listed subset with the final revision. It does
 not qualify Linux x64 under the current rules, Node 22, concurrent or
 adversarial races, the empty-directory window or a deploy helper.
 
@@ -974,9 +995,11 @@ provisioning workflow and operator SSH checks (doctor and refused dry-run;
 no message delivery) passed, plus 31 native storage/local-wrapper fixtures.
 Only the primary install has operator SSH evidence. **On Windows**, Node
 22 has direct-CLI/native-lock smoke evidence only. Issue #23's last criterion
-remains **partially validated**. The current recovery rules and the exact
-operator-check, receipt, unlock and caller-switch order were requalified once,
-on one Linux arm64 Node 24 test host only (2026-10-20). The other cells listed
+remains **partially validated**. On one Linux arm64 Node 24 test host only
+(2026-10-20), the current recovery rules and the exact operator-check,
+receipt, unlock and caller-switch order were requalified with harness
+revision `210759a1…41e7`. With the final revision, only the primary order and
+the subset listed above were rerun. The other cells listed
 under "Not validated" above remain not fully validated. Local stubs, including the 2026-10-20 harness
 fixtures, do not replace destination evidence. These results do not qualify a
 shipped deploy helper or Windows-client jump.

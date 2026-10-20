@@ -156,6 +156,30 @@ The user executables were byte-identical, and the test directory was removed
 with no leftover path or process. The first rerun's own record above remains
 the evidence for harness revision `29a46eb…8942`.
 
+**Third review-fix rerun (same day, same host and approval).** The third
+round:
+
+- gave every lock acquisition a random `lockId`;
+- bound every lock-bound result, journal record and statement to the prefix
+  sentinel ID and that `lockId`;
+- separated the presence of an activation intent from its validity.
+
+A minimal rerun with harness SHA-256
+`afe2c7f5d08d729f5e9eefc6527e6a995a346d6733cc792ae4a0bec3c6f0d809` (lock held
+14:03:58–14:06:23 KST) checked 48 expectations over 87 steps, with **0
+mismatches**. It repeated the second rerun's steps and added the following:
+
+- After the same run re-acquired the lock, its earlier lock's receipt and
+  unlock results were refused (`result_invalid`, `stale_or_foreign_lock`).
+- An intent overwritten with `false`, and then with `{}`, refused unlock as
+  `activation_intent_unreadable`. After the intent was restored, unlock was
+  refused as `unreceipted_activation`.
+
+The user executables were identical, and the test directory was removed with
+no leftover path or process. This is the only Linux run of the final harness
+revision. Together with the earlier minimal reruns, it covers only the subset
+named in the ADR.
+
 The rule cells L3–L8 above (retention, fresh-lock recovery, receipt states,
 journal-confirmed rollback, `.receipts` trust, lock overrides and activation
 rows) were not re-executed with the fixed harness. In particular, they were
