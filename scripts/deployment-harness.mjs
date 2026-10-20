@@ -11,7 +11,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, closeSync, constants, cpSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync,
   realpathSync, renameSync, rmSync, rmdirSync, unlinkSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { delimiter, dirname, isAbsolute, join, parse as parsePath, sep } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, parse as parsePath, resolve, sep } from 'node:path';
 
 const HARNESS = 'session-peer-ts deployment validation harness';
 const MANAGER = 'session-peer-ts operator workflow';
@@ -19,11 +19,12 @@ const SENTINEL = '.session-peer-ts-harness.json';
 const MARKER = '.session-peer-owner.json';
 const MANIFEST = '.session-peer-manifest.json';
 const LOCK = '.activate.lock';
+const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/;
 const INSTALL = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)-([0-9a-f]{16})$/;
 const STAGING = /^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?-[0-9a-f]{16})\.staging-[0-9a-f]{16}$/;
 const HEX32 = /^[0-9a-f]{32}$/;
 const FLAGS = new Set(['--execute', '--confirm-destructive', '--unowned', '--declare-run-ended']);
-const VALUES = new Set(['--prefix', '--journal', '--dest-alias', '--run', '--operator-label', '--event', '--file', '--target',
+const VALUES = new Set(['--prefix', '--journal', '--dest-alias', '--dest-host', '--remote-bin', '--run', '--operator-label', '--event', '--file', '--target',
   '--kind', '--version', '--package-sha256', '--lock-integrity', '--identity', '--from-tree', '--npm-cli', '--package-tarball',
   '--staging', '--name', '--statement', '--lock-name', '--mode', '--compare']);
 const MULTI = new Set(['--dependency-tarball']);
@@ -127,6 +128,29 @@ function identityOf({ version, sha256: packageSha, lockIntegrity }, rt = runtime
     ...(rt.libc ? { libc: rt.libc } : {}), nodeMajor: rt.nodeMajor, modules: rt.modules, node: rt.node };
 }
 const identityHash = identity => sha256(JSON.stringify(identity));
+// Closed schema for identity input read from a file (stage) or a marker: the
+// version becomes part of a path, so nothing unvalidated reaches a write.
+const INTEGRITY = /^sha512-[A-Za-z0-9+/]{86}==$/, PACKAGE = /^(?:@[a-z0-9-][a-z0-9._-]*\/)?[a-z0-9-][a-z0-9._-]*$/;
+function validIdentity(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = ['package', 'version', 'sha256', 'lockIntegrity', 'platform', 'arch', ...(value.platform === 'linux' ? ['libc'] : []), 'nodeMajor', 'modules', 'node'];
+  if (JSON.stringify(Object.keys(value)) !== JSON.stringify(keys)) return false;
+  const lock = value.lockIntegrity;
+  return value.package === 'session-peer' && typeof value.version === 'string' && VERSION.test(value.version) &&
+    typeof value.sha256 === 'string' && /^[0-9a-f]{64}$/.test(value.sha256) &&
+    !!lock && typeof lock === 'object' && !Array.isArray(lock) && Object.keys(lock).length > 0 &&
+    Object.entries(lock).every(([key, integrity]) => PACKAGE.test(key) && typeof integrity === 'string' && INTEGRITY.test(integrity)) &&
+    ['darwin', 'linux'].includes(value.platform) && typeof value.arch === 'string' && /^[a-z0-9]+$/.test(value.arch) &&
+    (value.platform !== 'linux' || ['glibc', 'musl'].includes(value.libc)) &&
+    Number.isInteger(value.nodeMajor) && typeof value.modules === 'string' && /^\d+$/.test(value.modules) &&
+    typeof value.node === 'string' && isAbsolute(value.node) && !/[\x00-\x1f]/.test(value.node);
+}
+// A name built from validated input must still resolve to a direct child of root.
+function inside(root, name) {
+  const path = resolve(root, name);
+  if (dirname(path) !== root || name.includes(sep)) throw new Refusal('path_outside_root');
+  return path;
+}
 function manifestOf(dir) {
   const files = {}, links = {};
   const walk = rel => {
@@ -148,7 +172,7 @@ function markerOf(dir) {
   try { if (!regular(path, 'marker')) return { state: 'no_valid_marker' }; } catch { return { state: 'no_valid_marker' }; }
   const marker = readJson(path);
   if (!marker) return { state: 'unparsable_marker' };
-  if (marker.manager !== MANAGER || marker.markerVersion !== 1 || !HEX32.test(marker.runId ?? '') || typeof marker.identity !== 'object')
+  if (marker.manager !== MANAGER || marker.markerVersion !== 1 || !HEX32.test(marker.runId ?? '') || !validIdentity(marker.identity))
     return { state: 'other_manager' };
   return { state: 'owned', marker };
 }
@@ -240,7 +264,7 @@ function statement(file, kind, run, target) {
 }
 
 // ---- verification (ADR step 8, destination part) ----
-function verify(p, name) {
+function verify(p, name, execute) {
   const target = join(p.root, name);
   const c = classify(p, name);
   const lock = lockState(p);
@@ -251,11 +275,12 @@ function verify(p, name) {
   checks.owned = !!c.marker;
   checks.markerConsistent = !!c.marker && c.state !== 'inconsistent_marker';
   checks.manifest = !!c.manifest;
-  if (checks.manifest) Object.assign(checks, probe(target, c.marker.identity));
+  if (!execute) Object.assign(checks, { banner: 'not_run', nativeLock: 'not_run' });
+  else if (checks.manifest) Object.assign(checks, probe(target, c.marker.identity));
   const ok = checks.realDirectory && checks.owned && checks.markerConsistent && checks.manifest && checks.banner &&
     checks.nativeLock === 'loaded' && checks.stagingGone !== false;
-  return { ok, target: name, state: c.state, checks, markerRunId: c.marker?.runId, identityHash: c.marker?.identityHash,
-    manifestSha256: c.manifest, receipt: receiptState(p, name).state };
+  return { ok, ...(execute ? { dryRun: false } : { dryRun: true }), target: name, state: c.state, checks, markerRunId: c.marker?.runId,
+    version: c.marker?.identity.version, identityHash: c.marker?.identityHash, manifestSha256: c.manifest, receipt: receiptState(p, name).state };
 }
 
 // ---- destination commands ----
@@ -285,22 +310,20 @@ const dest = {
   },
   identity(a) {
     const version = a.need('--version'), packageSha = a.need('--package-sha256');
-    if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/.test(version) || !/^[0-9a-f]{64}$/.test(packageSha)) throw new Usage('invalid --version or --package-sha256');
     const lockIntegrity = readJson(a.need('--lock-integrity'));
-    if (!lockIntegrity || typeof lockIntegrity !== 'object' || !Object.entries(lockIntegrity).length ||
-      Object.entries(lockIntegrity).some(([key, value]) => !/^[a-z0-9@/._-]+$/.test(key) || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(value)))
-      throw new Usage('--lock-integrity must map package names to sha512 integrity');
-    const identity = identityOf({ version, sha256: packageSha, lockIntegrity });
+    const identity = lockIntegrity && typeof lockIntegrity === 'object' ? identityOf({ version, sha256: packageSha, lockIntegrity }) : undefined;
+    if (!validIdentity(identity)) throw new Refusal('identity_invalid');
     const hash = identityHash(identity);
     return { identity, identityHash: hash, name: `${version}-${hash.slice(0, 16)}` };
   },
   stage(a) {
     const p = dedicated(a.need('--prefix')), run = runId(a.need('--run'));
     const input = readJson(a.need('--identity'));
-    if (!input?.identity) throw new Refusal('identity_missing');
+    if (!validIdentity(input?.identity)) throw new Refusal('identity_invalid');
     const identity = identityOf(input.identity);
     if (identityHash(identity) !== identityHash(input.identity)) throw new Refusal('identity_runtime_mismatch');
     const hash = identityHash(identity), name = `${identity.version}-${hash.slice(0, 16)}`;
+    if (!INSTALL.test(name)) throw new Refusal('identity_invalid');
     const tree = a.values.get('--from-tree'), npmCli = a.values.get('--npm-cli');
     if (!!tree === !!npmCli) throw new Usage('exactly one of --from-tree or --npm-cli');
     const tarballs = [a.values.get('--package-tarball'), ...(a.multi.get('--dependency-tarball') ?? [])];
@@ -312,10 +335,11 @@ const dest = {
         throw new Refusal('dependency_integrity_mismatch');
     }
     const staging = `${name}.staging-${hex(8)}`;
+    if (!STAGING.test(staging)) throw new Refusal('identity_invalid');
+    const dir = inside(p.root, staging);
     const plan = [`mkdir ${staging} 0700 (exclusive)`, npmCli ? 'npm install --offline --ignore-scripts with recorded Node' : 'copy prepared tree',
       'write wrapper, manifest, marker'];
     if (!a.execute) return { dryRun: true, staging, name, plan };
-    const dir = join(p.root, staging);
     mkdirSync(dir, { mode: 0o700 });
     if (tree) cpSync(tree, dir, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
     else {
@@ -350,6 +374,8 @@ const dest = {
     trusted(dir, 'probe_target');
     const owned = markerOf(dir);
     if (owned.state !== 'owned') throw new Refusal('probe_target_not_owned', { state: owned.state });
+    // Runs the launcher and creates/removes a lock file: an effect, so --execute.
+    if (!a.execute) return { dryRun: true, name, plan: ['run <dir>/session-peer --version', 'flock a temporary file inside <dir> and remove it'] };
     const result = probe(dir, owned.marker.identity);
     if (sha256(manifestOf(dir)) !== owned.marker.manifestSha256) throw new Refusal('probe_changed_manifest');
     return { ok: result.banner && result.nativeLock === 'loaded', name, ...result };
@@ -378,25 +404,31 @@ const dest = {
     if (owned.state !== 'owned' || owned.marker.runId !== run) throw new Refusal('staging_not_owned');
     if (identityHash(owned.marker.identity) !== owned.marker.identityHash || owned.marker.identityHash.slice(0, 16) !== INSTALL.exec(match[1])[2] ||
       sha256(manifestOf(dir)) !== owned.marker.manifestSha256) throw new Refusal('staging_failed_verification');
-    const checks = probe(dir, owned.marker.identity);
-    if (!checks.banner || checks.nativeLock !== 'loaded') throw new Refusal('staging_probe_failed', checks);
     if (lstat(p.receipts)) trusted(p.receipts, 'receipts');
     const target = classify(p, match[1]);
+    // Dry runs classify only; probes launch code and are deferred to --execute.
     if (target.state === 'owned_receipted') {
-      const checked = verify(p, match[1]);
-      if (checked.ok) return { dryRun: !a.execute, outcome: 'already_provisioned', target: match[1], receiptReused: true };
+      if (!a.execute) return { dryRun: true, outcome: 'already_provisioned_pending_verification', target: match[1] };
+      const checked = verify(p, match[1], true);
+      // The existing receipt is reused. This run's staging stays until the
+      // explicit `discard-staging --confirm-destructive` step.
+      if (checked.ok) return { dryRun: false, outcome: 'already_provisioned', target: match[1], receiptReused: true, stagingRetained: staging };
       throw new Refusal('existing_install_failed_verification', { target: match[1] });
     }
     if (target.state !== 'absent') throw new Refusal('target_not_absent', { target: match[1], state: target.state, reason: target.reason });
     if (target.receipt !== 'none') throw new Refusal('orphan_receipt', { target: match[1], receipt: target.receipt });
-    if (!a.execute) return { dryRun: true, target: match[1], plan: ['lstat target ENOENT', 'rename staging to target'] };
+    if (!a.execute) return { dryRun: true, target: match[1], plan: ['probe staging (banner, native lock)', 'lstat target ENOENT', 'rename staging to target'] };
+    const checks = probe(dir, owned.marker.identity);
+    if (!checks.banner || checks.nativeLock !== 'loaded') throw new Refusal('staging_probe_failed', checks);
     renameNoReplace(dir, join(p.root, match[1]));
     writeExclusive(join(p.lock, 'activated.json'), JSON.stringify({ target: match[1], staging, at: now() }));
     return { dryRun: false, outcome: 'activated', runId: run, target: match[1] };
   },
   verify(a) {
     const p = dedicated(a.need('--prefix'));
-    return verify(p, installName(a.need('--name')));
+    // Without --execute: static checks only (no launcher run, no probe file).
+    const result = verify(p, installName(a.need('--name')), a.execute);
+    return a.execute ? result : { ...result, ok: true, verified: false };
   },
   // Step 8 completion: only after the journal shows destination verification,
   // then operator doctor and dry-run, and only while this run holds the lock.
@@ -409,8 +441,9 @@ const dest = {
     if (lstat(p.receipts)) trusted(p.receipts, 'receipts');
     const state = receiptState(p, name).state;
     if (state !== 'none') throw new Refusal('receipt_present', { receipt: state });
-    const checked = verify(p, name);
-    if (!checked.ok) throw new Refusal('verification_failed', { checks: checked.checks, state: checked.state });
+    const checked = verify(p, name, a.execute);
+    if (a.execute ? !checked.ok : !checked.checks.manifest || !checked.checks.markerConsistent)
+      throw new Refusal('verification_failed', { checks: checked.checks, state: checked.state });
     if (proof.identityHash !== checked.identityHash || proof.manifestSha256 !== checked.manifestSha256)
       throw new Refusal('statement_mismatch', { kind: 'operator-checks-passed', reason: 'install' });
     const receipt = { receiptVersion: 1, runId: checked.markerRunId, identityHash: checked.identityHash, manifestSha256: checked.manifestSha256, verifiedAt: now() };
@@ -562,7 +595,7 @@ function journalRead(path) {
     return entry;
   });
   if (entries[0]?.event !== 'journal_created') throw new Refusal('journal_corrupt');
-  return { entries, head: prev, operatorLabel: entries[0].operatorLabel };
+  return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost };
 }
 function journalAppend(path, journal, event) {
   const line = JSON.stringify({ seq: journal.entries.length, prev: journal.head, at: now(), ...event });
@@ -585,14 +618,15 @@ function switches(journal, target) {
 }
 const op = {
   init(a) {
-    const path = a.need('--journal'), alias = a.need('--dest-alias');
+    const path = a.need('--journal'), alias = a.need('--dest-alias'), destHost = a.need('--dest-host');
     if (!isAbsolute(path)) throw new Usage('--journal must be absolute');
     if (!/^[A-Za-z0-9._-]{1,64}$/.test(alias)) throw new Usage('--dest-alias must be a short local alias');
+    if (!/^[A-Za-z0-9_.@:[\]-]{1,255}$/.test(destHost)) throw new Usage('--dest-host must be the --host value the operator CLI uses');
     trusted(dirname(path), 'journal_dir');
     if (lstat(path)) throw new Refusal('journal_exists');
     if (!a.execute) return { dryRun: true, plan: ['create journal exclusively'] };
     const label = hex(16);
-    writeExclusive(path, `${JSON.stringify({ seq: 0, prev: '0'.repeat(64), at: now(), event: 'journal_created', operatorLabel: label, destAlias: alias })}\n`);
+    writeExclusive(path, `${JSON.stringify({ seq: 0, prev: '0'.repeat(64), at: now(), event: 'journal_created', operatorLabel: label, destAlias: alias, destHost })}\n`);
     return { dryRun: false, operatorLabel: label };
   },
   begin(a) {
@@ -613,24 +647,39 @@ const op = {
     const locked = since(events, 'lock_acquired');
     const holding = locked.length && !locked.some(entry => ['lock_released', 'lock_broken'].includes(entry.event));
     if (RESULT[event]) {
-      if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || (event !== 'verified' && value.dryRun !== false))
+      if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || value.dryRun !== false)
         throw new Refusal('result_invalid', { event });
       if (event === 'lock_broken') Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override });
       else if (event !== 'verified' && value.runId !== run) throw new Refusal('result_invalid', { event });
       if (event === 'lock_acquired') record.lockCreatedAt = value.lockCreatedAt;
       else if (event !== 'lock_broken' && !holding) throw new Refusal('lock_not_recorded');
       if (value.target) record.target = value.target;
-      if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId });
+      if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId,
+        version: value.version });
     } else if (event === 'operator_doctor' || event === 'operator_dry_run') {
       if (!target || !holding) throw new Refusal('lock_not_recorded');
-      if (!since(locked, 'verified').some(entry => entry.target === target)) throw new Refusal('operator_check_before_verify');
-      // Operator SSH output: a doctor that completed, and a dry-run that sent nothing.
+      const verified = locked.findLast(entry => entry.event === 'verified' && entry.target === target);
+      if (!verified) throw new Refusal('operator_check_before_verify');
+      // Operator SSH output: a completed doctor, and a dry-run that reached the
+      // destination CLI and sent nothing: the intended nonexistent-target
+      // refusal or a normal validated dry run. Transport, preflight, version
+      // and other refusals do not pass.
       const ok = event === 'operator_doctor'
         ? value?.ok === true && value.diagnosticCompleted === true && value.implementation === 'typescript' && typeof value.host === 'string'
-        : value?.submitted === false && value.consumptionConfirmed !== true && typeof value.host === 'string' &&
-          ((value.ok === false && value.status === 'refused') || (value.ok === true && value.status === 'validated'));
+        : value?.submitted === false && value.consumptionConfirmed === false && typeof value.host === 'string' &&
+          ((value.ok === false && value.status === 'refused' && value.error === 'no_reachable_target') ||
+           (value.ok === true && value.status === 'validated' && value.error === undefined));
       if (!ok) throw new Refusal('operator_check_failed', { event });
-      Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok' });
+      // Bound from the JSON: the destination host and, for doctor, the remote
+      // version. Not visible in the JSON: which --remote-bin was used. That is
+      // the operator's attestation, recorded as such and checked only for
+      // naming the verified install.
+      if (value.host !== journal.destHost) throw new Refusal('operator_check_host_mismatch', { event });
+      if (event === 'operator_doctor' && value.version !== verified.version) throw new Refusal('operator_check_version_mismatch');
+      const remoteBin = a.values.get('--remote-bin');
+      if (!remoteBin) throw new Usage('--remote-bin required: the exact value passed to the operator CLI');
+      if (!remoteBin.split(/[\\/]/).includes(target)) throw new Refusal('operator_check_target_mismatch', { event });
+      Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok', host: value.host, remoteBinAttested: remoteBin });
     } else if (event === 'callers_switched' || event === 'callers_unswitched') {
       if (!target) throw new Usage('--target required');
       if (event === 'callers_switched') {

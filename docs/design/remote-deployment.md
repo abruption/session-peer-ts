@@ -808,14 +808,35 @@ exact, repeatable steps. It is **not** F6 and changes nothing in the CLI:
   `PATH`, so another manager's executable can be shown unchanged.
 - Every mutating command is a dry run unless `--execute`. Rollback,
   retention, lock breaking, receipt cleanup, staging discard and prefix
-  removal also need `--confirm-destructive`.
+  removal also need `--confirm-destructive`. Running the launcher and the
+  native-lock probe (which creates and removes a temporary file) also counts
+  as an effect. `dest probe` and `dest verify` do it only with `--execute`,
+  and the dry runs of `dest activate` and `dest receipt` classify statically
+  and defer every probe. An unexecuted `verify` result cannot be recorded.
+- `dest stage` validates the identity file against a closed schema (exact
+  keys and types, version syntax, SHA-256 and SHA-512 integrity forms,
+  absolute Node path) and checks that the staging name resolves to a direct
+  child of the root. This happens before any write, in dry runs as well.
 - It is POSIX only and refuses on Windows; see the Windows cells below.
 
 The fixed step 8 order is enforced across both sides. `op record` accepts a
-destination result only from the matching `dest` command and run, and
-accepts the operator `doctor` (`ok`, `diagnosticCompleted`,
-`implementation:"typescript"`) and dry-run (`submitted:false`) results only
-after a recorded destination `verify` of the same target under the same lock.
+destination result only from the matching executed `dest` command and run.
+It accepts the operator results only after a recorded destination `verify`
+of the same target under the same lock:
+
+- **Doctor:** `ok`, `diagnosticCompleted` and `implementation:"typescript"`.
+- **Dry-run:** `submitted:false` and `consumptionConfirmed:false`, and
+  either the intended `no_reachable_target` refusal or a normal `validated`
+  result. Transport, host-key, preflight, version and other refusals are
+  rejected.
+
+What the CLI JSON shows is bound. Its `host` must equal the `--dest-host`
+fixed at `op init`. The doctor's `version` must equal the verified install's
+version. Which `--remote-bin` the CLI ran is **not** in the JSON. The operator
+supplies it to `op record`, and it is stored as `remoteBinAttested`. The
+harness checks only that the path names the verified install directory (a
+test shim is placed under a directory with that name). It cannot prove that
+the CLI executed it.
 `op statement --kind operator-checks-passed` exists only after both, and `dest
 receipt` requires that statement, bound to the current lock's creation time,
 the marker's `identityHash` and the recomputed manifest. `dest unlock` refuses
@@ -832,7 +853,7 @@ consistency checks between cooperating same-user steps, not authentication.
 | Corrupt, mismatched and orphan receipts | Classified and refused by `dest activate`/`dest receipt` (orphans before the rename). `dest receipt-cleanup` (quarantine or remove) needs the lock and ownership through the marker, or a `receipt-owned` journal statement for orphans |
 | `.receipts` trust | A group/world-accessible directory, a symlinked `.receipts` or a non-regular receipt file is refused; nothing is followed through a link |
 | Unknown or unverifiable lock owner | A lock without `owner.json`, with an unreadable one, or whose run the journal cannot show as ended, is removed only by `dest break-lock --unowned --lock-name .activate.lock --declare-run-ended`, and never touches an install |
-| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` (reported as `already_provisioned`) and `owned_receipt_*` |
+| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` and `owned_receipt_*`. For `owned_receipted`, an executed `dest activate` re-verifies and reports `already_provisioned`, reusing the receipt. This run's staging is kept (`stagingRetained`), and the ADR's "delete only this run's staging" is the explicit `dest discard-staging --execute --confirm-destructive` step |
 
 **Darwin-local evidence only (2026-10-20).** On macOS 27 arm64 with Node
 24.16.0 and npm 11.15.0, `test/deployment-receipt-harness.test.ts` passed 8 of
@@ -858,8 +879,12 @@ arm64 workstation over the existing pinned SSH trust. The `dest` side ran over
 SSH with the recorded Node. 185 harness/operator steps checked 89 expected
 outcomes, all as expected. Step 6 was not run because no Node 22 exists on
 the host, and none was installed. [VALIDATION.md](../../VALIDATION.md#23-deployment-validation-harness--linux-arm64-test-host-2026-10-20-kst)
-has the results and the deviations. This qualifies exactly the rules in the
-table above on that one arm64/glibc/Node 24 cell, with this harness. It does
+has the results and the deviations. It also records a minimal same-day rerun
+of the primary order, the `already_provisioned` explicit discard, the
+dry-run no-effect checks and the identity path refusals with the review-fixed
+harness. Cells L3–L8 were run only with the earlier harness revision. This
+qualifies exactly the rules in the table above on that one arm64/glibc/Node 24
+cell, with this harness. It does
 not qualify Linux x64 under the current rules, Node 22, concurrent or
 adversarial races, the empty-directory window or a deploy helper.
 

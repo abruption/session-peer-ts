@@ -90,6 +90,44 @@ qualified here: Linux x86_64 under the current rules, Node 22 (unrun, no
 binary present), OpenSSH `sshd` as the server, concurrent or adversarial
 races, the empty-directory `rename(2)` window and F6.
 
+**Review-fix rerun (same day, same host and approval).** The run above used
+harness SHA-256 `210759a1…41e7` (commit `cc7fe23`). Review then tightened the
+harness:
+
+- closed identity-schema and path-containment checks in `dest stage`;
+- dry-run acceptance limited to `no_reachable_target` or a normal `validated`
+  result;
+- binding of the CLI JSON `host` (to `op init --dest-host`) and the doctor
+  `version`, with `--remote-bin` recorded only as operator attestation;
+- launcher and probe effects only with `--execute`;
+- `already_provisioned` keeping this run's staging for an explicit
+  destructive discard.
+
+A minimal rerun with the fixed harness (SHA-256
+`29a46ebabb3fa0392ed97b12b3a3a3908a648f61153209b199d0ee0c749a8942`), in a new
+`/tmp` test directory under the host lock, checked 29 expectations over 59
+steps, with **0 mismatches**:
+
+- The primary install repeated the exact order, with the operator doctor and
+  `no_reachable_target` dry-run accepted under the new binding.
+- `already_provisioned` reported `stagingRetained`. The staging survived a
+  discard without `--confirm-destructive` and was removed with it.
+- Dry-run `probe`, `activate` and `verify` left the staging directory's mtime
+  and link count unchanged. The unexecuted `verify` result was refused by `op
+  record` (`result_invalid`).
+- `dest stage` refused identity versions `../../../outside`, `/abs/outside` and
+  `0.4.0/../x` (`identity_invalid`) in dry-run and `--execute`. No `outside*`
+  entry appeared in `/tmp` and nothing new appeared in the test directory or
+  root.
+- The user executables were byte-identical. The prefix and test directory were
+  removed, with no leftover path or process.
+
+The rule cells L3–L8 above (retention, fresh-lock recovery, receipt states,
+journal-confirmed rollback, `.receipts` trust, lock overrides and activation
+rows) were not re-executed with the fixed harness. In particular, they were
+not re-executed under the new host/version binding or the execute-gated
+probes. Their evidence remains that of harness revision `210759a1…41e7`.
+
 Windows: the harness refuses on Windows, so no Windows cell was run. The only
 authorized Windows test host has an administrator account (the non-admin
 cell needs account creation, which is not authorized). A read-only check found
@@ -117,7 +155,8 @@ below is **Darwin-local evidence only** and qualifies no destination cell.
 Results:
 
 - `test/deployment-receipt-harness.test.ts`: **8 passed, 0 failed, 0
-  skipped**. It covers dedicated-prefix refusals and dry-run defaults, the
+  skipped** at the time (12 after the same-day review fixes, see the Linux
+  record above). It covers dedicated-prefix refusals and dry-run defaults, the
   enforced step 8 order (destination checks, operator doctor and dry-run,
   receipt, unlock, caller switch), fresh-lock recovery of an unreceipted
   target (the receipt keeps the original marker `runId`), same-run and

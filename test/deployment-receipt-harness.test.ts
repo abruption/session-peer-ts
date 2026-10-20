@@ -5,7 +5,7 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -35,6 +35,12 @@ function world(t: TestContext) {
   cpSync(join(repo, 'dist'), join(tree, 'node_modules/session-peer/dist'), { recursive: true });
   cpSync(join(repo, 'package.json'), join(tree, 'node_modules/session-peer/package.json'));
   for (const name of ['fs-ext-extra-prebuilt', 'nan', 'smol-toml']) cpSync(join(repo, 'node_modules', name), join(tree, 'node_modules', name), { recursive: true });
+  // Launch tracer: every execution of an installed launcher appends a line.
+  const launchLog = join(base, 'launches.log');
+  renameSync(join(tree, 'node_modules/session-peer/dist/cli.js'), join(tree, 'node_modules/session-peer/dist/cli-real.js'));
+  writeFileSync(join(tree, 'node_modules/session-peer/dist/cli.js'),
+    `import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(launchLog)}, 'launch\\n');\nawait import('./cli-real.js');\n`);
+  const launches = () => existsSync(launchLog) ? readFileSync(launchLog, 'utf8').split('\n').filter(Boolean).length : 0;
   const integrity = join(base, 'lock-integrity.json');
   writeFileSync(integrity, JSON.stringify(Object.fromEntries(['fs-ext-extra-prebuilt', 'nan', 'smol-toml']
     .map(name => [name, lockIntegrity[`node_modules/${name}`].integrity]))));
@@ -49,24 +55,25 @@ function world(t: TestContext) {
   const identity = ok(['dest', 'identity', '--version', JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).version,
     '--package-sha256', sha('prepared-tree fixture'), '--lock-integrity', integrity]);
   writeFileSync(identityFile, JSON.stringify(identity));
-  const label = ok(['op', 'init', '--journal', journal, '--dest-alias', 'fixture-dest', '--execute']).operatorLabel as string;
+  const label = ok(['op', 'init', '--journal', journal, '--dest-alias', 'fixture-dest', '--dest-host', 'dest.example', '--execute']).operatorLabel as string;
   const P = ['--prefix', prefix], J = ['--journal', journal];
   const file = (name: string, value: unknown) => { const path = join(base, `${name}-${Math.random().toString(16).slice(2)}.json`); writeFileSync(path, JSON.stringify(value)); return path; };
-  const record = (run: string, event: string, value?: unknown, target?: string) =>
-    ok(['op', 'record', ...J, '--run', run, '--event', event, '--execute', ...(value ? ['--file', file(event, value)] : []), ...(target ? ['--target', target] : [])]);
+  const record = (run: string, event: string, value?: unknown, target?: string, extra: string[] = []) =>
+    ok(['op', 'record', ...J, '--run', run, '--event', event, '--execute', ...(value ? ['--file', file(event, value)] : []), ...(target ? ['--target', target] : []), ...extra]);
   const begin = () => ok(['op', 'begin', ...J, '--execute']).runId as string;
   const stage = (run: string) => ok(['dest', 'stage', ...P, '--run', run, '--identity', identityFile, '--from-tree', tree, '--execute']).staging as string;
   const lock = (run: string) => record(run, 'lock_acquired', ok(['dest', 'lock', ...P, '--run', run, '--operator-label', label, '--execute']));
+  const remoteBin = () => join(prefix, 'data/session-peer-ts', name, 'session-peer');
   const cli = (args: string[]) => {
-    const result = spawnSync(process.execPath, [join(repo, 'dist/cli.js'), ...args, '--host', 'dest.example', '--remote-bin', join(prefix, 'data/session-peer-ts', name, 'session-peer'), '--json'],
+    const result = spawnSync(process.execPath, [join(repo, 'dist/cli.js'), ...args, '--host', 'dest.example', '--remote-bin', remoteBin(), '--json'],
       { encoding: 'utf8', timeout: 60000, env: { PATH: `${bin}:/usr/bin:/bin`, HOME: opDir, SESSION_PEER_TAILSCALE: 'off', CLAUDE_CONFIG_DIR: join(opDir, '.claude'), SESSION_PEER_CODEX_HOMES: '[]' } });
     return JSON.parse(result.stdout);
   };
   // Destination verification, then operator doctor and dry-run over the stand-in.
   const checks = (run: string) => {
-    record(run, 'verified', ok(['dest', 'verify', ...P, '--name', name]));
-    record(run, 'operator_doctor', cli(['doctor']), name);
-    record(run, 'operator_dry_run', cli(['send', '--to', '999999', '--message', 'synthetic deployment check', '--dry-run']), name);
+    record(run, 'verified', ok(['dest', 'verify', ...P, '--name', name, '--execute']));
+    record(run, 'operator_doctor', cli(['doctor']), name, ['--remote-bin', remoteBin()]);
+    record(run, 'operator_dry_run', cli(['send', '--to', '999999', '--message', 'synthetic deployment check', '--dry-run']), name, ['--remote-bin', remoteBin()]);
     return file('statement', ok(['op', 'statement', ...J, '--kind', 'operator-checks-passed', '--run', run, '--target', name]));
   };
   const finish = (run: string) => {
@@ -78,7 +85,7 @@ function world(t: TestContext) {
   const name = identity.name as string;
   const root = join(prefix, 'data/session-peer-ts');
   const state = () => (ok(['dest', 'inspect', ...P]).installs as Out[]).find(install => install.name === name)?.state;
-  return { base, prefix, root, journal, label, name, P, J, file, record, begin, stage, lock, activate, checks, finish, provision, state, bin };
+  return { base, prefix, root, journal, label, name, P, J, file, record, begin, stage, lock, activate, checks, finish, provision, state, bin, identityFile, launches, tree, remoteBin };
 }
 
 test('harness refuses non-dedicated prefixes and defaults to dry runs', { skip }, t => {
@@ -112,11 +119,11 @@ test('operator checks precede the receipt, which precedes unlock and caller swit
   const run = w.begin();
   w.lock(run);
   const staging = w.stage(run);
-  assert.equal(ok(['dest', 'probe', ...w.P, '--name', staging]).nativeLock, 'loaded');
+  assert.equal(ok(['dest', 'probe', ...w.P, '--name', staging, '--execute']).nativeLock, 'loaded');
   w.activate(run, staging);
   refused(['dest', 'unlock', ...w.P, '--run', run, '--execute'], 'unreceipted_activation');
   refused(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--execute'], 'statement_missing');
-  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name]));
+  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--execute']));
   refused(['op', 'statement', ...w.J, '--kind', 'operator-checks-passed', '--run', run, '--target', w.name], 'operator_checks_incomplete');
   refused(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name, '--file', w.file('bad', { ok: false }), '--execute'], 'operator_check_failed');
   refused(['op', 'record', ...w.J, '--run', run, '--event', 'callers_switched', '--target', w.name, '--execute'], 'switch_before_receipt');
@@ -130,8 +137,15 @@ test('operator checks precede the receipt, which precedes unlock and caller swit
   assert.equal(w.state(), 'owned_receipted');
   // A second run of the same identity reuses the receipt and changes nothing.
   const again = w.begin(); w.lock(again);
-  const second = ok(['dest', 'activate', ...w.P, '--run', again, '--staging', w.stage(again), '--execute']);
+  const kept = w.stage(again);
+  const second = ok(['dest', 'activate', ...w.P, '--run', again, '--staging', kept, '--execute']);
   assert.equal(second.outcome, 'already_provisioned');
+  // This run's staging is removed only by the explicit, destructive discard step.
+  assert.equal(second.stagingRetained, kept); assert.equal(existsSync(join(w.root, kept)), true);
+  assert.equal(ok(['dest', 'discard-staging', ...w.P, '--staging', kept, '--execute']).dryRun, true);
+  assert.equal(existsSync(join(w.root, kept)), true);
+  ok(['dest', 'discard-staging', ...w.P, '--staging', kept, '--execute', '--confirm-destructive']);
+  assert.equal(existsSync(join(w.root, kept)), false);
   assert.equal(h(['dest', 'path-inventory', '--compare', inventory], env).out.unchanged, true);
 });
 
@@ -290,8 +304,89 @@ test('activation refuses empty, foreign, inconsistent and failing targets', { sk
   writeFileSync(marker, original);
   writeFileSync(join(target, 'node_modules/session-peer/dist/help.js'), '// edited\n', { flag: 'a' });
   assert.equal(w.state(), 'owned_failed_verification');
-  const verify = h(['dest', 'verify', ...w.P, '--name', w.name]);
+  const verify = h(['dest', 'verify', ...w.P, '--name', w.name, '--execute']);
   assert.equal(verify.code, 1); assert.equal(verify.out.checks.manifest, false);
   ok(['dest', 'destroy-prefix', ...w.P, '--execute', '--confirm-destructive']);
   assert.equal(existsSync(w.prefix), false);
+});
+
+function listing(dir: string, skip: string[] = []): string[] {
+  return (readdirSync(dir, { recursive: true }) as string[]).filter(entry => !skip.some(prefix => entry === prefix || entry.startsWith(`${prefix}/`))).sort();
+}
+
+test('stage validates the identity file and stays inside the prefix before any write', { skip }, t => {
+  const w = world(t);
+  const valid = JSON.parse(readFileSync(w.identityFile, 'utf8')).identity;
+  const run = w.begin();
+  const ids = join(w.base, 'ids'); mkdirSync(ids, { mode: 0o700 });
+  const before = listing(w.base, ['ids']);
+  const patches: Record<string, unknown>[] = [{ version: '../../../outside' }, { version: '/absolute/outside' }, { version: '0.4.0/../x' },
+    { version: 4 }, { sha256: 7 }, { sha256: 'not-a-sha' }, { lockIntegrity: { nan: 'md5-x' } }, { lockIntegrity: [] }, { lockIntegrity: { '../x': valid.lockIntegrity.nan } },
+    { package: 'other' }, { extra: true }, { node: 'relative/node' }, { nodeMajor: '24' }, { modules: 137 }, { platform: '../x' }];
+  patches.forEach((patch, index) => {
+    const file = join(ids, `${index}.json`);
+    writeFileSync(file, JSON.stringify({ identity: { ...valid, ...patch } }));
+    for (const mode of [[], ['--execute']])
+      refused(['dest', 'stage', ...w.P, '--run', run, '--identity', file, '--from-tree', w.tree, ...mode], 'identity_invalid');
+  });
+  assert.deepEqual(listing(w.base, ['ids']), before);
+  assert.deepEqual(readdirSync(w.root), []);
+});
+
+test('operator dry-run records only no_reachable_target or a validated dry run', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--execute']));
+  const base = { ok: false, status: 'refused', submitted: false, consumptionConfirmed: false, host: 'dest.example' };
+  for (const error of ['ssh_unreachable', 'ssh_host_key_untrusted', 'ssh_authentication_refused', 'remote_cli_missing', 'remote_version_mismatch',
+    'ssh_preflight_failed', 'remote_preparation_unverified', 'invalid_ssh_option'])
+    refused(['op', 'record', ...w.J, '--run', run, '--event', 'operator_dry_run', '--target', w.name, '--file', w.file('dry', { ...base, error }), '--execute'], 'operator_check_failed');
+  for (const value of [{ ...base, ok: true, status: 'validated', submitted: true }, { ...base, error: 'no_reachable_target', submitted: null },
+    { ...base, ok: true, status: 'queued', submitted: true }])
+    refused(['op', 'record', ...w.J, '--run', run, '--event', 'operator_dry_run', '--target', w.name, '--file', w.file('dry', value), '--execute'], 'operator_check_failed');
+});
+
+test('dry runs and unexecuted checks launch nothing and create no probe files', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run);
+  const staging = w.stage(run);
+  const stagingDir = join(w.root, staging);
+  const mtime = (dir: string) => statSync(dir, { bigint: true }).mtimeNs;
+  const before = [w.launches(), mtime(stagingDir)];
+  assert.equal(ok(['dest', 'probe', ...w.P, '--name', staging]).dryRun, true);
+  assert.equal(ok(['dest', 'activate', ...w.P, '--run', run, '--staging', staging]).dryRun, true);
+  assert.deepEqual([w.launches(), mtime(stagingDir)], before);
+  w.activate(run, staging);
+  assert.ok(w.launches() > before[0]!);
+  const target = join(w.root, w.name);
+  const after = [w.launches(), mtime(target)];
+  const unexecuted = h(['dest', 'verify', ...w.P, '--name', w.name]).out;
+  assert.equal(unexecuted.dryRun, true); assert.equal(unexecuted.checks.banner, 'not_run'); assert.equal(unexecuted.checks.manifest, true);
+  refused(['op', 'record', ...w.J, '--run', run, '--event', 'verified', '--file', w.file('verify', unexecuted), '--execute'], 'result_invalid');
+  const statement = w.checks(run);
+  const settled = [w.launches(), mtime(target)];
+  assert.equal(ok(['dest', 'receipt', ...w.P, '--run', run, '--name', w.name, '--statement', statement]).dryRun, true);
+  assert.deepEqual([w.launches(), mtime(target)], settled);
+  assert.notDeepEqual(after, settled);
+});
+
+test('operator check records bind the destination host, remote version and named install', { skip }, t => {
+  const w = world(t);
+  const run = w.begin(); w.lock(run); w.activate(run);
+  w.record(run, 'verified', ok(['dest', 'verify', ...w.P, '--name', w.name, '--execute']));
+  const doctor = { ok: true, diagnosticCompleted: true, implementation: 'typescript', ready: false, version: '0.4.0', host: 'dest.example' };
+  const record = (value: unknown, extra: string[]) => h(['op', 'record', ...w.J, '--run', run, '--event', 'operator_doctor', '--target', w.name,
+    '--file', w.file('doctor', value), '--execute', ...extra]);
+  const bin = ['--remote-bin', w.remoteBin()];
+  assert.equal(record({ ...doctor, host: 'other.example' }, bin).out.error, 'operator_check_host_mismatch');
+  assert.equal(record({ ...doctor, version: '0.3.9' }, bin).out.error, 'operator_check_version_mismatch');
+  const other = `${w.name.slice(0, -16)}0000000000000000`;
+  assert.equal(record(doctor, ['--remote-bin', join(w.root, other, 'session-peer')]).out.error, 'operator_check_target_mismatch');
+  assert.equal(record(doctor, []).code, 2);
+  const accepted = record(doctor, bin).out;
+  assert.equal(accepted.ok, true); assert.equal(accepted.record.remoteBinAttested, w.remoteBin()); assert.equal(accepted.record.host, 'dest.example');
+  // A dry-run result from another destination is refused the same way.
+  const dry = { ok: false, error: 'no_reachable_target', status: 'refused', submitted: false, consumptionConfirmed: false, host: 'other.example' };
+  assert.equal(h(['op', 'record', ...w.J, '--run', run, '--event', 'operator_dry_run', '--target', w.name, '--file', w.file('dry', dry), '--execute', ...bin]).out.error,
+    'operator_check_host_mismatch');
 });
