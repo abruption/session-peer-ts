@@ -841,9 +841,12 @@ results `op record` accepts are exactly these:
 
 Each destination result must be executed. Operator checks, caller-switch
 attestations and run-ended events are handled separately. An unrecognized
-destination-result event such as `retire` is not recordable. The new cleanup
-and retirement records are audit entries; they do not invalidate earlier
-receipt records or change switch/statement eligibility. `op record` refuses a result from another run, another prefix or an earlier lock,
+destination-result event such as `retire` is not recordable. Cleanup,
+retirement, rollback and a new activation (not an `already_provisioned`
+reuse) of a prefix and name are lifecycle events. A publication of that name
+on that prefix recorded before such an event is superseded
+(`publication_superseded`): `callers_switched` then needs a newer completed
+publication. Nothing is migrated or re-associated. `op record` refuses a result from another run, another prefix or an earlier lock,
 including an earlier lock of the same run acquired at the same timestamp.
 Caller state is keyed by prefix and install name, because two dedicated
 prefixes can hold the same identity-derived name. `callers_switched` and
@@ -854,7 +857,10 @@ statements are scoped to the prefix of the run's current lock.
 `callers_switched` needs a receipt published on that prefix. It also needs
 the publishing acquisition to be closed, either by its run's unlock or by a
 recorded break that closed exactly that prefix and `lockId`. Breaks of other
-prefixes, stale breaks and unknown closures do not count. Once a run has
+prefixes, stale breaks and unknown closures do not count. Neither caller
+event is recorded while any recorded acquisition on that prefix is open
+(`acquisition_open`). This keeps a statement issued under an open lock, such
+as `no-caller`, true until that lock closes. Once a run has
 ended, it gets only a `run-ended` statement, even while its lock is still on
 disk. The journal records each acquisition (prefix ID and
 `lockId`) exactly once. Re-recording one, whether replayed after it closed or
@@ -890,9 +896,11 @@ What the CLI JSON shows is bound. Its `host` must equal the `--dest-host`
 fixed at `op init`. The doctor's `version` must equal the verified install's
 version. Which `--remote-bin` the CLI ran is **not** in the JSON. The operator
 supplies it to `op record`, and it is stored as `remoteBinAttested`. The
-harness checks only that the path names the verified install directory (a
-test shim is placed under a directory with that name). It cannot prove that
-the CLI executed it.
+attested value must be an absolute POSIX path that, after lexical
+normalization (no remote resolution), equals exactly the wrapper path that the
+verified destination result reports for that target. A `..` detour, another
+wrapper or another prefix is refused. The harness still cannot prove that the
+CLI executed it.
 `op statement --kind operator-checks-passed` exists only after both, and `dest
 receipt` requires that statement, bound to the current prefix and `lockId`,
 the marker's `identityHash` and the recomputed manifest. `dest activate`
@@ -984,6 +992,32 @@ obtain fresh checks under a new lock.
 - **Manifest names.** The manifest's file and link maps have no prototype, so
   a root entry named `__proto__` (file or symlink) is recorded and checked
   like any other.
+- **Manifest links.** Links are recorded by their text, so each must resolve
+  inside the install, including through a chain of links. Absolute link
+  texts, links resolving outside the install, and dangling, looping or
+  unreadable links are refused (`unsafe_link`). This check runs during
+  staging, before anything reads through the tree, and before every probe.
+  Bounded internal relative links, such as npm's, are allowed, and their
+  texts are covered by the manifest.
+- **npm arguments.** `dest stage --npm-cli` passes each tarball as the
+  absolute path of a regular file (not a symlink). No value can therefore be
+  read as an npm option, and the hashed path is exactly the one npm receives.
+  `--offline`, `--ignore-scripts`, the private cache, config files, prefix and
+  environment are unchanged.
+- **Journal coordination.** An executed `op begin` or `op record` creates
+  `<journal>.lock` exclusively (`mkdir`). It holds the lock across reading,
+  validation, the append and any rollback, then removes it. While the lock is
+  present, the following are refused (`journal_busy`), and none of them waits
+  or writes:
+  - every other executed `begin` or `record`;
+  - their dry runs;
+  - `op statement`.
+
+  Nothing steals the lock or kills a process. A lock left by a crashed
+  command is not judged stale: the operator confirms that no op command is
+  running and removes it by hand. This coordinates cooperating harness
+  commands only; it does not stop a hostile same-user writer and does not
+  qualify power-loss behavior.
 - **Durability.** Before a receipt is reported as written, completed,
   replayed or adopted, the following are synced in order: the publication
   intent and the lock directory, then the receipt file, the `.receipts`

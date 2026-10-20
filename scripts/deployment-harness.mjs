@@ -11,7 +11,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { appendFileSync, chmodSync, closeSync, constants, cpSync, fsyncSync, existsSync, ftruncateSync, fstatSync, lstatSync, mkdirSync, openSync,
   readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, rmdirSync, unlinkSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { delimiter, dirname, isAbsolute, join, parse as parsePath, resolve, sep } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, parse as parsePath, posix, resolve, sep } from 'node:path';
 
 const HARNESS = 'session-peer-ts deployment validation harness';
 const MANAGER = 'session-peer-ts operator workflow';
@@ -181,12 +181,22 @@ function inside(root, name) {
 function manifestOf(dir) {
   // Null-prototype maps: a root entry named __proto__ is an ordinary key.
   const files = Object.create(null), links = Object.create(null);
+  const top = realpathSync(dir);
   const walk = rel => {
     for (const entry of readdirSync(join(dir, rel)).sort()) {
       const path = rel ? `${rel}/${entry}` : entry;
       if (!rel && (entry === MANIFEST || entry === MARKER)) continue;
       const s = lstatSync(join(dir, path));
-      if (s.isSymbolicLink()) links[path] = readlinkSync(join(dir, path));
+      if (s.isSymbolicLink()) {
+        // Links are recorded by their text, so they must resolve inside the
+        // install (through any chain): absolute, escaping, dangling or looping
+        // links are refused before anything follows them.
+        const text = readlinkSync(join(dir, path));
+        let real;
+        try { real = realpathSync(join(dir, path)); } catch { throw new Refusal('unsafe_link', { path }); }
+        if (isAbsolute(text) || (real !== top && !real.startsWith(`${top}${sep}`))) throw new Refusal('unsafe_link', { path });
+        links[path] = text;
+      }
       else if (s.isDirectory()) walk(path);
       else if (s.isFile()) files[path] = sha256(readFileSync(join(dir, path)));
       else throw new Refusal('unsupported_entry');
@@ -396,7 +406,9 @@ function verify(p, name, execute) {
   const ok = checks.realDirectory && checks.owned && checks.markerConsistent && checks.manifest && checks.banner &&
     checks.nativeLock === 'loaded' && checks.stagingGone !== false;
   return { ok, ...(execute ? { dryRun: false } : { dryRun: true }), target: name, state: c.state, checks, markerRunId: c.marker?.runId,
-    version: c.marker?.identity.version, identityHash: c.marker?.identityHash, manifestSha256: c.manifest, receipt: receiptState(p, name).state };
+    version: c.marker?.identity.version, identityHash: c.marker?.identityHash, manifestSha256: c.manifest, receipt: receiptState(p, name).state,
+    // Harness-only: the wrapper path an operator check must name exactly.
+    wrapper: join(p.root, name, 'session-peer') };
 }
 
 // ---- destination commands ----
@@ -442,9 +454,18 @@ const dest = {
     if (!INSTALL.test(name)) throw new Refusal('identity_invalid');
     const tree = a.values.get('--from-tree'), npmCli = a.values.get('--npm-cli');
     if (!!tree === !!npmCli) throw new Usage('exactly one of --from-tree or --npm-cli');
-    const tarballs = [a.values.get('--package-tarball'), ...(a.multi.get('--dependency-tarball') ?? [])];
+    // Tarballs are passed to npm as absolute paths of regular files, so no
+    // value can be read as an npm option (for example `--prefix=...`); the
+    // hashed path is exactly the path npm receives.
+    const given = [a.values.get('--package-tarball'), ...(a.multi.get('--dependency-tarball') ?? [])];
+    if (npmCli && !given[0]) throw new Usage('--npm-cli needs --package-tarball and --dependency-tarball');
+    const tarballs = npmCli ? given.map(file => {
+      const path = resolve(file);
+      const st = lstat(path);
+      if (!st || !st.isFile() || st.isSymbolicLink() || !path.startsWith('/')) throw new Refusal('tarball_invalid');
+      return path;
+    }) : [];
     if (npmCli) {
-      if (!tarballs[0]) throw new Usage('--npm-cli needs --package-tarball and --dependency-tarball');
       if (sha256(readFileSync(tarballs[0])) !== identity.sha256) throw new Refusal('package_sha256_mismatch');
       const integrities = new Set(tarballs.slice(1).map(file => sha512(readFileSync(file))));
       if (Object.values(identity.lockIntegrity).some(value => !integrities.has(value)) || integrities.size !== Object.keys(identity.lockIntegrity).length)
@@ -471,6 +492,7 @@ const dest = {
       for (const [key, value] of Object.entries(identity.lockIntegrity))
         if (lock?.packages?.[`node_modules/${key}`]?.integrity !== value) throw new Refusal('installed_integrity_mismatch', { staging, package: key });
     }
+    manifestOf(dir); // link safety before anything reads through the tree
     if (readJson(join(dir, 'node_modules', 'session-peer', 'package.json'))?.version !== identity.version) throw new Refusal('installed_version_mismatch', { staging });
     const quoted = `'${identity.node.replace(/'/g, `'\\''`)}'`;
     writeExclusive(join(dir, 'session-peer'), `#!/bin/sh\nhere=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 127\nexec ${quoted} "$here/node_modules/session-peer/dist/cli.js" "$@"\n`);
@@ -492,6 +514,7 @@ const dest = {
     if (owned.state !== 'owned') throw new Refusal('probe_target_not_owned', { state: owned.state });
     // Runs the launcher and creates/removes a lock file: an effect, so --execute.
     if (!a.execute) return { dryRun: true, name, plan: ['run <dir>/session-peer --version', 'flock a temporary file inside <dir> and remove it'] };
+    if (sha256(manifestOf(dir)) !== owned.marker.manifestSha256) throw new Refusal('probe_target_failed_verification');
     const result = probe(dir, owned.marker.identity);
     if (sha256(manifestOf(dir)) !== owned.marker.manifestSha256) throw new Refusal('probe_changed_manifest');
     return { ok: result.banner && result.nativeLock === 'loaded', name, ...result };
@@ -821,6 +844,42 @@ function journalRead(path) {
   if (entries[0]?.event !== 'journal_created') throw new Refusal('journal_corrupt');
   return { entries, head: prev, operatorLabel: entries[0].operatorLabel, destHost: entries[0].destHost };
 }
+// Cooperative journal coordination: `<journal>.lock`, created exclusively by
+// mkdir, held by an executed begin/record across read, validation, append and
+// rollback. A held lock refuses (`journal_busy`); nothing waits, steals or
+// kills. A lock left by a crashed command is not judged stale: the operator
+// checks that no op command is running and removes it by hand. This
+// coordinates cooperating harness commands only, not a hostile same-user writer.
+const journalLock = path => `${path}.lock`;
+function journalIdle(path) {
+  if (!isAbsolute(path ?? '')) throw new Usage('--journal must be absolute');
+  if (lstat(journalLock(path))) throw new Refusal('journal_busy');
+}
+function withJournalLock(path, work) {
+  if (!isAbsolute(path ?? '')) throw new Usage('--journal must be absolute');
+  trusted(dirname(path), 'journal_dir');
+  try { mkdirSync(journalLock(path), { mode: 0o700 }); }
+  catch (error) { if (error.code === 'EEXIST') throw new Refusal('journal_busy'); throw error; }
+  let released = false;
+  try {
+    testPause(journalLock(path));
+    const result = work();
+    try { rmdirSync(journalLock(path)); released = true; } catch {}
+    return released ? result : { ...result, journalLock: 'left_in_place' };
+  } finally { if (!released) try { rmdirSync(journalLock(path)); } catch {} }
+}
+// Test hook only: while holding the journal lock, announce it and wait (bounded)
+// for a release file, so a second command can be run deterministically.
+function testPause(lock) {
+  const file = process.env.SESSION_PEER_TS_HARNESS_TEST_PAUSE_IN_JOURNAL_LOCK;
+  if (!file) return;
+  writeExclusive(`${file}.held`, lock);
+  const cell = new Int32Array(new SharedArrayBuffer(4));
+  for (let waited = 0; !existsSync(file); waited += 20) {
+    if (waited > 60000) throw Object.assign(new Error('test pause timed out'), { code: 'ETIMEDOUT' });
+    Atomics.wait(cell, 0, 0, 20);
+  }
+}
 // A record succeeds only once the whole line is written and synced. On a
 // failure the journal is truncated back to its previous length and synced:
 // `journal_append_failed` (rollback `restored`) only when that is confirmed;
@@ -888,158 +947,185 @@ const op = {
     return { dryRun: false, operatorLabel: label };
   },
   begin(a) {
-    const path = a.need('--journal'), journal = journalRead(path);
-    const run = hex(16);
-    if (!a.execute) return { dryRun: true };
-    journalAppend(path, journal, { event: 'run_started', runId: run });
-    return { dryRun: false, runId: run, operatorLabel: journal.operatorLabel };
+    const path = a.need('--journal');
+    if (!a.execute) { journalIdle(path); journalRead(path); return { dryRun: true }; }
+    return withJournalLock(path, () => {
+      const journal = journalRead(path), run = hex(16);
+      journalAppend(path, journal, { event: 'run_started', runId: run });
+      return { dryRun: false, runId: run, operatorLabel: journal.operatorLabel };
+    });
   },
+  // Executed records hold the journal lock across read, validation, append
+  // and rollback; dry runs take no lock and refuse while one is held.
   record(a) {
-    const path = a.need('--journal'), journal = journalRead(path), run = runId(a.need('--run')), event = a.need('--event');
-    const events = runEvents(journal, run);
-    if (events.some(entry => entry.event === 'run_ended')) throw new Refusal('run_ended');
-    const target = a.values.get('--target');
-    const file = a.values.get('--file');
-    const value = file ? readJson(file) : undefined;
-    const record = { event, runId: run };
-    const locked = since(events, 'lock_acquired');
-    const holding = !!locked.length && !acquisitionClosed(journal, locked[0]);
-    if (RESULT[event]) {
-      if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || value.dryRun !== false)
-        throw new Refusal('result_invalid', { event });
-      if (event === 'lock_broken') {
-        // A break (an override included) closes an acquisition only when its
-        // readable owner pair names an open one recorded here, on the same
-        // prefix and with the same lockId. Anything else (an override whose
-        // owner pair cannot be identified, another journal's or prefix's lock,
-        // an already closed lock) is kept as an audit record that closes nothing.
-        if (!HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
-        if (value.brokenLockId && journal.entries.some(entry => entry.event === 'lock_broken' && entry.prefixId === value.prefixId && entry.brokenLockId === value.brokenLockId))
-          throw new Refusal('break_replayed');
-        const open = value.brokenLockId ? journal.entries.find(entry => entry.event === 'lock_acquired' && entry.prefixId === value.prefixId &&
-          entry.lockId === value.brokenLockId && !acquisitionClosed(journal, entry)) : undefined;
-        if (open && open.runId !== value.runId) throw new Refusal('result_invalid', { event, reason: 'owner' });
-        Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override, prefixId: value.prefixId, brokenLockId: value.brokenLockId ?? null,
-          closesLockId: open ? open.lockId : null });
-      } else if (value.runId !== run) throw new Refusal('result_invalid', { event, reason: 'run' });
-      if (event === 'lock_acquired') {
-        if (!HEX32.test(value.lockId ?? '') || !HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
-        // Each acquisition is recorded exactly once per journal, by its own run:
-        // re-recording (even the current one) is refused, never deduplicated.
-        // A break of that same pair recorded anywhere (even before the
-        // acquisition itself) is a tombstone: the pair can never become current.
-        if (journal.entries.some(entry => entry.prefixId === value.prefixId &&
-          ((entry.event === 'lock_acquired' && entry.lockId === value.lockId) || (entry.event === 'lock_broken' && entry.brokenLockId === value.lockId))))
-          throw new Refusal('acquisition_replayed');
-        if (holding) throw new Refusal('result_invalid', { event, reason: 'already_holding' });
-        Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });
-      } else if (event !== 'lock_broken') {
-        // Every lock-bound result must come from this run's current lock on
-        // the same prefix; an earlier lock's result (even of the same run) is stale.
-        if (!holding) throw new Refusal('lock_not_recorded');
-        if (value.prefixId !== locked[0].prefixId || value.lockId !== locked[0].lockId)
-          throw new Refusal('result_invalid', { event, reason: 'stale_or_foreign_lock' });
-        Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });
-      }
-      if (value.target) record.target = value.target;
-      if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId,
-        version: value.version });
-      if (event === 'receipt_cleaned') Object.assign(record, { mode: value.mode, receipt: value.receipt, ownership: value.ownership });
-      if (event === 'receipt_published' && locked.some(entry => entry.event === 'receipt_published' && entry.target === value.target))
-        throw new Refusal('receipt_already_recorded');
-    } else if (event === 'operator_doctor' || event === 'operator_dry_run') {
-      if (!target || !holding) throw new Refusal('lock_not_recorded');
-      const verified = locked.findLast(entry => entry.event === 'verified' && entry.target === target);
-      if (!verified) throw new Refusal('operator_check_before_verify');
-      // Operator SSH output: a completed doctor, and a dry-run that reached the
-      // destination CLI and sent nothing: the intended nonexistent-target
-      // refusal or a normal validated dry run. Transport, preflight, version
-      // and other refusals do not pass.
-      const ok = event === 'operator_doctor'
-        ? value?.ok === true && value.diagnosticCompleted === true && value.implementation === 'typescript' && typeof value.host === 'string'
-        : value?.submitted === false && value.consumptionConfirmed === false && typeof value.host === 'string' &&
-          ((value.ok === false && value.status === 'refused' && value.error === 'no_reachable_target') ||
-           (value.ok === true && value.status === 'validated' && value.error === undefined));
-      if (!ok) throw new Refusal('operator_check_failed', { event });
-      // Bound from the JSON: the destination host and, for doctor, the remote
-      // version. Not visible in the JSON: which --remote-bin was used. That is
-      // the operator's attestation, recorded as such and checked only for
-      // naming the verified install.
-      if (value.host !== journal.destHost) throw new Refusal('operator_check_host_mismatch', { event });
-      if (event === 'operator_doctor' && value.version !== verified.version) throw new Refusal('operator_check_version_mismatch');
-      const remoteBin = a.values.get('--remote-bin');
-      if (!remoteBin) throw new Usage('--remote-bin required: the exact value passed to the operator CLI');
-      if (!remoteBin.split(/[\\/]/).includes(target)) throw new Refusal('operator_check_target_mismatch', { event });
-      // Recorded order: the dry-run only after a doctor recorded since the
-      // latest verify of this target under this lock. This is the order of the
-      // journal records, not proof of when the operator commands ran.
-      const sinceVerify = locked.slice(locked.lastIndexOf(verified) + 1);
-      if (event === 'operator_dry_run' && !sinceVerify.some(entry => entry.event === 'operator_doctor' && entry.target === target))
-        throw new Refusal('operator_check_order');
-      Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok', host: value.host, remoteBinAttested: remoteBin,
-        prefixId: locked[0].prefixId, lockId: locked[0].lockId });
-    } else if (event === 'callers_switched' || event === 'callers_unswitched') {
-      // Caller configuration is local and not under a destination lock, so the
-      // prefix is explicit and must be one this journal has acquired a lock on.
-      const prefixId = a.values.get('--prefix-id');
-      if (!target || !HEX32.test(prefixId ?? '')) throw new Usage('--target and --prefix-id required');
-      if (!journal.entries.some(entry => entry.event === 'lock_acquired' && entry.prefixId === prefixId)) throw new Refusal('prefix_unknown_to_journal');
-      if (event === 'callers_switched') {
-        const published = journal.entries.findLast(entry => entry.event === 'receipt_published' && entry.prefixId === prefixId && entry.target === target);
-        if (!published) throw new Refusal('switch_before_receipt');
-        // The publishing acquisition must be closed: by its run's unlock or by a
-        // recorded break that closed exactly that (prefix, lockId).
-        const acquired = journal.entries.find(entry => entry.event === 'lock_acquired' && entry.prefixId === prefixId && entry.lockId === published.lockId);
-        if (!acquired || !acquisitionClosed(journal, acquired)) throw new Refusal('switch_before_unlock');
-      } else if (switches(journal, prefixId, target) < 1) throw new Refusal('no_switch_recorded');
-      Object.assign(record, { target, prefixId });
-    } else if (event !== 'run_ended') throw new Usage(`unknown --event ${event}`);
-    if (!a.execute) return { dryRun: true, record };
-    journalAppend(path, journal, record);
-    return { dryRun: false, record };
+    const path = a.need('--journal');
+    if (!a.execute) { journalIdle(path); return recordUnderLock(a, path); }
+    return withJournalLock(path, () => recordUnderLock(a, path));
   },
   statement(a) {
-    const journal = journalRead(a.need('--journal')), kind = a.need('--kind'), run = runId(a.need('--run'));
-    const events = runEvents(journal, run), target = a.values.get('--target');
-    const locked = since(events, 'lock_acquired');
-    const base = { harness: HARNESS, statementVersion: 1, kind, runId: run, operatorLabel: journal.operatorLabel, journalHead: journal.head, issuedAt: now() };
-    const lockId = locked[0]?.lockId ?? null, prefixId = locked[0]?.prefixId ?? null;
-    const holding = !!locked.length && !acquisitionClosed(journal, locked[0]);
-    const ended = events.some(entry => entry.event === 'run_ended');
-    if (kind === 'run-ended') {
-      if (!ended) throw new Refusal('run_not_ended');
-      return { ...base, prefixId, lockId };
-    }
-    // An ended run issues nothing else, even if its lock is still on disk.
-    if (ended) throw new Refusal('run_ended');
-    if (!target || !holding) throw new Refusal('lock_not_recorded');
-    if (kind === 'operator-checks-passed') {
-      const last = locked.findLastIndex(entry => entry.event === 'verified' && entry.target === target);
-      const after = last < 0 ? [] : locked.slice(last + 1);
-      const doctor = after.findIndex(entry => entry.event === 'operator_doctor' && entry.target === target);
-      if (last < 0 || doctor < 0 || !after.slice(doctor + 1).some(entry => entry.event === 'operator_dry_run' && entry.target === target))
-        throw new Refusal('operator_checks_incomplete');
-      if (after.some(entry => entry.event === 'receipt_published' && entry.target === target)) throw new Refusal('receipt_already_recorded');
-      const v = locked[last];
-      return { ...base, target, prefixId, lockId, identityHash: v.identityHash, manifestSha256: v.manifestSha256 };
-    }
-    if (kind === 'no-caller') {
-      // Positive confirmation: this journal knows the target and records no
-      // outstanding caller switch. A missing receipt is not such evidence.
-      // Scoped to the prefix of the current lock.
-      if (!journal.entries.some(entry => entry.prefixId === prefixId && entry.target === target && ['activated', 'verified', 'receipt_published'].includes(entry.event)))
-        throw new Refusal('target_unknown_to_journal');
-      if (switches(journal, prefixId, target) !== 0) throw new Refusal('configured_for_caller');
-      return { ...base, target, prefixId, lockId };
-    }
-    if (kind === 'receipt-owned') {
-      if (!journal.entries.some(entry => entry.event === 'receipt_published' && entry.prefixId === prefixId && entry.target === target))
-        throw new Refusal('receipt_unknown_to_journal');
-      return { ...base, target, prefixId, lockId };
-    }
-    throw new Usage(`unknown --kind ${kind}`);
+    journalIdle(a.need('--journal'));
+    return statementOf(a);
   }
 };
+function recordUnderLock(a, path) {
+  const journal = journalRead(path), run = runId(a.need('--run')), event = a.need('--event');
+  const events = runEvents(journal, run);
+  if (events.some(entry => entry.event === 'run_ended')) throw new Refusal('run_ended');
+  const target = a.values.get('--target');
+  const file = a.values.get('--file');
+  const value = file ? readJson(file) : undefined;
+  const record = { event, runId: run };
+  const locked = since(events, 'lock_acquired');
+  const holding = !!locked.length && !acquisitionClosed(journal, locked[0]);
+  if (RESULT[event]) {
+    if (value?.harness !== HARNESS || value.command !== RESULT[event] || value.ok !== true || value.dryRun !== false)
+      throw new Refusal('result_invalid', { event });
+    if (event === 'lock_broken') {
+      // A break (an override included) closes an acquisition only when its
+      // readable owner pair names an open one recorded here, on the same
+      // prefix and with the same lockId. Anything else (an override whose
+      // owner pair cannot be identified, another journal's or prefix's lock,
+      // an already closed lock) is kept as an audit record that closes nothing.
+      if (!HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
+      if (value.brokenLockId && journal.entries.some(entry => entry.event === 'lock_broken' && entry.prefixId === value.prefixId && entry.brokenLockId === value.brokenLockId))
+        throw new Refusal('break_replayed');
+      const open = value.brokenLockId ? journal.entries.find(entry => entry.event === 'lock_acquired' && entry.prefixId === value.prefixId &&
+        entry.lockId === value.brokenLockId && !acquisitionClosed(journal, entry)) : undefined;
+      if (open && open.runId !== value.runId) throw new Refusal('result_invalid', { event, reason: 'owner' });
+      Object.assign(record, { brokenRunId: value.runId ?? null, override: value.override, prefixId: value.prefixId, brokenLockId: value.brokenLockId ?? null,
+        closesLockId: open ? open.lockId : null });
+    } else if (value.runId !== run) throw new Refusal('result_invalid', { event, reason: 'run' });
+    if (event === 'lock_acquired') {
+      if (!HEX32.test(value.lockId ?? '') || !HEX32.test(value.prefixId ?? '')) throw new Refusal('result_invalid', { event });
+      // Each acquisition is recorded exactly once per journal, by its own run:
+      // re-recording (even the current one) is refused, never deduplicated.
+      // A break of that same pair recorded anywhere (even before the
+      // acquisition itself) is a tombstone: the pair can never become current.
+      if (journal.entries.some(entry => entry.prefixId === value.prefixId &&
+        ((entry.event === 'lock_acquired' && entry.lockId === value.lockId) || (entry.event === 'lock_broken' && entry.brokenLockId === value.lockId))))
+        throw new Refusal('acquisition_replayed');
+      if (holding) throw new Refusal('result_invalid', { event, reason: 'already_holding' });
+      Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });
+    } else if (event !== 'lock_broken') {
+      // Every lock-bound result must come from this run's current lock on
+      // the same prefix; an earlier lock's result (even of the same run) is stale.
+      if (!holding) throw new Refusal('lock_not_recorded');
+      if (value.prefixId !== locked[0].prefixId || value.lockId !== locked[0].lockId)
+        throw new Refusal('result_invalid', { event, reason: 'stale_or_foreign_lock' });
+      Object.assign(record, { prefixId: value.prefixId, lockId: value.lockId });
+    }
+    if (value.target) record.target = value.target;
+    if (event === 'verified') Object.assign(record, { identityHash: value.identityHash, manifestSha256: value.manifestSha256, markerRunId: value.markerRunId,
+      version: value.version, wrapper: value.wrapper });
+    if (event === 'activated') record.outcome = value.outcome;
+    if (event === 'receipt_cleaned') Object.assign(record, { mode: value.mode, receipt: value.receipt, ownership: value.ownership });
+    if (event === 'receipt_published' && locked.some(entry => entry.event === 'receipt_published' && entry.target === value.target))
+      throw new Refusal('receipt_already_recorded');
+  } else if (event === 'operator_doctor' || event === 'operator_dry_run') {
+    if (!target || !holding) throw new Refusal('lock_not_recorded');
+    const verified = locked.findLast(entry => entry.event === 'verified' && entry.target === target);
+    if (!verified) throw new Refusal('operator_check_before_verify');
+    // Operator SSH output: a completed doctor, and a dry-run that reached the
+    // destination CLI and sent nothing: the intended nonexistent-target
+    // refusal or a normal validated dry run. Transport, preflight, version
+    // and other refusals do not pass.
+    const ok = event === 'operator_doctor'
+      ? value?.ok === true && value.diagnosticCompleted === true && value.implementation === 'typescript' && typeof value.host === 'string'
+      : value?.submitted === false && value.consumptionConfirmed === false && typeof value.host === 'string' &&
+        ((value.ok === false && value.status === 'refused' && value.error === 'no_reachable_target') ||
+         (value.ok === true && value.status === 'validated' && value.error === undefined));
+    if (!ok) throw new Refusal('operator_check_failed', { event });
+    // Bound from the JSON: the destination host and, for doctor, the remote
+    // version. Not visible in the JSON: which --remote-bin was used. That is
+    // the operator's attestation, recorded as such and checked only for
+    // naming the verified install.
+    if (value.host !== journal.destHost) throw new Refusal('operator_check_host_mismatch', { event });
+    if (event === 'operator_doctor' && value.version !== verified.version) throw new Refusal('operator_check_version_mismatch');
+    const remoteBin = a.values.get('--remote-bin');
+    if (!remoteBin) throw new Usage('--remote-bin required: the exact value passed to the operator CLI');
+    // The attested path, normalized as POSIX, must be exactly the verified
+    // target's wrapper (no `..` detour). It is not resolved remotely.
+    if (!remoteBin.startsWith('/') || typeof verified.wrapper !== 'string' || posix.normalize(remoteBin) !== verified.wrapper)
+      throw new Refusal('operator_check_target_mismatch', { event });
+    // Recorded order: the dry-run only after a doctor recorded since the
+    // latest verify of this target under this lock. This is the order of the
+    // journal records, not proof of when the operator commands ran.
+    const sinceVerify = locked.slice(locked.lastIndexOf(verified) + 1);
+    if (event === 'operator_dry_run' && !sinceVerify.some(entry => entry.event === 'operator_doctor' && entry.target === target))
+      throw new Refusal('operator_check_order');
+    Object.assign(record, { target, outcome: value.error ?? value.status ?? 'ok', host: value.host, remoteBinAttested: remoteBin,
+      prefixId: locked[0].prefixId, lockId: locked[0].lockId });
+  } else if (event === 'callers_switched' || event === 'callers_unswitched') {
+    // Caller configuration is local and not under a destination lock, so the
+    // prefix is explicit and must be one this journal has acquired a lock on.
+    const prefixId = a.values.get('--prefix-id');
+    if (!target || !HEX32.test(prefixId ?? '')) throw new Usage('--target and --prefix-id required');
+    if (!journal.entries.some(entry => entry.event === 'lock_acquired' && entry.prefixId === prefixId)) throw new Refusal('prefix_unknown_to_journal');
+    if (event === 'callers_switched') {
+      const published = journal.entries.findLast(entry => entry.event === 'receipt_published' && entry.prefixId === prefixId && entry.target === target);
+      if (!published) throw new Refusal('switch_before_receipt');
+      // Lifecycle fence: a later new activation, rollback, retirement or
+      // receipt cleanup of this (prefix, name) invalidates the publication.
+      if (journal.entries.some(entry => entry.seq > published.seq && entry.prefixId === prefixId && entry.target === target &&
+        (['rolled_back', 'retired', 'receipt_cleaned'].includes(entry.event) || (entry.event === 'activated' && entry.outcome !== 'already_provisioned'))))
+        throw new Refusal('publication_superseded');
+      // The publishing acquisition must be closed: by its run's unlock or by a
+      // recorded break that closed exactly that (prefix, lockId).
+      const acquired = journal.entries.find(entry => entry.event === 'lock_acquired' && entry.prefixId === prefixId && entry.lockId === published.lockId);
+      if (!acquired || !acquisitionClosed(journal, acquired)) throw new Refusal('switch_before_unlock');
+    }
+    // No caller change while any acquisition on this prefix is open: a
+    // statement issued under it (no-caller, for example) must stay true.
+    if (journal.entries.some(entry => entry.event === 'lock_acquired' && entry.prefixId === prefixId && !acquisitionClosed(journal, entry)))
+      throw new Refusal('acquisition_open');
+    if (event === 'callers_unswitched' && switches(journal, prefixId, target) < 1) throw new Refusal('no_switch_recorded');
+    Object.assign(record, { target, prefixId });
+  } else if (event !== 'run_ended') throw new Usage(`unknown --event ${event}`);
+  if (!a.execute) return { dryRun: true, record };
+  journalAppend(path, journal, record);
+  return { dryRun: false, record };
+}
+function statementOf(a) {
+  const journal = journalRead(a.need('--journal')), kind = a.need('--kind'), run = runId(a.need('--run'));
+  const events = runEvents(journal, run), target = a.values.get('--target');
+  const locked = since(events, 'lock_acquired');
+  const base = { harness: HARNESS, statementVersion: 1, kind, runId: run, operatorLabel: journal.operatorLabel, journalHead: journal.head, issuedAt: now() };
+  const lockId = locked[0]?.lockId ?? null, prefixId = locked[0]?.prefixId ?? null;
+  const holding = !!locked.length && !acquisitionClosed(journal, locked[0]);
+  const ended = events.some(entry => entry.event === 'run_ended');
+  if (kind === 'run-ended') {
+    if (!ended) throw new Refusal('run_not_ended');
+    return { ...base, prefixId, lockId };
+  }
+  // An ended run issues nothing else, even if its lock is still on disk.
+  if (ended) throw new Refusal('run_ended');
+  if (!target || !holding) throw new Refusal('lock_not_recorded');
+  if (kind === 'operator-checks-passed') {
+    const last = locked.findLastIndex(entry => entry.event === 'verified' && entry.target === target);
+    const after = last < 0 ? [] : locked.slice(last + 1);
+    const doctor = after.findIndex(entry => entry.event === 'operator_doctor' && entry.target === target);
+    if (last < 0 || doctor < 0 || !after.slice(doctor + 1).some(entry => entry.event === 'operator_dry_run' && entry.target === target))
+      throw new Refusal('operator_checks_incomplete');
+    if (after.some(entry => entry.event === 'receipt_published' && entry.target === target)) throw new Refusal('receipt_already_recorded');
+    const v = locked[last];
+    return { ...base, target, prefixId, lockId, identityHash: v.identityHash, manifestSha256: v.manifestSha256 };
+  }
+  if (kind === 'no-caller') {
+    // Positive confirmation: this journal knows the target and records no
+    // outstanding caller switch. A missing receipt is not such evidence.
+    // Scoped to the prefix of the current lock.
+    if (!journal.entries.some(entry => entry.prefixId === prefixId && entry.target === target && ['activated', 'verified', 'receipt_published'].includes(entry.event)))
+      throw new Refusal('target_unknown_to_journal');
+    if (switches(journal, prefixId, target) !== 0) throw new Refusal('configured_for_caller');
+    return { ...base, target, prefixId, lockId };
+  }
+  if (kind === 'receipt-owned') {
+    if (!journal.entries.some(entry => entry.event === 'receipt_published' && entry.prefixId === prefixId && entry.target === target))
+      throw new Refusal('receipt_unknown_to_journal');
+    return { ...base, target, prefixId, lockId };
+  }
+  throw new Usage(`unknown --kind ${kind}`);
+}
 
 function main(argv) {
   let a;
