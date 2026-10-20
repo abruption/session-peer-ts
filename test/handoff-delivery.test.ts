@@ -82,7 +82,24 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
    t.after(()=>finish(new Error('fixture ended before queue evidence')));check();
   });
  }
- async function initialized(){if(existsSync(initializeReady))return;await new Promise<void>((ok,fail)=>{const watcher=watch(root,()=>{if(existsSync(initializeReady)){clearTimeout(timer);watcher.close();ok();}});const timer=setTimeout(()=>{watcher.close();fail(new Error('initialize fixture not reached'));},10000);if(existsSync(initializeReady)){clearTimeout(timer);watcher.close();ok();}});}
+ // Initialization readiness also comes from persisted fixture evidence.
+ async function initialized(){
+  if(existsSync(initializeReady))return;
+  await new Promise<void>((ok,fail)=>{
+   let settled=false;
+   const finish=(error?:unknown)=>{if(settled)return;settled=true;clearTimeout(timer);clearInterval(poll);if(error)fail(error);else ok();};
+   const diagnostic=()=>JSON.stringify({initializeReady:existsSync(initializeReady),nativeCalls:nativeCalls(),send:activeSend?{
+    exitCode:activeSend.child.exitCode,signalCode:activeSend.child.signalCode,...activeSend.output()
+   }:null});
+   const check=()=>{try{
+    if(existsSync(initializeReady)){finish();return;}
+    if(activeSend?.closed())finish(new Error('initialize fixture not reached: send exited before initialize evidence; '+diagnostic()));
+   }catch(error){finish(error);}};
+   const poll=setInterval(check,25);
+   const timer=setTimeout(()=>{check();if(!settled){try{finish(new Error('initialize fixture not reached before 10000ms deadline; '+diagnostic()));}catch(error){finish(error);}}},10000);
+   t.after(()=>finish(new Error('fixture ended before initialize evidence')));check();
+  });
+ }
  const ledgerFile=join(root,'state','handoff','ledger.json');
  const ledger=()=>JSON.parse(readFileSync(ledgerFile,'utf8'));
  // Watch the directory because the ledger publishes by rename. Reading errors
@@ -132,6 +149,27 @@ test('queue readiness observes persisted fixture evidence when filesystem notifi
  assert.ifError(queued.error);assert.equal(queued.signal,null);assert.equal(queued.status,0,queued.stderr);
  await ready;
  assert.deepEqual(f.calls(),[{method:'legacy'}]);
+});
+test('initialize readiness observes persisted fixture evidence when filesystem notifications are suppressed',{skip:process.platform==='win32'},async t=>{
+ const f=await fixture(t,'none');
+ const realWatch=fs.watch;
+ t.mock.method(fs,'watch',((path:any)=>realWatch(path,()=>{})) as typeof fs.watch);syncBuiltinESMExports();
+ t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const ready=f.initialized();
+ writeFileSync(join(f.root,'initialize-ready'),'ready');
+ await ready;
+ assert.equal(readFileSync(join(f.root,'initialize-ready'),'utf8'),'ready');
+});
+test('initialize readiness reports a send that exits before initialization with its current outcome',qualified,async t=>{
+ const f=await fixture(t,'concurrent-stop','0.163.0');
+ const active=f.start([...f.args,'--wait-for','delivered']);
+ await assert.rejects(f.initialized(),error=>{
+  assert.ok(error instanceof Error);assert.match(error.message,/send exited before initialize evidence/);
+  assert.match(error.message,/evidence_unsupported/);assert.match(error.message,/exitCode.:1/);return true;
+ });
+ const result=await active.result;assert.equal(result.code,1,result.stdout);assert.equal(result.value.submitted,false);
+ assert.equal(existsSync(join(f.root,'initialize-ready')),false);assert.deepEqual(f.calls(),[]);
+ assert.deepEqual(f.nativeCalls().filter((row:{command:string})=>row.command==='app-server'),[]);
 });
 test('queue readiness reports a send that exits before submission with its current outcome',qualified,async t=>{
  const f=await fixture(t,'none','0.163.0');
