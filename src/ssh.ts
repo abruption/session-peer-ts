@@ -69,9 +69,10 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
     '-o', 'ClearAllForwardings=yes', '-o', 'PermitLocalCommand=no', ...(jump.port ? ['-p', jump.port] : []), '-l', jump.user,
     '-W', "'[%h]:%p'", '--', jump.host].join(' ');
 }
-// Win32-OpenSSH has no shell step (PowerShell/openssh-portable, same code from
-// v8.1.0.0 through latestw_all d0c65f2): readconf.c keeps the raw value but
-// argv_split()s it first and rejects unbalanced quotes; sshconnect.c
+// Win32-OpenSSH has no shell step (PowerShell/openssh-portable; the spawn path
+// is the same from v8.1.0.0 through latestw_all d0c65f2): readconf.c keeps the
+// raw value, and since 8.7 argv_split()s it first and rejects unbalanced quotes;
+// sshconnect.c
 // percent-expands "exec %s", skips "exec " and posix_spawnp()s the whole string
 // as argv[0] with no arguments; misc.c build_commandline_string() passes a string
 // that starts with '"' unchanged to CreateProcessW(NULL, ...) (w32fd.c, which
@@ -83,12 +84,12 @@ export function proxyCommand(ssh: string, jump: SshJump): string {
 // backslashes, so no MSVCRT escaping is needed. "[%h]:%p" is double-quoted where
 // POSIX single-quotes it; %h from a configured HostName stays the same trusted
 // ssh_config boundary. SSH_TEST_ENVIRONMENT makes Win32-OpenSSH rewrite the
-// path (bash_to_win_path) and is refused.
-// An isolated probe with the real Win32-OpenSSH 9.5p1 ssh.exe and an argv-dump
-// hop matched this exactly (VALIDATION). Not enabled: the CLI still refuses a
-// Windows client until a connected hop run and bounded owned-process-tree
-// cleanup of the hop grandchild on timeout, output overflow and interrupt are
-// qualified (#20, #131; see cli.ts).
+// path (bash_to_win_path) when atoi() of it is nonzero; parseInt() matches atoi
+// for every ASCII form and refuses more otherwise.
+// An isolated no-connection probe with the real Win32-OpenSSH 9.5p1 ssh.exe and
+// an argv-dump hop matched this exactly (VALIDATION). Not enabled: a connected
+// hop and owned-process-tree cleanup of the hop grandchild are unqualified (#20,
+// #131; see cli.ts).
 export function windowsProxyCommand(ssh: string, jump: SshJump, env: NodeJS.ProcessEnv = process.env): string {
   if (ssh.length > 4096 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(ssh) ||
     !/^[A-Za-z]:\\(?:[^\x00-\x1f\x7f"*:<>?|/\\]+\\)*ssh\.exe$/i.test(ssh)) throw new Refusal('ssh_jump_unsupported_ssh_path');

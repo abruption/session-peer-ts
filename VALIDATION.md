@@ -1,4 +1,4 @@
-# Validation record — updated 2026-10-18 KST
+# Validation record — updated 2026-10-20 KST
 
 
 ## Windows client jump ProxyCommand probe — #20, 2026-10-20 KST
@@ -32,15 +32,17 @@ prefix-only known-hosts files were used.
   `ssh.exe` (even `ssh -G`) did not exit within 15 s when its stdin was a
   Node pipe or file, and exited promptly with stdin ignored (`NUL`). The probe
   therefore used ignored stdin. Windows-client SSH with pipe stdin is not
-  covered by this record.
+  covered by this record; enabling needs that analysis first.
 - Cleanup: the prefix was removed and no process with the prefix in its path or
   command line remained.
 
 The probe ran at branch revision `9d54fa3dfbb0c50a1f9624461a43a3f02824706b`
-(the `windowsProxyCommand` source is unchanged by later documentation-only
+(the `windowsProxyCommand` code is unchanged by later comment and documentation
 commits). The probe driver, the argv-dump source and host-identifier-free
-results are provided with the review material for this change, not in the
-repository.
+results are kept out of the repository as review material, identified by
+SHA-256 in the change description. A later correction makes the driver's exit
+status depend on every cell, including refusal cells; it was not re-run, and
+the recorded cells were all individually successful.
 
 This is evidence for quoting only. Windows `--ssh-jump` stays refused: no hop
 or destination connection, version other than 9.5p1, non-administrator
