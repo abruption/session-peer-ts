@@ -45,16 +45,17 @@ replacing paths and labels with the operator's explicit selections:
 
 - Top-level keys are exactly `context`, `packageJson`, `expectedVersion` and
   optional `files`. Unknown keys and invalid shapes are rejected before file reads.
-- Context requires nonempty `installation` (at most 2,048 characters) and
+- Context requires nonempty `installation` (at most 2,048 UTF-16 code units) and
   `manager` (128); optional `destination` and `account` are limited to 256 each.
+  All string length bounds use UTF-16 code units, not Unicode code points.
   These are operator declarations, not authenticated ownership or host identity.
-- `packageJson` is a nonempty path string (2,048 characters maximum).
-  `expectedVersion` is nonempty text of at most 128 characters. Comparison is
+- `packageJson` is a nonempty path string (2,048 UTF-16 code units maximum).
+  `expectedVersion` is nonempty text of at most 128 UTF-16 code units. Comparison is
   exact text; this is not SemVer-range, implementation or runtime compatibility.
 - `files` has at most 16 entries, each with `path` (same length bound) and an
   optional `baseline`. No globbing, PATH discovery or recursive inventory occurs.
 - A usable baseline has only `sha256` (64 hexadecimal digits), `source` (nonempty,
-  at most 512 characters) and `observedAt` (nonempty, at most 128). Source/time
+  at most 512 UTF-16 code units) and `observedAt` (nonempty, at most 128). Source/time
   labels are recorded as unverified operator attestation, not authenticated
   history or clock validation. The comparison proves no interval-wide preservation.
 - No baseline means the comparison is `not_checked`; malformed/incomplete
@@ -66,7 +67,9 @@ replacing paths and labels with the operator's explicit selections:
 
 Input is limited to 64 KiB of raw UTF-8, plus at most one byte to detect overflow.
 Invalid input, oversized input or invalid UTF-8 emits a fixed generic error and
-exit 2, without echoing input, filesystem exception details or stack traces.
+exit 2 (`invalid_assessment_input`), without echoing input, filesystem exception
+details or stack traces. A stdin I/O failure instead emits `input_unavailable`
+and exit 2. Output transport failures are outside these input/report exit rules.
 
 ## Report and states
 
@@ -108,10 +111,13 @@ Relative paths, final symlinks, directories, FIFOs and devices are unsupported.
 The program does not follow a discovered tool or execute a selected file.
 Parent directory symlinks are not excluded and no canonical ownership is claimed.
 
-A selected regular file is opened read-only with `O_NOFOLLOW | O_NONBLOCK`.
+A selected regular file is opened read-only with `O_NOFOLLOW | O_NONBLOCK`
+and `O_NOCTTY` when available.
 Descriptor type/identity and observable path/descriptor size/timestamps are checked
-before and after reading. Each file has a 1 MiB raw-byte limit plus one overflow
-byte; chunks are at most 64 KiB. Closing every owned descriptor is attempted in `finally`, including on
+before and after reading. Each file has a 1 MiB raw-byte limit. One buffer sized to the observed file
+size plus one overflow byte is allocated; each read requests at most 64 KiB.
+Stdin similarly uses one 64 KiB-plus-one buffer. Short reads do not retain a new
+buffer per read. Closing every owned descriptor is attempted in `finally`, including on
 read/error paths; a close error makes the observation unknown, without claiming
 that cleanup was confirmed. Growth, replacement, read/close errors and observable
 instability cannot produce a verified measurement. Inherited stdin is not an
@@ -131,7 +137,9 @@ Isolated tests cover per-predicate states, invalid/duplicate inputs, metadata
 limits, baseline uncertainty, special/path cases, observable file races, read and
 allocation bounds, descriptor cleanup, safe imports and CLI error/nonexecution
 behavior. Mock POSIX evidence is separate from native platform qualification.
-There are no live-host or agent tests in this implementation request.
+Native special-file/race evidence and Windows stdin/CLI behavior have not been
+qualified; deterministic mocks do not replace those checks. There are no live-host
+or agent tests in this implementation request.
 
 The expanded contract and implementation undergo fresh noninteractive Opus 5.5
 review before PR handoff. Human merge review is required; no release, publication,

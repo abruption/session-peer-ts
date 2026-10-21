@@ -32,7 +32,8 @@ function fixture(t: TestContext) {
 
 // Deterministic owned descriptors: never touch a platform's real special files.
 function fakeFile(bytes: Buffer, options: { kind?: string; size?: number; fail?: string; changed?: string } = {}) {
-  const calls = { opens: 0, closes: 0, reads: 0, maxBuffer: 0, flags: 0, consumed: 0 };
+  const calls = { opens: 0, closes: 0, reads: 0, maxBuffer: 0, maxRead: 0, flags: 0, consumed: 0, errors: [] as string[], buffers: new Set<Buffer>() };
+  const record = (condition: boolean, detail: string) => { if (!condition) calls.errors.push(detail); };
   let statCount = 0;
   const stat = () => {
     statCount++;
@@ -45,15 +46,17 @@ function fakeFile(bytes: Buffer, options: { kind?: string; size?: number; fail?:
     constants: { O_RDONLY: 0, O_NOFOLLOW: 0x100, O_NONBLOCK: 0x200 },
     lstatSync: () => { if (options.fail === 'lstat') throw new Error('PRIVATE-FAILURE'); return stat(); },
     openSync: (_path: string, flags: number) => { calls.flags = flags; calls.opens++; if (options.fail === 'open') throw new Error('PRIVATE-FAILURE'); return 91; },
-    fstatSync: (fd: number) => { assert.equal(fd, 91); if (options.fail === 'fstat') throw new Error('PRIVATE-FAILURE'); return stat(); },
+    fstatSync: (fd: number) => { record(fd === 91, 'fstat descriptor'); if (options.fail === 'fstat') throw new Error('PRIVATE-FAILURE'); return stat(); },
     readSync: (fd: number, buffer: Buffer, offset: number, length: number, position: number | null) => {
-      assert.equal(fd, 91); calls.reads++; calls.maxBuffer = Math.max(calls.maxBuffer, buffer.length);
+      record(fd === 91, 'read descriptor'); record(position === null, 'read position');
+      record(offset >= 0 && length >= 0 && offset + length <= buffer.length, 'read bounds');
+      calls.reads++; calls.maxBuffer = Math.max(calls.maxBuffer, buffer.length); calls.maxRead = Math.max(calls.maxRead, length); calls.buffers.add(buffer);
       if (options.fail === 'read') throw new Error('PRIVATE-FAILURE');
       const start = position ?? calls.consumed;
       const count = Math.min(length, Math.max(0, bytes.length - start));
       bytes.copy(buffer, offset, start, start + count); calls.consumed += count; return count;
     },
-    closeSync: (fd: number) => { assert.equal(fd, 91); calls.closes++; }
+    closeSync: (fd: number) => { record(fd === 91, 'close descriptor'); calls.closes++; }
   };
   return { io, calls };
 }
@@ -93,11 +96,11 @@ test('metadata is exact, bounded, fatal UTF-8 and duplicate-key aware without ex
     ['[]', 'unknown', 'unknown'], ['{broken', 'unknown', 'unknown']
   ];
   for (const [data, name, version] of cases) {
-    const { io } = fakeFile(typeof data === 'string' ? Buffer.from(data) : data);
+    const { io, calls } = fakeFile(typeof data === 'string' ? Buffer.from(data) : data);
     const report = evaluate(input, { fsImpl: io, platform: 'linux' });
     assert.equal(check(report, 'package.name').state, name);
     assert.equal(check(report, 'package.version').state, version);
-    assert.equal(JSON.stringify(report).includes('HIDDEN-METADATA'), false);
+    assert.equal(JSON.stringify(report).includes('HIDDEN-METADATA'), false); assert.deepEqual(calls.errors, []);
   }
 });
 
@@ -149,11 +152,11 @@ test('reader refuses special files and unsupported methods before opening or rea
   for (const kind of ['symlink', 'fifo', 'directory', 'device']) {
     const { io, calls } = fakeFile(Buffer.from('private'), { kind });
     assert.equal(read('/owned/file', { fsImpl: io, platform: 'linux' }).state, 'unsupported');
-    assert.equal(calls.opens, 0); assert.equal(calls.reads, 0);
+    assert.equal(calls.opens, 0); assert.equal(calls.reads, 0); assert.deepEqual(calls.errors, []);
   }
   for (const path of ['relative', 'C:\\owned\\file', '\\\\server\\share', '']) {
     const { io, calls } = fakeFile(Buffer.from('private'));
-    assert.equal(read(path, { fsImpl: io, platform: 'linux' }).state, 'unsupported'); assert.equal(calls.opens, 0);
+    assert.equal(read(path, { fsImpl: io, platform: 'linux' }).state, 'unsupported'); assert.equal(calls.opens, 0); assert.deepEqual(calls.errors, []);
   }
   const { io, calls } = fakeFile(Buffer.from('private'));
   assert.equal(read('/owned/file', { fsImpl: io, platform: 'win32' }).state, 'unsupported');
@@ -169,12 +172,13 @@ test('reader enforces byte budgets with bounded allocations and closes its descr
     assert.equal(result.state, extra ? 'unknown' : 'pass');
     if (!extra) { assert.ok(result.bytes); assert.equal(result.bytes.length, LIMITS.fileBytes); }
     assert.equal(calls.consumed, LIMITS.fileBytes + extra); assert.equal(calls.reads, 17);
-    assert.ok(calls.maxBuffer <= LIMITS.chunkBytes); assert.equal(calls.closes, 1);
+    assert.ok(calls.maxBuffer <= LIMITS.fileBytes + 1); assert.ok(calls.maxRead <= LIMITS.chunkBytes);
+    assert.equal(calls.buffers.size, 1); assert.deepEqual(calls.errors, []); assert.equal(calls.closes, 1);
     assert.equal(calls.flags, io.constants.O_RDONLY | io.constants.O_NOFOLLOW | io.constants.O_NONBLOCK);
   }
   const { io, calls } = fakeFile(Buffer.alloc(0), { size: LIMITS.fileBytes + 1 });
   assert.equal(read('/owned/file', { fsImpl: io, platform: 'linux' }).state, 'unknown');
-  assert.equal(calls.opens, 0); assert.equal(calls.reads, 0);
+  assert.equal(calls.opens, 0); assert.equal(calls.reads, 0); assert.deepEqual(calls.errors, []);
 });
 
 test('replacement, observable changes and I/O failures produce unknown and close owned fds', () => {
@@ -182,11 +186,11 @@ test('replacement, observable changes and I/O failures produce unknown and close
     const { io, calls } = fakeFile(Buffer.from('abc'), options);
     const result = read('/owned/file', { fsImpl: io, platform: 'linux' });
     assert.equal(result.state, 'unknown'); assert.equal(calls.closes, options.fail === 'open' || options.fail === 'lstat' ? 0 : 1);
-    assert.equal(JSON.stringify(result).includes('PRIVATE-FAILURE'), false);
+    assert.equal(JSON.stringify(result).includes('PRIVATE-FAILURE'), false); assert.deepEqual(calls.errors, []);
   }
   const { io, calls } = fakeFile(Buffer.from('abc'));
   io.closeSync = () => { calls.closes++; throw new Error('PRIVATE-CLOSE'); };
-  assert.equal(read('/owned/file', { fsImpl: io, platform: 'linux' }).state, 'unknown'); assert.equal(calls.closes, 1);
+  assert.equal(read('/owned/file', { fsImpl: io, platform: 'linux' }).state, 'unknown'); assert.equal(calls.closes, 1); assert.deepEqual(calls.errors, []);
 });
 
 test('CLI handles bounds, options and import without consuming stdin or executing selected content', t => {
@@ -205,40 +209,88 @@ test('CLI handles bounds, options and import without consuming stdin or executin
 });
 
 
-test('stdin reader caps actual reads at input limit plus one and does not own fd zero', () => {
-  for (const overflow of [false, true]) {
+test('stdin bounds actual reads and one-buffer storage even with one-byte short reads', () => {
+  for (const short of [false, true]) for (const overflow of [false, true]) {
     const bytes = Buffer.alloc(LIMITS.inputBytes + (overflow ? 100000 : 0), 32);
-    let consumed = 0, reads = 0, maxBuffer = 0;
+    let consumed = 0, reads = 0;
+    const buffers = new Set<Buffer>(), errors: string[] = [];
     const io = {
       readSync(fd: number, buffer: Buffer, offset: number, length: number, position: number | null) {
-        assert.equal(fd, 0); assert.equal(position, null); reads++; maxBuffer = Math.max(maxBuffer, buffer.length);
-        const count = Math.min(length, bytes.length - consumed);
+        if (fd !== 0 || position !== null || length > LIMITS.chunkBytes || offset + length > buffer.length) errors.push('invalid read');
+        reads++; buffers.add(buffer);
+        const count = Math.min(short ? 1 : length, bytes.length - consumed);
         bytes.copy(buffer, offset, consumed, consumed + count); consumed += count; return count;
       },
-      closeSync() { assert.fail('stdin is not an owned descriptor'); }
+      closeSync() { errors.push('closed unowned stdin'); }
     };
     if (overflow) assert.throws(() => stdin({ fsImpl: io }), /invalid_assessment_input/);
     else assert.equal(stdin({ fsImpl: io }), bytes.toString('utf8'));
     assert.equal(consumed, LIMITS.inputBytes + (overflow ? 1 : 0));
-    assert.equal(reads, 2); assert.ok(maxBuffer <= LIMITS.chunkBytes);
+    assert.equal(reads, short ? LIMITS.inputBytes + 1 : 2);
+    assert.equal(buffers.size, 1); assert.ok([...buffers].reduce((sum, b) => sum + b.length, 0) <= LIMITS.inputBytes + 1);
+    assert.deepEqual(errors, []);
   }
-  let read = false;
+  let consumed = false, closed = false;
   assert.throws(() => stdin({ fsImpl: {
-    readSync(fd: number, buffer: Buffer) { assert.equal(fd, 0); if (read) return 0; read = true; buffer[0] = 255; return 1; },
-    closeSync() { assert.fail('stdin is not an owned descriptor'); }
+    readSync(_fd: number, buffer: Buffer) { if (consumed) return 0; consumed = true; buffer[0] = 255; return 1; },
+    closeSync() { closed = true; }
   } }));
+  assert.equal(closed, false);
+  assert.throws(() => stdin({ fsImpl: { readSync() { throw new Error('PRIVATE-STDIN-ERROR'); }, closeSync() { closed = true; } } }),
+    error => error instanceof Error && error.message === 'input_unavailable' && (error as NodeJS.ErrnoException).code === 'INPUT_UNAVAILABLE');
+  assert.equal(closed, false);
 });
 
+test('file one-byte short reads retain one bounded buffer and preserve measured bytes', () => {
+  const bytes = Buffer.alloc(4096, 65), { io, calls } = fakeFile(bytes);
+  const original = io.readSync;
+  io.readSync = (fd, buffer, offset, length, position) => original(fd, buffer, offset, Math.min(1, length), position);
+  const result = read('/owned/file', { fsImpl: io, platform: 'linux' });
+  assert.equal(result.state, 'pass'); assert.deepEqual(result.bytes, bytes);
+  assert.equal(calls.reads, bytes.length + 1); assert.equal(calls.buffers.size, 1);
+  assert.ok([...calls.buffers].reduce((sum, b) => sum + b.length, 0) <= bytes.length + 1);
+  assert.ok(calls.maxRead <= LIMITS.chunkBytes); assert.deepEqual(calls.errors, []); assert.equal(calls.closes, 1);
+});
 
-test('reader retains exact large inode identity with bigint stats', () => {
-  const { io } = fakeFile(Buffer.from('abc'));
-  let observations = 0;
-  const stat = (_: unknown, options?: { bigint?: boolean }) => {
-    assert.equal(options?.bigint, true);
-    observations++;
-    return { dev: 1n, ino: observations > 2 ? 9007199254740993n : 9007199254740992n,
-      size: 3n, mtimeNs: 1n, ctimeNs: 1n, isFile: () => true, isSymbolicLink: () => false };
-  };
-  const exact = { ...io, lstatSync: stat, fstatSync: stat };
-  assert.equal(read('/owned/file', { fsImpl: exact, platform: 'linux' }).state, 'unknown');
+test('large inode identity requests bigint stats and detects values that alias as Number', () => {
+  for (const replacement of [false, true]) {
+    const { io, calls } = fakeFile(Buffer.from('abc'));
+    let observations = 0;
+    const requested: (boolean | undefined)[] = [];
+    const stat = (_: unknown, options?: { bigint?: boolean }) => {
+      requested.push(options?.bigint); observations++;
+      const inode = replacement && observations > 2 ? 9007199254740993n : 9007199254740992n;
+      if (options?.bigint) return { dev: 1n, ino: inode, size: 3n, mtimeNs: 1n, ctimeNs: 1n, isFile: () => true, isSymbolicLink: () => false };
+      // The fallback deliberately aliases the two inode values, as Number Stats can.
+      return { dev: 1, ino: Number(inode), size: 3, mtimeMs: 1, ctimeMs: 1, isFile: () => true, isSymbolicLink: () => false };
+    };
+    const result = read('/owned/file', { fsImpl: { ...io, lstatSync: stat, fstatSync: stat }, platform: 'linux' });
+    assert.equal(result.state, replacement ? 'unknown' : 'pass');
+    assert.ok(requested.length >= 4); assert.ok(requested.every(value => value === true));
+    assert.deepEqual(calls.errors, []); assert.equal(calls.closes, 1);
+  }
+});
+
+test('CLI works through a symlink entry with default and preserved main resolution', t => {
+  const f = fixture(t), link = join(f.root, 'qualification.mjs');
+  try { fs.symlinkSync(script, link, 'file'); }
+  catch (error) {
+    if (['EPERM', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? '')) { t.skip('symlink creation permission denied'); return; }
+    throw error;
+  }
+  for (const flags of [[], ['--preserve-symlinks-main']]) {
+    const child = spawnSync(process.execPath, [...flags, link], { input: JSON.stringify(f.input), encoding: 'utf8', timeout: 10000 });
+    assert.ifError(child.error); assert.equal(child.status, 0); assert.equal(child.stderr, '');
+    assert.equal(JSON.parse(child.stdout).scope, 'local_static_assessment');
+  }
+});
+
+test('CLI reports stdin I/O failure with a fixed sanitized token', () => {
+  const code = `import fs from 'node:fs'; import {syncBuiltinESMExports} from 'node:module';
+    process.argv = [process.execPath, ${JSON.stringify(script)}];
+    const original = fs.readSync; fs.readSync = (fd, ...args) => { if (fd === 0) throw new Error('PRIVATE-STDIN-ERROR'); return original(fd, ...args); }; syncBuiltinESMExports();
+    await import(${JSON.stringify(pathToFileURL(script).href)});`;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', timeout: 10000 });
+  assert.ifError(child.error); assert.equal(child.status, 2);
+  assert.deepEqual(JSON.parse(child.stdout), { error: 'input_unavailable' }); assert.equal(child.stderr, '');
 });

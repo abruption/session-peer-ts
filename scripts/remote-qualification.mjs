@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { isAbsolute } from 'node:path/posix';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 export const LIMITS = Object.freeze({ inputBytes: 64 * 1024, fileBytes: 1024 * 1024, chunkBytes: 64 * 1024, files: 16 });
 const invalid = () => { throw new Error('invalid_assessment_input'); };
@@ -31,7 +31,7 @@ function uniqueKeys(text) {
         top.key = false;
       }
     } else if (char === '{' || char === '[') {
-      stack.push({ kind: char, key: char === '{', seen: new Set() });
+      stack.push(char === '{' ? { kind: char, key: true, seen: new Set() } : { kind: char });
     } else if (char === '}' || char === ']') stack.pop();
     else if (char === ',' && stack.at(-1)?.kind === '{') stack.at(-1).key = true;
   }
@@ -87,27 +87,27 @@ export function readRegularFile(path, { fsImpl = fs, platform = process.platform
     const before = fsImpl.lstatSync(path, { bigint: true });
     if (!before.isFile() || before.isSymbolicLink()) return { state: 'unsupported', reason: 'not_regular_file' };
     if (before.size > LIMITS.fileBytes) return { state: 'unknown', reason: 'file_byte_limit' };
-    fd = fsImpl.openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const noControllingTerminal = Number.isInteger(constants.O_NOCTTY) ? constants.O_NOCTTY : 0;
+    fd = fsImpl.openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK | noControllingTerminal);
     const opened = fsImpl.fstatSync(fd, { bigint: true });
     if (!opened.isFile()) result = { state: 'unsupported', reason: 'not_regular_file' };
     else if (!sameObservation(before, opened)) result = { state: 'unknown', reason: 'file_changed' };
     else {
-      const chunks = [];
+      const expectedSize = Number(opened.size);
+      const buffer = Buffer.alloc(expectedSize + 1);
       let total = 0;
-      while (total <= LIMITS.fileBytes) {
-        const chunk = Buffer.alloc(Math.min(LIMITS.chunkBytes, LIMITS.fileBytes + 1 - total));
-        const count = fsImpl.readSync(fd, chunk, 0, chunk.length, null);
+      while (total < buffer.length) {
+        const count = fsImpl.readSync(fd, buffer, total, Math.min(LIMITS.chunkBytes, buffer.length - total), null);
         if (count === 0) break;
-        chunks.push(chunk.subarray(0, count));
         total += count;
       }
       const after = fsImpl.fstatSync(fd, { bigint: true });
       const named = fsImpl.lstatSync(path, { bigint: true });
       if (total > LIMITS.fileBytes) result = { state: 'unknown', reason: 'file_byte_limit' };
-      else if (!after.isFile() || !named.isFile() || named.isSymbolicLink() ||
+      else if (total > expectedSize || !after.isFile() || !named.isFile() || named.isSymbolicLink() ||
           !sameObservation(opened, after) || !sameObservation(after, named) || BigInt(total) !== BigInt(after.size)) {
         result = { state: 'unknown', reason: 'file_changed' };
-      } else result = { state: 'pass', bytes: Buffer.concat(chunks, total) };
+      } else result = { state: 'pass', bytes: buffer.subarray(0, total) };
     }
   } catch (error) {
     result = ['ELOOP', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EINVAL'].includes(error?.code)
@@ -125,13 +125,13 @@ export function readRegularFile(path, { fsImpl = fs, platform = process.platform
 const decode = bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 /** Read at most the stdin byte limit plus one overflow byte. fd 0 is not owned. */
 export function readInput({ fsImpl = fs } = {}) {
-  const chunks = [];
+  const buffer = Buffer.alloc(LIMITS.inputBytes + 1);
   let size = 0;
-  while (size <= LIMITS.inputBytes) {
-    const chunk = Buffer.alloc(Math.min(LIMITS.chunkBytes, LIMITS.inputBytes + 1 - size));
-    const count = fsImpl.readSync(0, chunk, 0, chunk.length, null);
-    if (count === 0) return decode(Buffer.concat(chunks, size));
-    chunks.push(chunk.subarray(0, count));
+  while (size < buffer.length) {
+    let count;
+    try { count = fsImpl.readSync(0, buffer, size, Math.min(LIMITS.chunkBytes, buffer.length - size), null); }
+    catch { throw Object.assign(new Error('input_unavailable'), { code: 'INPUT_UNAVAILABLE' }); }
+    if (count === 0) return decode(buffer.subarray(0, size));
     size += count;
   }
   invalid();
@@ -204,8 +204,10 @@ No intentional file/state writes except stdout.
 Required: context {installation, manager}, packageJson (absolute path), expectedVersion.
 Optional: context.destination/account; files [{path, baseline?: {sha256, source, observedAt}}].
 Limits: 64 KiB UTF-8 input; 16 files; 1 MiB per selected regular file.
+Relative/foreign paths yield unsupported checks. Label lengths use UTF-16 units.
+Read limits bound bytes, not I/O time; they are not deadlines.
 Baseline source/time are operator labels, not authenticated history.
-Exit 0: report processed regardless of check states. Exit 2: invalid specification.
+Exit 0: report processed regardless of check states. Exit 2: invalid/unavailable input.
 No report grants qualification, readiness, ownership or permission to act.
 `;
 
@@ -218,10 +220,15 @@ function main() {
     if (process.argv.length !== 2) invalid();
     const input = parseInput(readInput());
     process.stdout.write(JSON.stringify(assess(input)) + '\n');
-  } catch {
-    process.stdout.write('{"error":"invalid_assessment_input"}\n');
+  } catch (error) {
+    process.stdout.write(error?.code === 'INPUT_UNAVAILABLE' ? '{"error":"input_unavailable"}\n' : '{"error":"invalid_assessment_input"}\n');
     process.exitCode = 2;
   }
 }
 
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) main();
+function isEntryPoint() {
+  try { return !!process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+}
+
+if (isEntryPoint()) main();
