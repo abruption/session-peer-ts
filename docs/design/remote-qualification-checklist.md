@@ -1,6 +1,6 @@
 # Proposal: operator checklist for remote qualification
 
-Status: **Design only; human review required.** Issue [#158](https://github.com/abruption/session-peer-ts/issues/158),
+Status: **Implementation proposal; human PR review required.** Issue [#158](https://github.com/abruption/session-peer-ts/issues/158),
 following [#23](https://github.com/abruption/session-peer-ts/issues/23).
 Draft date: 2026-10-21. No release version is assigned; priority is P2.
 
@@ -21,7 +21,11 @@ Installation, rollout, repair, activation, rollback and retention belong to the
 operator and the installation's owning manager. No manager takeover, installer,
 runtime update, source-streaming fallback, distributed lock, caller accounting,
 receipt ownership, recovery/resume protocol or automated cleanup is introduced.
-No runtime, CLI flag, schema or program is proposed here.
+The owner explicitly requested a repository-only read-only reporter extension on
+2026-10-21 after reviewing the checklist. Its limited input/output and reader
+contract is specified in [the reporter design](remote-qualification-reporter.md).
+It automates selected local metadata observations, not this whole workflow.
+The production CLI, wire schema and qualification/authority boundaries do not change.
 
 Existing exact-version SSH preflight, host-key checks, submission/unknown and
 no-resend behavior remain requirements. Passing this checklist proves neither
@@ -184,16 +188,19 @@ These are bounded paper scenarios, not commands or tests to execute.
 | An old digest is explicitly selected and compared with a current measurement | Record a new comparison result and both observations' scope; never inherit the old check's pass or claim preservation throughout the interval. |
 | Old Windows success is offered for a different account/runtime or a current Linux cell | Keep the dated historical reference; current cell stays unassessed or unknown, according to whether assessment was attempted. |
 
-## Reporter decision and review gate
+## Reporter extension decision and review gate
 
-Choose **checklist only** for this stage. There is no demonstrated need for a
-reporter, and no implementation is authorized by this proposal. Revisit only if
-operator use exposes repeated, concrete static transcription errors or effort
-that a bounded regular-file inspection tool would materially reduce. That would
-require a separate accepted design covering native paths, limits, explicit unknown
-results and preservation of unaffected entries, without executing discovered tools.
+The initial decision was checklist only. On 2026-10-21 the owner explicitly
+chose to extend it with a repository-only read-only reporter. The practical
+rationale is to reduce transcription mistakes in selected package-field and
+digest comparisons. No measured workflow pilot or time-saving claim is made.
 
-Human review must accept the workflow, evidence limits, state meanings and #23
-mapping before any implementation proposal. Any later implementation or live
-experiment needs its own explicit scope and authorization. This review does not
-close #23, accept #155 or commit work to a release.
+The [reporter contract](remote-qualification-reporter.md) is limited to explicit
+local file observations. Diagnostics, remote access, runtime/native execution,
+ownership, caller use and remediation remain outside the program. There is no
+new journal, receipt, lock, recovery engine or production CLI command.
+
+This authorizes the requested isolated implementation and review, not a merge,
+release, live experiment or closure of #23. Human PR review must still assess
+the implementation and remaining design choices. Additional functionality
+needs its own explicit scope; #155 remains deferred.

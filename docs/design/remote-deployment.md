@@ -11,11 +11,12 @@
 | Supersedes | Nothing. The exact-version preflight stays in force until the follow-ups below are implemented and verified |
 
 **Qualification follow-up (proposal, 2026-10-21):**
-[Issue #158's checklist-first design](https://github.com/abruption/session-peer-ts/pull/159) proposes
-an assessment workflow without a new authority or recovery engine. Draft #155
+[Issue #158's checklist-first design](https://github.com/abruption/session-peer-ts/issues/158) proposes
+an assessment workflow with a separately requested, repository-only read-only
+reporter, without a new authority or recovery engine. Draft #155
 is deferred and excluded from 0.5.0. The historical workflow and evidence below
 remain context; the new proposal implements none of the F1–F6 follow-ups and
-requires human design review before any replacement implementation.
+requires human PR review; it does not authorize provisioning or remediation.
 
 ## Contents
 
