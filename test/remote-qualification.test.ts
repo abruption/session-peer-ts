@@ -178,7 +178,8 @@ test('reader enforces byte budgets with bounded allocations and closes its descr
     assert.equal(calls.flags, io.constants.O_RDONLY | io.constants.O_NOFOLLOW | io.constants.O_NONBLOCK);
   }
   const { io, calls } = fakeFile(Buffer.alloc(0), { size: LIMITS.fileBytes + 1 });
-  assert.equal(read('/owned/file', { fsImpl: io, platform: 'linux' }).state, 'unknown');
+  const oversized = read('/owned/file', { fsImpl: io, platform: 'linux' });
+  assert.equal(oversized.state, 'unknown'); assert.equal(oversized.reason, 'file_byte_limit');
   assert.equal(calls.opens, 0); assert.equal(calls.reads, 0); assert.deepEqual(calls.errors, []);
 });
 
@@ -236,7 +237,7 @@ test('stdin bounds actual reads and one-buffer storage even with one-byte short 
   assert.throws(() => stdin({ fsImpl: {
     readSync(_fd: number, buffer: Buffer) { if (consumed) return 0; consumed = true; buffer[0] = 255; return 1; },
     closeSync() { closed = true; }
-  } }));
+  } }), error => error instanceof TypeError && (error as NodeJS.ErrnoException).code === 'ERR_ENCODING_INVALID_ENCODED_DATA');
   assert.equal(closed, false);
   assert.throws(() => stdin({ fsImpl: { readSync() { throw new Error('PRIVATE-STDIN-ERROR'); }, closeSync() { closed = true; } } }),
     error => error instanceof Error && error.message === 'input_unavailable' && (error as NodeJS.ErrnoException).code === 'INPUT_UNAVAILABLE');
