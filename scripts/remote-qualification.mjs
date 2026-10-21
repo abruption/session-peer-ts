@@ -48,6 +48,10 @@ export function parseInput(text) {
   if (typeof text !== 'string' || Buffer.byteLength(text, 'utf8') > LIMITS.inputBytes) invalid();
   let value;
   try { value = parseJson(text); } catch { invalid(); }
+  return validate(value);
+}
+
+function validate(value) {
   keys(value, ['context', 'packageJson', 'expectedVersion', 'files']);
   keys(value.context, ['installation', 'manager', 'destination', 'account']);
   if (!label(value.context.installation, 2048) || !label(value.context.manager, 128) ||
@@ -143,7 +147,7 @@ const baselineValid = baseline => object(baseline) && typeof baseline.sha256 ===
 /** Record independent predicates. States are evidence, never an operational gate. */
 export function assess(input, { fsImpl = fs, platform = process.platform, now = () => new Date().toISOString() } = {}) {
   // Validate all entries before any filesystem inspection, also for imported use.
-  const value = parseInput(JSON.stringify(input));
+  const value = validate(input);
   const checks = [];
   const add = (id, predicate, state, evidenceKind, source, details = {}) =>
     checks.push({ id, predicate, state, evidenceKind, source, observedAt: now(), ...details });

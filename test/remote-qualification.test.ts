@@ -170,6 +170,7 @@ test('reader enforces byte budgets with bounded allocations and closes its descr
     const { io, calls } = fakeFile(Buffer.alloc(LIMITS.fileBytes + extra, 65), { size: LIMITS.fileBytes });
     const result = read('/owned/file', { fsImpl: io, platform: 'linux' });
     assert.equal(result.state, extra ? 'unknown' : 'pass');
+    if (extra) assert.equal(result.reason, 'file_byte_limit');
     if (!extra) { assert.ok(result.bytes); assert.equal(result.bytes.length, LIMITS.fileBytes); }
     assert.equal(calls.consumed, LIMITS.fileBytes + extra); assert.equal(calls.reads, 17);
     assert.ok(calls.maxBuffer <= LIMITS.fileBytes + 1); assert.ok(calls.maxRead <= LIMITS.chunkBytes);
@@ -185,12 +186,13 @@ test('replacement, observable changes and I/O failures produce unknown and close
   for (const options of [{ changed: 'replace' }, { changed: 'time' }, { fail: 'fstat' }, { fail: 'read' }, { fail: 'open' }, { fail: 'lstat' }]) {
     const { io, calls } = fakeFile(Buffer.from('abc'), options);
     const result = read('/owned/file', { fsImpl: io, platform: 'linux' });
-    assert.equal(result.state, 'unknown'); assert.equal(calls.closes, options.fail === 'open' || options.fail === 'lstat' ? 0 : 1);
+    assert.equal(result.state, 'unknown'); assert.equal(result.reason, options.changed ? 'file_changed' : 'file_read_unavailable'); assert.equal(calls.closes, options.fail === 'open' || options.fail === 'lstat' ? 0 : 1);
     assert.equal(JSON.stringify(result).includes('PRIVATE-FAILURE'), false); assert.deepEqual(calls.errors, []);
   }
   const { io, calls } = fakeFile(Buffer.from('abc'));
   io.closeSync = () => { calls.closes++; throw new Error('PRIVATE-CLOSE'); };
-  assert.equal(read('/owned/file', { fsImpl: io, platform: 'linux' }).state, 'unknown'); assert.equal(calls.closes, 1); assert.deepEqual(calls.errors, []);
+  const closeResult = read('/owned/file', { fsImpl: io, platform: 'linux' });
+  assert.equal(closeResult.state, 'unknown'); assert.equal(closeResult.reason, 'file_close_unverified'); assert.equal(calls.closes, 1); assert.deepEqual(calls.errors, []);
 });
 
 test('CLI handles bounds, options and import without consuming stdin or executing selected content', t => {
@@ -203,7 +205,7 @@ test('CLI handles bounds, options and import without consuming stdin or executin
   for (const [text, args] of [[Buffer.from([0xff]), []], [' '.repeat(LIMITS.inputBytes + 1), []], ['', ['--host', 'NEVER-CONNECT']], ['', ['--unknown']]] as [string | Buffer, string[]][]) {
     const failure = f.invoke(text, args); assert.equal(failure.code, 2); assert.deepEqual(JSON.parse(failure.stdout), { error: 'invalid_assessment_input' }); assert.equal(failure.stderr, '');
   }
-  assert.match(f.invoke('', ['--help']).stdout, /static/i);
+  const help = f.invoke('', ['--help']); assert.equal(help.code, 0); assert.equal(help.stderr, ''); assert.match(help.stdout, /static/i);
   const imported = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(script).href)}); console.log('imported')`], { input: 'INVALID-STDIN', encoding: 'utf8', timeout: 10000 });
   assert.ifError(imported.error); assert.equal(imported.status, 0); assert.equal(imported.stdout.trim(), 'imported'); assert.equal(imported.stderr, '');
 });
@@ -244,9 +246,13 @@ test('stdin bounds actual reads and one-buffer storage even with one-byte short 
 test('file one-byte short reads retain one bounded buffer and preserve measured bytes', () => {
   const bytes = Buffer.alloc(4096, 65), { io, calls } = fakeFile(bytes);
   const original = io.readSync;
-  io.readSync = (fd, buffer, offset, length, position) => original(fd, buffer, offset, Math.min(1, length), position);
+  io.readSync = (fd, buffer, offset, length, position) => {
+    if (length > LIMITS.chunkBytes) calls.errors.push('requested read exceeds chunk limit');
+    return original(fd, buffer, offset, Math.min(1, length), position);
+  };
   const result = read('/owned/file', { fsImpl: io, platform: 'linux' });
-  assert.equal(result.state, 'pass'); assert.deepEqual(result.bytes, bytes);
+  assert.equal(result.state, 'pass'); assert.deepEqual(result.bytes, bytes); assert.ok(result.bytes);
+  assert.ok(result.bytes.buffer.byteLength <= bytes.length + 1);
   assert.equal(calls.reads, bytes.length + 1); assert.equal(calls.buffers.size, 1);
   assert.ok([...calls.buffers].reduce((sum, b) => sum + b.length, 0) <= bytes.length + 1);
   assert.ok(calls.maxRead <= LIMITS.chunkBytes); assert.deepEqual(calls.errors, []); assert.equal(calls.closes, 1);
@@ -264,8 +270,9 @@ test('large inode identity requests bigint stats and detects values that alias a
       // The fallback deliberately aliases the two inode values, as Number Stats can.
       return { dev: 1, ino: Number(inode), size: 3, mtimeMs: 1, ctimeMs: 1, isFile: () => true, isSymbolicLink: () => false };
     };
-    const result = read('/owned/file', { fsImpl: { ...io, lstatSync: stat, fstatSync: stat }, platform: 'linux' });
+    const result = read('/owned/file', { fsImpl: { ...io, lstatSync: stat, fstatSync(fd: number, options: any) { if (fd !== 91) calls.errors.push('bigint fstat descriptor'); return stat(fd, options); } }, platform: 'linux' });
     assert.equal(result.state, replacement ? 'unknown' : 'pass');
+    if (replacement) assert.equal(result.reason, 'file_changed');
     assert.ok(requested.length >= 4); assert.ok(requested.every(value => value === true));
     assert.deepEqual(calls.errors, []); assert.equal(calls.closes, 1);
   }
@@ -293,4 +300,21 @@ test('CLI reports stdin I/O failure with a fixed sanitized token', () => {
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', timeout: 10000 });
   assert.ifError(child.error); assert.equal(child.status, 2);
   assert.deepEqual(JSON.parse(child.stdout), { error: 'input_unavailable' }); assert.equal(child.stderr, '');
+});
+
+test('CLI keeps bounded raw specifications with expansive or deeply nested malformed baselines as per-file unknown', t => {
+  const f = fixture(t);
+  const prefix = JSON.stringify({ ...f.input, files: [{ path: f.pkg, baseline: 'BASELINE' }] });
+  const expansive = prefix.replace('"BASELINE"', '[' + Array(11000).fill('1e21').join(',') + ']');
+  assert.ok(Buffer.byteLength(expansive) < LIMITS.inputBytes);
+  assert.ok(Buffer.byteLength(JSON.stringify(JSON.parse(expansive))) > LIMITS.inputBytes);
+  const deep = prefix.replace('"BASELINE"', '['.repeat(12000) + '0' + ']'.repeat(12000));
+  assert.ok(Buffer.byteLength(deep) < LIMITS.inputBytes);
+  for (const raw of [expansive, deep]) {
+    const result = f.invoke(raw); assert.equal(result.code, 0); assert.equal(result.stderr, '');
+    const report = JSON.parse(result.stdout);
+    assert.equal(check(report, 'files.0.comparison').state, 'unknown');
+    assert.equal(check(report, 'files.0.comparison').reason, 'baseline_evidence_incomplete');
+    assert.equal(check(report, 'files.0.digest').state, process.platform === 'win32' ? 'unsupported' : 'pass');
+  }
 });
