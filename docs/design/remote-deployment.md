@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **Proposed** (design only; nothing in this document is implemented) |
+| Status | **Proposed** (design only; no deploy helper, capability flag or negotiation is implemented. An operator-invoked [validation harness](#validation-harness-2026-10-20) exists for requalification) |
 | Date | 2026-10-02 |
 | Applies to | `session-peer` 0.2.1 source and later; SSH transport (`--host`) only |
 | Decision owner | Repository maintainer |
@@ -31,17 +31,21 @@ SSH, so a destination needs only a usable Python and a POSIX shell. Its
 `install.sh --host` additionally pushes the program to
 `$HOME/.local/share/session-peer` and links `$HOME/.local/bin/session-peer`.
 
-The TypeScript client deliberately does not do that. In 0.2.1 through 0.3.2 the local client
+The TypeScript client deliberately does not do that. In 0.2.1 through 0.4.0 the local client
 runs `ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10`
 and, before any message leaves the machine:
 
 1. runs `<remote-bin> --version` with no message (15 s timeout);
 2. requires stdout to equal exactly the client's own version line, for example
-   `session-peer 0.3.2 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
+   `session-peer 0.4.0 (typescript)` (`VERSION_LINE` in `src/protocol.ts`),
    otherwise refuses with a fixed code from `sshPreflightFailure` in `src/cli.ts`;
 3. sends a `schemaVersion: 1` JSON request on stdin to
    `<remote-bin> --stdio-request` and verifies the `schemaVersion: 1` response
    shape, command, exit code and send status before reporting success.
+
+The 0.4.0 bounded handoff path (`--correlation-id` and related options) sends
+its destination preparation request only after this same exact-version
+preflight; it does not relax or replace the version rule.
 
 0.3.0 ([#20](https://github.com/abruption/session-peer-ts/issues/20))
 adds ordered repeated `--host`, an allowlisted `--ssh-opt`, a single-hop
@@ -107,7 +111,9 @@ The name `session-peer` is shared with the Python implementation (pipx,
 
 Python works offline because the source travels over SSH. An npm registry
 install needs network access to `registry.npmjs.org` (or a mirror) from the
-destination, plus the transitive `nan` package.
+destination for the package and every runtime dependency pinned by the release
+lockfile (for 0.4.0: `fs-ext-extra-prebuilt`, its dependency `nan`, and
+`smol-toml`).
 
 ## Options
 
@@ -492,8 +498,11 @@ PATH entry, a shell profile or a service.
    Then verify from the operator machine with
    `session-peer doctor --host H --remote-bin <target>/session-peer --json` and a
    `send ... --dry-run`. Never send a live message as a deployment check.
-   The order is fixed: **publish the receipt, then release the lock, then
-   switch callers (step 9)**.
+   The order is fixed: **destination checks, then the operator doctor and
+   dry-run, then publish the receipt, then release the lock, then switch
+   callers (step 9)**. The operator checks are part of step 8: if either
+   fails, no receipt is written, the run keeps the lock and rolls back as in
+   [cleanup and rollback](#cleanup-and-rollback).
 9. **Switch callers.** Only after the receipt is published and the lock is
    released does the operator change any local `--remote-bin` configuration to
    the new target. Until then, existing callers keep using the previous
@@ -603,6 +612,7 @@ PATH entry, a shell profile or a service.
 | State of `<root>/<version>-<id16>` before step 7 | Outcome |
 | --- | --- |
 | Absent | Rename, then step 8. On failure in step 8, roll back (below). |
+| Absent, but `<root>/.receipts/<version>-<id16>.json` exists (an orphan receipt) | Refuse before the rename. The receipt is removed or quarantined only by the explicit, ownership-confirmed cleanup above; never overwritten. |
 | Owned by this workflow, same `identityHash`, a matching completion receipt, and step 8 checks (including the manifest) pass on the existing directory | Report "already provisioned" and reuse the existing receipt (no new receipt). Delete only this run's staging; no change. |
 | Owned, same `identityHash`, but **no matching receipt** | Verification is insufficient. Refuse. The operator runs the explicit recovery (re-verify or roll back) under the lock, then reruns. |
 | Receipt present but corrupt or mismatched, or a `.receipts` path failing trust checks | Refuse. Explicit, ownership-confirmed cleanup only; never a blind delete. |
@@ -724,7 +734,9 @@ gaps:
 
 The details and the deviations from this workflow are in
 [VALIDATION.md](../../VALIDATION.md#remote-deployment-workflow-posix-cell-23-f5--2026-10-02-kst).
-Rules added after that Linux run remain **unvalidated on Linux**:
+Rules added after that Linux run were not exercised by it. On 2026-10-20
+they were run once with the [validation harness](#validation-harness-2026-10-20)
+on a Linux **arm64** test host only; Linux x86_64 has not been rerun under them:
 - the fresh-lock recovery of an unreceipted target;
 - receipts that copy the marker's `runId`;
 - `.receipts` trust checks;
@@ -773,6 +785,398 @@ This was a private operator test harness, not a shipped deploy helper; neither
 the host nor the account was disposable. It does not qualify Windows-client
 `--ssh-jump`.
 
+### Validation harness (2026-10-20)
+
+`scripts/deployment-harness.mjs` is repository-only tooling (it is not in the
+npm package). It implements the checks of this document as separately invoked
+commands, so the cells that the Linux run left open can be requalified with
+exact, repeatable steps. It is **not** F6 and changes nothing in the CLI:
+
+- It never opens SSH, never contacts a registry, never installs anything on a
+  destination by itself and never runs during `list`, `send` or `doctor`. The
+  exact-version preflight is untouched.
+- The operator moves the harness and the verified tarballs with existing SSH
+  trust, then runs each `dest` command on the destination with the recorded
+  Node. `op` commands run on the operator host and keep the run journal.
+- `dest init-prefix` creates a **new** prefix (it refuses an existing path, a
+  non-canonical path and an ancestor that others can write without the sticky
+  bit) and writes a sentinel. Every `dest` command that inspects or changes
+  a prefix refuses a path without that sentinel or failing the trust checks.
+  `dest identity` and `dest path-inventory` take no prefix and write nothing. The root is
+  `<prefix>/data/session-peer-ts`, the ADR layout with
+  `XDG_DATA_HOME=<prefix>/data`. Nothing is written outside the prefix or the
+  journal, and `dest path-inventory` only hashes the `session-peer` entries on
+  `PATH`, so another manager's executable can be shown unchanged.
+- Every mutating command is a dry run unless `--execute`. Rollback,
+  retention, lock breaking, receipt cleanup, staging discard and prefix
+  removal also need `--confirm-destructive`. Running the launcher and the
+  native-lock probe (which creates and removes a temporary file) also counts
+  as an effect. `dest probe` and `dest verify` do it only with `--execute`,
+  and the dry runs of `dest activate` and `dest receipt` classify statically
+  and defer every probe. An unexecuted `verify` result cannot be recorded.
+- `dest stage` validates the identity file against a closed schema (exact
+  keys and types, version syntax, SHA-256 and SHA-512 integrity forms,
+  absolute Node path) and checks that the staging name resolves to a direct
+  child of the root. This happens before any write, in dry runs as well.
+- It is POSIX only and refuses on Windows; see the Windows cells below.
+
+The fixed step 8 order is enforced across both sides. `op record` accepts a
+destination result only from the matching executed `dest` command and run.
+Every `dest lock` acquisition gets a fresh random `lockId`. Every lock-bound
+result (`activate`, `verify --run <run> --execute`, `receipt`, `unlock`,
+`rollback`, receipt cleanup, retention), every journal record and every
+statement carries the prefix sentinel ID and that `lockId`. The destination
+results `op record` accepts are exactly these:
+
+- `lock_acquired` (`dest lock`);
+- `activated`;
+- `verified`;
+- `receipt_published`;
+- `lock_released` (`dest unlock`);
+- `rolled_back`;
+- `lock_broken` (`dest break-lock`);
+- `receipt_cleaned` (`dest receipt-cleanup`, keeping mode, receipt state and
+  ownership basis);
+- `retired` (`dest retire`).
+
+Each destination result must be executed. Operator checks, caller-switch
+attestations and run-ended events are handled separately. An unrecognized
+destination-result event such as `retire` is not recordable. Cleanup,
+retirement, rollback and a new activation (not an `already_provisioned`
+reuse) of a prefix and name are lifecycle events. An `activated` record
+without an outcome, as written by earlier harness revisions, is treated as a
+new activation. A publication of that name
+on that prefix recorded before such an event is superseded
+(`publication_superseded`): `callers_switched` then needs a newer completed
+publication. A cleanup, retirement or rollback recorded since an acquisition
+also closes that acquisition's publication. A receipt result that arrives
+later under the same lock is refused (`publication_closed`); recovery needs a
+new lock and new checks, or the explicit adoption under a new lock. Nothing is migrated or re-associated. `op record` refuses a result from another run, another prefix or an earlier lock,
+including an earlier lock of the same run acquired at the same timestamp.
+Caller state is keyed by prefix and install name, because two dedicated
+prefixes can hold the same identity-derived name. `callers_switched` and
+`callers_unswitched` take an explicit `--prefix-id`, which must be a prefix
+this journal has acquired a lock on. A switch on one prefix is never
+cancelled by an unswitch on another. `no-caller` and `receipt-owned`
+statements are scoped to the prefix of the run's current lock.
+`callers_switched` needs a receipt published on that prefix. It also needs
+the publishing acquisition to be closed, either by its run's unlock or by a
+recorded break that closed exactly that prefix and `lockId`. Breaks of other
+prefixes, stale breaks and unknown closures do not count. Neither caller
+event is recorded while any recorded acquisition on that prefix is open
+(`acquisition_open`). This keeps a statement issued under an open lock, such
+as `no-caller`, true until that lock closes. Once a run has
+ended, it gets only a `run-ended` statement, even while its lock is still on
+disk. The journal records each acquisition (prefix ID and
+`lockId`) exactly once. Re-recording one, whether replayed after it closed or
+repeated while current, is refused (`acquisition_replayed`), never
+deduplicated. An acquisition stays current until this run's unlock of the
+same pair, or until a recorded break closes exactly that pair. A break result
+names a prefix and a broken `lockId`. It closes the current acquisition only
+when that pair is an open acquisition recorded in this journal. Other break
+results are recorded as audit entries that close nothing: an override whose
+owner pair cannot be identified, a lock on another prefix or from another
+journal, or an already closed lock. An override is not excluded as such. If
+the broken lock had a readable owner whose exact pair is an open acquisition
+here, the break closes it. Recording the same break twice is refused
+(`break_replayed`). A recorded break also acts as a tombstone for its pair.
+An acquisition result for that same prefix and `lockId`, recorded later
+(break first, acquisition afterwards), is refused as `acquisition_replayed`
+and never becomes current. A break naming the same `lockId` on another prefix
+is an unrelated generation and does not block it.
+It accepts the operator results only after a recorded destination `verify`
+of the same target under the same lock:
+
+- **Doctor:** `ok`, `diagnosticCompleted` and `implementation:"typescript"`.
+- **Dry-run:** `submitted:false` and `consumptionConfirmed:false`, and
+  either the intended `no_reachable_target` refusal or a normal `validated`
+  result. Transport, host-key, preflight, version and other refusals are
+  rejected. A dry-run is accepted only after a doctor recorded since the
+  latest `verify` of that target, and the operator-checks statement requires
+  that recorded order (verify, doctor, dry-run). A re-verify makes the earlier
+  doctor stale. This is the order of the journal records, which the operator
+  supplies. It does not prove when the operator commands actually ran.
+
+What the CLI JSON shows is bound. Its `host` must equal the `--dest-host`
+fixed at `op init`. The doctor's `version` must equal the verified install's
+version. Which `--remote-bin` the CLI ran is **not** in the JSON. The operator
+supplies it to `op record`, and it is stored as `remoteBinAttested`. The
+attested value must already be a canonical absolute POSIX path (no `.` or `..`
+segment, no repeated or trailing `/`). It must also equal exactly the wrapper
+path that the verified destination result reports for that target. A path
+that only normalizes to it is refused, because a shell resolves `link/..`
+through the link. Other wrappers and other prefixes are refused too, and the
+path is never resolved locally or remotely. The harness still cannot prove that the
+CLI executed it.
+`op statement --kind operator-checks-passed` exists only after both, and `dest
+receipt` requires that statement, bound to the current prefix and `lockId`,
+the marker's `identityHash` and the recomputed manifest. `dest activate`
+writes and syncs an activation intent (target and staging) inside the lock
+**before** the rename; if the intent cannot be written, nothing is renamed.
+Nothing is written after the rename, so an interruption right after it leaves
+the same state as a completed activation. `dest unlock` reads the intent and
+the actual target together. It refuses while the intended target exists
+without a matching receipt. Its presence and validity are separate checks: an
+intent that is present but not exactly this lock's record (wrong type,
+malformed, empty, extra or missing keys, or another run, lock, target or
+staging) refuses unlock, activation and receipts as
+`activation_intent_unreadable`. Such an intent is never treated as absent. No
+crash was physically injected between files; the fixtures make the intent
+write fail before the rename, and check the persisted state after a completed
+rename. `op record --event callers_switched` refuses until the receipt is
+recorded and the publishing run has released its lock. Statements are JSON
+files that the operator carries to the destination. Like the marker, they are
+consistency checks between cooperating same-user steps, not authentication.
+
+Further harness rules:
+
+All receipt consumers use the same closed schema, including a canonical UTC
+`verifiedAt` timestamp. Malformed completion records are corrupt and cannot
+authorize reuse, adoption or unlock. Replay and dry-run completion also require
+the activation staging path to remain absent. A lock containing publication
+evidence refuses every further activate operation, including an already-provisioned
+reuse or a same-identity replacement after rollback; release the acquisition and
+obtain fresh checks under a new lock.
+
+- **Receipt publication intent.** `dest receipt` writes and syncs a
+  publication intent inside the lock, holding the exact receipt bytes, before
+  writing the receipt. If the response is lost, rerunning the same command
+  under the same lock and proof does one of two things:
+  - it replays the committed receipt (`replayed:true`), keeping the receipt
+    bytes and `verifiedAt` unchanged;
+  - if the receipt write itself was lost, it writes those same bytes.
+
+  A changed or corrupt receipt, a stale proof, another target and any later
+  lock all fail closed. Before a lost receipt write is completed, every
+  static check must pass, plus the probes when executed. The current marker
+  `runId`, `identityHash` and recomputed manifest must also equal the
+  committed receipt; a rolled-back or changed target is refused
+  (`publication_target_changed`). The intent's embedded receipt must match the
+  closed receipt schema:
+
+  - exactly the receipt keys;
+  - `receiptVersion` 1;
+  - a 32-hex `runId`;
+  - 64-hex hashes;
+  - an ISO 8601 `verifiedAt`.
+
+  A lock holds at most one publication intent, so one target per lock. The
+  journal separately accepts one `receipt_published` per target under a lock.
+- **Adopting a receipt.** `dest receipt --adopt-existing` covers the case
+  where a run wrote a receipt, lost the response and ended, and its lock was
+  then broken (which removes its publication intent). A new run takes a fresh
+  lock and fresh checks: `verify`, doctor and dry-run under that lock. Adoption
+  then publishes the still-matching receipt under the new lock. The receipt
+  bytes, its original `runId` and `verifiedAt` are kept, and nothing is
+  rewritten. A receipt that does not match the marker and manifest is refused,
+  and so are an earlier lock's proof and an invalid receipt schema.
+- **Probe gating.** `dest verify --execute` runs the launcher and native
+  probes only after every static check passes: a real owned directory, a
+  consistent marker, the manifest and, after an activation, the staging gone.
+- **Lock overrides.** The explicit override removes only the lock's known
+  metadata entries. Each must be a regular file, a symlink (unlinked, never
+  followed) or an empty directory. Other file types (FIFO, socket, device),
+  non-empty directories and unknown entries are refused before any removal.
+- **Statement scope.** Statements are issued on the operator side: a run that
+  has ended gets only `run-ended`. A statement that was already issued becomes
+  invalid at the destination once the lock changes, because every statement is
+  bound to the prefix and `lockId`. Nothing is revoked remotely.
+- **Retained staging.** When `dest activate` reports `already_provisioned`,
+  it records the staging tree it kept in the lock (`retained.json`, bound to
+  run, lock and target). Until that tree is removed by `dest discard-staging
+  --run <run> --confirm-destructive`, several steps are refused:
+  - the final `dest verify` (`stagingGone:false`; no probe runs);
+  - adoption and receipts, which depend on it;
+  - `dest unlock` and further activations (`retained_staging_pending`).
+
+  A present but invalid record is refused, not treated as absent
+  (`retained_staging_unreadable`). The internal existing-target check inside
+  `activate` is separate and unchanged. This only blocks while the kept tree
+  is pending. After the explicit discard, the lock's existing statements are
+  usable as before, and no new proof is required. An explicit break removes the record
+  with the lock. The kept tree then stays as an owned leftover for its run's
+  explicit discard.
+- **Manifest names.** The manifest's file and link maps have no prototype, so
+  a root entry named `__proto__` (file or symlink) is recorded and checked
+  like any other.
+- **Manifest links.** Links are recorded by their text, so each must resolve
+  inside the install, including through a chain of links. Absolute link texts
+  are always refused, even when they point into the staging tree, because they
+  go stale or point outside after the activation rename. A relative link is
+  followed the way the OS follows it, one component and one link at a time.
+  Every intermediate location must stay inside the install, not only the end:
+  a `..` above the install root, or a hop through a link outside it, is
+  refused even when the chain would come back. Dangling, looping or unreadable
+  links, and a path continuing through a file, are refused as well
+  (`unsafe_link`). Relative internal links stay valid across the
+  rename, and their referents are covered by the manifest. This check runs during
+  staging, before anything reads through the tree, and before every probe.
+  Bounded internal relative links, such as npm's, are allowed, and their
+  texts are covered by the manifest.
+- **Prepared-tree copying.** The harness exclusively creates the empty staging
+  root with mode 0700, then copies top-level source entries to absent children
+  with `errorOnExist:true`, `force:false` and verbatim relative links. It does
+  not remove or replace that root or merge into existing entries. Source roots
+  are resolved using native filesystem semantics; non-directories and overlapping
+  source/destination roots are refused before copying. This avoids Node 24.22's
+  refusal to copy a directory over an existing destination with those flags.
+  Manifest/link checks still follow copying, before wrapper/version/native
+  probes; no atomic-copy or hostile same-user-writer guarantee is implied.
+- **npm arguments.** `dest stage --npm-cli` interprets each given tarball
+  path as the OS does, never lexically: a symlinked ancestor followed by `..`
+  selects what the OS would read. The final component must be a regular file,
+  not a symlink. The file is hashed and passed to npm by its absolute real
+  path. No value can therefore be
+  read as an npm option, and the hashed path is exactly the one npm receives.
+  `--offline`, `--ignore-scripts`, the private cache, config files, prefix and
+  environment are unchanged.
+- **Journal coordination.** Every `op init`, `op begin`, `op record` and `op
+  statement` (dry runs included) creates `<journal>.lock` exclusively (`mkdir`)
+  and removes it when done. `op init` holds it from the exclusive create until
+  the header line, with its newline, is written and synced, so no command
+  reads a partial header. Its dry run holds it only to check for an existing
+  journal. Because the lock is per path, a journal must have exactly one link:
+  a hard-linked journal is refused (`journal_aliased`) before it is read.
+  An unterminated header or final record is refused (`journal_corrupt`) before
+  any further append. The harness does not repair or truncate such input.
+  Before append or rollback, the open file must retain that same single-link
+  identity; before append, its size must also match the read snapshot.
+  Executed commands hold the lock across reading, validation,
+  the append and any rollback. Dry runs and statements hold it across their
+  read, so they never see a line that a concurrent failed append later rolls
+  back. For dry runs and statements, the only effect is this ephemeral
+  directory; they change no journal or destination state. A crash can leave the directory
+  behind. While it is present, every journal command is
+  refused (`journal_busy`) without waiting. Nothing steals the lock or kills a
+  process. A leftover lock is not judged stale: the operator confirms that no
+  op command is running and removes it by hand. This coordinates cooperating harness
+  commands only; it does not stop a hostile same-user writer and does not
+  qualify power-loss behavior.
+- **Durability.** Before a receipt is reported as written, completed,
+  replayed or adopted, the following are synced in order: the publication
+  intent and the lock directory, then the receipt file, the `.receipts`
+  directory and the root, and finally a `publication.synced.json` marker in
+  the lock, followed by the lock directory again. A replay or an adoption
+  syncs the existing intent and an existing valid marker again; it does not
+  skip them. A failed intent sync stops before the receipt is synced. A failed
+  marker sync comes after the receipt and its directories were already
+  synced; it fails the step but does not by itself mean the receipt is lost. While a receipt or its install exists without that marker, `dest
+  unlock` refuses (`publication_unsynced`) and keeps the evidence; rerunning
+  the same receipt command completes the syncs. An existing receipt is
+  synced, never rewritten. A journal record succeeds only after the whole line
+  is written (short writes continue) and synced. On a failure the harness
+  attempts a rollback: it truncates the journal to its previous length and
+  syncs it.
+  - If that is confirmed, the result is `journal_append_failed` with rollback
+    `restored`.
+  - Otherwise the result is `journal_append_unknown` with rollback
+    `unconfirmed`, keeping both the original error and the rollback error.
+    The operator must inspect the journal before any next step.
+
+  A failed record never promises that the line is absent, and the append is
+  never retried. I/O errors are reported, not retried. Test-only environment hooks can trace the fsync order, fail one
+  fsync or force short writes. These hooks only add failures. Neither the
+  hooks nor these fixtures qualify behavior under real power loss. The limits
+  stated above for unknown crashes, atomic file-system behavior and same-user
+  processes still apply.
+- **Old journal records.** Journals whose caller records carry no prefix
+  (from before the prefix binding) are not supported for caller decisions.
+  Such a record for a name makes `no-caller` and the switch count unusable
+  (`caller_history_unusable`); it is never counted as zero. No binding is
+  inferred and no migration is done.
+- **PATH inventory.** `dest path-inventory` treats an empty `PATH` component
+  (leading, trailing or doubled separator) as the current directory and
+  inventories `./session-peer` there.
+
+| Rule | Harness command and outcome |
+| --- | --- |
+| Fresh-lock recovery of an unreceipted target | The old lock blocks `dest lock` (`lock_held`, `autoStale:false`). `dest break-lock` needs a `run-ended` statement for the owning run and removes only the lock. The new run's `dest receipt` copies the marker `runId` (`recovery:true`) |
+| Journal-confirmed rollback | `dest rollback` from another run needs a `no-caller` statement. `op statement` refuses one for a target the journal never activated or verified (`target_unknown_to_journal`) or with an outstanding caller switch (`configured_for_caller`). Without it: `rollback_unconfirmed`, re-verify only |
+| Corrupt, mismatched and orphan receipts | Classified and refused by `dest activate`/`dest receipt` (orphans before the rename). `dest receipt-cleanup` (quarantine or remove) needs the lock and ownership through the marker, or a `receipt-owned` journal statement for orphans |
+| `.receipts` trust | A group/world-accessible directory, a symlinked `.receipts` or a non-regular receipt file is refused; nothing is followed through a link |
+| Unknown or unverifiable lock owner | A lock without `owner.json`, with an unreadable one, or whose run the journal cannot show as ended, is removed only by `dest break-lock --unowned --lock-name .activate.lock --declare-run-ended`, and never touches an install |
+| Activation table | `dest inspect`/`dest activate` report `absent`, `empty`, `foreign` (file, symlink, owner, marker), `inconsistent_marker`, `owned_failed_verification`, `owned_no_receipt`, `owned_receipted` and `owned_receipt_*`. For `owned_receipted`, an executed `dest activate` re-verifies and reports `already_provisioned`, reusing the receipt. This run's staging is kept (`stagingRetained`), and the ADR's "delete only this run's staging" is the explicit `dest discard-staging --run <run> --execute --confirm-destructive` step, allowed only when the staging marker names that run. A staging tree with no marker entry at all (a stage that failed early) is removed only by `dest discard-leftover --declare-abandoned` with the same gates; any marker entry (another manager's, broken, unreadable, non-regular or symlinked) refuses it as `staging_has_marker` |
+
+**Darwin-local evidence only (2026-10-20).** On macOS 27 arm64 with Node
+24.16.0 and npm 11.15.0, `test/deployment-receipt-harness.test.ts` passed 8 of
+8 tests in private temporary prefixes. They used a tree assembled from this
+checkout and a local `ssh` stand-in that runs the real CLI's `doctor --host`
+and `send --dry-run --host` against the installed wrapper. Two ordered runs were
+also recorded by hand. One used the assembled tree. The other used `--npm-cli`
+offline installation of the published 0.4.0 tarball. That tarball's SHA-256
+equals the [0.4.0 release record](../../VALIDATION.md#public-040--2026-10-18-kst),
+and its three dependency integrities equal the lockfile. Both ended
+`owned_receipted` with a matching receipt, after `dest unlock` was refused
+before the receipt and caller switching was refused before unlock. This is
+**not** Linux, Windows, OpenSSH or remote-account evidence, and no cell above
+is qualified by it.
+
+**Linux arm64 run (2026-10-20, user-authorized test host).** The steps below
+were run once, harness-driven, on Ubuntu (Linux 7.0) aarch64 with glibc 2.39,
+Node 24.18.0 (ABI 137) and its bundled npm 11.16.0. The test directory was a
+new `/tmp` directory with mode 700 (`/tmp` is root-owned and sticky). It
+installed the published 0.4.0 tarball offline. The operator side (`op`, the
+journal and the `session-peer` 0.4.0 CLI from this branch) ran on the macOS
+arm64 workstation over the existing pinned SSH trust. The `dest` side ran over
+SSH with the recorded Node. 185 harness/operator steps checked 89 expected
+outcomes, all as expected. Step 6 was not run because no Node 22 exists on
+the host, and none was installed. [VALIDATION.md](../../VALIDATION.md#23-deployment-validation-harness--linux-arm64-test-host-2026-10-20-kst)
+has the results and the deviations. That full run used harness revision
+`210759a1…41e7` (commit `cc7fe23`). It is the only Linux evidence for cells
+L3–L8: retention, fresh-lock recovery without a receipt, the receipt states,
+journal-confirmed rollback, `.receipts` trust, lock-owner overrides and the
+activation rows. Three later same-day minimal reruns used the review-fixed
+revisions. The last one used `afe2c7f5…d809` (commit `c0203fe`). They covered only this subset:
+
+- the primary order;
+- the explicit `already_provisioned` discard;
+- dry-run no-effect;
+- identity path refusals;
+- run- and lock-bound results, including stale same-run lock results;
+- the activation intent, including invalid-intent refusals;
+- run-owned staging discards.
+
+On that one arm64/glibc/Node 24 cell, this qualifies the table's rules with
+the earlier revision, and the listed subset with revision `afe2c7f5…d809`.
+The later journal-freshness change (acquisition replay and break closure
+binding) has Darwin-local fixture evidence only; it was not rerun on the
+Linux host. It does
+not qualify Linux x64 under the current rules, Node 22, concurrent or
+adversarial races, the empty-directory window or a deploy helper.
+
+On an isolated test directory of a Linux arm64 or x64 account, with Node 24
+(and, for the Node 22 cell, 22.13+) at absolute paths:
+
+1. Read-only discovery: OS, arch, glibc, Node and bundled npm versions,
+   `session-peer` entries on `PATH`, and that the test directory is absent.
+2. Upload the reviewed harness, the verified tarballs and a lockfile
+   integrity JSON; compare `sha256sum` with the operator's values.
+3. `dest init-prefix`, `dest path-inventory`, `dest identity`, then `dest
+   stage --npm-cli` with the recorded Node's `npm-cli.js`.
+4. Primary install: `dest lock`, `dest probe` (staging), `dest activate`,
+   `dest verify`, operator `doctor --host` and `send --to <absent> --dry-run
+   --host` with `--remote-bin` set to the wrapper (through a test-only
+   isolation shim outside the install, as in the 2026-10-02 run), `op
+   statement`, `dest receipt`, `dest unlock`, `op record callers_switched`.
+   Record the refused out-of-order attempts.
+5. The cells in the table above, each on a fresh name or after explicit
+   cleanup, with every result recorded through `op record`.
+6. Node 22 cell: repeat steps 3–5 with the Node 22 path; expect a new identity
+   and directory beside the Node 24 install.
+7. `dest path-inventory --compare`, `dest destroy-prefix`, and a read-only
+   check that the test directory is gone.
+
+**Windows non-admin (unrun).** The harness refuses on Windows. These cells need
+either a reviewed Windows port of the same checks or a manual run of the same
+order. The port or run must use reparse-point and DACL checks (owner = SSH
+user; write only for that user, `SYSTEM` and `Administrators`),
+`CreateDirectoryW` exclusivity for staging and lock,
+`[System.IO.Directory]::Move` for activation and rollback, and the
+self-locating `.cmd` wrapper. Run under a standard (non-administrator) account
+on Windows x64 with PowerShell 5.1, Node 24 and Node 22.13+. Operator checks
+must use `--remote-platform win32`. The 2026-10-07 record does not cover this
+account type.
+
 ### Not validated
 
 - Other Windows account/runtime/architecture combinations and other POSIX
@@ -786,17 +1190,23 @@ the host nor the account was disposable. It does not qualify Windows-client
   an unowned lock, and the per-file manifest. Selected corresponding Windows
   fixture cases passed at the 2026-10-07 checkpoint; the dated VALIDATION.md
   section distinguishes native/local fixtures from operator SSH.
-- Not exercised on Linux under the current rules: explicit recovery of an
-  unreceipted target under a fresh lock, corrupt/mismatched/orphan receipt
-  handling, `.receipts` trust checks and operator override for unconfirmable
-  lock owners. Those Windows fixture cells passed at the dated checkpoint.
+- Not exercised on Linux x86_64 under the current rules: explicit recovery
+  of an unreceipted target under a fresh lock, corrupt/mismatched/orphan
+  receipt handling, `.receipts` trust checks and operator override for
+  unconfirmable lock owners. These passed once on the Linux arm64 test host
+  with the harness (2026-10-20). The Windows fixture cells passed at the dated
+  checkpoint.
   General concurrent/adversarial race qualification remains open. The
   identity launcher was only compared logically (Linux) and prototyped
   (macOS).
+  The [validation harness](#validation-harness-2026-10-20) also has
+  Darwin-local fixtures for them. Its Linux x64, Windows (any account) and
+  Node 22 full-matrix runs are unrun.
 - The POSIX empty-directory race window. It is documented as unguaranteed and
   was not exercised.
-- Linux arm64, Windows arm64 and macOS x64 native loads; glibc below 2.28 and
-  musl (expected to fail).
+- Windows arm64 and macOS x64 native loads; glibc below 2.28 and musl
+  (expected to fail). The Linux arm64 node-24 binary loaded on the 2026-10-20
+  test host (glibc 2.39).
 - Complete Node 22 installation/recovery qualification on Windows, arm64 or
   macOS. Windows x64 Node 22.23.3 direct-CLI/native-lock smoke passed; Linux
   x86_64 Node 22.23.3 was exercised under the earlier dated workflow.
@@ -810,10 +1220,14 @@ provisioning workflow and operator SSH checks (doctor and refused dry-run;
 no message delivery) passed, plus 31 native storage/local-wrapper fixtures.
 Only the primary install has operator SSH evidence. **On Windows**, Node
 22 has direct-CLI/native-lock smoke evidence only. Issue #23's last criterion
-remains **partially validated**: current recovery rules have not been
-requalified on Linux, and the other cells listed under "Not validated" above
-remain not fully validated. Local stubs do not replace destination evidence. These
-results do not qualify a shipped deploy helper or Windows-client jump.
+remains **partially validated**. On one Linux arm64 Node 24 test host only
+(2026-10-20), the current recovery rules and the exact operator-check,
+receipt, unlock and caller-switch order were requalified with harness
+revision `210759a1…41e7`. With revision `afe2c7f5…d809`, only the primary order and
+the subset listed above were rerun. The other cells listed
+under "Not validated" above remain not fully validated. Local stubs, including the 2026-10-20 harness
+fixtures, do not replace destination evidence. These results do not qualify a
+shipped deploy helper or Windows-client jump.
 
 ## Follow-ups
 
