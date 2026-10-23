@@ -3,8 +3,7 @@
 # session-peer (TypeScript)
 
 [![npm 版本](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
-[![npm 每周下载](https://img.shields.io/npm/dw/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
-[![npm 每月下载](https://img.shields.io/npm/dm/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm近18个月下载量](https://img.shields.io/npm/d18m/session-peer?label=downloads%20%2818%20months%29&logo=npm)](https://www.npmjs.com/package/session-peer)
 [![CI](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml)
 [![Node 支持](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
 [![MIT 许可证](https://img.shields.io/npm/l/session-peer)](LICENSE)
