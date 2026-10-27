@@ -14,9 +14,9 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**文档和源码版本：0.5.0。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](VALIDATION.md)，发布流程见 [RELEASING.md](RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 0.5.0 会拒绝彼此的 SSH 预检。
+**文档和源码版本：0.5.1。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](VALIDATION.md)，发布流程见 [RELEASING.md](RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 0.5.1 会拒绝彼此的 SSH 预检。
 
-**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 0.5.0 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。
+**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 0.5.1 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。
 
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
@@ -55,15 +55,15 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 `Get-Command session-peer -All` 检查 PATH。选择所需实现，不要用 `--force`
 覆盖其他安装管理器的文件。
 
-**安装 0.5.0：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](docs/guide.zh-CN.md#从源码构建)。
+**安装 0.5.1：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](docs/guide.zh-CN.md#从源码构建)。
 
 ```sh
-npm view session-peer@0.5.0 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.5.0
+npm view session-peer@0.5.1 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.5.1
 session-peer --version
 ```
 
-预期输出：`session-peer 0.5.0 (typescript)`。隔离安装、源码构建、Windows 和
+预期输出：`session-peer 0.5.1 (typescript)`。隔离安装、源码构建、Windows 和
 卸载步骤见下方详细指南。
 
 可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
@@ -72,11 +72,11 @@ session-peer --version
 ### Update
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
-下面示例将旧 npm 安装更新至所选的 0.5.0。CLI 不会安装更新，`session-peer update --check` 只做检查。
+下面示例将旧 npm 安装更新至所选的 0.5.1。CLI 不会安装更新，`session-peer update --check` 只做检查。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.5.0
+npm install --global --ignore-scripts session-peer@0.5.1
 session-peer --version
 ```
 

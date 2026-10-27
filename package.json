@@ -1,6 +1,6 @@
 {
   "name": "session-peer",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": false,
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
@@ -50,6 +50,6 @@
   },
   "dependencies": {
     "fs-ext-extra-prebuilt": "2.2.14",
-    "smol-toml": "1.9.0"
+    "smol-toml": "1.9.1"
   }
 }

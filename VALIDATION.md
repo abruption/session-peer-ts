@@ -1,5 +1,32 @@
 # Validation record — updated 2026-10-20 KST
 
+## 0.5.1 dependency patch preparation — 2026-10-27 KST
+
+Baseline source: main `028780338310c9cfe469e1e1587857f730e99a1a`.
+The only intervening change from public 0.5.0 is README download-badge wording.
+Fresh npm advisory bulk checks across current main and the four open PR locks
+reported no advisory; open Dependabot and CodeQL alerts were empty. The scheduled
+[audit run](https://github.com/abruption/session-peer-ts/actions/runs/40295976850)
+on that exact main passed npm audit and signature/provenance checks on 2026-10-26.
+These facts do not prove the absence of every vulnerability.
+
+The actionable dependency defect is official smol-toml 1.9.1's
+[repeated-exponent-sign fix](https://github.com/squirrelchat/smol-toml/releases/tag/v1.9.1).
+With installed 1.9.0, `foo=3e++20` and `foo=3e--20` both produced `{foo:3}`.
+Two new doctor/transport regressions failed before the update: doctor reported
+`available` instead of `unknown`, and send/dry-run did not report
+`codex_config_unreadable`. With pinned 1.9.1 both regressions pass, including
+root/nested invalid numbers, valid single-sign controls and no fixture queue call
+on refusal. This establishes incorrect malformed-config handling, not an actual
+relocated-storage bypass, credential exposure or live-agent exploit.
+
+The tests use isolated fixture homes/queues. No existing user session, remote
+host, global installation or native/model/ACK experiment is used. Full package,
+profile/release and current-head CI results belong to the patch PR and its exact
+source. This dated preparation record does not claim publication or fresh npm
+publisher/MFA settings approval.
+
+
 ## 0.5.0 preparation scope — 2026-10-20 KST
 
 This release preparation includes the merged platform groundwork from #153,
