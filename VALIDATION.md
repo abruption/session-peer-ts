@@ -51,6 +51,257 @@ release-preparation PR. Preparation performs no staging, publication,
 new native/model/ACK experiment or global installation.
 
 
+## #23 deployment validation harness — Linux arm64 test host, 2026-10-20 KST
+
+A user-authorized, isolated run of `scripts/deployment-harness.mjs` from this
+branch (harness SHA-256 `210759a1cc9cf875771984ab5d94b07cec2807d9af6b1cdcfc42fddbd22b41e7`)
+against the [ADR rules](docs/design/remote-deployment.md#validation-harness-2026-10-20).
+It is a harness run, not the proposed F6 helper. No agent session was
+contacted and no message was delivered. Nothing outside one new test
+directory was written on the host. Host and account identifiers are omitted.
+
+| Item | Value |
+| --- | --- |
+| Destination | Linux arm64 test host: Ubuntu, Linux 7.0 aarch64, glibc 2.39, existing non-root account; no privilege used |
+| Destination Node | 24.18.0 (ABI 137) at an absolute path (realpath under a user-owned version-manager directory), bundled npm 11.16.0. No Node 22 exists on the host (read-only check); none was installed |
+| Test directory | New `/tmp/codex-sts050-23-*`, mode 700, with `/tmp` root-owned and sticky; prefix and a second prefix created by `dest init-prefix`; `umask 077` |
+| Operator | macOS 27.0.1 arm64, Node 24.16.0, OpenSSH_10.3p1; `op` journal and this branch's `dist/cli.js` (`session-peer 0.4.0 (typescript)`) |
+| SSH | Existing pinned host key and key, `BatchMode=yes`, `StrictHostKeyChecking=yes`, `UpdateHostKeys=no`, `ConnectTimeout=15`. The host answers SSH through Tailscale SSH rather than OpenSSH `sshd`. The operator CLI's own ssh calls went through a test-only local wrapper that prepends `-o UpdateHostKeys=no` |
+| Package | Published `session-peer-0.4.0.tgz`, SHA-256 `84adc8b50ef8f03a2c2170e3c36a97b573f28a6bcbeb7dbc965e16c3b37a57c9`; three dependency tarballs whose integrity equals the `dde3923` lockfile. Destination `sha256sum` equal to the operator's for every upload |
+
+Results (185 harness/operator steps, 89 checked expectations, **0 mismatches**):
+
+- **Install and ordering.** `dest stage --npm-cli` installed offline with
+  `--ignore-scripts` (`source:"npm-offline"`; identity `libc:"glibc"`). The
+  staging probe gave the exact banner and loaded the Linux arm64 native lock.
+  The out-of-order steps were refused: unlock before the receipt
+  (`unreceipted_activation`), a receipt without a statement
+  (`statement_missing`), a statement before the operator checks
+  (`operator_checks_incomplete`) and caller switching before unlock
+  (`switch_before_unlock`). Operator `doctor --host --remote-bin <test-only
+  isolation shim>` returned `ok:true`, `diagnosticCompleted:true`,
+  `implementation:"typescript"`, `version:"0.4.0"`. The nonexistent-target
+  `send --dry-run --host` returned `no_reachable_target`, `status:"refused"`,
+  `submitted:false`. The receipt was then written, the lock released and
+  callers switched. A second run reported `already_provisioned`.
+- **Retention.** A no-caller statement was refused while a caller switch was
+  outstanding (`configured_for_caller`), and so was retirement
+  (`configured_for_caller_or_unconfirmed`). After the switch back, the
+  journal-confirmed retirement removed the install and its receipt.
+- **Fresh-lock recovery without a receipt.** A run activated and then
+  stopped. A new run's lock attempt gave `lock_held`, `autoStale:false`. A
+  run-ended statement was refused until the journal recorded the end; one
+  naming another run gave `statement_mismatch`. After a dry run, the break
+  removed only the lock. The target then classified `owned_no_receipt`. Its
+  activation was refused (`target_not_absent`), and rollback without journal
+  confirmation was refused (`rollback_unconfirmed`). Re-verification and the
+  operator checks under the new lock produced a receipt with `recovery:true`
+  that copies the original activating run's `runId`.
+- **Receipts.** A mismatched receipt (edited `runId`) and a corrupt one
+  (non-JSON) were classified, refused by activation and receipt
+  (`receipt_present`), and then removed or quarantined by explicit cleanup
+  with marker ownership. An orphan receipt blocked activation
+  (`orphan_receipt`). Its cleanup was refused without a journal statement
+  (`receipt_ownership_unconfirmed`) and accepted with a `receipt-owned` one.
+- **Journal-confirmed rollback.** A no-caller statement was refused for a
+  target the journal never saw (`target_unknown_to_journal`) and while a
+  caller switch was outstanding. After the switch back, a different run's
+  rollback (`sameRun:false`) removed the unreceipted target.
+- **`.receipts` trust.** Mode 0755 was refused (`untrusted_path`, `mode`), and
+  so was a symlinked `.receipts` (`symlink`), leaving the link target empty.
+  A symlinked receipt file was classified `owned_receipt_untrusted_receipt`
+  and refused by both receipt writing and cleanup, leaving its target
+  unchanged.
+- **Unknown or unverifiable lock owner.** A lock without `owner.json`, with an
+  unreadable one, and an owned lock whose run was not ended were all refused
+  by `dest lock`, statement-based breaking and an incomplete override. Each
+  was removed only by `--unowned --lock-name .activate.lock
+  --declare-run-ended --confirm-destructive`, and the install stayed
+  `owned_receipted`.
+- **Activation rows** (second prefix): empty directory, file and symlink
+  targets were refused. A same-run rollback needed no statement. An
+  inconsistent marker and a failing manifest were classified. `verify` gave
+  `manifest:false`, and same-run rollback removed the failed install.
+- **Unchanged and clean.** `dest path-inventory --compare` returned
+  `unchanged:true`. The existing user-owned Python `session-peer` launcher
+  under `~/.local/bin` (not on the non-interactive PATH) and the Codex binary
+  had identical SHA-256 and link listings before and after; neither was
+  executed. Both prefixes were removed by `dest destroy-prefix`, the test
+  directory was removed, and a later read-only check found no
+  `/tmp/codex-sts050-23-*` path and no process except the check itself.
+
+Deviations and limits: the operator `doctor`/dry-run went through a test-only
+isolation shim inside the test directory, outside the install, as in the
+2026-10-02 run. Fixture states were made by plain file edits inside the
+prefix. A first driver attempt passed no role to the harness, so every command
+was a usage error (exit 2) and nothing was written in the prefix. Its test
+directory was removed, and the run above is the second attempt. Not
+qualified here: Linux x86_64 under the current rules, Node 22 (unrun, no
+binary present), OpenSSH `sshd` as the server, concurrent or adversarial
+races, the empty-directory `rename(2)` window and F6.
+
+**Review-fix rerun (same day, same host and approval).** The run above used
+harness SHA-256 `210759a1…41e7` (commit `cc7fe23`). Review then tightened the
+harness:
+
+- closed identity-schema and path-containment checks in `dest stage`;
+- dry-run acceptance limited to `no_reachable_target` or a normal `validated`
+  result;
+- binding of the CLI JSON `host` (to `op init --dest-host`) and the doctor
+  `version`, with `--remote-bin` recorded only as operator attestation;
+- launcher and probe effects only with `--execute`;
+- `already_provisioned` keeping this run's staging for an explicit
+  destructive discard.
+
+A minimal rerun with the fixed harness (SHA-256
+`29a46ebabb3fa0392ed97b12b3a3a3908a648f61153209b199d0ee0c749a8942`), in a new
+`/tmp` test directory under the host lock, checked 29 expectations over 59
+steps, with **0 mismatches**:
+
+- The primary install repeated the exact order, with the operator doctor and
+  `no_reachable_target` dry-run accepted under the new binding.
+- `already_provisioned` reported `stagingRetained`. The staging survived a
+  discard without `--confirm-destructive` and was removed with it.
+- Dry-run `probe`, `activate` and `verify` left the staging directory's mtime
+  and link count unchanged. The unexecuted `verify` result was refused by `op
+  record` (`result_invalid`).
+- `dest stage` refused identity versions `../../../outside`, `/abs/outside` and
+  `0.4.0/../x` (`identity_invalid`) in dry-run and `--execute`. No `outside*`
+  entry appeared in `/tmp` and nothing new appeared in the test directory or
+  root.
+- The user executables were byte-identical. The prefix and test directory were
+  removed, with no leftover path or process.
+
+**Second review-fix rerun (same day, same host and approval).** A second
+round of review changes:
+
+- bound executed `verify` results to the run, prefix sentinel ID and current
+  lock;
+- wrote and synced an activation intent inside the lock before the rename,
+  with `unlock` checking the intent against the actual target;
+- restricted `discard-staging` to the run named by the staging marker, with
+  markerless leftovers going to an explicit `discard-leftover
+  --declare-abandoned`.
+
+A minimal rerun with harness SHA-256
+`9d39ce86b9c8b2452b0bad5f3530b543ff1ef4e130349f61ef83533778331f7f`, in a new
+`/tmp` test directory under the host lock, checked 40 expectations over 78
+steps, with **0 mismatches**. It repeated the steps of the first rerun and
+added the following:
+
+- A verify result from one run, recorded under another run's lock, was
+  refused (`result_invalid`).
+- Discarding a staging tree from a different run was refused
+  (`staging_not_owned`).
+- With the lock directory made non-writable (mode 500), activation failed
+  with `EACCES` before the rename: the target stayed absent and the staging
+  was kept. After restoring the mode, activation wrote the intent, and
+  `unlock` was refused with `unreceipted_activation` until a same-run
+  rollback.
+- A markerless leftover was refused by `discard-staging` and by an
+  undeclared `discard-leftover`, and removed only with
+  `--declare-abandoned`.
+
+The user executables were byte-identical, and the test directory was removed
+with no leftover path or process. The first rerun's own record above remains
+the evidence for harness revision `29a46eb…8942`.
+
+**Third review-fix rerun (same day, same host and approval).** The third
+round:
+
+- gave every lock acquisition a random `lockId`;
+- bound every lock-bound result, journal record and statement to the prefix
+  sentinel ID and that `lockId`;
+- separated the presence of an activation intent from its validity.
+
+A minimal rerun with harness SHA-256
+`afe2c7f5d08d729f5e9eefc6527e6a995a346d6733cc792ae4a0bec3c6f0d809` (lock held
+14:03:58–14:06:23 KST) checked 48 expectations over 87 steps, with **0
+mismatches**. It repeated the second rerun's steps and added the following:
+
+- After the same run re-acquired the lock, its earlier lock's receipt and
+  unlock results were refused (`result_invalid`, `stale_or_foreign_lock`).
+- An intent overwritten with `false`, and then with `{}`, refused unlock as
+  `activation_intent_unreadable`. After the intent was restored, unlock was
+  refused as `unreceipted_activation`.
+
+The user executables were identical, and the test directory was removed with
+no leftover path or process. This is the only Linux run of harness revision
+`afe2c7f5…d809` (commit `c0203fe`). Together with the earlier minimal reruns,
+it covers only the subset named in the ADR. The later journal-freshness fix
+records each acquisition once and lets a break close only a matching open
+acquisition. It was verified with Darwin-local fixtures only and was not
+rerun on the host.
+
+The rule cells L3–L8 above (retention, fresh-lock recovery, receipt states,
+journal-confirmed rollback, `.receipts` trust, lock overrides and activation
+rows) were not re-executed with the fixed harness. In particular, they were
+not re-executed under the new host/version binding or the execute-gated
+probes. Their evidence remains that of harness revision `210759a1…41e7`.
+
+Windows: the harness refuses on Windows, so no Windows cell was run. The only
+authorized Windows test host has an administrator account (the non-admin
+cell needs account creation, which is not authorized). A read-only check found
+only Node 16.18.1 and 24.16.0 there, so no Node 22 cell is possible without
+installing one.
+
+## #23 deployment validation harness — Darwin-local, 2026-10-20 KST
+
+Source only; nothing was released and the package stays 0.4.0. The new
+operator-invoked harness `scripts/deployment-harness.mjs` and its rules are
+described in the
+[ADR](docs/design/remote-deployment.md#validation-harness-2026-10-20). It
+is not the proposed F6 deploy helper, and no CLI, SSH, preflight or package
+behavior changed. **No Linux or Windows destination was contacted. No SSH
+connection, live agent session or message delivery took place.** Every result
+below is **Darwin-local evidence only** and qualifies no destination cell.
+
+| Item | Value |
+| --- | --- |
+| Host | macOS 27.0.1 arm64, Node 24.16.0 (ABI 137), npm 11.15.0 |
+| Prefixes | New private directories under the user temp directory, created by `dest init-prefix` and removed afterwards |
+| Operator checks | Real `dist/cli.js doctor --host` and `send --to 999999 --dry-run --host` through a local `ssh` stand-in (drops options and runs the remote command with an isolated `HOME` and `PATH=/usr/bin:/bin`); not OpenSSH |
+| Registry use | Read-only `npm pack` of `session-peer@0.4.0`, `fs-ext-extra-prebuilt@2.2.14` and `nan@2.29.0` (`smol-toml@1.9.0` came from the local npm cache) for the offline-install run |
+
+Results:
+
+- `test/deployment-receipt-harness.test.ts`: **8 passed, 0 failed, 0
+  skipped** at the time (12 after the same-day review fixes, see the Linux
+  record above). It covers dedicated-prefix refusals and dry-run defaults, the
+  enforced step 8 order (destination checks, operator doctor and dry-run,
+  receipt, unlock, caller switch), fresh-lock recovery of an unreceipted
+  target (the receipt keeps the original marker `runId`), same-run and
+  journal-confirmed rollback, refusal without journal confirmation, corrupt,
+  mismatched and orphan receipts with explicit ownership-confirmed cleanup,
+  `.receipts` mode, symlink and non-regular-file refusals, unowned, unreadable
+  and unconfirmable lock overrides, and the empty, file, symlink,
+  inconsistent-marker and failed-verification activation rows. The tree under
+  test was assembled from this checkout's `dist/` and locked dependencies.
+- An ordered run by hand with that assembled tree ended `owned_receipted` with
+  a matching receipt. `dest unlock` was refused before the receipt
+  (`unreceipted_activation`), the statement before the operator checks
+  (`operator_checks_incomplete`) and caller switching before unlock
+  (`switch_before_unlock`). Operator doctor returned `ok:true`,
+  `diagnosticCompleted:true`, `implementation:"typescript"`; the dry-run
+  returned `no_reachable_target`, `status:"refused"`, `submitted:false`.
+- The same ordered run with `dest stage --npm-cli`, using the recorded Node's
+  bundled npm, offline and with `--ignore-scripts`, installed the published
+  `session-peer-0.4.0.tgz`. Its SHA-256
+  `84adc8b50ef8f03a2c2170e3c36a97b573f28a6bcbeb7dbc965e16c3b37a57c9` and
+  integrity equal the [0.4.0 record](#public-040--2026-10-18-kst). The three
+  dependency tarballs matched the lockfile integrity. The marker recorded
+  `source:"npm-offline"`, and the run reached the same outcomes and refusals.
+  A first attempt that passed one file as both npm `--userconfig` and
+  `--globalconfig` was refused by npm and fixed to use separate empty files,
+  as in the 2026-10-07 Windows record.
+
+At the time of this Darwin-local record, no destination had been run; the
+Linux arm64 run is recorded separately above. Still unrun: Linux x64 under the
+current rules, a Windows non-administrator account (the harness refuses on
+Windows) and a Node 22 full matrix. The 2026-10-02 Linux and
+2026-10-07 Windows records keep their dated scope.
+
+
 ## Windows client jump ProxyCommand probe — #20, 2026-10-20 KST
 
 Unreleased branch source (`windowsProxyCommand`, CLI gate unchanged) on a
