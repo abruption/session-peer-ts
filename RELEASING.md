@@ -23,6 +23,15 @@ The read-only registry baseline is latest=0.5.0, preview=0.1.0-preview.1 and
 Previous provenance endpoint:
 `https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.5.0`.
 
+For this 0.5.1 release, the user explicitly skipped the browser-only package
+publish-MFA policy read. That setting is not freshly audited. Authenticated npm
+ownership and absence of pending stages were confirmed; the fresh Trusted
+Publisher lookup returned repository `abruption/session-peer-ts`, workflow
+`publish.yml`, environment `npm` and only `createStagedPackage` permission.
+The protected GitHub environment and actual final npm stage 2FA approval remain
+required. No publisher/protection/credential settings were changed. This
+settings-read exception applies only to 0.5.1.
+
 1. Merge the reviewed patch under normal protections and require the exact
    merged-main release gate, Windows Node 22/24 and CodeQL checks.
 2. Freshly verify npm ownership, pending stages, stage-only Trusted Publisher,
