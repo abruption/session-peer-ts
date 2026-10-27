@@ -1,5 +1,22 @@
 # Python compatibility and npm migration
 
+## 0.5.1 parser correctness patch — 2026-10-27 KST
+
+Issue #163 updates only the TOML parser dependency from 1.9.0 to 1.9.1.
+Malformed repeated exponent signs such as `numeric_setting = 3e++20` previously
+parsed successfully and could make configuration inspection return `default`.
+The corrected parser rejects that input, so doctor reports
+`unknown / codex_config_unreadable` and Codex send/dry-run refuse before queueing.
+Valid exponent signs and the explicit root `sqlite_home` refusal are preserved.
+This is a reproduced parser-correctness fix; no storage-relocation bypass or
+published vulnerability is claimed.
+
+The exact 0.5.1 doctor row preserves the four profiles accepted by 0.5.0;
+all historical rows and immutable skill pins are unchanged. SSH endpoints must
+both use exactly 0.5.1. Unsupported platform/native/automatic-ACK cells and
+excluded experiments/reporter/harness remain outside the patch.
+
+
 ## 0.5.0 release scope — 2026-10-20 KST
 
 The 0.5.0 source carries platform-qualification groundwork. It does not activate additional observation or

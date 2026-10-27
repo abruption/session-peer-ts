@@ -2,7 +2,24 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
-## 0.5.0 finite row — release preparation
+## 0.5.1 finite row — 2026-10-27 KST release preparation
+
+The 0.5.1 source candidate explicitly accepts the same four exact metadata
+profiles as public 0.5.0: skill 0.1.0, 0.2.0, 0.2.1 and 0.3.0. Compiled default,
+explicit `undefined`, explicit 0.5.1 and outer `inspectSkill` use this finite row.
+The literal compatible result remains
+`compatible / skill_contract_compatible / metadata_only`. Changed profiles and
+unreviewed runtime identities such as 0.5.2 remain incompatible; malformed
+runtime identities remain `unknown / skill_metadata_missing` without a
+`verification` property. All historical rows remain explicit and unchanged.
+
+The TOML dependency-correctness patch does not change this metadata parser or
+its bounded reader, publish a new skill, adopt another installation pin or add
+platform/ACK qualification. Runtime publication still requires its release gates;
+these source fixtures are not proof of an actual npm publication. The existing
+four-language skill 0.2.1 source/hash below remain unchanged.
+
+## 0.5.0 finite row — historical release preparation
 
 The 0.5.0 source candidate explicitly carries forward the same four exact skill
 profiles as public 0.4.0: 0.1.0, 0.2.0, 0.2.1 and 0.3.0. The 0.3.0 profile

@@ -227,3 +227,28 @@ test('doctor distinguishes nested sqlite_home keys from an escaped root override
     assert.equal(result.sendAuthorized, false);
   }
 });
+
+
+test('doctor rejects repeated exponent signs anywhere in Codex configuration', async t => {
+  const f = fixture(t); f.db();
+  const config = join(f.home, 'config.toml');
+  // Unrelated numeric settings are still part of the complete TOML document.
+  // A rejected document cannot establish that default SQLite storage is in use.
+  for (const number of ['3e+20', '3e-20']) {
+    writeFileSync(config, `numeric_setting = ${number}\n[profiles.p]\nweight = ${number}\n`);
+    const result = await diagnoseCodex(f.home, process.execPath) as any;
+    assert.equal(result.homes[0].status, 'available', number);
+    assert.equal(result.homes[0].code, 'state_db_readable', number);
+    assert.equal(result.ready, true); assert.equal(result.tool.executed, false);
+  }
+  for (const number of ['3e++20', '3e--20']) {
+    for (const text of [`numeric_setting = ${number}\n`, `[profiles.p]\nweight = ${number}\n`]) {
+      writeFileSync(config, text);
+      const result = await diagnoseCodex(f.home, process.execPath) as any;
+      assert.equal(result.homes[0].status, 'unknown', text);
+      assert.equal(result.homes[0].code, 'codex_config_unreadable', text);
+      assert.equal(result.ready, false); assert.equal(result.tool.executed, false);
+      assert.equal(result.sendAuthorized, false);
+    }
+  }
+});

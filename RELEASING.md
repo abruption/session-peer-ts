@@ -9,6 +9,50 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.5.1 dependency hotfix procedure — 2026-10-27 KST
+
+Issue #163 pins smol-toml 1.9.1 to reject malformed repeated exponent signs in
+Codex configuration. It preserves explicit relocated-storage refusal and the
+four exact 0.5.0 skill profiles in a finite 0.5.1 row. This is a parser correctness
+patch, not a claimed CVE remediation or newly qualified platform/ACK feature.
+Draft #155, research #82/#142 and the repository-only reporter #160 are excluded.
+
+The read-only registry baseline is latest=0.5.0, preview=0.1.0-preview.1 and
+0.5.1 absent. Previous stable integrity is
+`sha512-lLc7SFRUydY5TjcX8aE18kgfC88Wi4Mx/OXcbLlk0W9yH+JYLkxGwmZIiC7S1bczFgXzsP3xSe8DqiD7YplpDw==`.
+Previous provenance endpoint:
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.5.0`.
+
+1. Merge the reviewed patch under normal protections and require the exact
+   merged-main release gate, Windows Node 22/24 and CodeQL checks.
+2. Freshly verify npm ownership, pending stages, stage-only Trusted Publisher,
+   package publish-MFA and the protected npm environment/main restriction.
+   Historical exceptions apply only to their named releases; any unread gate
+   needs a current explicit user exception.
+3. Verify reproducible exact-source archive bytes, all packaged Markdown,
+   isolated installation/version/removal and default/undefined/inspectSkill
+   behavior. Both SSH endpoints must use exactly 0.5.1.
+4. Obtain source approval naming the exact merged 40-character SHA,
+   `session-peer@0.5.1`, `stable-stage` and eventual latest promotion to 0.5.1.
+5. Dispatch the approved source/version/mode once; inspect retained Actions
+   bytes before protected-environment approval and stage/provenance before the
+   separate final npm 2FA approval. Do not retry an uncertain upload.
+6. Verify public bytes, registry signatures/provenance and isolated lifecycle,
+   preserve preview and record publication. Create the authorized v0.5.1 tag
+   and GitHub Release on the verified publication source. No fleet install.
+
+## Public 0.5.0 checkpoint — 2026-10-21 KST
+
+[GitHub v0.5.0](https://github.com/abruption/session-peer-ts/releases/tag/v0.5.0)
+and npm 0.5.0 are public from
+`12f98f2793b78f647107368c06e83286c5026e05`.
+The reviewed/Actions/public tarball SHA-256 is
+`50f603d9e5b6db8a99b4bcab464767ad30ff38ecac3fbebc22fc03fdd4c66b1d`;
+[stage-only run 39415871999](https://github.com/abruption/session-peer-ts/actions/runs/39415871999)
+records publication and human gates. Its GitHub release retains the complete
+public validation and settings-read exception record. The following 0.5.0
+procedure is historical and must not be replayed for 0.5.1.
+
 ## 0.5.0 stable release procedure — 2026-10-20 KST
 
 The 0.5.0 source includes platform-qualification groundwork from #153, #156
