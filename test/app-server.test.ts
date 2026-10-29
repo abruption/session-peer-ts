@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { PassThrough, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { mkdtempSync, realpathSync, mkdirSync, readFileSync, rmSync, writeFileSync, renameSync, symlinkSync } from 'node:fs';
+import fs from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import childProcess from 'node:child_process';
@@ -514,6 +515,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     const storage=process.env.FIXTURE_STORAGE_HOME||process.env.CODEX_SQLITE_HOME;
     fs.openSync(require('node:path').join(storage,'state_5.sqlite'),storage===process.env.CODEX_SQLITE_HOME?'r+':'w+');
     fs.openSync(require('node:path').join(storage,'queue_1.sqlite'),'w+');
+    if(process.env.FIXTURE_OPEN_SIDECAR)fs.openSync(require('node:path').join(storage,process.env.FIXTURE_OPEN_SIDECAR),'w+');
     let buffer='';setInterval(()=>{},1000);process.stderr.write('PRIVATE-STDERR-NOT-RETURNED');
     process.stdin.on('data',chunk=>{buffer+=chunk;let end;while((end=buffer.indexOf('\\n'))>=0){const r=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);
       fs.appendFileSync(log,JSON.stringify({method:r.method,guardExists:fs.existsSync(${JSON.stringify(join(root, 'guard'))})})+'\\n');
@@ -541,6 +543,43 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     env: { ...options.env, FIXTURE_STORAGE_HOME: other } }), fault('storage_binding_unverified', false));
   assert.equal(guards, 1);
   const guardsBefore = guards;
+  for (const file of ['queue_1.sqlite', 'queue_1.sqlite-wal']) await t.test(`${file} replacement after the last bind retains the original FD proof and cannot reach queue`, async t => {
+    const path = join(selected, file), detached = path + '.detached-last-bind', lstat = fs.lstatSync;
+    let fenced = false, scheduled = false, replaced = false;
+    t.mock.method(fs, 'lstatSync', ((item: any, ...args: any[]) => {
+      const info = (lstat as any)(item, ...args);
+      if (item === path && fenced && !scheduled) {
+        scheduled = true; queueMicrotask(() => { renameSync(path, detached); writeFileSync(path, 'replacement after bind'); replaced = true; });
+      } return info;
+    }) as typeof fs.lstatSync); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        env: { ...options.env, ...(file.endsWith('-wal') ? { FIXTURE_OPEN_SIDECAR: file } : {}) },
+        beforeEffect: async () => { fenced = true; },
+      }), fault('storage_binding_unverified', false));
+      assert.equal(replaced, true);
+    } finally {
+      t.mock.restoreAll(); syncBuiltinESMExports();
+      if (replaced) { rmSync(path, { force: true }); renameSync(detached, path); }
+      if (file.endsWith('-wal')) rmSync(path, { force: true });
+    }
+  });
+  await t.test('a fixed sidecar created after its absence was bound cannot reach queue', async t => {
+    const path = join(selected, 'queue_1.sqlite-shm'), lstat = fs.lstatSync;
+    let fenced = false, scheduled = false, created = false;
+    t.mock.method(fs, 'lstatSync', ((item: any, ...args: any[]) => {
+      const info = (lstat as any)(item, ...args);
+      if (item === join(selected, 'queue_1.sqlite') && fenced && !scheduled) {
+        scheduled = true; queueMicrotask(() => { writeFileSync(path, 'late sidecar'); created = true; });
+      } return info;
+    }) as typeof fs.lstatSync); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; },
+      }), fault('storage_binding_unverified', false));
+      assert.equal(created, true);
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); rmSync(path, { force: true }); }
+  });
   await t.test('an asynchronous root storage refusal retains its storage code without leaking native detail', async () => {
     await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
       beforeEffect: async () => {}, verifyStorage: async () => { throw new Error('SECRET-storage-detail'); },

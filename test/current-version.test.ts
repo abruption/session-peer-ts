@@ -143,3 +143,15 @@ test('CLI check runs through symlink entries with both Node resolution modes', t
     assert.match(result.stdout, /Current-version inventory: OK/);
   }
 });
+
+
+test('Korean templates use a fixed noun instead of number-dependent particles', () => {
+  const bad = structuredClone(inventory);
+  const entry = bad.find(value => value.file === 'README.ko.md')!;
+  const slot = entry.templates.find(value => value.line.includes('{{version}} 버전은'))!;
+  const before = slot.line;
+  slot.line = before.replace('{{version}} 버전은', '**{{version}}**은');
+  const data = files();
+  data.set(entry.file, data.get(entry.file)!.replace(before.replaceAll('{{version}}', version), slot.line.replaceAll('{{version}}', version)));
+  assert.throws(() => planCurrentVersions(version, data, bad), /Korean generated versions need a fixed noun/);
+});

@@ -36,6 +36,12 @@ export function planCurrentVersions(version, files, inventory) {
       assert.ok(Number.isSafeInteger(slot.occurrences) && slot.occurrences > 0, `${entry.file}: invalid slot count`);
       assert.ok(typeof slot.line === 'string' && !/[\r\n]/.test(slot.line) && slot.line.includes('{{version}}'),
         `${entry.file}: expected a single-line version template`);
+      // A generated number cannot choose Korean particles by its pronunciation.
+      // Use a fixed noun (for example, '{{version}} 버전은') in authored templates.
+      if (entry.file.endsWith('.ko.md')) {
+        assert.ok(!/\{\{version\}\}(?:\*\*|__|`+)?(?:으로|로|은|는|이|가|을|를|과|와)/.test(slot.line),
+          `${entry.file}: Korean generated versions need a fixed noun before inflected particles`);
+      }
       const parts = slot.line.split('{{version}}');
       const pattern = new RegExp(`^${parts.map(escape).join(`(${versionPattern})`)}(?=\\r?$)`, 'gm');
       const matches = [...original.matchAll(pattern)];

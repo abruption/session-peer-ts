@@ -40,10 +40,11 @@ The ordinary SSH response correction is documented separately as the [0.3.3 ordi
 
 ## Codex storage configuration guards
 
-This development source extends the published selected-home check with bounded
-local loader-layer classification. The published 0.5.1 comparison in PARITY is
-retained as dated evidence; this branch's source/fixture results do not establish
-publication or new native delivery qualification.
+The source implementation added after baseline `90481b1` extends its
+selected-home check with bounded local loader-layer classification. The published
+0.5.1 comparison in PARITY is retained as dated evidence. Availability is determined
+by the selected release record; source/fixture results do not establish publication
+or new native delivery qualification.
 
 The ordinary queue loader is reviewed at exact native Codex versions **0.160.1,
 0.162.1 and 0.165.0**, independently of the narrower observation profile table.
@@ -114,6 +115,13 @@ dispatch refuse submission. Errors include `unsupported_codex_sqlite_home`,
 `codex_storage_loader_unsupported`, `codex_daemon_storage_unverified`,
 `codex_consumer_context_unverifiable`, `codex_consumer_storage_unverifiable`,
 `codex_cloud_storage_unverified` and `codex_storage_changed_before_queue`.
+Doctor readiness describes ordinary local classification. A signed-in or other
+cloud-unclassifiable home can report `ready:false` and omit the selected DB
+schema/count check, even when a separately qualified owned route could later
+supply stronger storage evidence. Reader failure is not proof of a missing DB.
+Entry-file identity continuity covers the selected executable entry, not every
+transitive binary a trusted wrapper might launch.
+
 Public `storage` diagnostics contain layer names and classifications; content
 hashes, configuration paths, raw TOML and preference values stay private.
 

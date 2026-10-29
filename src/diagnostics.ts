@@ -1,4 +1,5 @@
-// Diagnostics inspect bounded metadata only. Never probe/connect to an inbox,
+// Diagnostics read bounded configuration and metadata, returning sanitized checks.
+// Never probe/connect to an inbox,
 // acquire a writer lock, execute an agent binary, or write configuration.
 import { accessSync, constants, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';

@@ -523,9 +523,10 @@ async function beforeDeadline<T>(deadlineMs: number, operation: () => Promise<T>
     });
   });
 }
-async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, deadlineMs: number): Promise<void> {
+type SqliteBindingProof = readonly Readonly<{ path: string; dev: bigint | null; ino: bigint | null }>[];
+async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, deadlineMs: number): Promise<SqliteBindingProof> {
   if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
-  verifyOpenedSqlite(await darwinOpenedFiles(pid, deadlineMs), home);
+  return verifyOpenedSqlite(await darwinOpenedFiles(pid, deadlineMs), home);
 }
 async function darwinOpenedFiles(pid: number, deadlineMs: number): Promise<OpenedFile[]> {
   // Only the owned app-server PID is queried, never a session inventory/PID scan.
@@ -556,8 +557,9 @@ async function darwinOpenedFiles(pid: number, deadlineMs: number): Promise<Opene
 }
 // Exact canonical state/queue paths (and only their own WAL/SHM sidecars) must
 // be opened by the owned PID with the inode now at that canonical path.
-function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
+function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): SqliteBindingProof {
   const required = ['state_5.sqlite', 'queue_1.sqlite'];
+  const proof = new Map<string, Readonly<{ path: string; dev: bigint | null; ino: bigint | null }>>();
   for (const file of required) {
     const expected = join(home, file);
     const opened = files.filter(row => row.name && [file, file + '-wal', file + '-shm'].includes(basename(row.name)));
@@ -568,7 +570,36 @@ function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
         const canonical = lstatSync(row.name!, { bigint: true });
         if (!canonical.isFile() || canonical.isSymbolicLink() || row.dev !== canonical.dev || row.ino !== canonical.ino)
           throw new Error('storage identity changed');
+        const prior = proof.get(row.name!);
+        if (prior && (prior.dev !== row.dev || prior.ino !== row.ino)) throw new Error('conflicting opened identities');
+        // Retain the opened FD's identity, not a later sample of the pathname.
+        proof.set(row.name!, Object.freeze({ path: row.name!, dev: row.dev, ino: row.ino }));
       } catch { throw new AppServerFault('storage_binding_unverified', false); }
+    }
+  }
+  // The fixed WAL/SHM paths may not be opened yet. Retain their named presence
+  // and identity too, without claiming FD evidence for these additional paths.
+  for (const file of required) for (const suffix of ['', '-wal', '-shm']) {
+    const path = join(home, file + suffix); if (proof.has(path)) continue;
+    try {
+      const info = lstatSync(path, { bigint: true });
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error();
+      proof.set(path, Object.freeze({ path, dev: info.dev, ino: info.ino }));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new AppServerFault('storage_binding_unverified', false);
+      proof.set(path, Object.freeze({ path, dev: null, ino: null }));
+    }
+  }
+  return Object.freeze([...proof.values()]);
+}
+function revalidateSqliteBinding(proof: SqliteBindingProof | undefined): void {
+  if (!proof) throw new AppServerFault('storage_binding_unverified', false);
+  for (const expected of proof) {
+    try {
+      const info = lstatSync(expected.path, { bigint: true });
+      if (!info.isFile() || info.isSymbolicLink() || info.dev !== expected.dev || info.ino !== expected.ino) throw new Error();
+    } catch (error) {
+      if (expected.dev !== null || (error as NodeJS.ErrnoException).code !== 'ENOENT') throw new AppServerFault('storage_binding_unverified', false);
     }
   }
 }
@@ -603,7 +634,7 @@ export async function artifactDigest(path: string, deadlineMs: number, maxBytes 
 // refused rather than trusted to have exec'd the right storage owner. An
 // injected reader (hermetic tests) runs in-process; production uses the worker.
 export async function verifyProcfsSqliteBinding(pid: number | undefined, home: string, deadlineMs: number, binary: string,
-  reader?: ProcReader): Promise<void> {
+  reader?: ProcReader): Promise<SqliteBindingProof> {
   if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
   let files: OpenedFile[];
   const uid = process.getuid?.();
@@ -624,7 +655,7 @@ export async function verifyProcfsSqliteBinding(pid: number | undefined, home: s
     } catch { throw new AppServerFault('storage_binding_unverified', false); }
   }
   if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
-  verifyOpenedSqlite(files, home);
+  return verifyOpenedSqlite(files, home);
 }
 function executableIdentity(binary: string): string {
   try {
@@ -710,6 +741,7 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
     ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false',
       '-c', codexStoragePin(original.codexHome)], env, original.codexHome) };
   let client: NativeQueuePort | undefined;
+  let lastBinding: SqliteBindingProof | undefined;
   try {
     verifyExecutableIdentity(options.binary, binaryIdentity);
     let effectGuarded = false;
@@ -721,7 +753,7 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
         try {
           await options.verifyStorage?.();
           await revalidateStorage(nativeVersion);
-          await bind(transport.pid);
+          lastBinding = await bind(transport.pid);
         } catch (error) { throw error instanceof AppServerFault ? error : new AppServerFault('storage_binding_unverified', false); }
       }
       return valid;
@@ -733,10 +765,11 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
         if (checkStorage(nativeVersion).fingerprint !== initialStorage.fingerprint) throw new Error();
         const current = codexConsumerSnapshotSync(original.codexHome, original.threadId);
         if (current.database !== consumerDatabase || current.cwd !== consumerCwd) throw new Error();
+        revalidateSqliteBinding(lastBinding);
         verifyExecutableIdentity(options.binary, binaryIdentity);
       } catch (error) { throw error instanceof AppServerFault ? error : new AppServerFault('storage_binding_unverified', false); }
     });
-    await bind(transport.pid);
+    lastBinding = await bind(transport.pid);
     return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
   } finally { if (client) await client.close(); else await disposeTransport(transport); }
 }
