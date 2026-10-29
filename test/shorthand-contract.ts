@@ -80,12 +80,18 @@ export function shorthandFixture(installed: string, bin: string, task: string) {
     for (const args of cases) {
       const direct = invoke(shell, false, args, 'stdin 한글\nsecond line');
       const short = invoke(shell, true, args, 'stdin 한글\nsecond line');
-      const expected = args.includes('--allow-inactive-codex-home') ? 0 : args.includes('--bad') || args.includes('--message') ? 2 : 0;
+      const expected = args.includes('--allow-inactive-codex-home') ? (win ? 1 : 0) : args.includes('--bad') || args.includes('--message') ? 2 : 0;
       let detail = '';
       if (short.status !== direct.status || short.stdout !== direct.stdout || stderrOf(short) !== stderrOf(direct)) detail = 'alias differs from canonical';
       else if (short.status !== expected) detail = `exit ${short.status}, expected ${expected}`;
       else if (args.includes('--allow-inactive-codex-home')) {
-        try { const result = JSON.parse(short.stdout); if (result.status !== 'validated' || result.submitted !== false) detail = 'not validated'; }
+        try {
+          const result = JSON.parse(short.stdout);
+          if (win) {
+            if (result.status !== 'refused' || result.error !== 'codex_storage_platform_unqualified' ||
+                result.submitted !== false || result.retryAllowed !== false) detail = 'not a guarded Windows refusal';
+          } else if (result.status !== 'validated' || result.submitted !== false) detail = 'not validated';
+        }
         catch { detail = 'stdout is not JSON'; }
       }
       if (detail) failures.push(`${shell} ${JSON.stringify(args)}: ${detail}; direct=${direct.status} ${direct.stdout.trim().slice(0, 300)} ${direct.stderr.trim().slice(0, 300)}; alias=${short.status} ${short.stdout.trim().slice(0, 300)} ${short.stderr.trim().slice(0, 300)}`);
