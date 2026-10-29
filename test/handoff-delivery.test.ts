@@ -10,6 +10,7 @@ import {join,delimiter,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateHandoff} from '../dist/handoff.js';
 import {HandoffLedger,payloadDigest} from '../dist/handoff-ledger.js';
+import {handoffSend} from '../dist/handoff-operations.js';
 const qualified={skip:process.platform!=='darwin'||process.arch!=='arm64'};
 const thread='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',cli=resolve('dist/cli.js');
 const schema=`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
@@ -123,6 +124,50 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
  function inject(clientId:string){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));try{db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(thread,'turn-fixture','after-submit-item',1,JSON.stringify({type:'userMessage',id:'after-submit-item',clientId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');}finally{db.close();}}
  return{root,home,codex,env,calls,nativeCalls,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
+async function directEnvironment<T>(f:{root:string;env:NodeJS.ProcessEnv},action:()=>Promise<T>):Promise<T>{
+ const saved={...process.env},cwd=process.cwd();Object.assign(process.env,f.env);process.chdir(f.root);
+ try{return await action();}finally{process.chdir(cwd);for(const key of Object.keys(process.env))if(!(key in saved))delete process.env[key];Object.assign(process.env,saved);}
+}
+test('direct handoff dry-run never probes a live agent for observation or required delivery',qualified,async t=>{
+ const f=await fixture(t),before=readFileSync(f.ledgerFile,'utf8');
+ await directEnvironment(f,async()=>{
+  for(const intent of [{observeDelivery:true},{waitFor:'delivered' as const}]){
+   await assert.rejects(handoffSend({to:'codex:'+thread,home:f.home,codexBin:f.codex,message:'direct dry-run',dryRun:true},
+    {...intent,ledgerPath:f.env.SESSION_PEER_HANDOFF_HOME}),{code:'incompatible_handoff_dry_run'});
+   assert.deepEqual(f.nativeCalls(),[]);assert.deepEqual(f.calls(),[]);
+  }
+ });
+ assert.equal(readFileSync(f.ledgerFile,'utf8'),before);
+});
+test('qualified owned handoff binds cloud-possible storage while fallback remains unqualified',qualified,async t=>{
+ const f=await fixture(t);writeFileSync(join(f.home,'auth.json'),'fixture-credentials-never-read',{mode:0o600});
+ const sent=await f.invoke([...f.args,'--observe-delivery']);
+ assert.equal(sent.code,0,sent.stdout);assert.equal(sent.value.submitted,true);
+ assert.equal(sent.value.storage.cloudConfiguration,'requires_owned_storage_binding');
+ assert.equal(sent.value.handoff.observation.injectionObserved,true);assert.equal(f.calls().length,1);
+});
+test('direct handoff qualification and queue both retain the canonical binary across an alias change during selection',qualified,async t=>{
+ const f=await fixture(t),alias=join(f.root,'selected-codex'),other=join(f.root,'other-codex'),otherLog=join(f.root,'other-native-log');
+ fs.copyFileSync(f.codex,other);chmodSync(other,0o700);
+ const config=JSON.parse(readFileSync(f.codex+'.json','utf8'));config.version='0.162.1';config.nativeLog=otherLog;config.log=join(f.root,'other-queue-log');
+ writeFileSync(other+'.json',JSON.stringify(config),{mode:0o600});fs.symlinkSync(f.codex,alias);
+ const lstat=fs.lstatSync;let changed=false;
+ t.mock.method(fs,'lstatSync',((path:any,...args:any[])=>{const value=(lstat as any)(path,...args);
+  if(path===join(f.home,'thread-writer-locks',thread+'.lock')&&!changed){changed=true;fs.unlinkSync(alias);fs.symlinkSync(other,alias);}return value;
+ }) as typeof fs.lstatSync);syncBuiltinESMExports();
+ try{
+  await directEnvironment(f,async()=>{
+   const sent=await handoffSend({to:'codex:'+thread,home:f.home,codexBin:alias,message:'pinned qualification'},
+    {observeDelivery:true,ledgerPath:f.env.SESSION_PEER_HANDOFF_HOME});
+   assert.equal(sent.exitCode,0,JSON.stringify(sent.value));assert.equal(sent.value.submitted,true);
+   const handoff=sent.value.handoff as {correlationId:string},record=f.ledger().data.records[handoff.correlationId];
+   assert.equal(record.observationQualification.version,'0.160.1');assert.equal('binary' in record.binding,false);
+   assert.equal(JSON.stringify(sent.value).includes(f.codex),false);
+  });
+  assert.equal(changed,true);assert.equal(existsSync(otherLog),false);assert.equal(f.calls().length,1);
+  assert.ok(f.nativeCalls().some(row=>row.command==='--version'));assert.ok(f.nativeCalls().some(row=>row.command==='app-server'));
+ }finally{t.mock.restoreAll();syncBuiltinESMExports();}
+});
 test('warm history fixture keeps WAL sidecar identities stable across synthetic injection',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t,'none'),database=join(f.home,'thread_history_1.sqlite');
  const mode=new DatabaseSync(database,{readOnly:true});

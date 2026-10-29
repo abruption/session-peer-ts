@@ -74,6 +74,8 @@ Without reading credential/cache contents, ordinary queue classification refuses
 when selected-home `auth.json` or `cloud-config-bundle-cache.json` metadata is
 present, when configuration selects keyring/auto credential storage, or when
 external identity markers or a config server make cloud applicability unknown.
+The conservative selector scan also includes inactive/nested tables; it does not
+claim that native legacy profiles apply those selectors.
 **This includes ordinary signed-in file-auth homes even when their actual account
 would not receive cloud policy.** The refusal is
 `codex_cloud_storage_unverified`; it is not a determination that relocation is
@@ -96,6 +98,14 @@ project markers use a conservative ancestor superset, which can refuse an
 otherwise unused ancestor configuration; the result is not a complete model of
 native project trust. System metadata helpers have bounded output/timeouts;
 byte bounds do not promise a deadline for arbitrary filesystem I/O.
+
+Ordinary queue processes keep the sender's physical cwd. A malformed or unsafe
+project config in that directory can therefore refuse a send independently of
+the target's cwd. The guard also inspects conservative consumer/ancestor context
+supersets without reproducing the native project-trust decision, so it can reject
+configuration the native loader would ignore as untrusted. Missing/deleted saved
+thread cwd, config symlinks, an unclassifiable selected DB or unavailable fixed
+system metadata helpers also refuse; these are explicit availability limits.
 
 Unsupported root `sqlite_home`, malformed/unreadable configuration, unsupported
 reported loader versions, conflicting process/file evidence and changes before

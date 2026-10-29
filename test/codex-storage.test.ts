@@ -6,10 +6,12 @@ import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { classifyCodexStorage, codexWriterStorage, storageDiagnostic, STORAGE_LOADER_VERSIONS } from '../dist/codex-storage.js';
+import { performance } from 'node:perf_hooks';
+import { parse as parseTOML } from 'smol-toml';
+import { classifyCodexStorage, codexStoragePin, codexWriterStorage, storageDiagnostic, STORAGE_LOADER_VERSIONS } from '../dist/codex-storage.js';
 import { send } from '../dist/send.js';
 import { diagnoseCodex } from '../dist/diagnostics.js';
-import { handoffSend } from '../dist/handoff-operations.js';
+import { handoffSend, prepareHandoff } from '../dist/handoff-operations.js';
 import { HandoffBudget } from '../dist/handoff.js';
 import { HandoffLedger } from '../dist/handoff-ledger.js';
 
@@ -39,6 +41,13 @@ test('exact source loader tags are separate from observation qualification; unsu
   assert.equal(check.loaderVersionVerified, false); assert.equal(check.loaderVersion, null);
   assert.equal(JSON.stringify(storageDiagnostic(check)).includes(f.root), false);
   assert.equal('fingerprint' in storageDiagnostic(check), false);
+});
+test('storage CLI pins round-trip every C0/DEL character, quotes and backslashes as semantic TOML', () => {
+  const controls = Array.from({ length: 32 }, (_, n) => String.fromCharCode(n)).join('') + '\x7f';
+  for (const home of ['/fixture/"quoted"/\\backslash\x7f', '/fixture/' + controls, 'C:\\fixture\\DEL\x7f\\"quote"']) {
+    const pin = codexStoragePin(home); assert.equal(parseTOML(pin).sqlite_home, home);
+    assert.equal(/[\x00-\x1f\x7f]/.test(pin), false);
+  }
 });
 test('home/system/requirements/legacy each reject semantic escaped root keys, malformed UTF8/TOML and unreadable files', t => {
   const f = fixture(t);
@@ -311,4 +320,49 @@ test('handoff fallback rechecks the original cutoff after durable authorization 
   });
   const result = await handoffSend(f.sendOptions, { ledgerPath: join(f.root, 'ledger'), budget });
   assert.equal(committed, true); assert.equal(result.value.error, 'deadline_before_effect'); assert.equal(existsSync(f.log), false);
+});
+test('the outer dispatch barrier catches a mutation queued at the end of the inner async guard', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t), lstat = fs.lstatSync; let armed = false, scheduled = false, mutated = false;
+  t.mock.method(fs, 'lstatSync', ((path: any, ...args: any[]) => {
+    const info = (lstat as any)(path, ...args);
+    if (path === f.binary && armed && !scheduled) {
+      scheduled = true; queueMicrotask(() => { mutated = true; fs.appendFileSync(f.binary, '\n// between inner and outer guard'); });
+    } return info;
+  }) as typeof fs.lstatSync); syncBuiltinESMExports();
+  await assert.rejects(send({ ...f.sendOptions, hooks: { resolved() {}, beforeEffect() { armed = true; } } }), { code: 'codex_storage_loader_changed' });
+  assert.equal(mutated, true); assert.equal(existsSync(f.log), false);
+});
+test('a submission timeout callback cannot mutate the selected binary after its last validation', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t); let armed = false, finalCalls = 0;
+  await assert.rejects(send({ ...f.sendOptions, hooks: { resolved() {}, beforeEffect() { armed = true; }, timeoutMs() {
+    if (armed) { finalCalls++; fs.appendFileSync(f.binary, '\n// timeout callback mutation'); } return 3000;
+  } } }), { code: 'codex_storage_loader_changed' });
+  assert.equal(finalCalls, 1); assert.equal(existsSync(f.log), false);
+});
+test('the final synchronous guard is charged to the captured caller deadline without calling the budget again', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t), lstat = fs.lstatSync; let armed = false, captured = false, now = 0, finalCalls = 0;
+  t.mock.method(performance, 'now', () => now);
+  t.mock.method(fs, 'lstatSync', ((path: any, ...args: any[]) => {
+    if (path === f.binary && captured) now = 101;
+    return (lstat as any)(path, ...args);
+  }) as typeof fs.lstatSync); syncBuiltinESMExports();
+  await assert.rejects(send({ ...f.sendOptions, hooks: { resolved() {}, beforeEffect() { armed = true; }, timeoutMs() {
+    if (armed) { finalCalls++; captured = true; return 100; } return 3000;
+  } } }), { code: 'deadline_before_effect' });
+  assert.equal(finalCalls, 1); assert.equal(existsSync(f.log), false);
+});
+test('handoff fallback and prepared dry-run use ordinary cloud classification rather than unproven owned storage', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t), path = join(f.root, 'ledger'); new HandoffLedger(path).init();
+  const prepared = await prepareHandoff(f.sendOptions, path);
+  const correlationId = (prepared.value.handoff as { correlationId: string }).correlationId;
+  writeFileSync(join(f.home, 'auth.json'), 'fixture-credentials-never-read');
+  const before = fs.readFileSync(join(path, 'ledger.json'), 'utf8');
+  await assert.rejects(prepareHandoff(f.sendOptions, path), { code: 'codex_cloud_storage_unverified' });
+  await assert.rejects(handoffSend({ ...f.sendOptions, dryRun: true }, { ledgerPath: path, correlationId }), { code: 'codex_cloud_storage_unverified' });
+  assert.equal(fs.readFileSync(join(path, 'ledger.json'), 'utf8'), before);
+  let snapshot: Record<string, any> | undefined, submitted = false;
+  await assert.rejects(send({ ...f.sendOptions, hooks: { resolved(_context, result) { snapshot = result; }, codexRoute: () => 'ordinary',
+    async submitCodex() { submitted = true; return { clientUserMessageId: id }; },
+  } }), { code: 'codex_cloud_storage_unverified' });
+  assert.equal(snapshot?.storage.code, 'codex_cloud_storage_unverified'); assert.equal(submitted, false); assert.equal(existsSync(f.log), false);
 });

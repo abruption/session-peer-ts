@@ -5,12 +5,13 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, type BigIntStats 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { claude, Refusal } from './discovery.js';
-import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, codexWriterCwd, codexWriterStorage, storageDiagnostic, type StorageCheck } from './codex-storage.js';
+import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, codexStoragePin, codexWriterCwd, codexWriterStorage, storageDiagnostic, type StorageCheck } from './codex-storage.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { HomeRefusal, resolveWriter, revalidateWriter, uuid, type HomeResolution } from './writer.js';
 import { postWindowsPipe } from './windows.js';
 
-export type SendContext = { agent: 'claude' | 'codex'; target: string; home?: string; generation: string | null; writerIdentity?: string };
+export type SendContext = { agent: 'claude' | 'codex'; target: string; home?: string; generation: string | null;
+  writerIdentity?: string; readonly binary?: string };
 export type CodexStorageGuard = { readonly binary: string; readonly cwd: string;
   revalidate: (ownedAppServer?: boolean) => Promise<void>; finalCheck: (ownedAppServer?: boolean) => void };
 export type SendHooks = {
@@ -19,6 +20,7 @@ export type SendHooks = {
   resolved: (context: SendContext, snapshot: Record<string, unknown>) => Promise<string | void> | string | void;
   beforeEffect?: () => Promise<void> | void;
   timeoutMs?: () => number;
+  codexRoute?: () => 'ordinary' | 'owned_app_server';
   submitCodex?: (context: SendContext, message: string, storage: CodexStorageGuard) => Promise<{ queueId?: string; clientUserMessageId: string }>;
 };
 export type SendOptions = { to: string; home?: string; codexBin?: string; message: string; dryRun?: boolean; allowInactive?: boolean; hooks?: SendHooks };
@@ -125,8 +127,9 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     const queueCwd = process.cwd();
     // Hooks may choose an owned app-server; that path binds its opened SQLite
     // descriptors independently. Its fallback must revalidate the ordinary plan.
-    const ownedAppServer = Boolean(options.hooks?.submitCodex);
-    const storage = refuseStorage(classifyCodexStorage({ home, queueCwd, consumerCwds, ownedAppServer }));
+    const provisionalOwned = !options.dryRun && Boolean(options.hooks?.submitCodex);
+    let ownedAppServer = provisionalOwned;
+    let storage = refuseStorage(classifyCodexStorage({ home, queueCwd, consumerCwds, ownedAppServer }));
     const result = { ...base, target: { agent: 'codex', id }, codexHome: home,
       status: options.dryRun ? 'validated' : 'queued', codexHomeResolution: selection.resolution,
       storage: storageDiagnostic(storage) };
@@ -140,13 +143,25 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
       const live = selection.resolution.candidates.find(item => item.codexHome === home)?.activity === 'live_writer';
       if (!identity) throw new HomeRefusal('active_writer_unverified', selection.resolution);
       const generation = live ? createHash('sha256').update(identity).digest('hex') : null;
-      context = { agent: 'codex', target: id, home, generation,
+      context = { agent: 'codex', target: id, home, generation, binary,
         // Inactive evidence still binds a prepared intent across invocations. This
         // private fingerprint is not a native incarnation or public generation.
         writerIdentity: generation ?? createHash('sha256').update(JSON.stringify(selected)).digest('hex') };
       const body = await options.hooks.resolved(context, result);
       if (body !== undefined) { checkMessage(body, true); options = { ...options, message: body }; result.chars = [...body].length; }
     }
+    // Recheck the provisional evidence after asynchronous resolution, then
+    // classify the route actually selected by the handoff. Dry-run has no
+    // owned process/FD proof and always uses the ordinary metadata policy.
+    const actualOwned = !options.dryRun && Boolean(options.hooks?.submitCodex) &&
+      (options.hooks?.codexRoute ? options.hooks.codexRoute() === 'owned_app_server' : true);
+    const continuity = classifyCodexStorage({ home, queueCwd, consumerCwds, ownedAppServer: provisionalOwned });
+    result.storage = storageDiagnostic(continuity);
+    refuseStorage(continuity);
+    if (continuity.fingerprint !== storage.fingerprint) throw new HomeRefusal('codex_storage_changed_before_queue', selection.resolution);
+    const actualStorage = classifyCodexStorage({ home, queueCwd, consumerCwds, ownedAppServer: actualOwned });
+    result.storage = storageDiagnostic(actualStorage);
+    storage = refuseStorage(actualStorage); ownedAppServer = actualOwned;
     if (options.dryRun) return result;
     // Diagnostic probe only on an effectful send. Doctor and dry-run never
     // execute an agent binary. Exact tags qualify loader semantics, not delivery.
@@ -190,9 +205,14 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     }
     await options.hooks?.beforeEffect?.();
     await guard.revalidate();
-    // Read the remaining operation budget after the final synchronous I/O.
-    const timeout = options.hooks?.timeoutMs?.() ?? 30000;
-    const done = await run(binary, ['queue', '--thread', id, `--message=${options.message}`, '-c', `sqlite_home=${JSON.stringify(home)}`],
+    // Capture a caller's remaining budget once, then charge the final sync I/O
+    // to that absolute cutoff without another callback or asynchronous gap.
+    const remaining = options.hooks?.timeoutMs?.();
+    const cutoff = remaining === undefined ? undefined : performance.now() + remaining;
+    guard.finalCheck();
+    const timeout = cutoff === undefined ? 30000 : Math.floor(cutoff - performance.now());
+    if (!Number.isFinite(timeout) || timeout < 1) throw new HomeRefusal('deadline_before_effect', selection.resolution);
+    const done = await run(binary, ['queue', '--thread', id, `--message=${options.message}`, '-c', codexStoragePin(home)],
       { env, cwd: guard.cwd, timeout });
     if (!done.spawned) throw new HomeRefusal('native_spawn_failed', selection.resolution);
     if (done.interrupted || done.code !== 0) throw new CodexUnknownOutcome(selection.resolution);

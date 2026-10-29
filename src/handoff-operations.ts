@@ -13,6 +13,7 @@ import { Refusal } from './discovery.js';
 import { HomeRefusal } from './writer.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { currentPlatform, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
+import { codexStoragePin } from './codex-storage.js';
 
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; remote?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
@@ -39,7 +40,8 @@ export function privateMessage(path: string): string {
   } finally { closeSync(fd); }
 }
 function binding(context: SendContext, message: string, destination = hostname()): HandoffBinding {
-  return { ...context, destination, payloadDigest: payloadDigest(message) };
+  const { binary: _privateBinary, ...retained } = context;
+  return { ...retained, destination, payloadDigest: payloadDigest(message) };
 }
 export function correlationEnvelope(message: string, id: string): string {
   if (!canonicalId(id)) throw new Refusal('invalid_correlation_id', 2);
@@ -137,10 +139,11 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
         // Account for the fixed correlation envelope before allocating an intent.
         checkMessage(correlationEnvelope(options.message, '00000000-0000-4000-8000-000000000000'), context.agent === 'codex');
         const wantsDelivery = handoffOptions.observeDelivery || handoffOptions.waitFor === 'delivered';
-        if (wantsDelivery && context.agent === 'codex' && context.home && context.generation && budget.observationRemainingMs() > 0) {
+        if (!options.dryRun && wantsDelivery && context.agent === 'codex' && context.home && context.generation && budget.observationRemainingMs() > 0) {
           scope = { home: context.home, threadId: context.target, generation: context.generation };
           queueScope = { codexHome: context.home, threadId: context.target, generation: context.generation, ownerIdentity: context.writerIdentity! };
-          const version = await run(executable(options.codexBin ?? 'codex'), ['--version'], { timeout: Math.min(1000, budget.observationRemainingMs()), limit: 4096 });
+          if (!context.binary) throw new Refusal('codex_storage_loader_unverifiable', 1);
+          const version = await run(context.binary, ['--version'], { timeout: Math.min(1000, budget.observationRemainingMs()), limit: 4096 });
           const nativeVersion = !version.interrupted && version.code === 0 ? version.stdout.trim().replace(/^codex-cli /, '') : '';
           // Exact host platform and native version select one profile row, or none.
           qualification = observationQualification(nativeVersion, currentPlatform(), handoffOptions.remote === true); ownerArgs = ownerProbeArgs(qualification);
@@ -156,6 +159,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
         return correlationEnvelope(options.message, handoff.correlationId);
       },
       beforeEffect: authorize,
+      codexRoute: () => deliverySupported ? 'owned_app_server' : 'ordinary',
       async submitCodex(context, message, storage) {
         if (!deliverySupported) {
           // Best-effort unsupported is chosen before ANY app-server attempt.
@@ -166,7 +170,7 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
           storage.finalCheck(false);
           const timeout = Math.max(1, budget.observationRemainingMs());
           budget.beforeEffect();
-          const done = await run(storage.binary, ['queue','--thread',context.target,`--message=${message}`,'-c',`sqlite_home=${JSON.stringify(context.home)}`], {env:{...inherited,CODEX_HOME:context.home,PWD:storage.cwd},cwd:storage.cwd,timeout});
+          const done = await run(storage.binary, ['queue','--thread',context.target,`--message=${message}`,'-c',codexStoragePin(context.home!)], {env:{...inherited,CODEX_HOME:context.home,PWD:storage.cwd},cwd:storage.cwd,timeout});
           if (!done.spawned) throw new Refusal('native_spawn_failed',1);
           if (done.interrupted || done.code !== 0) throw new UnknownOutcome();
           const receipt = queueId(done.stdout,context.target);

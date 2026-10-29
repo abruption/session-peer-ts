@@ -23,6 +23,8 @@
 
 </div>
 
+普通 Codex 发送也会拒绝登录 home 等无法判定云端策略适用范围的上下文。选择路径前请确认[存储检查范围](docs/api.md#codex-storage-configuration)。
+
 此源码检查 Codex 的更多配置层。Windows 的 Codex 发送和 dry-run 因本地存储检查方式尚未验证而在队列提交前被拒绝；普通 Claude 路径另行处理。安装前请确认[检查范围](docs/api.md#codex-storage-configuration)及所选版本。
 
 ## Demo

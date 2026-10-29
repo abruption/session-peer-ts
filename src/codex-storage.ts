@@ -9,6 +9,12 @@ import { TextDecoder } from 'node:util';
 import { parse } from 'smol-toml';
 
 export const STORAGE_LOADER_VERSIONS = ['0.160.1', '0.162.1', '0.165.0'] as const;
+// JSON string escapes are TOML-compatible except raw DEL, which TOML forbids.
+// C0 characters are escaped by JSON.stringify; escape DEL explicitly so Rust's
+// override parser never falls back to a literal containing doubled slashes.
+export function codexStoragePin(home: string): string {
+  return `sqlite_home=${JSON.stringify(home).replace(/\u007f/g, '\\u007f')}`;
+}
 const LIMIT = 1024 * 1024;
 type Layer = 'home' | 'system' | 'requirements' | 'legacy' | 'preferences' | 'project' | 'context' | 'daemon' | 'cloud';
 export type StorageCheck = {
@@ -105,8 +111,9 @@ export function classifyCodexStorage(options: StorageOptions): StorageCheck {
       try { value = parse(new TextDecoder('utf-8', { fatal: true }).decode(data)); } catch { throw new Invalid(layer); }
       if (Object.hasOwn(value, 'sqlite_home')) throw new Invalid(layer, true);
       customMarkers ||= Object.hasOwn(value, 'project_root_markers');
-      // A legacy profile can select auth storage. Inspect this selector without
-      // reading any credential values, including inactive profiles conservatively.
+      // Native auth storage is a root selector. This deliberately conservative
+      // superset also refuses selectors in inactive/nested tables; it does not
+      // claim the native loader applies those nested selectors.
       const pending: unknown[] = [value]; let count = 0;
       while (pending.length) {
         if (++count > 65536) throw new Invalid(layer);

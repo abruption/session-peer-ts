@@ -14,7 +14,7 @@ import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
 import { run } from './process.js';
-import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, decodeLsofFilename } from './codex-storage.js';
+import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, codexStoragePin, decodeLsofFilename } from './codex-storage.js';
 import { CANDIDATE_PROFILES, NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 import { procOwnedFiles, type OpenedFile, type ProcReader } from './linux-proc.js';
 import { fileURLToPath } from 'node:url';
@@ -364,8 +364,8 @@ export class BoundedAppServerClient implements AppServerPort {
     return new Promise((resolve, reject) => {
       const wait = { reject };
       this.operations.add(wait);
-      promise.then(value => { this.operations.delete(wait); resolve(value); }, () => {
-        this.operations.delete(wait); this.fail(failureCode); reject(this.fault);
+      promise.then(value => { this.operations.delete(wait); resolve(value); }, error => {
+        this.operations.delete(wait); this.fail(error instanceof AppServerFault ? error.code : failureCode); reject(this.fault);
       });
     });
   }
@@ -708,7 +708,7 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
     verifyOwnedSqliteBinding(pid, original.codexHome, options.deadlineMs);
   const transport: NativeQueueTransport = { qualification: 'native_queue_only_stdio',
     ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false',
-      '-c', `sqlite_home=${JSON.stringify(original.codexHome)}`], env, original.codexHome) };
+      '-c', codexStoragePin(original.codexHome)], env, original.codexHome) };
   let client: NativeQueuePort | undefined;
   try {
     verifyExecutableIdentity(options.binary, binaryIdentity);
@@ -718,9 +718,11 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
       if (valid && effectGuarded) {
         // Run after the LAST asynchronous owner verification. The durable guard
         // and owner probe can both await I/O and change canonical file bindings.
-        await options.verifyStorage?.();
-        await revalidateStorage(nativeVersion);
-        await bind(transport.pid);
+        try {
+          await options.verifyStorage?.();
+          await revalidateStorage(nativeVersion);
+          await bind(transport.pid);
+        } catch (error) { throw error instanceof AppServerFault ? error : new AppServerFault('storage_binding_unverified', false); }
       }
       return valid;
     }, async () => { await options.beforeEffect(); effectGuarded = true; }, profile, () => {

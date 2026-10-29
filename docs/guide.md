@@ -1,5 +1,7 @@
 # User guide — session-peer (TypeScript)
 
+Ordinary Codex queue submission also refuses cloud-unclassifiable contexts, including signed-in file-auth homes with `auth.json`, with `codex_cloud_storage_unverified`. Credential/cache contents are not read; the separately qualified owned app-server route still requires actual storage binding.
+
 This source classifies Codex storage configuration across home, system, managed macOS and physical queue/consumer project contexts. See the [storage guard scope and refusals](api.md#codex-storage-configuration). Windows Codex send/dry-run refuse before queue submission until its local storage adapter is qualified. Doctor and dry-run do not execute Codex and leave its loader version unverified.
 
 See the [dated feature comparison and porting decisions](../PARITY.md#current-scoped-feature-matrix) for shipped TypeScript behavior and the separately pinned Python comparison baseline.

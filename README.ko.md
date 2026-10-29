@@ -17,6 +17,8 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 </div>
 
+일반 Codex 전송은 로그인 home 등 클라우드 정책 적용 여부를 분류할 수 없는 경우에도 거부합니다. 경로를 선택하기 전에 [저장소 검증 범위](docs/api.md#codex-storage-configuration)를 확인하세요.
+
 이 소스는 Codex의 추가 설정 계층을 검사합니다. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부하며, 일반 Claude 경로는 별도입니다. 설치 전에 [검증 범위](docs/api.md#codex-storage-configuration)와 선택한 릴리스를 확인하세요.
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->

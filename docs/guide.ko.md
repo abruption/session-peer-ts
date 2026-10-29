@@ -1,5 +1,7 @@
 # 사용자 가이드 — session-peer (TypeScript)
 
+일반 Codex 큐는 `auth.json`이 있는 로그인 home 등에서 클라우드 정책 적용 여부를 분류할 수 없으면 `codex_cloud_storage_unverified`로 거부합니다. 자격정보·캐시 내용은 읽지 않으며, 별도로 검증하는 owned app-server 경로에는 실제 저장소 바인딩 증거가 필요합니다.
+
 이 소스는 Codex home·시스템·macOS 관리 설정과 큐 실행 프로세스 및 대상 프로세스의 실제 작업 경로에 적용되는 프로젝트 설정을 검사합니다. [저장소 검증 범위와 거부 조건](api.md#codex-storage-configuration)을 확인하세요. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부합니다. doctor와 dry-run은 Codex를 실행하지 않으며 로더 버전은 미확인으로 남깁니다.
 
 현재 기능 차이와 포팅 결정은 [날짜가 명시된 비교표](../PARITY.md#current-scoped-feature-matrix)에서 확인하세요. TypeScript의 공개 기능과 별도로 고정한 Python 비교 기준을 구분합니다.

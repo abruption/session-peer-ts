@@ -541,6 +541,11 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     env: { ...options.env, FIXTURE_STORAGE_HOME: other } }), fault('storage_binding_unverified', false));
   assert.equal(guards, 1);
   const guardsBefore = guards;
+  await t.test('an asynchronous root storage refusal retains its storage code without leaking native detail', async () => {
+    await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+      beforeEffect: async () => {}, verifyStorage: async () => { throw new Error('SECRET-storage-detail'); },
+    }), error => { assert.equal(JSON.stringify(error).includes('SECRET'), false); return fault('storage_binding_unverified', false)(error); });
+  });
   await t.test('binary replacement inside the final async binding cannot reach the RPC write', async t => {
     const originalSpawn = childProcess.spawn; let fenced = false, swapped = false;
     t.mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
@@ -577,7 +582,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     const config = join(selected, 'config.toml');
     try {
       await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
-        beforeEffect: async () => { writeFileSync(config, 'model="changed-during-guard"'); } }), fault('owner_changed', false));
+        beforeEffect: async () => { writeFileSync(config, 'model="changed-during-guard"'); } }), fault('storage_binding_unverified', false));
     } finally { rmSync(config, { force: true }); }
   });
   await t.test('consumer cwd mutation during final owner verification cannot reach queue', async () => {
@@ -585,7 +590,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     const updateCwd = (cwd: string) => { const state = new DatabaseSync(join(selected, 'state_5.sqlite')); state.prepare('UPDATE threads SET cwd=?').run(cwd); state.close(); };
     try {
       await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
-        beforeEffect: async () => { fenced = true; }, verifyOwner: async () => { if (fenced) updateCwd(other); return true; } }), fault('owner_changed', false));
+        beforeEffect: async () => { fenced = true; }, verifyOwner: async () => { if (fenced) updateCwd(other); return true; } }), fault('storage_binding_unverified', false));
     } finally { updateCwd(selected); }
   });
   await t.test('storage replaced during durable guard cannot reach queue', async () => {
@@ -593,7 +598,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
       beforeEffect: async () => {
         guards++; renameSync(join(selected, 'state_5.sqlite'), join(selected, 'detached-state.sqlite'));
         writeFileSync(join(selected, 'state_5.sqlite'), 'replacement');
-      } }), fault('owner_changed', false));
+      } }), fault('storage_binding_unverified', false));
     rmSync(join(selected, 'state_5.sqlite'));
     renameSync(join(selected, 'detached-state.sqlite'), join(selected, 'state_5.sqlite'));
   });
@@ -604,15 +609,15 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
       if (binary === '/usr/sbin/lsof' && guarded) {
         // Model unchanged reported paths while opened inode identities differ.
         const output = ['state_5.sqlite', 'queue_1.sqlite'].map((file, index) =>
-          `f${index + 3}\0D0x1\0i1\0n${join(selected, file)}\0\n`).join('');
-        return originalSpawn(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', output], options);
+          `f${index + 3}\0D0x1\0i1\0n${join(selected, file).replaceAll('\\', '\\\\')}\0\n`).join('');
+        return originalSpawn(process.execPath, ['-e', "process.stdout.write(Buffer.from(process.argv[1],'base64'))", Buffer.from(output).toString('base64')], options);
       }
       return originalSpawn(binary, args, options);
     });
     syncBuiltinESMExports();
     try {
       await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
-        beforeEffect: async () => { guarded = true; } }), fault('owner_changed', false));
+        beforeEffect: async () => { guarded = true; } }), fault('storage_binding_unverified', false));
     } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
   });
   await t.test('storage replacement during final async owner verification is checked before queue', async () => {
@@ -625,7 +630,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
           writeFileSync(join(selected, 'queue_1.sqlite'), 'replacement');
         }
         return true;
-      } }), fault('owner_changed', false));
+      } }), fault('storage_binding_unverified', false));
   });
   await t.test('queue process actual build must equal the probed qualified build', async () => {
     await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
