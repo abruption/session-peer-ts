@@ -532,7 +532,8 @@ async function cliFixture(t: TestContext, version = '0.162.1', warm = false) {
   const root = temp(t, 'codex-linux-cli-'), home = join(root, 'home'), bin = join(root, 'bin');
   mkdirSync(home, { mode: 0o700 }); mkdirSync(bin, { mode: 0o700 }); mkdirSync(join(home, 'thread-writer-locks'), { mode: 0o700 });
   const { DatabaseSync } = await import('node:sqlite');
-  const state = new DatabaseSync(join(home, 'state_5.sqlite')); state.exec('CREATE TABLE threads(id TEXT)'); state.prepare('INSERT INTO threads VALUES(?)').run(thread); state.close();
+  const state = new DatabaseSync(join(home, 'state_5.sqlite')); state.exec('CREATE TABLE threads(id TEXT, cwd TEXT)');
+  state.prepare('INSERT INTO threads VALUES(?,?)').run(thread, root); state.close();
   if (warm) {
     const history = new DatabaseSync(join(home, 'thread_history_1.sqlite'));
     history.exec(`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
@@ -542,7 +543,15 @@ CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rol
     history.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread, 1, 1); history.close();
   }
   const locks = createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt');
-  const held = spawn(process.execPath, [resolve('test/fixtures/ssh-codex-lock-holder.cjs'), join(home, 'thread-writer-locks', thread + '.lock'), locks]);
+  // A live writer fixture must retain the selected state inode, not just its
+  // lock: dispatch now verifies saved/physical cwd and real opened-store proof.
+  // Keep this stand-in local to the test; frozen cross-language fixtures stay
+  // unchanged. The parent owns this child and terminates only that handle.
+  const held = spawn(process.execPath, ['-e', `const fs=require('node:fs');
+    fs.openSync(process.argv[1],'r');
+    require(process.argv[3]).flockSync(fs.openSync(process.argv[2],'w',0o600),'exnb');
+    process.stdout.write('ready');setInterval(()=>{},1000);`,
+    join(home, 'state_5.sqlite'), join(home, 'thread-writer-locks', thread + '.lock'), locks], { cwd: root });
   held.stderr.resume(); await once(held.stdout, 'data');
   t.after(async () => { if (held.exitCode === null && held.signalCode === null) { held.kill('SIGKILL'); await once(held, 'close'); } });
   writeFileSync(join(bin, 'lsof.data'), `p${held.pid}\0ccodex-fixture\0u${process.getuid?.()}\0`, { mode: 0o600 });
@@ -567,12 +576,24 @@ CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rol
     args: ['send', '--to', 'codex:' + thread, '--codex-home', home, '--codex-bin', codex, '--message', 'fixture request', '--no-from', '--no-reply-to'] };
 }
 
+test('Linux CLI stand-in supplies saved cwd and real writer storage before delivery checks', posix, async t => {
+  const f = await cliFixture(t);
+  const dry = await f.invoke([...f.args, '--dry-run']);
+  assert.equal(dry.code, 0, dry.stdout);
+  assert.equal(dry.value.status, 'validated', dry.stdout);
+  assert.equal(dry.value.storage.status, 'classified', dry.stdout);
+  assert.equal(dry.value.submitted, false);
+  assert.deepEqual(f.queueCalls(), []);
+  assert.deepEqual(f.nativeCalls(), []);
+});
+
 // Only versions without an exact row for this Linux host (all of them on x64).
 for (const version of ['0.160.1', '0.162.1'].filter(version => !selectNativeProfile({ platform: host, version }))) {
   test(`Linux host with exact Darwin-qualified ${version} refuses required delivery and downgrades best-effort before any app-server`, linuxNative, async t => {
     const f = await cliFixture(t, version);
     const required = await f.invoke([...f.args, '--wait-for', 'delivered', '--wait-timeout', '10']);
     assert.equal(required.code, 1, required.stdout); assert.equal(required.value.submitted, false);
+    assert.ok(required.value.handoff, required.stdout);
     assert.equal(required.value.handoff.wait.status, 'unsupported'); assert.equal(required.value.handoff.observation.status, 'unsupported');
     assert.deepEqual(f.queueCalls(), []);
     const best = await f.invoke([...f.args, '--observe-delivery']);
@@ -620,6 +641,7 @@ test('SSH to a Linux destination: complete result keeps pre-effect refusal; part
   };
   const required = await invoke([...f.args, '--wait-for', 'delivered', '--wait-timeout', '15']);
   assert.equal(required.code, 1, required.stdout); assert.equal(required.value.submitted, false);
+  assert.ok(required.value.handoff, required.stdout);
   assert.equal(required.value.handoff.wait.status, 'unsupported'); assert.deepEqual(f.queueCalls(), []);
   // One preparation and one send request; the destination refused before effect.
   assert.deepEqual(f.log().map(request => request.handoff?.preparation === true), [true, false]);
