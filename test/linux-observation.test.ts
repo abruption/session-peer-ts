@@ -416,6 +416,13 @@ function syntheticRow(binary: string, patch: Partial<NativeProfile> = {}): Nativ
 async function compiledRun(t: TestContext) {
   const root = temp(t, 'codex-compiled-native-'), home = join(root, 'home'), other = join(root, 'other'), log = join(root, 'events.jsonl');
   mkdirSync(home, { mode: 0o700 }); mkdirSync(other, { mode: 0o700 }); writeFileSync(log, '');
+  // The owned queue binds the saved consumer's real cwd before probing its
+  // binary. The compiled stand-in retains this same state inode when started.
+  const state = new DatabaseSync(join(home, 'state_5.sqlite'));
+  try {
+    state.exec('CREATE TABLE threads(id TEXT PRIMARY KEY, cwd TEXT NOT NULL)');
+    state.prepare('INSERT INTO threads VALUES (?, ?)').run(thread, root);
+  } finally { state.close(); }
   const binary = compiledFixture(t, root); if (!binary) return undefined;
   let guards = 0;
   const options = { binary, scope: { codexHome: home, threadId: thread, generation: 'g', ownerIdentity: 'o' }, message: 'own echo',

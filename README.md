@@ -23,6 +23,8 @@ A Node.js client that runs without Python. Package and command: `session-peer`.
 
 </div>
 
+Source storage guards now inspect additional Codex configuration layers. Windows Codex send/dry-run refuse before queue submission while local storage classification is unqualified; ordinary Claude behavior is separate. Review the [guard scope](docs/api.md#codex-storage-configuration) and selected release before installation.
+
 ## Demo
 
 ![Actual Codex to Claude Code request and reply with TypeScript session-peer 0.2.1](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)

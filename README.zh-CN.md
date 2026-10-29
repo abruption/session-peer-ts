@@ -23,6 +23,8 @@
 
 </div>
 
+此源码检查 Codex 的更多配置层。Windows 的 Codex 发送和 dry-run 因本地存储检查方式尚未验证而在队列提交前被拒绝；普通 Claude 路径另行处理。安装前请确认[检查范围](docs/api.md#codex-storage-configuration)及所选版本。
+
 ## Demo
 
 ![TypeScript session-peer 0.2.1 的实际 Codex 与 Claude Code 请求和回复](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)

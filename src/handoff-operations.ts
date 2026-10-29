@@ -156,18 +156,20 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
         return correlationEnvelope(options.message, handoff.correlationId);
       },
       beforeEffect: authorize,
-      async submitCodex(context, message) {
+      async submitCodex(context, message, storage) {
         if (!deliverySupported) {
           // Best-effort unsupported is chosen before ANY app-server attempt.
+          await storage.revalidate(false);
           await authorize();
+          await storage.revalidate(false);
           const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'CODEX_SQLITE_HOME'));
-          const done = await run(executable(options.codexBin ?? 'codex'), ['queue','--thread',context.target,`--message=${message}`], {env:{...inherited,CODEX_HOME:context.home},timeout:Math.max(1,budget.observationRemainingMs())});
+          const done = await run(executable(options.codexBin ?? 'codex'), ['queue','--thread',context.target,`--message=${message}`,'-c',`sqlite_home=${JSON.stringify(context.home)}`], {env:{...inherited,CODEX_HOME:context.home,PWD:storage.cwd},cwd:storage.cwd,timeout:Math.max(1,budget.observationRemainingMs())});
           if (!done.spawned) throw new Refusal('native_spawn_failed',1);
           if (done.interrupted || done.code !== 0) throw new UnknownOutcome();
           const receipt = queueId(done.stdout,context.target);
           return {queueId:receipt,clientUserMessageId:handoff!.correlationId};
         }
-        try { return await nativeQueueOnce({binary:executable(options.codexBin ?? 'codex'),scope:queueScope!,message,clientUserMessageId:handoff!.correlationId,deadlineMs:budget.cutoff,verifyOwner: async () => verifyOwner(scope!),beforeEffect: authorize}); }
+        try { return await nativeQueueOnce({binary:executable(options.codexBin ?? 'codex'),scope:queueScope!,message,clientUserMessageId:handoff!.correlationId,deadlineMs:budget.cutoff,verifyOwner: async () => verifyOwner(scope!),beforeEffect: authorize,verifyStorage: () => storage.revalidate(true)}); }
         catch(error) { if (error instanceof AppServerFault && error.attempted) throw new UnknownOutcome(); if(error instanceof AppServerFault) throw new Refusal(`app_server_${error.code}`,1); throw error; }
       },
       timeoutMs() { budget.beforeEffect(); return Math.max(1, Math.floor(budget.observationRemainingMs())); },

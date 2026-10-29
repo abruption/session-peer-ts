@@ -32,13 +32,13 @@ function fixture(t: TestContext) {
     const db = new DatabaseSync(join(path, 'state_5.sqlite'));
     try {
       db.exec('CREATE TABLE threads(id TEXT, title TEXT, cwd TEXT, updated_at INTEGER, archived INTEGER, rollout_path TEXT)');
-      db.prepare('INSERT INTO threads VALUES (?,?,?,?,?,?)').run(thread, 'fixture', '/project', updated, archived, 'unused');
+      db.prepare('INSERT INTO threads VALUES (?,?,?,?,?,?)').run(thread, 'fixture', root, updated, archived, 'unused');
     } finally { db.close(); }
     return path;
   }
   function invoke(args: string[] = ['list'], env: NodeJS.ProcessEnv = process.env, wire?: string) {
     const child = spawnSync(process.execPath, [cli, ...args, ...(wire === undefined ? ['--json'] : [])],
-      { env, input: wire, encoding: 'utf8', timeout: 45000 });
+      { env, cwd: env.HOME, input: wire, encoding: 'utf8', timeout: 45000 });
     assert.ifError(child.error); assert.equal(child.signal, null);
     const value = JSON.parse(child.stdout);
     assert.equal(value.schemaVersion, 1); assert.equal(value.command, 'list');
@@ -48,7 +48,7 @@ function fixture(t: TestContext) {
   function oracle(args: string[], node: any) {
     if (!process.env.SESSION_PEER_PYTHON_ROOT) return; // Python oracle is POSIX CI only.
     const child = spawnSync(process.env.PYTHON ?? 'python3', [join(process.env.SESSION_PEER_PYTHON_ROOT, 'session_peer.py'),
-      ...args, '--json', '--no-update-notice'], { env: process.env, encoding: 'utf8', timeout: 15000 });
+      ...args, '--json', '--no-update-notice'], { env: process.env, cwd: root, encoding: 'utf8', timeout: 15000 });
     assert.ifError(child.error);
     const reference = JSON.parse(child.stdout);
     assert.equal(node.ok, reference.ok); assert.deepEqual(node.sessions, reference.sessions);

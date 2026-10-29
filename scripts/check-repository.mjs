@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { currentVersions } from './current-version.mjs';
 
 const root = new URL('../', import.meta.url);
 process.chdir(fileURLToPath(root));
@@ -26,6 +27,7 @@ assert.equal(lock.packages[''].name, pkg.name);
 assert.equal(lock.packages[''].version, pkg.version);
 assert.deepEqual(lock.packages[''].bin, pkg.bin);
 assert.equal(read('src/protocol.ts').match(/export const VERSION = '([^']+)'/)[1], pkg.version);
+currentVersions();
 
 const locales = ['README.md', 'README.ko.md', 'README.ja.md', 'README.zh-CN.md'];
 const guides = locales.map(file => file.replace('README', 'docs/guide'));

@@ -47,13 +47,13 @@ function forward(signal: NodeJS.Signals) {
   process.kill(process.pid, signal);
 }
 export function run(binary: string, args: string[], options: {
-  env?: NodeJS.ProcessEnv; input?: string; timeout?: number; limit?: number; rawStdout?: boolean;
+  env?: NodeJS.ProcessEnv; cwd?: string; input?: string; timeout?: number; limit?: number; rawStdout?: boolean;
 } = {}): Promise<Done> {
   return new Promise(resolve => {
     let stdout = '', stderr = '', bytes = 0, stderrBytes = 0, spawned = false, interrupted = false, finished = false, stopped = false;
     let stopReason: StopReason | undefined;
     const chunks: Buffer[] = [], outputDecoder = new StringDecoder('utf8'), diagnosticDecoder = new StringDecoder('utf8');
-    const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'], detached: posix });
+    const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: posix });
     const release = () => {
       if (child.pid === undefined || !groups.delete(child.pid) || groups.size) return;
       for (const name of signals) process.removeListener(name, forward);

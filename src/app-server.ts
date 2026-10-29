@@ -14,6 +14,7 @@ import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
 import { run } from './process.js';
+import { classifyCodexStorage, codexConsumerCwd, decodeLsofFilename } from './codex-storage.js';
 import { CANDIDATE_PROFILES, NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 import { procOwnedFiles, type OpenedFile, type ProcReader } from './linux-proc.js';
 import { fileURLToPath } from 'node:url';
@@ -114,7 +115,8 @@ type ClientTransport = MetadataOnlyTransport | NativeQueueTransport;
 export type NativeQueuePort = Pick<AppServerPort, 'queueOnce' | 'close'>;
 export type NativeQueueOptions = {
   binary: string; scope: AppServerScope; message: string; clientUserMessageId: string; deadlineMs: number;
-  verifyOwner: (scope: AppServerScope) => Promise<boolean>; beforeEffect: () => Promise<void>; env?: NodeJS.ProcessEnv;
+  verifyOwner: (scope: AppServerScope) => Promise<boolean>; beforeEffect: () => Promise<void>;
+  verifyStorage?: () => Promise<void>; env?: NodeJS.ProcessEnv;
 };
 export function nativeQueueCapability(context: AppServerContext): {
   queueSupported: boolean; observationSupported: false;
@@ -541,7 +543,10 @@ async function darwinOpenedFiles(pid: number, deadlineMs: number): Promise<Opene
   for (const raw of result.stdout.split('\0')) {
     const field = raw.replace(/^\n/, '');
     if (field.startsWith('f')) { current = {}; files.push(current); }
-    else if (current && field.startsWith('n')) current.name = lsofFilename(field.slice(1));
+    else if (current && field.startsWith('n')) {
+      try { current.name = decodeLsofFilename(field.slice(1)); }
+      catch { throw new AppServerFault('storage_binding_unverified', false); }
+    }
     else if (current && /^D0x[0-9a-f]+$/i.test(field)) current.dev = BigInt(field.slice(1));
     else if (current && /^i[0-9]+$/.test(field)) current.ino = BigInt(field.slice(1));
   }
@@ -619,26 +624,6 @@ export async function verifyProcfsSqliteBinding(pid: number | undefined, home: s
   if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
   verifyOpenedSqlite(files, home);
 }
-// lsof field output escapes backslashes and non-ASCII bytes even with NUL field
-// delimiters. Decode the protected system tool's filename representation, then
-// compare exact canonical paths; never accept a prefix/substring match.
-function lsofFilename(raw: string): string {
-  const bytes: number[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    if (raw[i] !== '\\') {
-      const char = String.fromCodePoint(raw.codePointAt(i)!);
-      bytes.push(...Buffer.from(char)); i += char.length - 1; continue;
-    }
-    const next = raw[++i];
-    if (next === '\\') { bytes.push(92); continue; }
-    if (next === 'x' && /^[0-9a-f]{2}$/i.test(raw.slice(i + 1, i + 3))) {
-      bytes.push(parseInt(raw.slice(i + 1, i + 3), 16)); i += 2; continue;
-    }
-    throw new AppServerFault('storage_binding_unverified', false);
-  }
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(bytes)); }
-  catch { throw new AppServerFault('storage_binding_unverified', false); }
-}
 function executableIdentity(binary: string): string {
   try {
     const path = realpathSync(binary), info = statSync(path, { bigint: true });
@@ -668,18 +653,33 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
   // Reject malformed effect input before even a version probe or bootstrap can
   // start the binary and access/create native files in the selected home.
   validateQueueInput(options, false);
+  if (!await beforeDeadline(options.deadlineMs, () => options.verifyOwner(original), 'owner_changed')) throw new AppServerFault('owner_changed', false);
+  if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  const consumerCwd = await codexConsumerCwd(original.codexHome, original.threadId).catch(() => {
+    throw new AppServerFault('storage_binding_unverified', false);
+  });
+  const checkStorage = (version?: string) => {
+    const value = classifyCodexStorage({ home: original.codexHome, queueCwd: original.codexHome,
+      consumerCwds: [consumerCwd], ownedAppServer: true, version, environment: options.env ?? process.env });
+    if (value.status !== 'classified') throw new AppServerFault('storage_binding_unverified', false);
+    return value;
+  };
+  const initialStorage = checkStorage();
+  const revalidateStorage = async (version?: string) => {
+    if (await codexConsumerCwd(original.codexHome, original.threadId).catch(() => '') !== consumerCwd ||
+        checkStorage(version).fingerprint !== initialStorage.fingerprint) throw new AppServerFault('storage_binding_unverified', false);
+  };
   // In the qualified versions config.sqlite_home precedes CODEX_SQLITE_HOME. Pin BOTH env and
   // a quoted CLI value so an ordinary config A->B->A load cannot redirect us.
   // Managed policy can still supersede the CLI pin, hence the FD-path check.
-  const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env), CODEX_HOME: original.codexHome,
-    CODEX_SQLITE_HOME: original.codexHome };
-  if (!await beforeDeadline(options.deadlineMs, () => options.verifyOwner(original), 'owner_changed')) throw new AppServerFault('owner_changed', false);
-  if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  const inherited = Object.fromEntries(Object.entries(options.env ?? process.env).filter(([key]) => !['CODEX_HOME', 'CODEX_SQLITE_HOME'].includes(key.toUpperCase())));
+  const env: NodeJS.ProcessEnv = { ...inherited, CODEX_HOME: original.codexHome,
+    CODEX_SQLITE_HOME: original.codexHome, PWD: initialStorage.queueCwd! };
   const binaryIdentity = executableIdentity(options.binary);
   const probeRemaining = options.deadlineMs - performance.now();
   if (probeRemaining <= 0) throw new AppServerFault('deadline', false);
   const version = await run(options.binary, ['--version'], {
-    env, timeout: probeRemaining, limit: 4096,
+    env, cwd: initialStorage.queueCwd, timeout: probeRemaining, limit: 4096,
   });
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
   const nativeVersion = version.stdout.trim().slice('codex-cli '.length);
@@ -688,6 +688,7 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
     throw new AppServerFault('unsupported_version', false);
   }
   verifyExecutableIdentity(options.binary, binaryIdentity);
+  await revalidateStorage(nativeVersion);
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
   if (profile.artifact) {
     // Pinned executable bytes, hashed within the original deadline; the stable
@@ -714,8 +715,10 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
       if (valid && effectGuarded) {
         // Run after the LAST asynchronous owner verification. The durable guard
         // and owner probe can both await I/O and change canonical file bindings.
+        await options.verifyStorage?.();
         verifyExecutableIdentity(options.binary, binaryIdentity);
         await bind(transport.pid);
+        await revalidateStorage(nativeVersion);
       }
       return valid;
     }, async () => { await options.beforeEffect(); effectGuarded = true; }, profile);

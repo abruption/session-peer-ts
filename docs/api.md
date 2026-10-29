@@ -36,6 +36,100 @@ The ordinary SSH response correction is documented separately as the [0.3.3 ordi
 
 <a id="unreleased-opt-in-handoff-cli--040-work"></a>
 
+<a id="codex-storage-configuration"></a>
+
+## Codex storage configuration guards
+
+This development source extends the published selected-home check with bounded
+local loader-layer classification. The published 0.5.1 comparison in PARITY is
+retained as dated evidence; this branch's source/fixture results do not establish
+publication or new native delivery qualification.
+
+The ordinary queue loader is reviewed at exact native Codex versions **0.160.1,
+0.162.1 and 0.165.0**, independently of the narrower observation profile table.
+An effectful send probes the explicitly selected binary's reported version and
+retains its file identity. Doctor and dry-run never execute the agent binary;
+their `loaderVersionVerified:false` result is not native queue authorization.
+
+Darwin and Linux classify the selected-home `config.toml`, system
+`/etc/codex/config.toml`, `requirements.toml` and legacy `managed_config.toml`,
+plus project configuration for the physical queue cwd and the saved target
+thread's cwd. A live writer additionally needs an observable physical cwd and
+opened state-database descriptor matching the selected inode; a queried sender
+version does not establish the running consumer's configuration. macOS reads only
+forced `config_toml_base64` / `requirements_toml_base64` values for
+`com.openai.codex`, checking forced status before and after value retrieval.
+
+Windows local storage classification is unqualified: Codex send/dry-run refuse
+before queue submission until its native known-folder and process/storage
+inspection contract is supported. This does not disable ordinary Claude paths
+or qualify Linux/Windows observation. A reused native daemon retains startup
+storage that these local reads cannot attest to; its existing control-socket
+metadata causes refusal without connecting to or stopping it. The separately
+owned stdio app-server path must bind its opened SQLite files independently.
+
+Cloud config bundles can supply configuration and storage requirements. Cache
+absence alone is insufficient because native loaders may fetch a bundle.
+Without reading credential/cache contents, ordinary queue classification refuses
+when selected-home `auth.json` or `cloud-config-bundle-cache.json` metadata is
+present, when configuration selects keyring/auto credential storage, or when
+external identity markers or a config server make cloud applicability unknown.
+**This includes ordinary signed-in file-auth homes even when their actual account
+would not receive cloud policy.** The refusal is
+`codex_cloud_storage_unverified`; it is not a determination that relocation is
+configured. File-auth/cache absence plus source-qualified local selectors permits
+the clean ordinary path. The separately requested owned app-server route may
+continue only with its actual opened-storage binding; local metadata alone is
+not substituted for that proof.
+
+Nonempty native exec-server/Noise environment markers and selected-home
+`environments.toml` metadata cause refusal on both paths. The adapter classifies
+local storage only and does not attach to remote workspaces. Alternative V2 user
+profiles in the reviewed loaders require explicit `--profile`/`-p` arguments;
+these native invocations do not select them. Diagnostic fields identify the local
+layer scope and cloud applicability; they never certify complete effective policy.
+
+Configuration files are bounded regular-file reads (1 MiB per file, 8 MiB total),
+with fatal UTF-8/TOML decoding and observable descriptor/path identity and
+stability checks. Project ancestry is capped at 256 directories. Explicit custom
+project markers use a conservative ancestor superset, which can refuse an
+otherwise unused ancestor configuration; the result is not a complete model of
+native project trust. System metadata helpers have bounded output/timeouts;
+byte bounds do not promise a deadline for arbitrary filesystem I/O.
+
+Unsupported root `sqlite_home`, malformed/unreadable configuration, unsupported
+reported loader versions, conflicting process/file evidence and changes before
+dispatch refuse submission. Errors include `unsupported_codex_sqlite_home`,
+`codex_config_unreadable`, `codex_storage_config_unverifiable`,
+`codex_storage_loader_unsupported`, `codex_daemon_storage_unverified`,
+`codex_consumer_context_unverifiable`, `codex_consumer_storage_unverifiable`,
+`codex_cloud_storage_unverified` and `codex_storage_changed_before_queue`.
+Public `storage` diagnostics contain layer names and classifications; content
+hashes, configuration paths, raw TOML and preference values stay private.
+
+Ordinary, fallback and owned app-server paths recheck applicable evidence before
+effect while retaining original writer and deadline rules. A quoted explicit
+`sqlite_home` pin enforces the already-classified selected location; it does not
+adopt a configured relocation. This is an observable continuity guard, not an
+atomic filesystem/configuration snapshot or protection against an undetectable
+same-user rewrite. Missing evidence never permits fallback after an attempt or
+an automatic retry of an unknown outcome.
+
+Source review pins:
+
+| Native tag | Upstream source commit |
+| --- | --- |
+| 0.160.1 | [`d27764b82f7118f674371e6d6e76271d9d606edb`](https://github.com/openai/codex/tree/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/config/src/loader) |
+| 0.162.1 | [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/config/src/loader) |
+| 0.165.0 | [`360319d8dee62d87e2d59fc0c21805d79519cfed`](https://github.com/openai/codex/tree/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/config/src/loader) |
+
+All three macOS loader files have SHA-256
+`36dd560f67b3b45bf3d63f4e2b962571456c12dc2f9ca55304f8729d49bee0c5`.
+The comparison also inspects Python
+[`f5e7c49554ff02771990a151e00b52f2abf3df0a`](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/codex.py).
+These are static source and isolated-fixture checks; no native Codex queue,
+user session, delivery/ACK or remote-host qualification was run for this change.
+
 ## Opt-in handoff CLI — 0.4.0
 
 0.4.0 includes an explicit private POSIX sender ledger. Default sends retain

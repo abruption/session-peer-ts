@@ -1,0 +1,450 @@
+[
+  {
+    "file": "src/protocol.ts",
+    "templates": [
+      {
+        "line": "export const VERSION = '{{version}}';",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "README.md",
+    "templates": [
+      {
+        "line": "**Documentation and source version: {{version}}.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and {{version}} refuse each other’s SSH preflight.",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. The {{version}} source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported.",
+        "occurrences": 1
+      },
+      {
+        "line": "**Version {{version}} installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 2
+      },
+      {
+        "line": "Expected: `session-peer {{version}} (typescript)`. For isolated installation, source",
+        "occurrences": 1
+      },
+      {
+        "line": "older npm installation to the selected {{version}} release. The CLI does not install updates;",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "README.ko.md",
+    "templates": [
+      {
+        "line": "**문서·소스 기준 버전: {{version}}.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6과 {{version}}은 서로의 SSH 사전 확인을 거부합니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. {{version}} 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "**{{version}} 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](docs/guide.ko.md#소스에서-빌드)를 사용하세요.",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 2
+      },
+      {
+        "line": "예상 결과는 `session-peer {{version}} (typescript)`입니다. 별도 경로에 설치하거나,",
+        "occurrences": 1
+      },
+      {
+        "line": "(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 선택한 {{version}}으로",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "README.ja.md",
+    "templates": [
+      {
+        "line": "**文書・ソースのバージョン: {{version}}。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と {{version}} は互いの SSH 事前確認を拒否します。",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 {{version}} のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。",
+        "occurrences": 1
+      },
+      {
+        "line": "**{{version}} のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](docs/guide.ja.md#ソースからビルド)を使います。",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 2
+      },
+      {
+        "line": "期待する出力: `session-peer {{version}} (typescript)`。分離インストール・ソースビルド・",
+        "occurrences": 1
+      },
+      {
+        "line": "正確なバージョンを指定してください。以下は古い npm 版を選択した {{version}} に更新する例です。",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "README.zh-CN.md",
+    "templates": [
+      {
+        "line": "**文档和源码版本：{{version}}。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](VALIDATION.md)，发布流程见 [RELEASING.md](RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 {{version}} 会拒绝彼此的 SSH 预检。",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 {{version}} 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。",
+        "occurrences": 1
+      },
+      {
+        "line": "**安装 {{version}}：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](docs/guide.zh-CN.md#从源码构建)。",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 2
+      },
+      {
+        "line": "预期输出：`session-peer {{version}} (typescript)`。隔离安装、源码构建、Windows 和",
+        "occurrences": 1
+      },
+      {
+        "line": "下面示例将旧 npm 安装更新至所选的 {{version}}。CLI 不会安装更新，`session-peer update --check` 只做检查。",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "docs/guide.md",
+    "templates": [
+      {
+        "line": "**Documentation and source version: {{version}}.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and {{version}} refuse each other’s SSH preflight.",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. The {{version}} source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported.",
+        "occurrences": 1
+      },
+      {
+        "line": "This guide covers version {{version}} ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.",
+        "occurrences": 1
+      },
+      {
+        "line": "This guide describes **version {{version}}**. The npm package and CLI command are both **`session-peer`**. This",
+        "occurrences": 1
+      },
+      {
+        "line": "**Version {{version}} installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 2
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 1
+      },
+      {
+        "line": "session-peer --version  # session-peer {{version}} (typescript)",
+        "occurrences": 1
+      },
+      {
+        "line": "On SSH, both ends need the same TypeScript client version ({{version}}).",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts ./session-peer-{{version}}.tgz",
+        "occurrences": 1
+      },
+      {
+        "line": "Expected for version {{version}}: `session-peer {{version}} (typescript)`. Keep the `./...tgz` path to",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --prefix \"$env:TEMP\\session-peer-ts-source\" --ignore-scripts .\\session-peer-{{version}}.tgz",
+        "occurrences": 1
+      },
+      {
+        "line": "Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current {{version}} availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.",
+        "occurrences": 1
+      },
+      {
+        "line": "`npm install --global --ignore-scripts session-peer@{{version}}`; a pnpm, Yarn or Bun",
+        "occurrences": 1
+      },
+      {
+        "line": "Native delivery observation is unsupported on Linux and Windows. The {{version}} source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "docs/guide.ko.md",
+    "templates": [
+      {
+        "line": "**문서·소스 기준 버전: {{version}}.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6과 {{version}}은 서로의 SSH 사전 확인을 거부합니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. {{version}} 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "이 가이드는 {{version}}을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전({{version}})을 설치해야",
+        "occurrences": 1
+      },
+      {
+        "line": "확인하세요. 아래 명령은 선택한 {{version}}을 npm으로 설치하는 예입니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "**{{version}} 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 2
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 1
+      },
+      {
+        "line": "session-peer --version  # session-peer {{version}} (typescript)",
+        "occurrences": 1
+      },
+      {
+        "line": "예상 결과는 `session-peer {{version}} (typescript)`입니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts ./session-peer-{{version}}.tgz",
+        "occurrences": 1
+      },
+      {
+        "line": "{{version}}에서 예상되는 결과는 `session-peer {{version}} (typescript)`입니다. 로컬 빌드",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --prefix \"$env:TEMP\\session-peer-ts-source\" --ignore-scripts .\\session-peer-{{version}}.tgz",
+        "occurrences": 1
+      },
+      {
+        "line": "아래 레지스트리 조회로 {{version}}의 현재 제공 여부와 npm 태그를 확인하세요. 날짜가 기록된 준비 근거는 이후 발행 결과를 입증하지 않습니다.",
+        "occurrences": 1
+      },
+      {
+        "line": "nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@{{version}}`),",
+        "occurrences": 1
+      },
+      {
+        "line": "Linux·Windows의 native 주입 관측은 미지원입니다. {{version}} 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "docs/guide.ja.md",
+    "templates": [
+      {
+        "line": "**文書・ソースのバージョン: {{version}}。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](../VALIDATION.md)、リリース手順は [RELEASING.md](../RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と {{version}} は互いの SSH 事前確認を拒否します。",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 {{version}} のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。",
+        "occurrences": 1
+      },
+      {
+        "line": "{{version}} の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。以前の公開記録は [0.3.1 公開リリースの証拠](../VALIDATION.md#public-031--2026-10-04-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。",
+        "occurrences": 1
+      },
+      {
+        "line": "**{{version}} の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。",
+        "occurrences": 1
+      },
+      {
+        "line": "対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（{{version}}）が必要です。",
+        "occurrences": 1
+      },
+      {
+        "line": "**{{version}} のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](#ソースからビルド)を使います。",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 2
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 1
+      },
+      {
+        "line": "期待値は `session-peer {{version}} (typescript)`。",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts ./session-peer-{{version}}.tgz",
+        "occurrences": 1
+      },
+      {
+        "line": "Windows PowerShell では `Get-Command session-peer -All` で既存コマンドを確認します。Python CLI を置換せずに試すには、`npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts` の後、`npm install --prefix \"$env:TEMP\\session-peer-ts-source\" --ignore-scripts .\\session-peer-{{version}}.tgz` を実行し、`& \"$env:TEMP\\session-peer-ts-source\\node_modules\\.bin\\session-peer.cmd\" --version` で確認します。同じ prefix の `npm uninstall --prefix \"$env:TEMP\\session-peer-ts-source\" session-peer` で削除します。",
+        "occurrences": 1
+      },
+      {
+        "line": "公開 **0.3.2** は 2026-10-07 KST に検証されました（[固定された公開記録](../VALIDATION.md#public-032--2026-10-07-kst)）。以下のレジストリ照会で {{version}} の現在の公開状況と npm タグを確認してください。日付付きの準備記録は、その後の公開結果を証明しません。",
+        "occurrences": 1
+      },
+      {
+        "line": "`npm install --global --ignore-scripts session-peer@{{version}}`）、マニフェストで",
+        "occurrences": 1
+      },
+      {
+        "line": "Linux・Windows の native 注入観測は未対応です。 {{version}} のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。対応する POSIX ledger では、運用者が明示的に確認した受領を `operator_confirmed` として記録できますが、自動 ACK 収集ではありません。0.4.0 の範囲は、検証済みの macOS 観測と明示的な運用者確認です。Linux・Windows 観測と receipt bootstrap は [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) の後続作業です。",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "docs/guide.zh-CN.md",
+    "templates": [
+      {
+        "line": "**文档和源码版本：{{version}}。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](../VALIDATION.md)，发布流程见 [RELEASING.md](../RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 {{version}} 会拒绝彼此的 SSH 预检。",
+        "occurrences": 1
+      },
+      {
+        "line": "**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 {{version}} 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。",
+        "occurrences": 1
+      },
+      {
+        "line": "这是 {{version}} 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。此前的发布记录见 [0.3.1 公开发布证据](../VALIDATION.md#public-031--2026-10-04-kst)；下文 0.1.0 的说明用于旧版本对比。",
+        "occurrences": 1
+      },
+      {
+        "line": "**这是 {{version}} 使用指南。**包名为 `session-peer`，CLI 命令为 **`session-peer`**。本项目不提供 Relay 服务器或托管服务。",
+        "occurrences": 1
+      },
+      {
+        "line": "范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（{{version}}）。",
+        "occurrences": 1
+      },
+      {
+        "line": "**安装 {{version}}：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](#从源码构建)。",
+        "occurrences": 1
+      },
+      {
+        "line": "npm view session-peer@{{version}} version dist.integrity",
+        "occurrences": 2
+      },
+      {
+        "line": "npm install --global --ignore-scripts session-peer@{{version}}",
+        "occurrences": 1
+      },
+      {
+        "line": "预期输出：`session-peer {{version}} (typescript)`。",
+        "occurrences": 1
+      },
+      {
+        "line": "npm install --global --ignore-scripts ./session-peer-{{version}}.tgz",
+        "occurrences": 1
+      },
+      {
+        "line": "在 Windows PowerShell 中用 `Get-Command session-peer -All` 检查已有命令。为了不替换 Python CLI，可先执行 `npm ci --ignore-scripts`、`npm run build`、`npm pack --ignore-scripts`，再用 `npm install --prefix \"$env:TEMP\\session-peer-ts-source\" --ignore-scripts .\\session-peer-{{version}}.tgz` 安装到隔离目录。以 `& \"$env:TEMP\\session-peer-ts-source\\node_modules\\.bin\\session-peer.cmd\" --version` 验证，并可用 `npm uninstall --prefix \"$env:TEMP\\session-peer-ts-source\" session-peer` 卸载。",
+        "occurrences": 1
+      },
+      {
+        "line": "公开 **0.3.2** 于 2026-10-07 KST 完成验证（[不可变公开记录](../VALIDATION.md#public-032--2026-10-07-kst)）。请用下方注册表查询确认 {{version}} 的当前可用性和 npm 标签；带日期的准备证据不能证明后续发布结果。",
+        "occurrences": 1
+      },
+      {
+        "line": "`npm install --global --ignore-scripts session-peer@{{version}}`），清单中声明了",
+        "occurrences": 1
+      },
+      {
+        "line": "Linux、Windows 的 native 注入观察尚不支持。 {{version}} 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。支持的 POSIX ledger 可将操作人员明确确认的收件事实记录为 `operator_confirmed`，但这不是自动 ACK 收集。0.4.0 范围是已验证的 macOS 观察和操作人员的明确确认。Linux、Windows 观察及 receipt bootstrap 分别作为 [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) 的后续工作。",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "docs/api.md",
+    "templates": [
+      {
+        "line": "This reference describes source/package version **{{version}}**. Check registry availability and review the selected release before installation. Dated release evidence is recorded in [VALIDATION.md](../VALIDATION.md); before publication use a reviewed source artifact.",
+        "occurrences": 1
+      },
+      {
+        "line": "locally with `npm install --ignore-scripts session-peer@{{version}}` before importing it.",
+        "occurrences": 1
+      },
+      {
+        "line": "console.log(VERSION);      // {{version}}",
+        "occurrences": 1
+      },
+      {
+        "line": "console.log(VERSION_LINE); // session-peer {{version}} (typescript)",
+        "occurrences": 1
+      },
+      {
+        "line": "the same reviewed {{version}} implementation. This workflow was introduced in",
+        "occurrences": 1
+      },
+      {
+        "line": "The {{version}} source records a Linux arm64 Codex 0.162.1 candidate (pinned musl",
+        "occurrences": 1
+      },
+      {
+        "line": "The {{version}} source preserves this supported handoff scope; its Linux and Windows",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "docs/shorthand.md",
+    "templates": [
+      {
+        "line": "This reference describes source/package version {{version}}. Check registry availability before using a version-pinned npm installation; before publication use a reviewed source artifact. The shorthand forwards to the explicitly selected CLI and does not install or upgrade it.",
+        "occurrences": 1
+      }
+    ]
+  },
+  {
+    "file": "PARITY.md",
+    "templates": [
+      {
+        "line": "Current source/package version: **{{version}}**.",
+        "occurrences": 1
+      }
+    ]
+  }
+]

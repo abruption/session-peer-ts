@@ -1,5 +1,9 @@
 # 사용자 가이드 — session-peer (TypeScript)
 
+이 소스는 Codex home·시스템·macOS 관리 설정과 큐 실행 프로세스 및 대상 프로세스의 실제 작업 경로에 적용되는 프로젝트 설정을 검사합니다. [저장소 검증 범위와 거부 조건](api.md#codex-storage-configuration)을 확인하세요. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부합니다. doctor와 dry-run은 Codex를 실행하지 않으며 로더 버전은 미확인으로 남깁니다.
+
+현재 기능 차이와 포팅 결정은 [날짜가 명시된 비교표](../PARITY.md#current-scoped-feature-matrix)에서 확인하세요. TypeScript의 공개 기능과 별도로 고정한 Python 비교 기준을 구분합니다.
+
 [README로 돌아가기](../README.ko.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)

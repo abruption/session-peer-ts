@@ -20,18 +20,23 @@ async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-hd-'))),home=join(root,'home'),bin=join(root,'bin');chmodSync(root,0o700);mkdirSync(home,{mode:0o700});mkdirSync(bin,{mode:0o700});mkdirSync(join(home,'thread-writer-locks'),{mode:0o700});
  let history:DatabaseSync|undefined;
  t.after(()=>{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}});
- const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT)');state.prepare('INSERT INTO threads VALUES(?)').run(thread);state.close();
+ const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT, cwd TEXT)');state.prepare('INSERT INTO threads VALUES(?,?)').run(thread,home);state.close();
  // Model a live warm WAL store: keep the owner connection open so other
  // fixture connections cannot remove/recreate WAL and SHM between probes.
  // DELETE-mode writes can expose a rollback journal that the observer refuses.
  if(warm){const db=history=new DatabaseSync(join(home,'thread_history_1.sqlite'));db.exec('PRAGMA journal_mode=WAL');db.exec(schema);db.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread,'turn-fixture','completed');db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread,100,100);}
  const lock=join(home,'thread-writer-locks',thread+'.lock'),locks=createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt');
- const held=spawn(process.execPath,['-e',"const f=require('fs').openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(f,'exnb');console.log('ready');setInterval(()=>{},1000)",lock,locks]);held.stderr.resume();await once(held.stdout,'data');t.after(async()=>{if(held.exitCode===null&&held.signalCode===null){held.kill('SIGKILL');await once(held,'close');}});
+ // The retained writer really opens this home's state inode and runs from an
+ // existing cwd, so the production storage binding guard needs no fixture bypass.
+ const held=spawn(process.execPath,['-e',"const f=require('fs').openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(f,'exnb');const db=require('fs').openSync(process.argv[3],'r');console.log('ready');setInterval(()=>{},1000)",lock,locks,join(home,'state_5.sqlite')],{cwd:home});held.stderr.resume();await once(held.stdout,'data');t.after(async()=>{if(held.exitCode===null&&held.signalCode===null){held.kill('SIGKILL');await once(held,'close');}});
  // The real tools are native executables. Do not spend the bounded owner
  // probe's budget on four extra Node startups under parallel CI load.
  // Owner data stays in a separate file, never interpolated into shell code.
  const lsof=join(bin,'lsof');writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+process.getuid?.()+'\0',{mode:0o600});
- writeFileSync(lsof,'#!/bin/sh\nexec /bin/cat "$0.data"\n',{mode:0o700});
+ writeFileSync(lsof+'.cwd','p'+held.pid+'\0fcwd\0n'+home+'\0',{mode:0o600});
+ const stateInfo=statSync(join(home,'state_5.sqlite'),{bigint:true});
+ writeFileSync(lsof+'.fds','p'+held.pid+'\0f4\0D0x'+stateInfo.dev.toString(16)+'\0i'+stateInfo.ino+'\0n'+join(home,'state_5.sqlite')+'\0',{mode:0o600});
+ writeFileSync(lsof,'#!/bin/sh\ncase " $* " in\n  *" -d cwd "*) exec /bin/cat "$0.cwd";;\n  *" -F0fDin "*) exec /bin/cat "$0.fds";;\n  *) exec /bin/cat "$0.data";;\nesac\n',{mode:0o700});
  writeFileSync(join(bin,'ps'),'#!/bin/sh\nprintf "Fixture stable start\\n"\n',{mode:0o700});
  const log=join(root,'queue-log-\'"\\\n\u2028\u2029'),nativeLog=join(root,'native-calls.jsonl');writeFileSync(log,'');writeFileSync(nativeLog,'');const codex=join(bin,'codex');
  const initializeReady=join(root,'initialize-ready'),initializeRelease=join(root,'initialize-release');
@@ -161,7 +166,7 @@ test('initialize readiness observes persisted fixture evidence when filesystem n
  assert.equal(readFileSync(join(f.root,'initialize-ready'),'utf8'),'ready');
 });
 test('initialize readiness reports a send that exits before initialization with its current outcome',qualified,async t=>{
- const f=await fixture(t,'concurrent-stop','0.163.0');
+ const f=await fixture(t,'concurrent-stop','0.165.0');
  const active=f.start([...f.args,'--wait-for','delivered']);
  await assert.rejects(f.initialized(),error=>{
   assert.ok(error instanceof Error);assert.match(error.message,/send exited before initialize evidence/);
@@ -172,7 +177,7 @@ test('initialize readiness reports a send that exits before initialization with 
  assert.deepEqual(f.nativeCalls().filter((row:{command:string})=>row.command==='app-server'),[]);
 });
 test('queue readiness reports a send that exits before submission with its current outcome',qualified,async t=>{
- const f=await fixture(t,'none','0.163.0');
+ const f=await fixture(t,'none','0.165.0');
  const active=f.start([...f.args,'--wait-for','delivered']);
  await assert.rejects(f.queued(),error=>{
   assert.ok(error instanceof Error);assert.match(error.message,/send exited before queue evidence/);
@@ -212,8 +217,9 @@ test('positive native acceptance survives a subsequent ledger failure without an
  assert.equal(duplicate.code,1);assert.equal(duplicate.value.error,'handoff_already_attempted');
  assert.equal(f.calls().length,1);
 });
-test('current unqualified native version cannot enter the app-server or required delivery path',qualified,async t=>{
- const f=await fixture(t,'inject','0.163.0');
+test('storage-qualified but observation-unqualified native version cannot enter the app-server or required delivery path',qualified,async t=>{
+ // 0.165.0 has reviewed local loader semantics but no delivery observation row.
+ const f=await fixture(t,'inject','0.165.0');
  const required=await f.invoke([...f.args,'--wait-for','delivered']);
  assert.equal(required.code,1);assert.equal(required.value.submitted,false);
  assert.equal(required.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
@@ -223,8 +229,8 @@ test('current unqualified native version cannot enter the app-server or required
  assert.equal(best.value.handoff.observation.injectionObserved,false);
  assert.deepEqual(f.calls(),[{method:'legacy'}]);
 });
-test('unsupported version/absent warm store refuse required goals, best-effort fallback is chosen before app-server effect',qualified,async t=>{
- const f=await fixture(t,'inject','0.159.0');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1);assert.equal(r.value.submitted,false);assert.equal(r.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
+test('unsupported observation version/absent warm store refuse required goals, best-effort fallback is chosen before app-server effect',qualified,async t=>{
+ const f=await fixture(t,'inject','0.165.0');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1);assert.equal(r.value.submitted,false);assert.equal(r.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
  const best=await f.invoke([...f.args,'--observe-delivery']);assert.equal(best.code,0);assert.equal(best.value.handoff.observation.status,'unsupported');assert.deepEqual(f.calls(),[{method:'legacy'}]);
  const missing=await fixture(t,'inject','0.160.1',false);const blocked=await missing.invoke([...missing.args,'--wait-for','delivered']);assert.equal(blocked.code,1);assert.equal(blocked.value.submitted,false);assert.equal(missing.calls().length,0);
 });

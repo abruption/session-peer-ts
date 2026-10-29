@@ -52,7 +52,87 @@ observation and explicit operator-confirmed receipt scope below; #130–#132
 remain separate platform/collector extensions. Published skill 0.2.1 remains
 the installation pin; runtime publication is not companion-skill publication.
 
-## Current comparison — Python 1.1.0 / TypeScript 0.5.0
+<a id="current-scoped-feature-matrix"></a>
+## Current scoped feature matrix
+
+Current source/package version: **0.5.1**.
+
+Reviewed **2026-10-29 KST** against TS **0.5.1** source
+[`90481b148584926ea328ed956327f3050d9be9cb`](https://github.com/abruption/session-peer-ts/tree/90481b148584926ea328ed956327f3050d9be9cb)
+and Python **1.3.2** source
+[`f5e7c49554ff02771990a151e00b52f2abf3df0a`](https://github.com/abruption/session-peer/tree/f5e7c49554ff02771990a151e00b52f2abf3df0a),
+also the [published Python v1.3.2 release](https://github.com/abruption/session-peer/releases/tag/v1.3.2).
+The version display above is maintained separately; changing it does not refresh
+this dated source review. This matrix describes the reviewed TS baseline;
+branch proposals and later publications require their own evidence. Source and
+GitHub-state inspection adds no test, live delivery, ACK or platform qualification.
+
+**Shipped** means the bounded TS behavior exists in that baseline. **Partial**
+means only the stated subset exists. **Intentional difference** is a maintained
+contract choice. **Not planned** records an explicit disposition. **Undecided**
+means no TS implementation scope has been approved, including deferred evaluation.
+An issue or Python feature alone does not authorize implementation.
+
+| Surface | Reviewed TS behavior and Python comparison | Status / boundary |
+| --- | --- | --- |
+| Ordinary discovery, input and submission | Unified Claude/Codex list, bounded Codex-home inventory, text/JSON and positional/stdin input, Unicode name matching, Claude inbox and guarded Codex queue submission | Shipped within existing platform/native contracts; submission never proves consumption |
+| macOS Claude Orca profiles | TS reads one environment-selected/default registry; Python additionally inventories bounded known macOS Orca profiles when no override is set ([TS source](https://github.com/abruption/session-peer-ts/blob/90481b148584926ea328ed956327f3050d9be9cb/src/discovery.ts#L78-L117), [Python source](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/claude.py#L44-L84)) | Partial; [#165](https://github.com/abruption/session-peer-ts/issues/165) is a separate discovery/provenance extension |
+| Codex storage classification | TS rejects selected-home root `sqlite_home` and malformed TOML, and strips `CODEX_SQLITE_HOME` from native child environments; Python additionally checks system/requirements, managed-preference and project/cwd layers ([TS source](https://github.com/abruption/session-peer-ts/blob/90481b148584926ea328ed956327f3050d9be9cb/src/discovery.ts#L13-L24), [Python source](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/codex.py#L272-L494)) | Partial; [#166](https://github.com/abruption/session-peer-ts/issues/166). Selected-home validation is not effective-storage attestation |
+| Doctor and return routes | Read-only local/SSH diagnostics, generated From/Reply-To metadata, explicit reply URI and opt-in return-route probe | Shipped bounded behavior; no executable `Reply:` instruction or Antigravity sender identity |
+| Ordered SSH and typed jump | Repeated hosts, allowlisted options, IPv6 and POSIX-client single-hop jump; Windows-client jump refuses before effect | Partial; remaining Windows-client qualification in [#20](https://github.com/abruption/session-peer-ts/issues/20); no arbitrary options or multi-hop |
+| Remote deployment | TS requires an installed CLI and exactly matching TS versions; Python streams its standalone source | Intentional difference; [#23](https://github.com/abruption/session-peer-ts/issues/23) / [remote deployment design](docs/design/remote-deployment.md) remain bounded follow-ups, with no automatic deployment/update or version-range compatibility |
+| Updates and notice suppression | npm-aware `update --check` and manager guidance; cached runtime notices opt in with `SESSION_PEER_UPDATE_NOTICE=1`, and honor `--no-update-notice` and `SESSION_PEER_NO_UPDATE_NOTICE` ([source](https://github.com/abruption/session-peer-ts/blob/90481b148584926ea328ed956327f3050d9be9cb/src/updates.ts#L289-L291)) | Intentional difference from Python's default-on runtime/skill notices and standalone update paths; existing suppression shipped in #22/#85; no self-update, remote push or skill notices |
+| Handoff and observation | Private correlated intents and explicit operator-confirmed receipt; exact macOS arm64 Codex 0.160.1/0.162.1 observation only | Partial; Linux [#130](https://github.com/abruption/session-peer-ts/issues/130), Windows [#131](https://github.com/abruption/session-peer-ts/issues/131) and authenticated receipt producer/collector [#132](https://github.com/abruption/session-peer-ts/issues/132) remain separate. No automatic ACK, consumption or exactly-once guarantee |
+| Public execution API | Package root exports pure protocol helpers, not a reusable execution/adapter API | Partial; [#24](https://github.com/abruption/session-peer-ts/issues/24) retains validation, permission and single-attempt boundaries |
+| Companion skill | Separately installed TS skill with immutable guidance pin and finite exact metadata profiles | Intentional difference; runtime publication does not publish/update the skill or authenticate its contents |
+| Paired devices, relay and recovery | Python exposes optional device/relay/setup workflows; TS has no equivalent | Not planned; [#29](https://github.com/abruption/session-peer-ts/issues/29), [#30](https://github.com/abruption/session-peer-ts/issues/30), [#31](https://github.com/abruption/session-peer-ts/issues/31), [#32](https://github.com/abruption/session-peer-ts/issues/32) are closed as not planned; historical Planned rows below are not the current roadmap |
+| Wake, Antigravity and MCP integration | No TS wake/resume, Antigravity adapter or policy-restricted MCP server | Undecided implementation scope; [#27](https://github.com/abruption/session-peer-ts/issues/27), [#28](https://github.com/abruption/session-peer-ts/issues/28), [#26](https://github.com/abruption/session-peer-ts/issues/26) track separate work; no inferred Python feature parity |
+| Newer Python convenience workflows | Route presets/saved recipients, explain, explicit trusted SSH config and persistent per-version runtime-notice dismissal are absent from the [TS command/options inventory](https://github.com/abruption/session-peer-ts/blob/90481b148584926ea328ed956327f3050d9be9cb/src/cli.ts#L19-L29) | Undecided eventual scope; explicit defer decisions below |
+
+The published 0.5.1 storage coverage gap above is separate from the proposed
+#166 correction on this development branch. A branch change or fixture result
+must not be described as an already published runtime fix or native-loader
+qualification. The development guard's [actual scope](docs/api.md#codex-storage-configuration)
+classifies source-qualified local layers and retains opened-file evidence. It
+refuses ordinary signed-in/possibly cloud-managed homes when classification would
+require reading credentials; the owned app-server path needs actual storage binding.
+Windows Codex dispatch remains unqualified and refuses before queueing. Python's
+broader checks also explicitly exclude some effective
+storage sources; they are not a whole-runtime storage attestation.
+
+### Product decisions for newer Python workflows — 2026-10-29 KST
+
+These are **defer** decisions for this patch, not promises to port. Any later
+implementation needs a focused scope and separate approval; this comparison
+creates no new feature implementation or automatic follow-up issue.
+
+| Workflow / pinned Python evidence | Decision and prerequisite for reconsideration |
+| --- | --- |
+| [Route presets and saved addresses](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/cli.py#L138-L215), [address commands](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/cli.py#L318-L340) | Defer. Decide private local storage, route-versus-recipient identity, revision checks and explicit target confirmation before proposing a port. Existing reply URIs are not saved-address support |
+| [Delivery/diagnostic explain](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/cli.py#L194-L196), [handoff status explain](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/cli.py#L228-L229) | Defer. Define a read-only explanation of existing evidence without promoting queue, turn completion or arbitrary replies to delivery/ACK. Current text output and doctor remain available |
+| [Operator-trusted SSH config](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/cli.py#L258-L263) | Defer. Explicit trust would authorize local executable SSH configuration, including during inspection/dry-run; it needs a separate consent and execution contract. Existing user/system SSH configuration already remains an operator trust boundary. Constrained options and typed jump do not provide Python's additional `--ssh-config` / `--trust-ssh-config` workflow |
+| [Persistent per-version runtime-notice dismissal](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/cli.py#L245-L255) | Defer. Specify private version-scoped persistence, reset and interaction with opt-in notices first. This differs from the already supported TS `--no-update-notice` and `SESSION_PEER_NO_UPDATE_NOTICE`; no dismissal flag is advertised for TS |
+
+### Comparison evidence and retained history
+
+The ordinary test oracle remains Python **1.1.0** / commit
+`8ca77cf31254c8287a2593fe484bb30a7dba2727`, scoped to
+`ordinary-list-discovery-projection` in
+[`python-reference.pin.json`](test/fixtures/python-reference.pin.json).
+This Python 1.3.2 static review does not repin that oracle, fixtures, CI or
+runtime `referenceVersion`; ordinary listing evidence does not establish
+send/handoff/SSH interoperability. The frozen handoff design bytes, hashes and
+historical Python 1.0.3 baseline also remain unchanged.
+
+See the [dated ordinary comparison](#ordinary-python-110-comparison--2026-10-20-kst),
+[historical 0.3.x context](#historical-03x-comparison-context),
+[historical feature matrix](#feature-and-command-matrix) and
+[frozen handoff checkpoint](#published-python-handoff-checkpoint--2026-10-11).
+Their dated release, planned-work and test claims retain their original scope.
+
+<a id="current-comparison--python-110--typescript-050"></a>
+
+## Ordinary Python 1.1.0 comparison — 2026-10-20 KST
 
 Updated 2026-10-20 KST. TypeScript 0.5.0 uses published
 Python **1.1.0**, commit

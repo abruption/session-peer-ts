@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
+import { DatabaseSync } from 'node:sqlite';
 import { APP_SERVER_EVIDENCE, APP_SERVER_QUEUE_EVIDENCE, APP_SERVER_LIMITS, AppServerFault, BoundedAppServerClient,
   appServerCapability, connectAppServer, parseMetadataEvent, spawnOwnedMetadataFixture, nativeQueueCapability,
   nativeQueueOnce, NATIVE_QUEUE_NOTIFICATION_OPTOUTS, NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS,
@@ -497,7 +498,13 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
   const log = join(root, 'metadata.jsonl'), binary = join(root, 'codex-fixture');
   const selected = join(root, 'selected "quoted" \\home'), other = join(root, 'other');
   mkdirSync(selected, { mode: 0o700 }); mkdirSync(other, { mode: 0o700 });
+  // Synthetic auth metadata makes cloud policy possible. No credential content
+  // is read: owned stdio must prove the actual state/queue descriptors instead.
+  writeFileSync(join(selected, 'auth.json'), 'fixture-auth-metadata-never-read');
   const original = { ...scope, codexHome: selected, threadId: '01950000-0000-7000-8000-000000000071' };
+  const state = new DatabaseSync(join(selected, 'state_5.sqlite'));
+  state.exec('CREATE TABLE threads(id TEXT,cwd TEXT)');
+  state.prepare('INSERT INTO threads VALUES(?,?)').run(original.threadId, selected); state.close();
   const script = `#!${process.execPath}\n
     const fs=require('node:fs'),log=${JSON.stringify(log)};
     fs.appendFileSync(log,JSON.stringify({argv:process.argv.slice(2),pid:process.pid,home:process.env.CODEX_HOME,sqliteHome:process.env.CODEX_SQLITE_HOME})+'\\n');
@@ -505,7 +512,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     // Synthetic descriptors model the service's already resolved SQLite home;
     // the negative case represents an exact policy overriding CLI/env pins.
     const storage=process.env.FIXTURE_STORAGE_HOME||process.env.CODEX_SQLITE_HOME;
-    fs.openSync(require('node:path').join(storage,'state_5.sqlite'),'w+');
+    fs.openSync(require('node:path').join(storage,'state_5.sqlite'),storage===process.env.CODEX_SQLITE_HOME?'r+':'w+');
     fs.openSync(require('node:path').join(storage,'queue_1.sqlite'),'w+');
     let buffer='';setInterval(()=>{},1000);process.stderr.write('PRIVATE-STDERR-NOT-RETURNED');
     process.stdin.on('data',chunk=>{buffer+=chunk;let end;while((end=buffer.indexOf('\\n'))>=0){const r=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);
@@ -517,7 +524,8 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
   let guards = 0;
   const options = { binary, scope: original, message: 'PRIVATE-OWN-EFFECT', clientUserMessageId: id, deadlineMs: performance.now() + 2000,
     verifyOwner: async (value: AppServerScope) => { assert.deepEqual(value, original); return true; },
-    beforeEffect: async () => { guards++; writeFileSync(join(root, 'guard'), 'committed'); },
+    beforeEffect: async () => { guards++; writeFileSync(join(root, 'guard'), 'committed');
+      writeFileSync(join(selected, 'cloud-config-bundle-cache.json'), 'fixture-cache-refresh-never-read'); },
     env: { HOME: root, CODEX_HOME: 'must-be-replaced', CODEX_SQLITE_HOME: 'must-be-replaced', PATH: process.env.PATH } };
   assert.deepEqual(await nativeQueueOnce(options), { queueId: 'fixture-q', clientUserMessageId: id }); assert.equal(guards, 1);
   const rows = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
@@ -533,12 +541,29 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     env: { ...options.env, FIXTURE_STORAGE_HOME: other } }), fault('storage_binding_unverified', false));
   assert.equal(guards, 1);
   const guardsBefore = guards;
+  await t.test('configuration mutation during durable guard cannot reach queue', async () => {
+    const config = join(selected, 'config.toml');
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { writeFileSync(config, 'model="changed-during-guard"'); } }), fault('owner_changed', false));
+    } finally { rmSync(config, { force: true }); }
+  });
+  await t.test('consumer cwd mutation during final owner verification cannot reach queue', async () => {
+    let fenced = false;
+    const updateCwd = (cwd: string) => { const state = new DatabaseSync(join(selected, 'state_5.sqlite')); state.prepare('UPDATE threads SET cwd=?').run(cwd); state.close(); };
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; }, verifyOwner: async () => { if (fenced) updateCwd(other); return true; } }), fault('owner_changed', false));
+    } finally { updateCwd(selected); }
+  });
   await t.test('storage replaced during durable guard cannot reach queue', async () => {
     await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
       beforeEffect: async () => {
         guards++; renameSync(join(selected, 'state_5.sqlite'), join(selected, 'detached-state.sqlite'));
         writeFileSync(join(selected, 'state_5.sqlite'), 'replacement');
       } }), fault('owner_changed', false));
+    rmSync(join(selected, 'state_5.sqlite'));
+    renameSync(join(selected, 'detached-state.sqlite'), join(selected, 'state_5.sqlite'));
   });
   assert.equal(guards, guardsBefore + 1);
   await t.test('same canonical descriptor paths with wrong inode are refused after the guard', async () => {
