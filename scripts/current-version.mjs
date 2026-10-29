@@ -39,7 +39,7 @@ export function planCurrentVersions(version, files, inventory) {
       // A generated number cannot choose Korean particles by its pronunciation.
       // Use a fixed noun (for example, '{{version}} 버전은') in authored templates.
       if (entry.file.endsWith('.ko.md')) {
-        assert.ok(!/\{\{version\}\}(?:\*\*|__|`+)?(?:으로|로|은|는|이|가|을|를|과|와)/.test(slot.line),
+        assert.ok(!/\{\{version\}\}[*_`~]*(?:으로|로|은|는|이|가|을|를|과|와|나|며|라|랑|야|여|예요)/.test(slot.line),
           `${entry.file}: Korean generated versions need a fixed noun before inflected particles`);
       }
       const parts = slot.line.split('{{version}}');

@@ -146,12 +146,19 @@ test('CLI check runs through symlink entries with both Node resolution modes', t
 
 
 test('Korean templates use a fixed noun instead of number-dependent particles', () => {
-  const bad = structuredClone(inventory);
-  const entry = bad.find(value => value.file === 'README.ko.md')!;
-  const slot = entry.templates.find(value => value.line.includes('{{version}} 버전은'))!;
-  const before = slot.line;
-  slot.line = before.replace('{{version}} 버전은', '**{{version}}**은');
-  const data = files();
-  data.set(entry.file, data.get(entry.file)!.replace(before.replaceAll('{{version}}', version), slot.line.replaceAll('{{version}}', version)));
-  assert.throws(() => planCurrentVersions(version, data, bad), /Korean generated versions need a fixed noun/);
+  for (const span of [
+    '{{version}}은', '**{{version}}**은', '*{{version}}*은',
+    '_{{version}}_을', '***{{version}}***으로', '__{{version}}__를',
+    '`{{version}}`과', '``{{version}}``와', '~~{{version}}~~는',
+    '**`{{version}}`**이', '{{version}}예요', '{{version}}나',
+  ]) {
+    const bad = structuredClone(inventory);
+    const entry = bad.find(value => value.file === 'README.ko.md')!;
+    const slot = entry.templates.find(value => value.line.includes('{{version}} 버전은'))!;
+    const before = slot.line;
+    slot.line = before.replace('{{version}} 버전은', span);
+    const data = files();
+    data.set(entry.file, data.get(entry.file)!.replace(before.replaceAll('{{version}}', version), slot.line.replaceAll('{{version}}', version)));
+    assert.throws(() => planCurrentVersions(version, data, bad), /Korean generated versions need a fixed noun/, span);
+  }
 });
