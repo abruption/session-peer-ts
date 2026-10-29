@@ -214,17 +214,31 @@ export function classifyCodexStorage(options: StorageOptions): StorageCheck {
 
 // Only the saved thread's cwd column is inspected: never transcripts, accounts,
 // credentials, preference files or arbitrary environment variables.
-export async function codexConsumerCwd(home: string, threadId: string): Promise<string> {
+let sqlite: typeof import('node:sqlite') | undefined;
+export function codexStateIdentity(home: string): string {
+  const info = lstatSync(join(home, 'state_5.sqlite'), { bigint: true });
+  if (!info.isFile()) throw new Error('codex_consumer_context_unverifiable');
+  return `${info.dev}:${info.ino}`;
+}
+// Initialized lazily by the first Codex-only read. The final dispatch barrier
+// then queries metadata synchronously, without importing SQLite for Claude.
+export function codexConsumerSnapshotSync(home: string, threadId: string): { cwd: string; database: string } {
   try {
-    const { DatabaseSync } = await import('node:sqlite');
-    const db = new DatabaseSync(join(home, 'state_5.sqlite'), { readOnly: true });
+    if (!sqlite) throw new Error();
+    const database = codexStateIdentity(home);
+    const db = new sqlite.DatabaseSync(join(home, 'state_5.sqlite'), { readOnly: true });
     try {
       db.exec('PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA busy_timeout=3000');
       const row = db.prepare('SELECT cwd FROM threads WHERE id=? LIMIT 1').get(threadId) as { cwd?: unknown } | undefined;
       if (typeof row?.cwd !== 'string' || row.cwd.length > 32768 || !isAbsolute(row.cwd)) throw new Error();
-      return row.cwd;
+      if (codexStateIdentity(home) !== database) throw new Error();
+      return { cwd: row.cwd, database };
     } finally { db.close(); }
   } catch { throw new Error('codex_consumer_context_unverifiable'); }
+}
+export async function codexConsumerCwd(home: string, threadId: string): Promise<string> {
+  sqlite ??= await import('node:sqlite');
+  return codexConsumerSnapshotSync(home, threadId).cwd;
 }
 
 // Optional live consumer context complements the persisted thread cwd. A PID

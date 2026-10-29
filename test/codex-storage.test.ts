@@ -9,6 +9,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { classifyCodexStorage, codexWriterStorage, storageDiagnostic, STORAGE_LOADER_VERSIONS } from '../dist/codex-storage.js';
 import { send } from '../dist/send.js';
 import { diagnoseCodex } from '../dist/diagnostics.js';
+import { handoffSend } from '../dist/handoff-operations.js';
+import { HandoffBudget } from '../dist/handoff.js';
+import { HandoffLedger } from '../dist/handoff-ledger.js';
 
 const id = '11111111-1111-4111-8111-111111111111';
 function fixture(t: TestContext) {
@@ -258,4 +261,54 @@ test('Windows Codex send and dry-run refuse an unqualified storage adapter befor
   t.mock.method(childProcess, 'spawn', () => { calls++; throw new Error('unexpected native execution'); }); syncBuiltinESMExports();
   for (const dryRun of [false, true]) await assert.rejects(send({ ...f.sendOptions, codexBin: process.execPath, dryRun }), { code: 'codex_storage_platform_unqualified' });
   assert.equal(calls, 0);
+});
+test('binary replacement during the final consumer-query await refuses before native submission', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t), prepare = DatabaseSync.prototype.prepare; let armed = false, mutated = false;
+  t.mock.method(DatabaseSync.prototype, 'prepare', function(this: DatabaseSync, sql: string) {
+    if (armed && !mutated && sql.startsWith('SELECT cwd FROM threads')) {
+      mutated = true; queueMicrotask(() => fs.appendFileSync(f.binary, '\n// swapped during consumer await'));
+    }
+    return prepare.call(this, sql);
+  });
+  await assert.rejects(send({ ...f.sendOptions, hooks: { resolved() {}, beforeEffect() { armed = true; } } }), { code: 'codex_storage_loader_changed' });
+  assert.equal(mutated, true); assert.equal(existsSync(f.log), false);
+});
+test('same-cwd inactive state database replacement during the final consumer-query await refuses before submission', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t), replacement = join(f.root, 'replacement.sqlite'), prepare = DatabaseSync.prototype.prepare;
+  fs.copyFileSync(join(f.home, 'state_5.sqlite'), replacement);
+  let armed = false, mutated = false;
+  t.mock.method(DatabaseSync.prototype, 'prepare', function(this: DatabaseSync, sql: string) {
+    if (armed && !mutated && sql.startsWith('SELECT cwd FROM threads')) {
+      mutated = true; queueMicrotask(() => fs.renameSync(replacement, join(f.home, 'state_5.sqlite')));
+    }
+    return prepare.call(this, sql);
+  });
+  await assert.rejects(send({ ...f.sendOptions, hooks: { resolved() {}, beforeEffect() { armed = true; } } }), { code: 'codex_storage_changed_before_queue' });
+  assert.equal(mutated, true); assert.equal(existsSync(f.log), false);
+});
+test('handoff fallback executes the retained canonical binary when its input symlink changes during authorization', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t), link = join(f.root, 'selected-binary'), other = join(f.root, 'unverified-binary'), otherLog = join(f.root, 'unverified-log');
+  fs.copyFileSync(f.binary, other); fs.chmodSync(other, 0o700);
+  writeFileSync(other, fs.readFileSync(other, 'utf8').replaceAll(f.log, otherLog));
+  symlinkSync(f.binary, link);
+  new HandoffLedger(join(f.root, 'ledger')).init();
+  const commit = HandoffLedger.prototype.commitEffect; let retargeted = false;
+  t.mock.method(HandoffLedger.prototype, 'commitEffect', function(this: HandoffLedger, ...args: Parameters<typeof commit>) {
+    const value = commit.apply(this, args);
+    queueMicrotask(() => { rmSync(link); symlinkSync(other, link); retargeted = true; }); return value;
+  });
+  const result = await handoffSend({ ...f.sendOptions, codexBin: link }, { ledgerPath: join(f.root, 'ledger'), seconds: 30 });
+  assert.equal(result.value.submitted, true); assert.equal(retargeted, true);
+  assert.equal(fs.readFileSync(f.log, 'utf8').trim().split('\n').length, 1); assert.equal(existsSync(otherLog), false);
+});
+test('handoff fallback rechecks the original cutoff after durable authorization and never queues late', { skip: process.platform === 'win32' }, async t => {
+  const f = dispatchFixture(t); let now = 0;
+  new HandoffLedger(join(f.root, 'ledger')).init();
+  const budget = new HandoffBudget(30, { monotonic: () => now, utc: () => 100000 });
+  const commit = HandoffLedger.prototype.commitEffect; let committed = false;
+  t.mock.method(HandoffLedger.prototype, 'commitEffect', function(this: HandoffLedger, ...args: Parameters<typeof commit>) {
+    const value = commit.apply(this, args); committed = true; now = budget.cutoff; return value;
+  });
+  const result = await handoffSend(f.sendOptions, { ledgerPath: join(f.root, 'ledger'), budget });
+  assert.equal(committed, true); assert.equal(result.value.error, 'deadline_before_effect'); assert.equal(existsSync(f.log), false);
 });

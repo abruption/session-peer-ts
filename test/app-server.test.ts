@@ -541,6 +541,38 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     env: { ...options.env, FIXTURE_STORAGE_HOME: other } }), fault('storage_binding_unverified', false));
   assert.equal(guards, 1);
   const guardsBefore = guards;
+  await t.test('binary replacement inside the final async binding cannot reach the RPC write', async t => {
+    const originalSpawn = childProcess.spawn; let fenced = false, swapped = false;
+    t.mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
+      const child = originalSpawn(...args);
+      if (args[0] === '/usr/sbin/lsof' && fenced && !swapped) child.once('close', () => {
+        queueMicrotask(() => { if (!swapped) { swapped = true; writeFileSync(binary, script + '\n// late replacement'); } });
+      });
+      return child;
+    }); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; } }), fault('unsupported_version', false));
+      assert.equal(swapped, true);
+    } finally { writeFileSync(binary, script); t.mock.restoreAll(); syncBuiltinESMExports(); }
+  });
+  await t.test('retained consumer changes during final async binding are checked synchronously at the RPC write', async t => {
+    const originalSpawn = childProcess.spawn; let fenced = false, moved = false, currentCwd = selected, finalChecks = 0;
+    t.mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
+      const child = originalSpawn(...args);
+      if (args[0] === '/usr/sbin/lsof' && fenced && !moved) child.once('close', () => {
+        queueMicrotask(() => { moved = true; currentCwd = other; });
+      }); return child;
+    }); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; },
+        verifyStorage: async () => { assert.equal(currentCwd, selected); },
+        verifyStorageSync: () => { finalChecks++; if (currentCwd !== selected) throw new AppServerFault('storage_binding_unverified', false); },
+      }), fault('storage_binding_unverified', false));
+      assert.equal(moved, true); assert.equal(finalChecks, 1);
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  });
   await t.test('configuration mutation during durable guard cannot reach queue', async () => {
     const config = join(selected, 'config.toml');
     try {

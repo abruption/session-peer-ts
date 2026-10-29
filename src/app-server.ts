@@ -14,7 +14,7 @@ import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
 import { run } from './process.js';
-import { classifyCodexStorage, codexConsumerCwd, decodeLsofFilename } from './codex-storage.js';
+import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, decodeLsofFilename } from './codex-storage.js';
 import { CANDIDATE_PROFILES, NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 import { procOwnedFiles, type OpenedFile, type ProcReader } from './linux-proc.js';
 import { fileURLToPath } from 'node:url';
@@ -116,7 +116,7 @@ export type NativeQueuePort = Pick<AppServerPort, 'queueOnce' | 'close'>;
 export type NativeQueueOptions = {
   binary: string; scope: AppServerScope; message: string; clientUserMessageId: string; deadlineMs: number;
   verifyOwner: (scope: AppServerScope) => Promise<boolean>; beforeEffect: () => Promise<void>;
-  verifyStorage?: () => Promise<void>; env?: NodeJS.ProcessEnv;
+  verifyStorage?: () => Promise<void>; verifyStorageSync?: () => void; env?: NodeJS.ProcessEnv;
 };
 export function nativeQueueCapability(context: AppServerContext): {
   queueSupported: boolean; observationSupported: false;
@@ -286,7 +286,8 @@ export class BoundedAppServerClient implements AppServerPort {
   private fault?: AppServerFault; private closing?: Promise<void>; private readonly timer: ReturnType<typeof setTimeout>;
   private constructor(readonly scope: AppServerScope, private readonly transport: ClientTransport,
     private readonly deadlineMs: number, private readonly verifyOwner: (scope: AppServerScope) => Promise<boolean>,
-    private readonly nativeQueue = false, private readonly beforeEffect: () => Promise<void> = async () => {}) {
+    private readonly nativeQueue = false, private readonly beforeEffect: () => Promise<void> = async () => {},
+    private readonly beforeWrite: () => void = () => {}) {
     this.timer = setTimeout(() => this.fail('deadline'), Math.max(1, deadlineMs - performance.now()));
     transport.input.on('data', this.receive);
     transport.input.once('end', this.ended); transport.input.once('error', this.errored);
@@ -309,12 +310,12 @@ export class BoundedAppServerClient implements AppServerPort {
   }
   static async connectNativeQueueWire(scope: AppServerScope, transport: NativeQueueTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>,
-    profile: NativeProfile): Promise<NativeQueuePort> {
-    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, profile);
+    profile: NativeProfile, beforeWrite: () => void): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, profile, beforeWrite);
   }
   private static async connectWire(scope: AppServerScope, transport: ClientTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, nativeQueue: boolean,
-    beforeEffect: () => Promise<void> = async () => {}, profile?: NativeProfile): Promise<BoundedAppServerClient> {
+    beforeEffect: () => Promise<void> = async () => {}, profile?: NativeProfile, beforeWrite?: () => void): Promise<BoundedAppServerClient> {
     let original: AppServerScope;
     try { original = scopeValue(scope); } catch { await disposeTransport(transport); throw new AppServerFault('invalid_scope', false); }
     if (transport.qualification !== 'hermetic_fixture_only' && !(nativeQueue && transport.qualification === 'native_queue_only_stdio')) {
@@ -324,7 +325,7 @@ export class BoundedAppServerClient implements AppServerPort {
     if (!Number.isFinite(remaining) || remaining <= 0 || remaining > APP_SERVER_LIMITS.lifetimeMs) {
       await disposeTransport(transport); throw new AppServerFault('deadline', false);
     }
-    const client = new BoundedAppServerClient(original, transport, deadlineMs, verifyOwner, nativeQueue, beforeEffect);
+    const client = new BoundedAppServerClient(original, transport, deadlineMs, verifyOwner, nativeQueue, beforeEffect, beforeWrite);
     try {
       await client.owner();
       if (nativeQueue) {
@@ -440,6 +441,7 @@ export class BoundedAppServerClient implements AppServerPort {
       // owner after that await, before marking an attempt or writing the RPC.
       // The ledger may already be fenced; this never authorizes a new effect.
       await this.owner();
+      this.beforeWrite();
       this.check();
     }
     return new Promise((resolve, reject) => {
@@ -665,6 +667,7 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
     return value;
   };
   const initialStorage = checkStorage();
+  const consumerDatabase = codexConsumerSnapshotSync(original.codexHome, original.threadId).database;
   const revalidateStorage = async (version?: string) => {
     if (await codexConsumerCwd(original.codexHome, original.threadId).catch(() => '') !== consumerCwd ||
         checkStorage(version).fingerprint !== initialStorage.fingerprint) throw new AppServerFault('storage_binding_unverified', false);
@@ -716,12 +719,21 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
         // Run after the LAST asynchronous owner verification. The durable guard
         // and owner probe can both await I/O and change canonical file bindings.
         await options.verifyStorage?.();
-        verifyExecutableIdentity(options.binary, binaryIdentity);
-        await bind(transport.pid);
         await revalidateStorage(nativeVersion);
+        await bind(transport.pid);
       }
       return valid;
-    }, async () => { await options.beforeEffect(); effectGuarded = true; }, profile);
+    }, async () => { await options.beforeEffect(); effectGuarded = true; }, profile, () => {
+      // The effect writer calls this after its final await, before setting the
+      // attempted marker. No async callback follows these continuity checks.
+      try {
+        options.verifyStorageSync?.();
+        if (checkStorage(nativeVersion).fingerprint !== initialStorage.fingerprint) throw new Error();
+        const current = codexConsumerSnapshotSync(original.codexHome, original.threadId);
+        if (current.database !== consumerDatabase || current.cwd !== consumerCwd) throw new Error();
+        verifyExecutableIdentity(options.binary, binaryIdentity);
+      } catch (error) { throw error instanceof AppServerFault ? error : new AppServerFault('storage_binding_unverified', false); }
+    });
     await bind(transport.pid);
     return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
   } finally { if (client) await client.close(); else await disposeTransport(transport); }

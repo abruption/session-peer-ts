@@ -115,6 +115,17 @@ atomic filesystem/configuration snapshot or protection against an undetectable
 same-user rewrite. Missing evidence never permits fallback after an attempt or
 an automatic retry of an unknown outcome.
 
+The reviewed project-discovery implementation reads `dir/.codex/config.toml`;
+its older summary comment mentioning `cwd/config.toml` is not the implemented
+path. Git files (including worktree markers) stop root discovery; a `.git`
+directory needs its HEAD marker. The ordinary startup path uses embedded
+packaged defaults, whose reviewed TOML contains no `sqlite_home`; it does not
+supply the programmatic packaged-defaults-file override. Legacy root `profile`
+selection is rejected by the reviewed core, and `ConfigProfile` has no
+`sqlite_home` member or storage flattening. A nested profile key is not promoted
+to a root storage override. The global `-c` option is present in all three
+reviewed CLI parsers and can follow the queue message argument.
+
 Source review pins:
 
 | Native tag | Upstream source commit |

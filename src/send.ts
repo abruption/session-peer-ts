@@ -5,16 +5,17 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, type BigIntStats 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { claude, Refusal } from './discovery.js';
-import { classifyCodexStorage, codexConsumerCwd, codexWriterCwd, codexWriterStorage, storageDiagnostic, type StorageCheck } from './codex-storage.js';
+import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, codexWriterCwd, codexWriterStorage, storageDiagnostic, type StorageCheck } from './codex-storage.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { HomeRefusal, resolveWriter, revalidateWriter, uuid, type HomeResolution } from './writer.js';
 import { postWindowsPipe } from './windows.js';
 
 export type SendContext = { agent: 'claude' | 'codex'; target: string; home?: string; generation: string | null; writerIdentity?: string };
-export type CodexStorageGuard = { cwd: string; revalidate: (ownedAppServer?: boolean) => Promise<void> };
+export type CodexStorageGuard = { readonly binary: string; readonly cwd: string;
+  revalidate: (ownedAppServer?: boolean) => Promise<void>; finalCheck: (ownedAppServer?: boolean) => void };
 export type SendHooks = {
-  // Only explicitly opted-in callers resolve this additional context. Default
-  // send output, inspection count and native execution remain unchanged.
+  // Opted-in callers resolve additional handoff context and fencing. Codex
+  // sends share the storage guard without creating an implicit handoff ledger.
   resolved: (context: SendContext, snapshot: Record<string, unknown>) => Promise<string | void> | string | void;
   beforeEffect?: () => Promise<void> | void;
   timeoutMs?: () => number;
@@ -111,10 +112,13 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     let consumerCwd: string;
     try { consumerCwd = await codexConsumerCwd(home, id); }
     catch { throw new HomeRefusal('codex_consumer_context_unverifiable', selection.resolution); }
-    let writerPid: number | undefined, writerCwd: string | undefined;
+    let writerPid: number | undefined, writerCwd: string | undefined, selectedDatabase: string;
     try {
-      const proof = JSON.parse(selection.evidence) as { fingerprints: { home: string; writer: string }[] };
-      writerPid = JSON.parse(proof.fingerprints.find(item => item.home === home)!.writer).pid;
+      const proof = JSON.parse(selection.evidence) as { fingerprints: { home: string; writer: string; database: string }[] };
+      const selected = proof.fingerprints.find(item => item.home === home)!;
+      selectedDatabase = selected.database;
+      if (codexConsumerSnapshotSync(home, id).database !== selectedDatabase) throw new Error();
+      writerPid = JSON.parse(selected.writer).pid;
       if (writerPid !== undefined) { writerCwd = codexWriterCwd(writerPid); codexWriterStorage(writerPid, home); }
     } catch { throw new HomeRefusal('codex_consumer_context_unverifiable', selection.resolution); }
     const consumerCwds = [consumerCwd, ...(writerCwd ? [writerCwd] : [])];
@@ -153,13 +157,19 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     const qualified = refuseStorage(classifyCodexStorage({ home, queueCwd, consumerCwds, ownedAppServer, version: nativeVersion }));
     if (qualified.fingerprint !== storage.fingerprint) throw new HomeRefusal('codex_storage_changed_before_queue', selection.resolution);
     result.storage = storageDiagnostic(qualified);
-    const guard: CodexStorageGuard = { cwd: qualified.queueCwd!, async revalidate(owned = ownedAppServer) {
+    const guard: CodexStorageGuard = Object.freeze({ binary, cwd: qualified.queueCwd!, async revalidate(owned = ownedAppServer) {
       await revalidateWriter(selection, options.home, id, options.allowInactive);
-      if (executableEvidence() !== binaryEvidence) throw new HomeRefusal('codex_storage_loader_changed', selection.resolution);
-      let currentCwd: string;
-      try { currentCwd = await codexConsumerCwd(home, id); }
+      try { await codexConsumerCwd(home, id); }
       catch { throw new HomeRefusal('codex_consumer_context_unverifiable', selection.resolution); }
-      if (currentCwd !== consumerCwd) throw new HomeRefusal('codex_storage_changed_before_queue', selection.resolution);
+      guard.finalCheck(owned);
+    }, finalCheck(owned = ownedAppServer) {
+      const checkConsumer = () => {
+        try {
+          const current = codexConsumerSnapshotSync(home, id);
+          if (current.database !== selectedDatabase || current.cwd !== consumerCwd) throw new Error();
+        } catch { throw new HomeRefusal('codex_storage_changed_before_queue', selection.resolution); }
+      };
+      checkConsumer();
       if (writerPid !== undefined) {
         try { if (codexWriterCwd(writerPid) !== writerCwd) throw new Error(); codexWriterStorage(writerPid, home); }
         catch { throw new HomeRefusal('codex_consumer_context_unverifiable', selection.resolution); }
@@ -167,7 +177,9 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
       const current = refuseStorage(classifyCodexStorage({ home, queueCwd, consumerCwds, ownedAppServer, version: nativeVersion }));
       if (current.fingerprint !== qualified.fingerprint) throw new HomeRefusal('codex_storage_changed_before_queue', selection.resolution);
       if (owned !== ownedAppServer) refuseStorage(classifyCodexStorage({ home, queueCwd, consumerCwds, ownedAppServer: owned, version: nativeVersion }));
-    } };
+      checkConsumer();
+      if (executableEvidence() !== binaryEvidence) throw new HomeRefusal('codex_storage_loader_changed', selection.resolution);
+    } });
     await guard.revalidate();
     // `--message=` keeps a body starting with `-` from being parsed as an option.
     // An inherited CODEX_SQLITE_HOME would queue outside the validated home.
@@ -178,8 +190,10 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     }
     await options.hooks?.beforeEffect?.();
     await guard.revalidate();
+    // Read the remaining operation budget after the final synchronous I/O.
+    const timeout = options.hooks?.timeoutMs?.() ?? 30000;
     const done = await run(binary, ['queue', '--thread', id, `--message=${options.message}`, '-c', `sqlite_home=${JSON.stringify(home)}`],
-      { env, cwd: guard.cwd, timeout: options.hooks?.timeoutMs?.() ?? 30000 });
+      { env, cwd: guard.cwd, timeout });
     if (!done.spawned) throw new HomeRefusal('native_spawn_failed', selection.resolution);
     if (done.interrupted || done.code !== 0) throw new CodexUnknownOutcome(selection.resolution);
     const queuedId = queueId(done.stdout, id);
