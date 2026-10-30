@@ -308,7 +308,7 @@ test('concurrent wait before effect cannot hide the original pending operation f
 test('independent wait resumes exact submitted scope and observes later injection without native calls',qualified,async t=>{
  const f=await fixture(t,'none');const sent=await f.invoke([...f.args,'--observe-delivery']);
  assert.equal(sent.code,0,sent.stdout);assert.equal(sent.value.status,'queued');assert.equal(sent.value.submitted,true);
- const original=validateHandoff(sent.value.handoff);assert.equal(original.observation.status,'pending');
+ const original=validateHandoff(sent.value.handoff);assert.equal(original.observation.status,'pending',JSON.stringify({result:sent.value,calls:f.calls(),nativeCalls:f.nativeCalls(),qualification:f.ledger().data.records[original.correlationId].observationQualification??null}));
  const before=f.ledger().data.records[original.correlationId],nativeBefore=f.nativeCalls();
  const contextBefore=new HandoffLedger(f.env.SESSION_PEER_HANDOFF_HOME!).observationContext(original.correlationId);assert.ok(contextBefore);
  assert.ok(before.observationQualification);assert.equal(f.calls().length,1);
