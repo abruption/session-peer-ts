@@ -1,5 +1,63 @@
 # Validation record — updated 2026-10-30 KST
 
+<a id="public-052--2026-10-30-kst"></a>
+
+## Public 0.5.2 — 2026-10-30 KST
+
+`session-peer@0.5.2` was published at `2026-10-30T01:54:47.513Z` from
+`d5c40ecd09baa831315266d0debf63eb1c4a1e59`.
+[Run 40988011234](https://github.com/abruption/session-peer-ts/actions/runs/40988011234)
+ran once; both prepare and publish succeeded, with npm stage
+`333968c3-29bd-4fbe-afeb-134da02924a5`. The
+[GitHub release](https://github.com/abruption/session-peer-ts/releases/tag/v0.5.2)
+was published at `2026-10-30T02:04:15Z`. Annotated tag object
+`b19877a806154afecbd35b7754333d23b55ebd31` peels to the same source commit.
+
+The reviewed local, exact-main, retained Actions, staged and public tarball raw
+bytes all matched. All 79 archive files, including 18 Markdown files, matched
+the selected source. The immutable archive contains the correct release source;
+this later GitHub public record is not in the 0.5.2 archive and does not imply
+republishing it.
+
+- SHA-256: `c799e4f7ed96794928e5780732f8d230e6eac8502301a75f44c0d55393c85d8b`
+- Registry integrity: `sha512-4cgqyU7AaSVUnTZvsFeP5Ocyri9XNqUQCxV+WDZOhHK0aJ8c/CkeMiv7isVtZns3RYu58TyU0sAoz4oBbQLhAA==`
+
+The full suite recorded 503 tests: 491 pass, 0 fail, 11 platform skips and
+1 existing TODO. Exact-main
+[CLI CI run 40984539326](https://github.com/abruption/session-peer-ts/actions/runs/40984539326)
+and [CodeQL run 40984538915](https://github.com/abruption/session-peer-ts/actions/runs/40984538915)
+succeeded. The release helper's public verification with pinned npm 11.15.0
+passed signature/provenance checks, an isolated installation, CLI version and
+empty Claude-list checks, and uninstallation.
+
+The actual registry SLSA bundle passed `sigstore.verify` certificate-chain,
+certificate-transparency and transparency-log verification, including the
+GitHub OIDC issuer and workflow identity. Its subject SHA-512, source commit,
+repository, `main` ref, `publish.yml`, `workflow_dispatch` trigger and invocation
+`40988011234` matched the release. Rekor entry: `3581769908`. The staged-byte
+comparison completed at `01:53:47Z`, before publication; full provenance trust
+verification completed after publication. These results do not establish that
+all checks preceded user approval.
+
+The user explicitly confirmed source approval and GitHub environment approval.
+Fresh checks established authenticated owner `abruption`, no pre-existing
+stages, a stage-only `createStagedPackage` publisher and the GitHub environment's
+required reviewer and main-only restriction. For 0.5.2 the user explicitly
+skipped only the web read of npm's publish-MFA policy; that setting was not
+freshly audited. No protection or setting was changed. The stage later returned
+404 and public `latest=0.5.2` was observed. The agent did not execute final
+`npm stage approve`; this record claims neither that action nor an explicit
+chat confirmation of npm 2FA approval.
+
+At public verification, `latest=0.5.2` and `preview=0.1.0-preview.1` (unchanged).
+Registry `readmeFilename=README.zh-CN.md` and the registry README exactly matched
+the packaged 0.5.2 Chinese README. Public npm HTML returned HTTP 403, so rendered
+npm-page inspection is not claimed. These checks establish source/package
+identity and public package availability only: no new native/model, SSH, delivery/ACK,
+fleet-installation or global-installation test is claimed. Historical evidence
+and the dated preparation checkpoint below retain their original scope.
+
+
 ## 0.5.2 preparation scope — 2026-10-30 KST
 
 Preparation baseline is merged main

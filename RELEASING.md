@@ -9,6 +9,37 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## Public 0.5.2 checkpoint — 2026-10-30 KST
+
+[GitHub v0.5.2](https://github.com/abruption/session-peer-ts/releases/tag/v0.5.2)
+and npm 0.5.2 are public from
+`d5c40ecd09baa831315266d0debf63eb1c4a1e59`. The annotated tag peels to that
+same immutable source. Reviewed, exact-main, retained Actions, staged and public
+raw tarballs are byte-identical: SHA-256
+`c799e4f7ed96794928e5780732f8d230e6eac8502301a75f44c0d55393c85d8b`.
+[Stage-only run 40988011234](https://github.com/abruption/session-peer-ts/actions/runs/40988011234)
+ran once after exact-source approval. Public integrity/signature/provenance,
+source/workflow/run linkage and isolated installation/removal passed;
+latest=0.5.2 and preview=0.1.0-preview.1 is preserved. The
+[public validation record](VALIDATION.md#public-052--2026-10-30-kst) records the
+exact chronology and evidence limits. No new native/platform/ACK or fleet
+qualification is implied.
+
+Ownership, no pending stages before dispatch, stage-only Trusted Publisher and
+protected GitHub npm environment/main restriction were freshly checked. The
+user confirmed the protected environment approval. The separate browser package
+publish-MFA policy read was explicitly skipped for this 0.5.2 publication and is
+not freshly audited. This is a settings-read exception only, not a change to
+publisher permissions or approval requirements. The agent did not execute the
+final npm stage approval; publication was observed after that stage became
+unavailable. Full public provenance trust/signature checks completed afterward.
+
+This later GitHub checkpoint is not part of the immutable published tarball,
+which retains its dated preparation evidence. Do not replay the completed
+preparation or stage, reuse these approvals for a later release, move the tag or
+republish 0.5.2. A future version needs its own reviewed source/artifact and
+approvals. No user global/fleet runtime or skill installation was changed.
+
 ## 0.5.2 storage guards and release consistency preparation — 2026-10-30 KST
 
 Preparation baseline is merged main
