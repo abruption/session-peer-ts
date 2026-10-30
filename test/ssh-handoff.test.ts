@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -128,7 +128,7 @@ fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify(request)+'\\n');
 if(process.env.FIXTURE_PARTIAL_PREPARE&&request.handoff?.preparation){process.stdout.write('{');process.exit(0);}
 const env={...process.env,HOME:process.env.FIXTURE_DEST,USERPROFILE:process.env.FIXTURE_DEST,CLAUDE_CONFIG_DIR:process.env.FIXTURE_DEST+'/.claude',SESSION_PEER_HANDOFF_HOME:process.env.FIXTURE_DEST+'/state/handoff'};
 const selector=args.at(-1).match(/ --handoff-remaining-ms=([1-9][0-9]{0,4})$/);
-const child=cp.spawn(process.execPath,[process.env.FIXTURE_CLI,'--stdio-request',...(selector?['--handoff-remaining-ms='+selector[1]]:[])],{env,stdio:['pipe','pipe','inherit']});
+const child=cp.spawn(process.execPath,[process.env.FIXTURE_CLI,'--stdio-request',...(selector?['--handoff-remaining-ms='+selector[1]]:[])],{env,cwd:env.HOME,stdio:['pipe','pipe','inherit']});
 let output='';child.stdout.on('data',part=>{output+=part;process.stdout.write(part);});
 child.stdin.end(input);child.on('close',(code,signal)=>{if(request.handoff?.preparation)fs.appendFileSync(process.env.FIXTURE_PREPARATIONS,output);if(signal)process.kill(process.pid,signal);else process.exitCode=request.handoff?.preparation&&process.env.FIXTURE_PREPARE_EXIT255?255:code;});
 `, { mode: 0o700 });
@@ -137,7 +137,7 @@ child.stdin.end(input);child.on('close',(code,signal)=>{if(request.handoff?.prep
   const destEnv = { ...common, HOME: destination, USERPROFILE: destination, CLAUDE_CONFIG_DIR: join(destination, '.claude'), SESSION_PEER_HANDOFF_HOME: join(destination, 'state', 'handoff') };
   const originEnv = { ...common, HOME: origin, USERPROFILE: origin, CLAUDE_CONFIG_DIR: join(origin, '.claude'), SESSION_PEER_HANDOFF_HOME: join(origin, 'state', 'handoff') };
   async function invoke(args: string[], destinationSide = false, input?: string, extra: NodeJS.ProcessEnv = {}) {
-    const child = spawn(process.execPath, [cli, ...args], { env: { ...(destinationSide ? destEnv : originEnv), ...extra } });
+    const child = spawn(process.execPath, [cli, ...args], { env: { ...(destinationSide ? destEnv : originEnv), ...extra }, cwd: destinationSide ? destination : origin });
     let stdout = '', stderr = ''; child.stdout.on('data', part => { stdout += part; }); child.stderr.on('data', part => { stderr += part; }); child.stdin.end(input);
     // Harness margin permits cleanup/reporting; the request budget is unchanged.
     const timer = setTimeout(() => child.kill('SIGKILL'), 20000);
@@ -154,7 +154,7 @@ async function codexFixture(t: TestContext, mode: 'inject' | 'none' | 'loss') {
   mkdirSync(home, { mode: 0o700 }); mkdirSync(bin, { mode: 0o700 });
   mkdirSync(join(home, 'thread-writer-locks'), { mode: 0o700 });
   const state = new DatabaseSync(join(home, 'state_5.sqlite'));
-  state.exec('CREATE TABLE threads(id TEXT)'); state.prepare('INSERT INTO threads VALUES(?)').run(thread); state.close();
+  state.exec('CREATE TABLE threads(id TEXT, cwd TEXT)'); state.prepare('INSERT INTO threads VALUES(?,?)').run(thread, home); state.close();
   const warm = new DatabaseSync(join(home, 'thread_history_1.sqlite'));
   warm.exec(`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
 CREATE TABLE thread_items(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,item_id TEXT NOT NULL,rollout_ordinal INTEGER NOT NULL,item_json TEXT NOT NULL,item_type TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id,item_id));
@@ -162,8 +162,10 @@ CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_or
 CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rollout_byte_offset INTEGER NOT NULL,next_rollout_ordinal INTEGER NOT NULL);`);
   warm.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread, 'ssh-turn-fixture', 'completed');
   warm.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread, 100, 100); warm.close();
-  const holder = fileURLToPath(new URL('./fixtures/ssh-codex-lock-holder.cjs', import.meta.url));
-  const held = spawn(process.execPath, [holder, join(home, 'thread-writer-locks', thread + '.lock'), createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt')]);
+  // Keep the retained writer's actual cwd and opened state inode bound to this home.
+  // Paths are arguments, never interpolated into executable fixture source.
+  const held = spawn(process.execPath, ['-e', "const fs=require('node:fs');const lock=fs.openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(lock,'exnb');const state=fs.openSync(process.argv[3],'r');console.log('ready');setInterval(()=>{},1000);",
+    join(home, 'thread-writer-locks', thread + '.lock'), createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt'), join(home, 'state_5.sqlite')], { cwd: home });
   held.stderr.resume();
   t.after(async () => { if (held.exitCode === null && held.signalCode === null) { held.kill('SIGKILL'); await once(held, 'close'); } });
   const readyTimer = setTimeout(() => held.kill('SIGKILL'), 3000);
@@ -171,7 +173,10 @@ CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rol
   finally { clearTimeout(readyTimer); }
   const lsof = join(bin, 'lsof');
   writeFileSync(lsof + '.data', 'p' + held.pid + '\0ccodex-fixture\0u' + process.getuid?.() + '\0', { mode: 0o600 });
-  writeFileSync(lsof, '#!/bin/sh\nexec /bin/cat "$0.data"\n', { mode: 0o700 });
+  writeFileSync(lsof + '.cwd', 'p' + held.pid + '\0fcwd\0n' + home + '\0', { mode: 0o600 });
+  const stateInfo = statSync(join(home, 'state_5.sqlite'), { bigint: true });
+  writeFileSync(lsof + '.fds', 'p' + held.pid + '\0f4\0D0x' + stateInfo.dev.toString(16) + '\0i' + stateInfo.ino + '\0n' + join(home, 'state_5.sqlite') + '\0', { mode: 0o600 });
+  writeFileSync(lsof, '#!/bin/sh\ncase " $* " in\n  *" -d cwd "*) exec /bin/cat "$0.cwd";;\n  *" -F0fDin "*) exec /bin/cat "$0.fds";;\n  *) exec /bin/cat "$0.data";;\nesac\n', { mode: 0o700 });
   writeFileSync(join(bin, 'ps'), '#!/bin/sh\nprintf "Fixture stable start\\n"\n', { mode: 0o700 });
   const queueLog = join(f.root, 'codex-queue.jsonl'), nativeLog = join(f.root, 'codex-native.jsonl'), codex = join(bin, 'codex');
   writeFileSync(queueLog, ''); writeFileSync(nativeLog, '');

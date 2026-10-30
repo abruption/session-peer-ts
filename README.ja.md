@@ -23,6 +23,10 @@ Python 不要の Node.js クライアントです。パッケージ名とコマ�
 
 </div>
 
+通常の Codex 送信は、ログイン済み home などクラウドポリシーの適用範囲を判定できない場合も拒否します。経路を選ぶ前に[ストレージ検証の範囲](docs/api.md#codex-storage-configuration)を確認してください。
+
+このソースは Codex の追加設定レイヤーを確認します。Windows の Codex 送信・dry-run はローカルストレージ検査が未検証のためキュー提出前に拒否し、通常の Claude 経路とは区別します。導入前に[検証範囲](docs/api.md#codex-storage-configuration)と選択したリリースを確認してください。
+
 ## Demo
 
 ![TypeScript session-peer 0.2.1 による実際の Codex・Claude Code 間の要求と返信](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)

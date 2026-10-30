@@ -9,6 +9,16 @@ import { syncBuiltinESMExports } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import { doctor, diagnoseCodex, diagnoseClaude, inspectSkills } from '../dist/diagnostics.js';
 const cli = resolve('dist/cli.js');
+const windows = process.platform === 'win32';
+// The shared loader classifier refuses Windows before opening a state DB or
+// interpreting its schema/config. This is not evidence of Windows readiness.
+function assertWindowsStorageUnqualified(home: any) {
+  assert.equal(home.status, 'unsupported');
+  assert.equal(home.code, 'codex_storage_platform_unqualified');
+  assert.equal(home.storage.localLoaderPlatformSupported, false);
+  assert.equal(Object.hasOwn(home, 'sessionCount'), false);
+}
+
 // Answers `ssh -G` user metadata lookups without logging them as SSH dispatches.
 const sshConfigUser = "if(process.argv.includes('-G')){console.log('user fixture-user');process.exit(0);}";
 function fixture(t: TestContext) {
@@ -39,7 +49,8 @@ test('doctor succeeds independently of unavailable agents and truthfully declare
   assert.equal(code, 0); assert.equal(value.ok, true); assert.equal(value.ready, false);
   assert.equal(value.agents.claude.code, 'sessions_dir_missing');
   assert.equal(value.agents.codex.tool.code, 'executable_unavailable');
-  assert.equal(value.agents.codex.homes[0].code, 'state_db_missing');
+  if (windows) assertWindowsStorageUnqualified(value.agents.codex.homes[0]);
+  else assert.equal(value.agents.codex.homes[0].code, 'state_db_missing');
   for (const key of ['wake', 'wait', 'ack', 'consumptionConfirmation']) assert.equal(value.capabilities[key], false);
   assert.equal(value.capabilities.doctor, true); assert.equal(value.implementation, 'typescript');
   assert.equal(value.diagnosticCompleted, true);
@@ -53,8 +64,14 @@ test('per-home schema, missing, malformed, permission and unknown diagnostics st
   mkdirSync(malformed); writeFileSync(join(malformed, 'state_5.sqlite'), 'private-native-detail');
   process.env.SESSION_PEER_CODEX_HOMES = JSON.stringify([missing, unsupported, malformed]);
   const result = await diagnoseCodex(undefined, process.execPath) as any;
-  assert.deepEqual(result.homes.map((h: any) => h.code), ['state_db_readable', 'state_db_missing', 'unsupported_threads_schema', 'state_db_unreadable']);
-  assert.equal(result.ready, false); assert.equal(result.homes[0].sessionCount, 0);
+  if (windows) {
+    assert.equal(result.homes.length, 4);
+    for (const home of result.homes) assertWindowsStorageUnqualified(home);
+  } else {
+    assert.deepEqual(result.homes.map((h: any) => h.code), ['state_db_readable', 'state_db_missing', 'unsupported_threads_schema', 'state_db_unreadable']);
+    assert.equal(result.homes[0].sessionCount, 0);
+  }
+  assert.equal(result.ready, false);
   assert.equal(JSON.stringify(result).includes('private-native-detail'), false);
   const stat = fs.statSync;
   t.mock.method(fs, 'statSync', ((path: any, ...args: any[]) => {
@@ -62,7 +79,9 @@ test('per-home schema, missing, malformed, permission and unknown diagnostics st
     return (stat as any)(path, ...args);
   }) as typeof fs.statSync); syncBuiltinESMExports();
   const denied = await diagnoseCodex(f.home, process.execPath) as any;
-  assert.equal(denied.homes[0].status, 'permission_denied'); assert.equal(JSON.stringify(denied).includes('secret'), false);
+  if (windows) assertWindowsStorageUnqualified(denied.homes[0]);
+  else assert.equal(denied.homes[0].status, 'permission_denied');
+  assert.equal(JSON.stringify(denied).includes('secret'), false);
 });
 
 test('explicit doctor home bypasses unrelated invalid inventory and never executes codex binary', async t => {
@@ -70,7 +89,9 @@ test('explicit doctor home bypasses unrelated invalid inventory and never execut
   process.env.SESSION_PEER_CODEX_HOMES = 'bad-secret-config';
   const before = readFileSync(file); const contents = readdirSync(f.home);
   const result = await diagnoseCodex(f.home, process.execPath) as any;
-  assert.equal(result.ready, true); assert.equal(result.tool.executed, false); assert.equal(result.writerVerified, false);
+  assert.equal(result.ready, !windows);
+  if (windows) assertWindowsStorageUnqualified(result.homes[0]);
+  assert.equal(result.tool.executed, false); assert.equal(result.writerVerified, false);
   assert.equal(result.sendAuthorized, false); assert.deepEqual(readFileSync(file), before); assert.deepEqual(readdirSync(f.home), contents);
   const automatic = await diagnoseCodex(undefined, process.execPath) as any;
   assert.equal(automatic.ready, false); assert.equal(automatic.errors[0].code, 'invalid_home_configuration');
@@ -109,7 +130,8 @@ test('permissions and unknown process inspection cannot authorize readiness', t 
 test('stdio doctor has identical read-only result boundaries and rejects dispatch options', t => {
   const f = fixture(t); f.db();
   const wire = f.invoke(['--stdio-request'], JSON.stringify({ schemaVersion: 1, args: ['doctor', '--json', '--agent', 'codex', '--codex-home', f.home, '--codex-bin', process.execPath] }));
-  assert.equal(wire.code, 0); assert.equal(wire.value.command, 'doctor'); assert.equal(wire.value.ready, true);
+  assert.equal(wire.code, 0); assert.equal(wire.value.command, 'doctor'); assert.equal(wire.value.ready, !windows);
+  if (windows) assertWindowsStorageUnqualified(wire.value.agents.codex.homes[0]);
   assert.deepEqual(Object.keys(wire.value.agents), ['codex']);
   for (const args of [['--to', 'codex:id'], ['--all'], ['--dry-run'], ['--message', 'SECRET'], ['--allow-inactive-codex-home']]) {
     const result = f.invoke(['doctor', '--json', ...args]); assert.equal(result.code, 2); assert.equal(result.value.status, 'refused');
@@ -190,15 +212,21 @@ test('doctor reports a relocated Codex sqlite_home as unsupported instead of rea
     writeFileSync(join(f.home, 'config.toml'), `${key} = "/relocated"\n`);
     const result = await diagnoseCodex(f.home, process.execPath) as any;
     assert.equal(result.homes[0].status, 'unsupported', key);
-    assert.equal(result.homes[0].code, 'unsupported_codex_sqlite_home', key);
+    if (windows) assertWindowsStorageUnqualified(result.homes[0]);
+    else assert.equal(result.homes[0].code, 'unsupported_codex_sqlite_home', key);
     assert.equal(result.ready, false);
   }
   writeFileSync(join(f.home, 'config.toml'), 'model = "sqlite_home = /relocated"\n# sqlite_home = "/commented"\n[profiles.p]\nmodel = "fixture"\n');
-  assert.equal(((await diagnoseCodex(f.home, process.execPath)) as any).homes[0].code, 'state_db_readable');
+  const harmless = await diagnoseCodex(f.home, process.execPath) as any;
+  if (windows) assertWindowsStorageUnqualified(harmless.homes[0]);
+  else assert.equal(harmless.homes[0].code, 'state_db_readable');
   writeFileSync(join(f.home, 'config.toml'), 'sqlite_home = [\n');
   const invalid = await diagnoseCodex(f.home, process.execPath) as any;
-  assert.equal(invalid.homes[0].status, 'unknown');
-  assert.equal(invalid.homes[0].code, 'codex_config_unreadable');
+  if (windows) assertWindowsStorageUnqualified(invalid.homes[0]);
+  else {
+    assert.equal(invalid.homes[0].status, 'unknown');
+    assert.equal(invalid.homes[0].code, 'codex_config_unreadable');
+  }
 });
 
 test('doctor distinguishes nested sqlite_home keys from an escaped root override', async t => {
@@ -211,8 +239,10 @@ test('doctor distinguishes nested sqlite_home keys from an escaped root override
     writeFileSync(file, text);
     const result = await diagnoseCodex(f.home, process.execPath) as any;
     const selected = result.homes.find((home: any) => home.codexHome === f.home);
-    assert.ok(selected); assert.equal(selected.status, 'available'); assert.equal(selected.code, 'state_db_readable');
-    assert.equal(result.ready, true); assert.equal(result.tool.executed, false);
+    assert.ok(selected);
+    if (windows) assertWindowsStorageUnqualified(selected);
+    else { assert.equal(selected.status, 'available'); assert.equal(selected.code, 'state_db_readable'); }
+    assert.equal(result.ready, !windows); assert.equal(result.tool.executed, false);
     assert.equal(result.sendAuthorized, false);
   }
   // Root keys precede the table header; otherwise they would remain nested.
@@ -222,7 +252,8 @@ test('doctor distinguishes nested sqlite_home keys from an escaped root override
     const result = await diagnoseCodex(f.home, process.execPath) as any;
     const selected = result.homes.find((home: any) => home.codexHome === f.home);
     assert.ok(selected); assert.equal(selected.status, 'unsupported');
-    assert.equal(selected.code, 'unsupported_codex_sqlite_home');
+    if (windows) assertWindowsStorageUnqualified(selected);
+    else assert.equal(selected.code, 'unsupported_codex_sqlite_home');
     assert.equal(result.ready, false); assert.equal(result.tool.executed, false);
     assert.equal(result.sendAuthorized, false);
   }
@@ -237,16 +268,22 @@ test('doctor rejects repeated exponent signs anywhere in Codex configuration', a
   for (const number of ['3e+20', '3e-20']) {
     writeFileSync(config, `numeric_setting = ${number}\n[profiles.p]\nweight = ${number}\n`);
     const result = await diagnoseCodex(f.home, process.execPath) as any;
-    assert.equal(result.homes[0].status, 'available', number);
-    assert.equal(result.homes[0].code, 'state_db_readable', number);
-    assert.equal(result.ready, true); assert.equal(result.tool.executed, false);
+    if (windows) assertWindowsStorageUnqualified(result.homes[0]);
+    else {
+      assert.equal(result.homes[0].status, 'available', number);
+      assert.equal(result.homes[0].code, 'state_db_readable', number);
+    }
+    assert.equal(result.ready, !windows); assert.equal(result.tool.executed, false);
   }
   for (const number of ['3e++20', '3e--20']) {
     for (const text of [`numeric_setting = ${number}\n`, `[profiles.p]\nweight = ${number}\n`]) {
       writeFileSync(config, text);
       const result = await diagnoseCodex(f.home, process.execPath) as any;
-      assert.equal(result.homes[0].status, 'unknown', text);
-      assert.equal(result.homes[0].code, 'codex_config_unreadable', text);
+      if (windows) assertWindowsStorageUnqualified(result.homes[0]);
+      else {
+        assert.equal(result.homes[0].status, 'unknown', text);
+        assert.equal(result.homes[0].code, 'codex_config_unreadable', text);
+      }
       assert.equal(result.ready, false); assert.equal(result.tool.executed, false);
       assert.equal(result.sendAuthorized, false);
     }

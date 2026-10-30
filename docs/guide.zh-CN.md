@@ -1,5 +1,11 @@
 # 用户指南 — session-peer (TypeScript)
 
+普通 Codex 队列也会拒绝无法判定云端策略适用范围的上下文，包括存在 `auth.json` 的登录 home，并返回 `codex_cloud_storage_unverified`。不会读取凭据或缓存内容；另行验证的 owned app-server 路径仍需实际存储绑定证据。
+
+此源码检查 Codex home、系统配置、macOS 管理配置，以及队列进程和目标进程实际工作目录所适用的项目配置。详见[存储检查范围与拒绝条件](api.md#codex-storage-configuration)。Windows 的 Codex 发送和 dry-run 在本地存储检查方式通过验证前会拒绝队列提交。doctor 和 dry-run 不执行 Codex，加载器版本仍标为未验证。
+
+当前功能差异与移植决策见[注明日期的对照表](../PARITY.md#current-scoped-feature-matrix)。表中区分 TypeScript 已发布的功能与单独固定的 Python 比较基准。
+
 [返回 README](../README.zh-CN.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)

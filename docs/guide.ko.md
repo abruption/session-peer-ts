@@ -1,14 +1,20 @@
 # 사용자 가이드 — session-peer (TypeScript)
 
+일반 Codex 큐는 `auth.json`이 있는 로그인 home 등에서 클라우드 정책 적용 여부를 분류할 수 없으면 `codex_cloud_storage_unverified`로 거부합니다. 자격정보·캐시 내용은 읽지 않으며, 별도로 검증하는 owned app-server 경로에는 실제 저장소 바인딩 증거가 필요합니다.
+
+이 소스는 Codex home·시스템·macOS 관리 설정과 큐 실행 프로세스 및 대상 프로세스의 실제 작업 경로에 적용되는 프로젝트 설정을 검사합니다. [저장소 검증 범위와 거부 조건](api.md#codex-storage-configuration)을 확인하세요. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부합니다. doctor와 dry-run은 Codex를 실행하지 않으며 로더 버전은 미확인으로 남깁니다.
+
+현재 기능 차이와 포팅 결정은 [날짜가 명시된 비교표](../PARITY.md#current-scoped-feature-matrix)에서 확인하세요. TypeScript의 공개 기능과 별도로 고정한 Python 비교 기준을 구분합니다.
+
 [README로 돌아가기](../README.ko.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**문서·소스 기준 버전: 0.5.1.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6과 0.5.1은 서로의 SSH 사전 확인을 거부합니다.
+**문서·소스 기준 버전: 0.5.1.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6 버전과 0.5.1 버전은 서로의 SSH 사전 확인을 거부합니다.
 
 **0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 0.5.1 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.
 
-이 가이드는 0.5.1을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
+이 가이드는 0.5.1 버전을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
 
 <a id="마이그레이션-경계-033-후보"></a>
 
@@ -136,7 +142,7 @@ Claude Code에는 받은 메시지함에 접근할 수 있는 실행 중 TUI(터
 
 Node 22.x의 22.13 이상 또는 24.x를 사용하세요. Python CLI도 같은 `session-peer`
 명령 이름을 쓰므로, 설치 전에 PATH(명령 검색 경로)에서 어떤 실행 파일을 찾는지
-확인하세요. 아래 명령은 선택한 0.5.1을 npm으로 설치하는 예입니다.
+확인하세요. 아래 명령은 선택한 0.5.1 버전을 npm으로 설치하는 예입니다.
 CLI 자체는 패키지를 설치하거나 업데이트하지 않습니다.
 
 **0.5.1 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.

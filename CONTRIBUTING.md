@@ -56,6 +56,32 @@ that invokes actual PowerShell; no live sessions or network destinations.
 Keep `package-lock.json` tracked. Do not commit dist, node_modules, local
 worktrees, credentials, agent state, transcripts or real test evidence.
 
+## Current version maintenance
+
+For a source checkout, package.json is the current-version source. Update package
+and lock metadata together through the normal npm workflow, then run:
+
+```sh
+npm run version:update
+npm run version:check
+node scripts/check-repository.mjs
+```
+
+The explicit `scripts/current-version-fields.json` inventory covers runtime
+VERSION and selected current examples in the four READMEs/guides, API/shorthand
+references and PARITY's current display. Only `{{version}}` spans change; the
+rest of each authored line is checked exactly. Edit the matching inventory entry
+when changing an owned translated line. Missing or unexpected matches refuse
+before writes. The check is non-mutating and runs in the normal repository CI.
+See `scripts/current-version.md` in the source checkout and
+[issue #168](https://github.com/abruption/session-peer-ts/issues/168) for the
+inventory boundary and synthetic build/package acceptance.
+
+Dated comparison/release evidence, native/Python/skill versions and hashes,
+finite compatibility rows, release policy and installation pins are reviewed
+separately. The updater does not approve a release or extend compatibility.
+Inspect the diff and rerun build/package checks before proposing a release.
+
 ## Safety and documentation
 
 Preserve actual flock/owner evidence, ambiguity rejection, pre-submit revalidation,

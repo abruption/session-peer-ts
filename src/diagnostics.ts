@@ -1,9 +1,11 @@
-// Diagnostics inspect bounded metadata only. Never probe/connect to an inbox,
+// Diagnostics read bounded configuration and metadata, returning sanitized checks.
+// Never probe/connect to an inbox,
 // acquire a writer lock, execute an agent binary, or write configuration.
 import { accessSync, constants, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
-import { listingCandidates, sqliteHome } from './discovery.js';
+import { listingCandidates } from './discovery.js';
+import { classifyCodexStorage, storageDiagnostic } from './codex-storage.js';
 import { inspectSkill } from './skill-metadata.js';
 import { batchShim } from './process.js';
 import { windowsProcessStart } from './windows.js';
@@ -59,9 +61,9 @@ export async function diagnoseCodex(home?: string, binary?: string): Promise<Rec
   const inventory = listingCandidates(home);
   const homes = [];
   for (const item of inventory.homes) {
-    const storage = sqliteHome(item.codexHome);
-    homes.push({ ...item, ...(storage === 'configured' ? { status: 'unsupported', code: 'unsupported_codex_sqlite_home' } :
-      storage === 'unknown' ? { status: 'unknown', code: 'codex_config_unreadable' } : await codexHome(item.stateDb)) });
+    const storage = classifyCodexStorage({ home: item.codexHome });
+    homes.push({ ...item, storage: storageDiagnostic(storage), ...(storage.status !== 'classified' ?
+      { status: storage.status, code: storage.code } : await codexHome(item.stateDb)) });
   }
   const agentTool = tool(binary ?? 'codex');
   const complete = inventory.errors.length === 0 && homes.every(item => item.status === 'available' || (!item.required && item.status === 'missing'));

@@ -4,12 +4,11 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import timers from 'node:timers/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { send } from '../dist/send.js';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { inspectWriter, probeLock, resolveWriter } from '../dist/writer.js';
+import { inspectWriter, probeLock, resolveWriter, revalidateWriter } from '../dist/writer.js';
 import { inspectWindows, windowsProcessStart } from '../dist/windows.js';
 import { VERSION_LINE } from '../dist/protocol.js';
 
@@ -52,7 +51,7 @@ async function fixture(t: TestContext) {
     mkdirSync(join(path, 'thread-writer-locks'), { recursive: true });
     const db = new DatabaseSync(join(path, 'state_5.sqlite'));
     db.exec('CREATE TABLE threads(id TEXT, title TEXT, cwd TEXT, updated_at INTEGER, archived INTEGER, rollout_path TEXT)');
-    db.prepare('INSERT INTO threads VALUES (?,?,?,?,?,?)').run(id, 'fixture', '/project', 1, 0, 'unused'); db.close();
+    db.prepare('INSERT INTO threads VALUES (?,?,?,?,?,?)').run(id, 'fixture', path, 1, 0, 'unused'); db.close();
   }
   database(home);
   const lock = join(home, 'thread-writer-locks', id + '.lock');
@@ -151,9 +150,10 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const owner = await f.holder();
     const sample = samplingBarrier(t);
     const before = f.log('FIXTURE_QUEUE_LOG').length;
-    const rejected = assert.rejects(send({ to: `codex:${id}`, home: f.home,
-      codexBin: f.binary, message: 'pre-submit owner race' }), /active_writer_unverified/);
+    const initial = resolveWriter(f.home, id);
     (await sample())(); // Complete first resolveWriter's two native samples.
+    const selected = await initial;
+    const rejected = assert.rejects(revalidateWriter(selected, f.home, id), /active_writer_unverified/);
     const resume = await sample(); // Revalidation's first native sample completed.
     await f.stop(owner);
     const replacement = await f.holder();
@@ -163,18 +163,18 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     await f.stop(replacement);
   });
-  await t.test('dry-run submits nothing; stable owner queues once; inactive and ambiguous refuse', async () => {
+  await t.test('Windows storage adapter refuses send and dry-run without queueing; writer refusals remain precise', async () => {
     assert.equal((await f.invoke(f.args)).error, 'inactive_writer'); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 0);
     const owner = await f.holder();
-    assert.equal((await f.invoke([...f.args, '--dry-run'])).submitted, false); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 0);
+    const dry = await f.invoke([...f.args, '--dry-run']);
+    assert.equal(dry.error, 'codex_storage_platform_unqualified'); assert.equal(dry.submitted, false); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 0);
     const sent = await f.invoke(f.args);
-    assert.equal(sent.status, 'queued'); assert.equal(sent.submitted, true); assert.equal(sent.consumptionConfirmed, false);
-    const calls = f.log('FIXTURE_QUEUE_LOG'); assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].args, ['queue', '--thread', id, '--message=fixture 🚀']); assert.equal(calls[0].home, f.home);
+    assert.equal(sent.error, 'codex_storage_platform_unqualified'); assert.equal(sent.status, 'refused'); assert.equal(sent.submitted, false); assert.equal(sent.consumptionConfirmed, false);
+    assert.equal(sent.codexHomeResolution.reason, 'explicit_live_writer'); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 0);
     const other = join(f.root, 'other'); f.database(other);
     const competing = await f.holder(join(other, 'thread-writer-locks', id + '.lock'));
     const refused = await f.invoke(f.args, { SESSION_PEER_CODEX_HOMES: JSON.stringify([other]) });
-    assert.equal(refused.error, 'multiple_live_writers'); assert.equal(refused.submitted, false); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 1);
+    assert.equal(refused.error, 'multiple_live_writers'); assert.equal(refused.submitted, false); assert.equal(f.log('FIXTURE_QUEUE_LOG').length, 0);
     await f.stop(competing); await f.stop(owner);
   });
   await t.test('implicit selection, explicit conflict, unsaved first turn and inactive opt-in', async () => {
@@ -182,7 +182,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const owner = await f.holder();
     const implicit = f.args.filter((_, index) => index !== 3 && index !== 4);
     const dry = await f.invoke([...implicit, '--dry-run'], { CODEX_HOME: f.home });
-    assert.equal(dry.status, 'validated'); assert.equal(dry.codexHomeResolution.reason, 'single_stable_live_writer');
+    assert.equal(dry.error, 'codex_storage_platform_unqualified'); assert.equal(dry.submitted, false); assert.equal(dry.codexHomeResolution.reason, 'single_stable_live_writer');
     const other = join(f.root, 'inactive-17'); f.database(other);
     const conflict = await f.invoke([...f.args.slice(0, 4), other, ...f.args.slice(5)], { CODEX_HOME: f.home });
     assert.equal(conflict.error, 'explicit_home_conflicts_with_live_writer');
@@ -191,22 +191,22 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     assert.equal(unsaved.error, 'thread_not_yet_persisted'); assert.equal(unsaved.submitted, false);
     assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     const restored = new DatabaseSync(join(f.home, 'state_5.sqlite'));
-    restored.prepare('INSERT INTO threads(id) VALUES (?)').run(id); restored.close();
+    restored.prepare('INSERT INTO threads(id,cwd) VALUES (?,?)').run(id, f.home); restored.close();
     await f.stop(owner);
     const queued = await f.invoke([...f.args, '--allow-inactive-codex-home']);
-    assert.equal(queued.status, 'queued'); assert.equal(queued.queueId, 'fixture-17');
+    assert.equal(queued.error, 'codex_storage_platform_unqualified'); assert.equal(queued.status, 'refused'); assert.equal(queued.submitted, false);
     assert.equal(queued.codexHomeResolution.reason, 'explicit_inactive_opt_in');
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
   });
-  await t.test('nonzero and timeout after queue spawn stay unknown without retry or stderr leak', async () => {
+  await t.test('native failure and timeout modes cannot bypass the unqualified Windows storage adapter', async () => {
     const owner = await f.holder();
     for (const mode of ['fail', 'timeout']) {
       const before = f.log('FIXTURE_QUEUE_LOG').length;
       const result = await f.invoke(f.args, { FIXTURE_QUEUE_MODE: mode });
-      assert.equal(result.status, 'unknown'); assert.equal(result.submitted, null); assert.equal(result.retryAllowed, false);
+      assert.equal(result.error, 'codex_storage_platform_unqualified'); assert.equal(result.status, 'refused'); assert.equal(result.submitted, false); assert.equal(result.retryAllowed, false);
       assert.equal(result.codexHomeResolution.reason, 'explicit_live_writer');
       assert.equal(JSON.stringify(result).includes('SECRET-SENTINEL'), false);
-      assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+      assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     }
     await f.stop(owner);
   });
@@ -261,9 +261,9 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
       '--to', `codex:${id}`, '--codex-home', f.home, '--codex-bin', f.binary, '--message', 'SSH SECRET-SENTINEL 🚀', '--no-from'];
     const owner = await f.holder();
     const before = f.log('FIXTURE_QUEUE_LOG').length;
-    const sent = await f.invoke(args); assert.equal(sent.status, 'queued', JSON.stringify(sent)); assert.equal(sent.consumptionConfirmed, false);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').at(-1).args.at(-1), '--message=SSH SECRET-SENTINEL 🚀');
+    const sent = await f.invoke(args); assert.equal(sent.status, 'refused', JSON.stringify(sent)); assert.equal(sent.error, 'codex_storage_platform_unqualified');
+    assert.equal(sent.submitted, false); assert.equal(sent.consumptionConfirmed, false);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     const calls = f.log('FIXTURE_SSH_LOG'); assert.equal(calls.length, 2);
     for (const call of calls) {
       assert.ok(call.args.includes('BatchMode=yes')); assert.ok(call.args.includes('StrictHostKeyChecking=yes'));
@@ -283,14 +283,14 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     }
     const lost = await f.invoke(args, { FIXTURE_SSH_MODE: 'loss' });
     assert.equal(lost.status, 'unknown'); assert.equal(lost.submitted, null); assert.equal(lost.retryAllowed, false);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 1);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     const sshBeforeComplete = f.log('FIXTURE_SSH_LOG').length;
     const complete = await f.invoke(args, { FIXTURE_SSH_MODE: 'complete255' });
-    assert.equal(complete.ok, true); assert.equal(complete.status, 'queued'); assert.equal(complete.submitted, true);
-    assert.deepEqual(complete.target, sent.target); assert.equal(complete.queueId, 'fixture-17');
+    assert.equal(complete.ok, false); assert.equal(complete.status, 'refused'); assert.equal(complete.submitted, false);
+    assert.equal(complete.error, 'codex_storage_platform_unqualified'); assert.equal(complete.codexHomeResolution.reason, 'explicit_live_writer');
     assert.equal(complete.consumptionConfirmed, false); assert.equal(complete.retryAllowed, false);
     assert.deepEqual(complete.sshTransport, { status: 'failed', reason: 'ssh_exit_nonzero', exitCode: 255 });
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2); // Exactly one additional native fixture call, never a retry.
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before); // Complete refusal evidence survives exit 255 without a native queue or retry.
     assert.equal(f.log('FIXTURE_SSH_LOG').length, sshBeforeComplete + 2); // Preflight plus one request.
     const remoteProfile = join(f.root, 'remote-user');
     const remoteHome = join(remoteProfile, '.codex'); f.database(remoteHome);
@@ -302,13 +302,14 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     assert.equal(listed.discovery.claude.status, 'ok');
     assert.equal(listed.discovery.codex.homes.at(-1).code, 'state_db_missing');
     assert.equal(listed.sshHost, 'fixture'); assert.equal('submitted' in listed, false);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     const diagnosed = await f.invoke(['doctor', '--host', 'fixture', '--remote-platform', 'win32', '--remote-bin', remote,
       '--agent', 'codex', '--codex-bin', f.binary], { FIXTURE_REMOTE_PROFILE: remoteProfile, FIXTURE_REMOTE_HOMES: '[]' });
-    assert.equal(diagnosed.ok, true); assert.equal(diagnosed.ready, true); assert.equal(diagnosed.command, 'doctor');
+    assert.equal(diagnosed.ok, true); assert.equal(diagnosed.ready, false); assert.equal(diagnosed.command, 'doctor');
     assert.equal(diagnosed.agents.codex.homes[0].codexHome, remoteHome);
+    assert.equal(diagnosed.agents.codex.homes[0].code, 'codex_storage_platform_unqualified');
     assert.equal(diagnosed.agents.codex.tool.executed, false); assert.equal(diagnosed.sshHost, 'fixture');
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     // #20: repeated hosts run in order through the same encoded PowerShell path.
     const sshBefore = f.log('FIXTURE_SSH_LOG').length;
     const pair = await f.invoke(['list', '--agent', 'codex', '--host', 'fixture', '--host', 'user@[2001:db8::1]', '--remote-platform', 'win32',
@@ -319,7 +320,7 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const pairCalls = f.log('FIXTURE_SSH_LOG').slice(sshBefore);
     assert.deepEqual(pairCalls.map(call => call.args[call.args.indexOf('--') + 1]), ['fixture', 'fixture', 'user@2001:db8::1', 'user@2001:db8::1']);
     for (const call of pairCalls) assert.deepEqual(call.args.slice(call.args.indexOf('-p'), call.args.indexOf('-p') + 2), ['-p', '2222']);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     // #22 with #20: an opted-in client notice (fresh cache, no refresh) never enters the
     // repeated --host array; text gets one stderr line; one flat host carries the field.
     const cacheDir = join(f.root, 'update-cache'); mkdirSync(cacheDir, { recursive: true });
@@ -351,10 +352,10 @@ test('Windows native writer, CLI and SSH contracts', { skip: process.platform !=
     const quietText = await raw([...pairArgs, '--output-format', 'text', '--no-update-notice']);
     assert.equal(quietText.code, noticedText.code); assert.equal(noticedText.stdout, quietText.stdout); assert.equal(quietText.stderr, '');
     assert.deepEqual(readdirSync(cacheDir), ['npm-update.json']);
-    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before + 2);
+    assert.equal(f.log('FIXTURE_QUEUE_LOG').length, before);
     await f.stop(owner);
     const inactive = await f.invoke([...args, '--allow-inactive-codex-home']);
-    assert.equal(inactive.status, 'queued'); assert.equal(inactive.queueId, 'fixture-17');
+    assert.equal(inactive.error, 'codex_storage_platform_unqualified'); assert.equal(inactive.status, 'refused'); assert.equal(inactive.submitted, false);
     assert.equal(inactive.codexHomeResolution.reason, 'explicit_inactive_opt_in');
     assert.ok(JSON.parse(f.log('FIXTURE_SSH_LOG').at(-1).input).args.includes('--allow-inactive-codex-home'));
   });

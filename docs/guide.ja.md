@@ -1,5 +1,11 @@
 # ユーザーガイド — session-peer (TypeScript)
 
+通常の Codex キュー提出も、`auth.json` があるログイン済み home など、クラウドポリシーの適用範囲を判定できない場合は `codex_cloud_storage_unverified` で拒否します。認証情報やキャッシュの内容は読まず、別途検証する owned app-server 経路では実際のストレージとの結び付きを確認する必要があります。
+
+このソースは Codex home、システム設定、macOS 管理設定、送信側と対象プロセスの実際の作業ディレクトリに適用されるプロジェクト設定を確認します。[ストレージ検証の範囲と拒否条件](api.md#codex-storage-configuration)を参照してください。Windows の Codex 送信・dry-run は、ローカルストレージ検査方式の検証が済むまでキュー提出前に拒否します。doctor と dry-run は Codex を実行せず、ローダーのバージョンは未確認のままです。
+
+現在の機能差と移植方針は[日付を明記した比較表](../PARITY.md#current-scoped-feature-matrix)を参照してください。TypeScriptで公開済みの機能と、別途固定したPythonの比較基準を区別しています。
+
 [README に戻る](../README.ja.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)

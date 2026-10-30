@@ -10,6 +10,7 @@ import {join,delimiter,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateHandoff} from '../dist/handoff.js';
 import {HandoffLedger,payloadDigest} from '../dist/handoff-ledger.js';
+import {handoffSend} from '../dist/handoff-operations.js';
 const qualified={skip:process.platform!=='darwin'||process.arch!=='arm64'};
 const thread='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',cli=resolve('dist/cli.js');
 const schema=`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
@@ -20,18 +21,23 @@ async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-hd-'))),home=join(root,'home'),bin=join(root,'bin');chmodSync(root,0o700);mkdirSync(home,{mode:0o700});mkdirSync(bin,{mode:0o700});mkdirSync(join(home,'thread-writer-locks'),{mode:0o700});
  let history:DatabaseSync|undefined;
  t.after(()=>{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}});
- const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT)');state.prepare('INSERT INTO threads VALUES(?)').run(thread);state.close();
+ const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT, cwd TEXT)');state.prepare('INSERT INTO threads VALUES(?,?)').run(thread,home);state.close();
  // Model a live warm WAL store: keep the owner connection open so other
  // fixture connections cannot remove/recreate WAL and SHM between probes.
  // DELETE-mode writes can expose a rollback journal that the observer refuses.
  if(warm){const db=history=new DatabaseSync(join(home,'thread_history_1.sqlite'));db.exec('PRAGMA journal_mode=WAL');db.exec(schema);db.prepare('INSERT INTO thread_turns VALUES(?,?,?)').run(thread,'turn-fixture','completed');db.prepare('INSERT INTO thread_history_projection_state VALUES(?,?,?)').run(thread,100,100);}
  const lock=join(home,'thread-writer-locks',thread+'.lock'),locks=createRequire(import.meta.url).resolve('fs-ext-extra-prebuilt');
- const held=spawn(process.execPath,['-e',"const f=require('fs').openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(f,'exnb');console.log('ready');setInterval(()=>{},1000)",lock,locks]);held.stderr.resume();await once(held.stdout,'data');t.after(async()=>{if(held.exitCode===null&&held.signalCode===null){held.kill('SIGKILL');await once(held,'close');}});
+ // The retained writer really opens this home's state inode and runs from an
+ // existing cwd, so the production storage binding guard needs no fixture bypass.
+ const held=spawn(process.execPath,['-e',"const f=require('fs').openSync(process.argv[1],'w',0o600);require(process.argv[2]).flockSync(f,'exnb');const db=require('fs').openSync(process.argv[3],'r');console.log('ready');setInterval(()=>{},1000)",lock,locks,join(home,'state_5.sqlite')],{cwd:home});held.stderr.resume();await once(held.stdout,'data');t.after(async()=>{if(held.exitCode===null&&held.signalCode===null){held.kill('SIGKILL');await once(held,'close');}});
  // The real tools are native executables. Do not spend the bounded owner
  // probe's budget on four extra Node startups under parallel CI load.
  // Owner data stays in a separate file, never interpolated into shell code.
  const lsof=join(bin,'lsof');writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+process.getuid?.()+'\0',{mode:0o600});
- writeFileSync(lsof,'#!/bin/sh\nexec /bin/cat "$0.data"\n',{mode:0o700});
+ writeFileSync(lsof+'.cwd','p'+held.pid+'\0fcwd\0n'+home+'\0',{mode:0o600});
+ const stateInfo=statSync(join(home,'state_5.sqlite'),{bigint:true});
+ writeFileSync(lsof+'.fds','p'+held.pid+'\0f4\0D0x'+stateInfo.dev.toString(16)+'\0i'+stateInfo.ino+'\0n'+join(home,'state_5.sqlite')+'\0',{mode:0o600});
+ writeFileSync(lsof,'#!/bin/sh\ncase " $* " in\n  *" -d cwd "*) exec /bin/cat "$0.cwd";;\n  *" -F0fDin "*) exec /bin/cat "$0.fds";;\n  *) exec /bin/cat "$0.data";;\nesac\n',{mode:0o700});
  writeFileSync(join(bin,'ps'),'#!/bin/sh\nprintf "Fixture stable start\\n"\n',{mode:0o700});
  const log=join(root,'queue-log-\'"\\\n\u2028\u2029'),nativeLog=join(root,'native-calls.jsonl');writeFileSync(log,'');writeFileSync(nativeLog,'');const codex=join(bin,'codex');
  const initializeReady=join(root,'initialize-ready'),initializeRelease=join(root,'initialize-release');
@@ -118,6 +124,50 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
  function inject(clientId:string){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));try{db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(thread,'turn-fixture','after-submit-item',1,JSON.stringify({type:'userMessage',id:'after-submit-item',clientId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');}finally{db.close();}}
  return{root,home,codex,env,calls,nativeCalls,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
+async function directEnvironment<T>(f:{root:string;env:NodeJS.ProcessEnv},action:()=>Promise<T>):Promise<T>{
+ const saved={...process.env},cwd=process.cwd();Object.assign(process.env,f.env);process.chdir(f.root);
+ try{return await action();}finally{process.chdir(cwd);for(const key of Object.keys(process.env))if(!(key in saved))delete process.env[key];Object.assign(process.env,saved);}
+}
+test('direct handoff dry-run never probes a live agent for observation or required delivery',qualified,async t=>{
+ const f=await fixture(t),before=readFileSync(f.ledgerFile,'utf8');
+ await directEnvironment(f,async()=>{
+  for(const intent of [{observeDelivery:true},{waitFor:'delivered' as const}]){
+   await assert.rejects(handoffSend({to:'codex:'+thread,home:f.home,codexBin:f.codex,message:'direct dry-run',dryRun:true},
+    {...intent,ledgerPath:f.env.SESSION_PEER_HANDOFF_HOME}),{code:'incompatible_handoff_dry_run'});
+   assert.deepEqual(f.nativeCalls(),[]);assert.deepEqual(f.calls(),[]);
+  }
+ });
+ assert.equal(readFileSync(f.ledgerFile,'utf8'),before);
+});
+test('qualified owned handoff binds cloud-possible storage while fallback remains unqualified',qualified,async t=>{
+ const f=await fixture(t);writeFileSync(join(f.home,'auth.json'),'fixture-credentials-never-read',{mode:0o600});
+ const sent=await f.invoke([...f.args,'--observe-delivery']);
+ assert.equal(sent.code,0,sent.stdout);assert.equal(sent.value.submitted,true);
+ assert.equal(sent.value.storage.cloudConfiguration,'requires_owned_storage_binding');
+ assert.equal(sent.value.handoff.observation.injectionObserved,true);assert.equal(f.calls().length,1);
+});
+test('direct handoff qualification and queue both retain the canonical binary across an alias change during selection',qualified,async t=>{
+ const f=await fixture(t),alias=join(f.root,'selected-codex'),other=join(f.root,'other-codex'),otherLog=join(f.root,'other-native-log');
+ fs.copyFileSync(f.codex,other);chmodSync(other,0o700);
+ const config=JSON.parse(readFileSync(f.codex+'.json','utf8'));config.version='0.162.1';config.nativeLog=otherLog;config.log=join(f.root,'other-queue-log');
+ writeFileSync(other+'.json',JSON.stringify(config),{mode:0o600});fs.symlinkSync(f.codex,alias);
+ const lstat=fs.lstatSync;let changed=false;
+ t.mock.method(fs,'lstatSync',((path:any,...args:any[])=>{const value=(lstat as any)(path,...args);
+  if(path===join(f.home,'thread-writer-locks',thread+'.lock')&&!changed){changed=true;fs.unlinkSync(alias);fs.symlinkSync(other,alias);}return value;
+ }) as typeof fs.lstatSync);syncBuiltinESMExports();
+ try{
+  await directEnvironment(f,async()=>{
+   const sent=await handoffSend({to:'codex:'+thread,home:f.home,codexBin:alias,message:'pinned qualification'},
+    {observeDelivery:true,ledgerPath:f.env.SESSION_PEER_HANDOFF_HOME});
+   assert.equal(sent.exitCode,0,JSON.stringify(sent.value));assert.equal(sent.value.submitted,true);
+   const handoff=sent.value.handoff as {correlationId:string},record=f.ledger().data.records[handoff.correlationId];
+   assert.equal(record.observationQualification.version,'0.160.1');assert.equal('binary' in record.binding,false);
+   assert.equal(JSON.stringify(sent.value).includes(f.codex),false);
+  });
+  assert.equal(changed,true);assert.equal(existsSync(otherLog),false);assert.equal(f.calls().length,1);
+  assert.ok(f.nativeCalls().some(row=>row.command==='--version'));assert.ok(f.nativeCalls().some(row=>row.command==='app-server'));
+ }finally{t.mock.restoreAll();syncBuiltinESMExports();}
+});
 test('warm history fixture keeps WAL sidecar identities stable across synthetic injection',{skip:process.platform==='win32'},async t=>{
  const f=await fixture(t,'none'),database=join(f.home,'thread_history_1.sqlite');
  const mode=new DatabaseSync(database,{readOnly:true});
@@ -161,7 +211,7 @@ test('initialize readiness observes persisted fixture evidence when filesystem n
  assert.equal(readFileSync(join(f.root,'initialize-ready'),'utf8'),'ready');
 });
 test('initialize readiness reports a send that exits before initialization with its current outcome',qualified,async t=>{
- const f=await fixture(t,'concurrent-stop','0.163.0');
+ const f=await fixture(t,'concurrent-stop','0.165.0');
  const active=f.start([...f.args,'--wait-for','delivered']);
  await assert.rejects(f.initialized(),error=>{
   assert.ok(error instanceof Error);assert.match(error.message,/send exited before initialize evidence/);
@@ -172,7 +222,7 @@ test('initialize readiness reports a send that exits before initialization with 
  assert.deepEqual(f.nativeCalls().filter((row:{command:string})=>row.command==='app-server'),[]);
 });
 test('queue readiness reports a send that exits before submission with its current outcome',qualified,async t=>{
- const f=await fixture(t,'none','0.163.0');
+ const f=await fixture(t,'none','0.165.0');
  const active=f.start([...f.args,'--wait-for','delivered']);
  await assert.rejects(f.queued(),error=>{
   assert.ok(error instanceof Error);assert.match(error.message,/send exited before queue evidence/);
@@ -186,7 +236,7 @@ test('qualified local opt-in waits for exact client ID injection, not completed 
  const status=await f.invoke(['handoff','status','--correlation-id',h.correlationId]);assert.equal(status.code,0);assert.equal(status.value.handoff.observation.injectionObserved,true);assert.equal(f.calls().length,1);
 });
 test('unknown after possible native write never falls back to legacy queue',qualified,async t=>{
- const f=await fixture(t,'loss');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1,r.stdout);assert.equal(r.value.status,'unknown');assert.equal(r.value.submitted,null);assert.equal(r.value.handoff.submission.status,'unknown');assert.equal(r.value.handoff.wait.status,'failed');assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');
+ const f=await fixture(t,'loss');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1,r.stdout);assert.equal(r.value.status,'unknown',r.stdout);assert.equal(r.value.submitted,null);assert.equal(r.value.handoff.submission.status,'unknown');assert.equal(r.value.handoff.wait.status,'failed');assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');
 });
 test('positive native acceptance survives a subsequent ledger failure without another submission',qualified,async t=>{
  const f=await fixture(t,'ledger-failure');
@@ -212,8 +262,9 @@ test('positive native acceptance survives a subsequent ledger failure without an
  assert.equal(duplicate.code,1);assert.equal(duplicate.value.error,'handoff_already_attempted');
  assert.equal(f.calls().length,1);
 });
-test('current unqualified native version cannot enter the app-server or required delivery path',qualified,async t=>{
- const f=await fixture(t,'inject','0.163.0');
+test('storage-qualified but observation-unqualified native version cannot enter the app-server or required delivery path',qualified,async t=>{
+ // 0.165.0 has reviewed local loader semantics but no delivery observation row.
+ const f=await fixture(t,'inject','0.165.0');
  const required=await f.invoke([...f.args,'--wait-for','delivered']);
  assert.equal(required.code,1);assert.equal(required.value.submitted,false);
  assert.equal(required.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
@@ -223,8 +274,8 @@ test('current unqualified native version cannot enter the app-server or required
  assert.equal(best.value.handoff.observation.injectionObserved,false);
  assert.deepEqual(f.calls(),[{method:'legacy'}]);
 });
-test('unsupported version/absent warm store refuse required goals, best-effort fallback is chosen before app-server effect',qualified,async t=>{
- const f=await fixture(t,'inject','0.159.0');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1);assert.equal(r.value.submitted,false);assert.equal(r.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
+test('unsupported observation version/absent warm store refuse required goals, best-effort fallback is chosen before app-server effect',qualified,async t=>{
+ const f=await fixture(t,'inject','0.165.0');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1);assert.equal(r.value.submitted,false);assert.equal(r.value.handoff.wait.status,'unsupported');assert.equal(f.calls().length,0);
  const best=await f.invoke([...f.args,'--observe-delivery']);assert.equal(best.code,0);assert.equal(best.value.handoff.observation.status,'unsupported');assert.deepEqual(f.calls(),[{method:'legacy'}]);
  const missing=await fixture(t,'inject','0.160.1',false);const blocked=await missing.invoke([...missing.args,'--wait-for','delivered']);assert.equal(blocked.code,1);assert.equal(blocked.value.submitted,false);assert.equal(missing.calls().length,0);
 });

@@ -18,8 +18,8 @@ function fixture(t: TestContext) {
   function database(home: string, savedThread = true) {
     mkdirSync(home, { recursive: true });
     const db = new DatabaseSync(join(home, 'state_5.sqlite'));
-    db.exec('CREATE TABLE threads(id TEXT)');
-    if (savedThread) db.prepare('INSERT INTO threads VALUES (?)').run(id);
+    db.exec('CREATE TABLE threads(id TEXT, cwd TEXT)');
+    if (savedThread) db.prepare('INSERT INTO threads VALUES (?, ?)').run(id, root);
     db.close(); return home;
   }
   const home = database(join(root, '.codex'));
@@ -106,12 +106,13 @@ test('CLI validates inactive option scope and stdio dry-run includes sanitized d
   function invoke(extra: string[], wire = false) {
     const all = [...args, ...extra];
     const result = spawnSync(process.execPath, [resolve('dist/cli.js'), ...(wire ? ['--stdio-request'] : all)], {
-      encoding: 'utf8', input: wire ? JSON.stringify({ schemaVersion: 1, args: all }) : undefined });
+      cwd: f.root, encoding: 'utf8', input: wire ? JSON.stringify({ schemaVersion: 1, args: all }) : undefined });
     return JSON.parse(result.stdout);
   }
   assert.equal(invoke(['--allow-inactive-codex-home']).error, 'inactive_opt_in_requires_explicit_home');
   const result = invoke(['--codex-home', f.home, '--allow-inactive-codex-home', '--dry-run'], true);
-  assert.equal(result.status, 'validated'); assert.equal(result.submitted, false);
+  assert.equal(result.status, process.platform === 'win32' ? 'refused' : 'validated'); assert.equal(result.submitted, false);
+  if (process.platform === 'win32') assert.equal(result.error, 'codex_storage_platform_unqualified');
   assert.equal(result.codexHomeResolution.reason, 'explicit_inactive_opt_in');
   assert.equal(result.queueId, undefined);
   for (const c of result.codexHomeResolution.candidates) assert.deepEqual(Object.keys(c).sort(), ['activity', 'codexHome', 'reason', 'savedThread', 'sources', 'writerLock']);

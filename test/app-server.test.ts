@@ -5,11 +5,13 @@ import assert from 'node:assert/strict';
 import { PassThrough, Writable } from 'node:stream';
 import { performance } from 'node:perf_hooks';
 import { mkdtempSync, realpathSync, mkdirSync, readFileSync, rmSync, writeFileSync, renameSync, symlinkSync } from 'node:fs';
+import fs from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
+import { DatabaseSync } from 'node:sqlite';
 import { APP_SERVER_EVIDENCE, APP_SERVER_QUEUE_EVIDENCE, APP_SERVER_LIMITS, AppServerFault, BoundedAppServerClient,
   appServerCapability, connectAppServer, parseMetadataEvent, spawnOwnedMetadataFixture, nativeQueueCapability,
   nativeQueueOnce, NATIVE_QUEUE_NOTIFICATION_OPTOUTS, NATIVE_QUEUE_01621_NOTIFICATION_OPTOUTS,
@@ -497,7 +499,13 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
   const log = join(root, 'metadata.jsonl'), binary = join(root, 'codex-fixture');
   const selected = join(root, 'selected "quoted" \\home'), other = join(root, 'other');
   mkdirSync(selected, { mode: 0o700 }); mkdirSync(other, { mode: 0o700 });
+  // Synthetic auth metadata makes cloud policy possible. No credential content
+  // is read: owned stdio must prove the actual state/queue descriptors instead.
+  writeFileSync(join(selected, 'auth.json'), 'fixture-auth-metadata-never-read');
   const original = { ...scope, codexHome: selected, threadId: '01950000-0000-7000-8000-000000000071' };
+  const state = new DatabaseSync(join(selected, 'state_5.sqlite'));
+  state.exec('CREATE TABLE threads(id TEXT,cwd TEXT)');
+  state.prepare('INSERT INTO threads VALUES(?,?)').run(original.threadId, selected); state.close();
   const script = `#!${process.execPath}\n
     const fs=require('node:fs'),log=${JSON.stringify(log)};
     fs.appendFileSync(log,JSON.stringify({argv:process.argv.slice(2),pid:process.pid,home:process.env.CODEX_HOME,sqliteHome:process.env.CODEX_SQLITE_HOME})+'\\n');
@@ -505,8 +513,9 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     // Synthetic descriptors model the service's already resolved SQLite home;
     // the negative case represents an exact policy overriding CLI/env pins.
     const storage=process.env.FIXTURE_STORAGE_HOME||process.env.CODEX_SQLITE_HOME;
-    fs.openSync(require('node:path').join(storage,'state_5.sqlite'),'w+');
+    fs.openSync(require('node:path').join(storage,'state_5.sqlite'),storage===process.env.CODEX_SQLITE_HOME?'r+':'w+');
     fs.openSync(require('node:path').join(storage,'queue_1.sqlite'),'w+');
+    if(process.env.FIXTURE_OPEN_SIDECAR)fs.openSync(require('node:path').join(storage,process.env.FIXTURE_OPEN_SIDECAR),'w+');
     let buffer='';setInterval(()=>{},1000);process.stderr.write('PRIVATE-STDERR-NOT-RETURNED');
     process.stdin.on('data',chunk=>{buffer+=chunk;let end;while((end=buffer.indexOf('\\n'))>=0){const r=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);
       fs.appendFileSync(log,JSON.stringify({method:r.method,guardExists:fs.existsSync(${JSON.stringify(join(root, 'guard'))})})+'\\n');
@@ -517,7 +526,8 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
   let guards = 0;
   const options = { binary, scope: original, message: 'PRIVATE-OWN-EFFECT', clientUserMessageId: id, deadlineMs: performance.now() + 2000,
     verifyOwner: async (value: AppServerScope) => { assert.deepEqual(value, original); return true; },
-    beforeEffect: async () => { guards++; writeFileSync(join(root, 'guard'), 'committed'); },
+    beforeEffect: async () => { guards++; writeFileSync(join(root, 'guard'), 'committed');
+      writeFileSync(join(selected, 'cloud-config-bundle-cache.json'), 'fixture-cache-refresh-never-read'); },
     env: { HOME: root, CODEX_HOME: 'must-be-replaced', CODEX_SQLITE_HOME: 'must-be-replaced', PATH: process.env.PATH } };
   assert.deepEqual(await nativeQueueOnce(options), { queueId: 'fixture-q', clientUserMessageId: id }); assert.equal(guards, 1);
   const rows = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
@@ -533,12 +543,103 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
     env: { ...options.env, FIXTURE_STORAGE_HOME: other } }), fault('storage_binding_unverified', false));
   assert.equal(guards, 1);
   const guardsBefore = guards;
+  for (const file of ['queue_1.sqlite', 'queue_1.sqlite-wal']) await t.test(`${file} replacement after the last bind retains the original FD proof and cannot reach queue`, async t => {
+    const path = join(selected, file), detached = path + '.detached-last-bind', lstat = fs.lstatSync;
+    let fenced = false, scheduled = false, replaced = false;
+    t.mock.method(fs, 'lstatSync', ((item: any, ...args: any[]) => {
+      const info = (lstat as any)(item, ...args);
+      if (item === path && fenced && !scheduled) {
+        scheduled = true; queueMicrotask(() => { renameSync(path, detached); writeFileSync(path, 'replacement after bind'); replaced = true; });
+      } return info;
+    }) as typeof fs.lstatSync); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        env: { ...options.env, ...(file.endsWith('-wal') ? { FIXTURE_OPEN_SIDECAR: file } : {}) },
+        beforeEffect: async () => { fenced = true; },
+      }), fault('storage_binding_unverified', false));
+      assert.equal(replaced, true);
+    } finally {
+      t.mock.restoreAll(); syncBuiltinESMExports();
+      if (replaced) { rmSync(path, { force: true }); renameSync(detached, path); }
+      if (file.endsWith('-wal')) rmSync(path, { force: true });
+    }
+  });
+  await t.test('a fixed sidecar created after its absence was bound cannot reach queue', async t => {
+    const path = join(selected, 'queue_1.sqlite-shm'), lstat = fs.lstatSync;
+    let fenced = false, scheduled = false, created = false;
+    t.mock.method(fs, 'lstatSync', ((item: any, ...args: any[]) => {
+      const info = (lstat as any)(item, ...args);
+      if (item === join(selected, 'queue_1.sqlite') && fenced && !scheduled) {
+        scheduled = true; queueMicrotask(() => { writeFileSync(path, 'late sidecar'); created = true; });
+      } return info;
+    }) as typeof fs.lstatSync); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; },
+      }), fault('storage_binding_unverified', false));
+      assert.equal(created, true);
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); rmSync(path, { force: true }); }
+  });
+  await t.test('an asynchronous root storage refusal retains its storage code without leaking native detail', async () => {
+    await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+      beforeEffect: async () => {}, verifyStorage: async () => { throw new Error('SECRET-storage-detail'); },
+    }), error => { assert.equal(JSON.stringify(error).includes('SECRET'), false); return fault('storage_binding_unverified', false)(error); });
+  });
+  await t.test('binary replacement inside the final async binding cannot reach the RPC write', async t => {
+    const originalSpawn = childProcess.spawn; let fenced = false, swapped = false;
+    t.mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
+      const child = originalSpawn(...args);
+      if (args[0] === '/usr/sbin/lsof' && fenced && !swapped) child.once('close', () => {
+        queueMicrotask(() => { if (!swapped) { swapped = true; writeFileSync(binary, script + '\n// late replacement'); } });
+      });
+      return child;
+    }); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; } }), fault('unsupported_version', false));
+      assert.equal(swapped, true);
+    } finally { writeFileSync(binary, script); t.mock.restoreAll(); syncBuiltinESMExports(); }
+  });
+  await t.test('retained consumer changes during final async binding are checked synchronously at the RPC write', async t => {
+    const originalSpawn = childProcess.spawn; let fenced = false, moved = false, currentCwd = selected, finalChecks = 0;
+    t.mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
+      const child = originalSpawn(...args);
+      if (args[0] === '/usr/sbin/lsof' && fenced && !moved) child.once('close', () => {
+        queueMicrotask(() => { moved = true; currentCwd = other; });
+      }); return child;
+    }); syncBuiltinESMExports();
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; },
+        verifyStorage: async () => { assert.equal(currentCwd, selected); },
+        verifyStorageSync: () => { finalChecks++; if (currentCwd !== selected) throw new AppServerFault('storage_binding_unverified', false); },
+      }), fault('storage_binding_unverified', false));
+      assert.equal(moved, true); assert.equal(finalChecks, 1);
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  });
+  await t.test('configuration mutation during durable guard cannot reach queue', async () => {
+    const config = join(selected, 'config.toml');
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { writeFileSync(config, 'model="changed-during-guard"'); } }), fault('storage_binding_unverified', false));
+    } finally { rmSync(config, { force: true }); }
+  });
+  await t.test('consumer cwd mutation during final owner verification cannot reach queue', async () => {
+    let fenced = false;
+    const updateCwd = (cwd: string) => { const state = new DatabaseSync(join(selected, 'state_5.sqlite')); state.prepare('UPDATE threads SET cwd=?').run(cwd); state.close(); };
+    try {
+      await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
+        beforeEffect: async () => { fenced = true; }, verifyOwner: async () => { if (fenced) updateCwd(other); return true; } }), fault('storage_binding_unverified', false));
+    } finally { updateCwd(selected); }
+  });
   await t.test('storage replaced during durable guard cannot reach queue', async () => {
     await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
       beforeEffect: async () => {
         guards++; renameSync(join(selected, 'state_5.sqlite'), join(selected, 'detached-state.sqlite'));
         writeFileSync(join(selected, 'state_5.sqlite'), 'replacement');
-      } }), fault('owner_changed', false));
+      } }), fault('storage_binding_unverified', false));
+    rmSync(join(selected, 'state_5.sqlite'));
+    renameSync(join(selected, 'detached-state.sqlite'), join(selected, 'state_5.sqlite'));
   });
   assert.equal(guards, guardsBefore + 1);
   await t.test('same canonical descriptor paths with wrong inode are refused after the guard', async () => {
@@ -547,15 +648,15 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
       if (binary === '/usr/sbin/lsof' && guarded) {
         // Model unchanged reported paths while opened inode identities differ.
         const output = ['state_5.sqlite', 'queue_1.sqlite'].map((file, index) =>
-          `f${index + 3}\0D0x1\0i1\0n${join(selected, file)}\0\n`).join('');
-        return originalSpawn(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', output], options);
+          `f${index + 3}\0D0x1\0i1\0n${join(selected, file).replaceAll('\\', '\\\\')}\0\n`).join('');
+        return originalSpawn(process.execPath, ['-e', "process.stdout.write(Buffer.from(process.argv[1],'base64'))", Buffer.from(output).toString('base64')], options);
       }
       return originalSpawn(binary, args, options);
     });
     syncBuiltinESMExports();
     try {
       await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
-        beforeEffect: async () => { guarded = true; } }), fault('owner_changed', false));
+        beforeEffect: async () => { guarded = true; } }), fault('storage_binding_unverified', false));
     } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
   });
   await t.test('storage replacement during final async owner verification is checked before queue', async () => {
@@ -568,7 +669,7 @@ test('nativeQueueOnce pins env/CLI SQLite home, checks opened paths and selected
           writeFileSync(join(selected, 'queue_1.sqlite'), 'replacement');
         }
         return true;
-      } }), fault('owner_changed', false));
+      } }), fault('storage_binding_unverified', false));
   });
   await t.test('queue process actual build must equal the probed qualified build', async () => {
     await assert.rejects(nativeQueueOnce({ ...options, deadlineMs: performance.now() + 2000,
