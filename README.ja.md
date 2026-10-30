@@ -3,8 +3,7 @@
 # session-peer (TypeScript)
 
 [![npm バージョン](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
-[![npm 週間ダウンロード](https://img.shields.io/npm/dw/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
-[![npm 月間ダウンロード](https://img.shields.io/npm/dm/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npmの過去18か月のダウンロード](https://img.shields.io/npm/d18m/session-peer?label=downloads%20%2818%20months%29&logo=npm)](https://www.npmjs.com/package/session-peer)
 [![CI](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml)
 [![Node 対応](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
 [![MIT ライセンス](https://img.shields.io/npm/l/session-peer)](LICENSE)
@@ -15,14 +14,18 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**文書・ソースのバージョン: 0.5.0。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と 0.5.0 は互いの SSH 事前確認を拒否します。
+**文書・ソースのバージョン: 0.5.1。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と 0.5.1 は互いの SSH 事前確認を拒否します。
 
-**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 0.5.0 のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。
+**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 0.5.1 のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。
 
 **実行中の Claude Code・Codex セッションを見つけ、ローカルまたは SSH でメッセージを送信します。**
 Python 不要の Node.js クライアントです。パッケージ名とコマンド名は `session-peer` です。
 
 </div>
+
+通常の Codex 送信は、ログイン済み home などクラウドポリシーの適用範囲を判定できない場合も拒否します。経路を選ぶ前に[ストレージ検証の範囲](docs/api.md#codex-storage-configuration)を確認してください。
+
+このソースは Codex の追加設定レイヤーを確認します。Windows の Codex 送信・dry-run はローカルストレージ検査が未検証のためキュー提出前に拒否し、通常の Claude 経路とは区別します。導入前に[検証範囲](docs/api.md#codex-storage-configuration)と選択したリリースを確認してください。
 
 ## Demo
 
@@ -58,15 +61,15 @@ SSH は既存の鍵・ホスト信頼設定と両端の**同じバージョン�
 `Get-Command session-peer -All` で PATH を確認してください。利用する実装を選び、
 別の管理ツールのファイルを `--force` で上書きしないでください。
 
-**0.5.0 のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](docs/guide.ja.md#ソースからビルド)を使います。
+**0.5.1 のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](docs/guide.ja.md#ソースからビルド)を使います。
 
 ```sh
-npm view session-peer@0.5.0 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.5.0
+npm view session-peer@0.5.1 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.5.1
 session-peer --version
 ```
 
-期待する出力: `session-peer 0.5.0 (typescript)`。分離インストール・ソースビルド・
+期待する出力: `session-peer 0.5.1 (typescript)`。分離インストール・ソースビルド・
 Windows・削除の手順は以下の詳細ガイドを参照してください。
 
 任意の `sp` 短縮名は 0.3.0 以降に含まれ（0.2.1 以前にはありません）、自動では有効になりません。
@@ -75,12 +78,12 @@ Windows・削除の手順は以下の詳細ガイドを参照してください�
 ### Update
 
 npm で導入したクライアントは npm で更新します。タグと対象バージョンを確認してから
-正確なバージョンを指定してください。以下は古い npm 版を選択した 0.5.0 に更新する例です。
+正確なバージョンを指定してください。以下は古い npm 版を選択した 0.5.1 に更新する例です。
 CLI は更新をインストールせず、`session-peer update --check` は確認のみ行います。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.5.0
+npm install --global --ignore-scripts session-peer@0.5.1
 session-peer --version
 ```
 

@@ -1,18 +1,18 @@
 # API reference
 
-This reference describes source/package version **0.5.0**. Check registry availability and review the selected release before installation. Dated release evidence is recorded in [VALIDATION.md](../VALIDATION.md); before publication use a reviewed source artifact.
+This reference describes source/package version **0.5.1**. Check registry availability and review the selected release before installation. Dated release evidence is recorded in [VALIDATION.md](../VALIDATION.md); before publication use a reviewed source artifact.
 
 [Back to README](../README.md) · [User guide](guide.md)
 
 The package exposes a small ESM API with TypeScript declarations. Install it
-locally with `npm install --ignore-scripts session-peer@0.5.0` before importing it.
+locally with `npm install --ignore-scripts session-peer@0.5.1` before importing it.
 Importing the package does not execute the CLI or submit a message.
 
 ```js
 import { VERSION, VERSION_LINE, reply, envelope } from 'session-peer';
 
-console.log(VERSION);      // 0.5.0
-console.log(VERSION_LINE); // session-peer 0.5.0 (typescript)
+console.log(VERSION);      // 0.5.1
+console.log(VERSION_LINE); // session-peer 0.5.1 (typescript)
 const address = 'session-peer://v1/reply?agent=claude&session=12345&transport=local';
 console.log(reply(address)); // { to: '12345' }
 console.log(envelope('Please review and reply.', true, address));
@@ -35,6 +35,129 @@ not package subpath exports. Use the [CLI guide](guide.md#use) for sending and
 The ordinary SSH response correction is documented separately as the [0.3.3 ordinary SSH response correction](design/ordinary-ssh-responses.md); its internal parser is not a package-root export.
 
 <a id="unreleased-opt-in-handoff-cli--040-work"></a>
+
+<a id="codex-storage-configuration"></a>
+
+## Codex storage configuration guards
+
+The source implementation added after baseline `90481b1` extends its
+selected-home check with bounded local loader-layer classification. The published
+0.5.1 comparison in PARITY is retained as dated evidence. Availability is determined
+by the selected release record; source/fixture results do not establish publication
+or new native delivery qualification.
+
+The ordinary queue loader is reviewed at exact native Codex versions **0.160.1,
+0.162.1 and 0.165.0**, independently of the narrower observation profile table.
+An effectful send probes the explicitly selected binary's reported version and
+retains its file identity. Doctor and dry-run never execute the agent binary;
+their `loaderVersionVerified:false` result is not native queue authorization.
+
+Darwin and Linux classify the selected-home `config.toml`, system
+`/etc/codex/config.toml`, `requirements.toml` and legacy `managed_config.toml`,
+plus project configuration for the physical queue cwd and the saved target
+thread's cwd. A live writer additionally needs an observable physical cwd and
+opened state-database descriptor matching the selected inode; a queried sender
+version does not establish the running consumer's configuration. macOS reads only
+forced `config_toml_base64` / `requirements_toml_base64` values for
+`com.openai.codex`, checking forced status before and after value retrieval.
+
+Windows local storage classification is unqualified: Codex send/dry-run refuse
+before queue submission until its native known-folder and process/storage
+inspection contract is supported. This does not disable ordinary Claude paths
+or qualify Linux/Windows observation. A reused native daemon retains startup
+storage that these local reads cannot attest to; its existing control-socket
+metadata causes refusal without connecting to or stopping it. The separately
+owned stdio app-server path must bind its opened SQLite files independently.
+
+Cloud config bundles can supply configuration and storage requirements. Cache
+absence alone is insufficient because native loaders may fetch a bundle.
+Without reading credential/cache contents, ordinary queue classification refuses
+when selected-home `auth.json` or `cloud-config-bundle-cache.json` metadata is
+present, when configuration selects keyring/auto credential storage, or when
+external identity markers or a config server make cloud applicability unknown.
+The conservative selector scan also includes inactive/nested tables; it does not
+claim that native legacy profiles apply those selectors.
+**This includes ordinary signed-in file-auth homes even when their actual account
+would not receive cloud policy.** The refusal is
+`codex_cloud_storage_unverified`; it is not a determination that relocation is
+configured. File-auth/cache absence plus source-qualified local selectors permits
+the clean ordinary path. The separately requested owned app-server route may
+continue only with its actual opened-storage binding; local metadata alone is
+not substituted for that proof.
+
+Nonempty native exec-server/Noise environment markers and selected-home
+`environments.toml` metadata cause refusal on both paths. The adapter classifies
+local storage only and does not attach to remote workspaces. Alternative V2 user
+profiles in the reviewed loaders require explicit `--profile`/`-p` arguments;
+these native invocations do not select them. Diagnostic fields identify the local
+layer scope and cloud applicability; they never certify complete effective policy.
+
+Configuration files are bounded regular-file reads (1 MiB per file, 8 MiB total),
+with fatal UTF-8/TOML decoding and observable descriptor/path identity and
+stability checks. Project ancestry is capped at 256 directories. Explicit custom
+project markers use a conservative ancestor superset, which can refuse an
+otherwise unused ancestor configuration; the result is not a complete model of
+native project trust. System metadata helpers have bounded output/timeouts;
+byte bounds do not promise a deadline for arbitrary filesystem I/O.
+
+Ordinary queue processes keep the sender's physical cwd. A malformed or unsafe
+project config in that directory can therefore refuse a send independently of
+the target's cwd. The guard also inspects conservative consumer/ancestor context
+supersets without reproducing the native project-trust decision, so it can reject
+configuration the native loader would ignore as untrusted. Missing/deleted saved
+thread cwd, config symlinks, an unclassifiable selected DB or unavailable fixed
+system metadata helpers also refuse; these are explicit availability limits.
+
+Unsupported root `sqlite_home`, malformed/unreadable configuration, unsupported
+reported loader versions, conflicting process/file evidence and changes before
+dispatch refuse submission. Errors include `unsupported_codex_sqlite_home`,
+`codex_config_unreadable`, `codex_storage_config_unverifiable`,
+`codex_storage_loader_unsupported`, `codex_daemon_storage_unverified`,
+`codex_consumer_context_unverifiable`, `codex_consumer_storage_unverifiable`,
+`codex_cloud_storage_unverified` and `codex_storage_changed_before_queue`.
+Doctor readiness describes ordinary local classification. A signed-in or other
+cloud-unclassifiable home can report `ready:false` and omit the selected DB
+schema/count check, even when a separately qualified owned route could later
+supply stronger storage evidence. Reader failure is not proof of a missing DB.
+Entry-file identity continuity covers the selected executable entry, not every
+transitive binary a trusted wrapper might launch.
+
+Public `storage` diagnostics contain layer names and classifications; content
+hashes, configuration paths, raw TOML and preference values stay private.
+
+Ordinary, fallback and owned app-server paths recheck applicable evidence before
+effect while retaining original writer and deadline rules. A quoted explicit
+`sqlite_home` pin enforces the already-classified selected location; it does not
+adopt a configured relocation. This is an observable continuity guard, not an
+atomic filesystem/configuration snapshot or protection against an undetectable
+same-user rewrite. Missing evidence never permits fallback after an attempt or
+an automatic retry of an unknown outcome.
+
+The reviewed project-discovery implementation reads `dir/.codex/config.toml`;
+its older summary comment mentioning `cwd/config.toml` is not the implemented
+path. Git files (including worktree markers) stop root discovery; a `.git`
+directory needs its HEAD marker. The ordinary startup path uses embedded
+packaged defaults, whose reviewed TOML contains no `sqlite_home`; it does not
+supply the programmatic packaged-defaults-file override. Legacy root `profile`
+selection is rejected by the reviewed core, and `ConfigProfile` has no
+`sqlite_home` member or storage flattening. A nested profile key is not promoted
+to a root storage override. The global `-c` option is present in all three
+reviewed CLI parsers and can follow the queue message argument.
+
+Source review pins:
+
+| Native tag | Upstream source commit |
+| --- | --- |
+| 0.160.1 | [`d27764b82f7118f674371e6d6e76271d9d606edb`](https://github.com/openai/codex/tree/d27764b82f7118f674371e6d6e76271d9d606edb/codex-rs/config/src/loader) |
+| 0.162.1 | [`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`](https://github.com/openai/codex/tree/092d3acd6bec3e3a14bdc7e7a2810ab628ab759d/codex-rs/config/src/loader) |
+| 0.165.0 | [`360319d8dee62d87e2d59fc0c21805d79519cfed`](https://github.com/openai/codex/tree/360319d8dee62d87e2d59fc0c21805d79519cfed/codex-rs/config/src/loader) |
+
+All three macOS loader files have SHA-256
+`36dd560f67b3b45bf3d63f4e2b962571456c12dc2f9ca55304f8729d49bee0c5`.
+The comparison also inspects Python
+[`f5e7c49554ff02771990a151e00b52f2abf3df0a`](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/codex.py).
+These are static source and isolated-fixture checks; no native Codex queue,
+user session, delivery/ACK or remote-host qualification was run for this change.
 
 ## Opt-in handoff CLI — 0.4.0
 
@@ -91,7 +214,7 @@ message/transcript scan manufactures ACK. Ordinary generated Reply-To stays v1.
 
 POSIX opt-in `send --host HOST` performs an exact-version preflight and a
 no-effect preparation before one destination-side send. Both ends must contain
-the same reviewed 0.5.0 implementation. This workflow was introduced in
+the same reviewed 0.5.1 implementation. This workflow was introduced in
 0.4.0; a 0.3.x banner does not establish the capability. Initialize the destination's private ledger explicitly; no command
 auto-installs a handler or initializes missing history. The origin does not
 create a local receipt collector. Reconcile with `handoff status`/`wait` on the
@@ -193,7 +316,7 @@ requested evidence goal. After any possible RPC write, no legacy fallback or
 second submission occurs.
 
 Selection is by the exact host platform/architecture and native version.
-The 0.5.0 source records a Linux arm64 Codex 0.162.1 candidate (pinned musl
+The 0.5.1 source records a Linux arm64 Codex 0.162.1 candidate (pinned musl
 executable, procfs storage binding, `/proc/locks` writer-owner check) but does
 not activate it. Linux and any other unlisted platform/version have no
 profile, so required delivery refuses before effect and best-effort uses the
@@ -273,7 +396,7 @@ a completed milestone. Exact evidence and limits are in [VALIDATION](../VALIDATI
 
 ## 0.4.0 implementation scope
 
-The 0.5.0 source preserves this supported handoff scope; its Linux and Windows
+The 0.5.1 source preserves this supported handoff scope; its Linux and Windows
 groundwork does not enable additional platform or ACK support.
 
 The 0.4.0 implementation includes the qualified macOS arm64 observer and explicit

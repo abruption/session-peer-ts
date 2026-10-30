@@ -8,15 +8,15 @@ import { fileURLToPath } from 'node:url';
 
 export const repository = 'abruption/session-peer-ts';
 export const registry = 'https://registry.npmjs.org';
-const stableVersion = '0.5.0';
-const previousStable = '0.4.0';
-const previousStableIntegrity = 'sha512-mMNJ118atoflhpFTkf2+DtO7MRf7FQnPK3lKWbq/vd8Xvb5DsjUtAgydIBOcd3Xj9BCYGqM50aFhzUr4dDGHSw==';
+const stableVersion = '0.5.1';
+const previousStable = '0.5.0';
+const previousStableIntegrity = 'sha512-lLc7SFRUydY5TjcX8aE18kgfC88Wi4Mx/OXcbLlk0W9yH+JYLkxGwmZIiC7S1bczFgXzsP3xSe8DqiD7YplpDw==';
 const verifiedPreview = '0.1.0-preview.1';
 const verifiedPreviewIntegrity = 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==';
 export const packageFiles = ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md',
   'README.md', 'README.zh-CN.md', 'RELEASING.md', 'SECURITY.md', 'VALIDATION.md',
   'docs/guide.md', 'docs/guide.ko.md', 'docs/guide.ja.md', 'docs/guide.zh-CN.md', 'docs/api.md', 'docs/shorthand.md', 'shorthand/sp.sh', 'shorthand/sp.ps1', 'docs/design/remote-deployment.md', 'docs/design/ordinary-ssh-responses.md', 'docs/design/typescript-skill-compatibility.md',
-  'dist/cli.js', 'dist/discovery.js', 'dist/diagnostics.js', 'dist/skill-metadata.js', 'dist/process.js', 'dist/protocol.js', 'dist/replies.js', 'dist/send.js', 'dist/ssh.js', 'dist/ssh-response.js',
+  'dist/cli.js', 'dist/discovery.js', 'dist/codex-storage.js', 'dist/codex-storage.d.ts', 'dist/diagnostics.js', 'dist/skill-metadata.js', 'dist/process.js', 'dist/protocol.js', 'dist/replies.js', 'dist/send.js', 'dist/ssh.js', 'dist/ssh-response.js',
   'dist/windows.js', 'dist/writer.js', 'dist/index.js', 'dist/index.d.ts', 'dist/cli.d.ts',
   'dist/discovery.d.ts', 'dist/diagnostics.d.ts', 'dist/skill-metadata.d.ts', 'dist/process.d.ts', 'dist/protocol.d.ts',
   'dist/replies.d.ts', 'dist/send.d.ts', 'dist/ssh.d.ts', 'dist/ssh-response.d.ts', 'dist/windows.d.ts', 'dist/writer.d.ts', 'dist/updates.js', 'dist/updates.d.ts', 'dist/handoff.js', 'dist/handoff.d.ts', 'dist/handoff-ledger.js', 'dist/handoff-ledger.d.ts', 'dist/handoff-operations.js', 'dist/handoff-operations.d.ts', 'dist/app-server.js', 'dist/app-server.d.ts', 'dist/metadata-observation.js', 'dist/metadata-observation.d.ts', 'dist/handoff-observer-probe.js', 'dist/handoff-observer-probe.d.ts', 'dist/handoff-writer-probe.js', 'dist/handoff-writer-probe.d.ts', 'dist/native-profiles.js', 'dist/native-profiles.d.ts', 'dist/linux-proc.js', 'dist/linux-proc.d.ts', 'dist/linux-native-probe.js', 'dist/linux-native-probe.d.ts', 'package.json'].sort();
@@ -30,7 +30,7 @@ export function validatePackage(pkg) {
   assert.deepEqual(pkg.exports, { '.': { types: './dist/index.d.ts', import: './dist/index.js' } });
   assert.equal(pkg.private, false);
   assert.ok(pkg.version === stableVersion || /^\d+\.\d+\.\d+-preview\.\d+$/.test(pkg.version),
-    'only reviewed preview versions and 0.5.0 stable are supported');
+    'only reviewed preview versions and 0.5.1 stable are supported');
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
   assert.equal(pkg.repository.url, `git+https://github.com/${repository}.git`);
   assert.deepEqual(pkg.publishConfig, { registry: `${registry}/`, access: 'public',

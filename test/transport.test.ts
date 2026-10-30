@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, delimiter } from 'node:path';
+import { join, dirname, delimiter } from 'node:path';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,8 @@ import { reply, envelope } from '../dist/protocol.js';
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 // Answers `ssh -G` user metadata lookups without logging them as SSH dispatches.
 const sshConfigUser = "if(process.argv.includes('-G')){console.log('user fixture-user');process.exit(0);}";
+// Agent version inspection is metadata only; counters below record queue effects.
+const codexVersion = "if(process.argv.length===3&&process.argv[2]==='--version'){console.log('codex-cli 0.165.0');process.exit(0);}";
 const python = process.env.PYTHON ?? 'python3';
 const id = '11111111-1111-4111-8111-111111111111';
 function setup(t: TestContext) {
@@ -24,7 +26,7 @@ function setup(t: TestContext) {
   return { path, env };
 }
 async function invoke(args: string[], env: NodeJS.ProcessEnv) {
-  const child = spawn(process.execPath, [cli, ...args, '--json'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [cli, ...args, '--json'], { env, cwd: env.HOME, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = ''; child.stdout.on('data', x => { stdout += x; }); child.stderr.resume();
   const timer = setTimeout(() => child.kill('SIGKILL'), 15000);
   const [code, signal] = await once(child, 'close'); clearTimeout(timer);
@@ -69,17 +71,17 @@ test('structured replies are inert data and reject conflicting/unsafe fields', (
 function database(home: string) {
   mkdirSync(join(home, 'thread-writer-locks'), { recursive: true });
   const result = spawnSync(python, ['-c',
-    'import sqlite3,sys\nc=sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE threads(id TEXT)"); c.execute("INSERT INTO threads VALUES (?)",(sys.argv[2],)); c.commit(); c.close()',
-    join(home, 'state_5.sqlite'), id]);
+    'import sqlite3,sys\nc=sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE threads(id TEXT, cwd TEXT)"); c.execute("INSERT INTO threads VALUES (?,?)",(sys.argv[2],sys.argv[3])); c.commit(); c.close()',
+    join(home, 'state_5.sqlite'), id, dirname(home)]);
   assert.equal(result.status, 0, result.stderr.toString());
 }
 async function holder(t: TestContext, path: string, home: string, name = 'codex-fixture') {
   // Actual OS flock held by a separate native process, not a mocked lock probe.
   const source = join(path, 'holder.c'), binary = join(path, name);
-  writeFileSync(source, '#include <sys/file.h>\n#include <fcntl.h>\n#include <unistd.h>\n#include <stdio.h>\nint main(int argc,char**argv){int f=open(argv[1],O_RDWR|O_CREAT,0600); if(f<0||flock(f,LOCK_EX|LOCK_NB))return 1;puts("ready");fflush(stdout); sleep(60);return 0;}\n');
+  writeFileSync(source, '#include <sys/file.h>\n#include <fcntl.h>\n#include <unistd.h>\n#include <stdio.h>\nint main(int argc,char**argv){int state=open(argv[2],O_RDONLY);if(state<0)return 2;int f=open(argv[1],O_RDWR|O_CREAT,0600); if(f<0||flock(f,LOCK_EX|LOCK_NB))return 1;puts("ready");fflush(stdout); sleep(60);return 0;}\n');
   const built = spawnSync('cc', [source, '-o', binary]);
   assert.equal(built.status, 0, built.stderr.toString());
-  const child = spawn(binary, [join(home, 'thread-writer-locks', `${id}.lock`)], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const child = spawn(binary, [join(home, 'thread-writer-locks', `${id}.lock`), join(home, 'state_5.sqlite')], { cwd: path, stdio: ['ignore', 'pipe', 'inherit'] });
   t.after(async () => { if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await once(child, 'close'); } });
   await once(child.stdout, 'data');
   return child;
@@ -97,7 +99,7 @@ test('actual kernel lock + owner correlation; symlink and non-Codex owner fail c
 test('Codex guarded queue runs once, refuses inactive or competing live writers', async t => {
   const { path, env } = setup(t), home = join(path, 'home'); database(home);
   const queue = join(path, 'queue'), count = join(path, 'count');
-  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.log('Queued message queue-17 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
+  writeFileSync(queue, `#!${process.execPath}\n${codexVersion}require('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.log('Queued message queue-17 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, '--message', 'fixture', '--no-from'];
   assert.equal((await invoke(args, env)).error, 'inactive_writer');
   const inactive = await invoke([...args, '--allow-inactive-codex-home'], env);
@@ -127,7 +129,7 @@ test('Codex guarded queue runs once, refuses inactive or competing live writers'
 test('queue failure after spawn is unknown, never retried or leaked', async t => {
   const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
   const queue = join(path, 'queue'), count = join(path, 'count');
-  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.error('SECRET-SENTINEL');process.exit(1);`, { mode: 0o700 });
+  writeFileSync(queue, `#!${process.execPath}\n${codexVersion}require('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.error('SECRET-SENTINEL');process.exit(1);`, { mode: 0o700 });
   const result = await invoke(['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, '--message', 'SECRET-SENTINEL'], env);
   assert.equal(result.status, 'unknown'); assert.equal(result.submitted, null); assert.equal(result.retryAllowed, false);
   assert.equal(result.codexHomeResolution.reason, 'explicit_live_writer');
@@ -171,20 +173,20 @@ test('SSH preflight reports allowlisted causes without leaking stderr or sending
 test('SSH request framing: no message in remote command; response loss never retries', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer 0.5.0 (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer 0.5.1 (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const result = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message', 'SECRET-SENTINEL', '--no-from'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(result.status, 'posted'); assert.equal(messages.length, 1);
   // Valid JSON mixed with banner/trailing output is not a verified response.
   for (const command of ['send', 'list']) for (const prefix of [true, false]) {
     const response = JSON.stringify({ schemaVersion: 1, command, host: 'fixture', ok: true, status: 'posted', submitted: true, consumptionConfirmed: false });
     const stdout = prefix ? 'untrusted banner\n' + response : response + '\ntrailing junk';
-    writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.5.0 (typescript)');else console.log(${JSON.stringify(stdout)});`, { mode: 0o700 });
+    writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.5.1 (typescript)');else console.log(${JSON.stringify(stdout)});`, { mode: 0o700 });
     const unverified = await invoke([command, '--host', 'fixture', ...(command === 'send' ? ['--to', 'fixture', '--message', 'not-provable'] : [])], { ...env, PATH: path + delimiter + env.PATH });
     assert.equal(unverified.status, command === 'send' ? 'unknown' : 'refused');
     assert.equal(unverified.submitted, command === 'send' ? null : false);
     assert.equal(unverified.retryAllowed, false);
   }
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.5.0 (typescript)');else process.exit(255);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.5.1 (typescript)');else process.exit(255);`, { mode: 0o700 });
   const lost = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'lost'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(lost.status, 'unknown'); assert.equal(lost.retryAllowed, false); assert.equal(messages.length, 1);
 });
@@ -203,7 +205,7 @@ test('SSH resolves Codex homes at destination and preserves resolution/queue met
   const { path, env } = setup(t), home = join(path, 'remote-home'); database(home);
   const owner = await holder(t, path, home);
   const queue = join(path, 'queue'), count = join(path, 'count');
-  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1'); if(process.env.QUEUE_FAIL){console.error('SECRET-SENTINEL');process.exit(1);} console.log('Queued message ssh-17 for thread ${id}.');`, { mode: 0o700 });
+  writeFileSync(queue, `#!${process.execPath}\n${codexVersion}require('node:fs').appendFileSync(${JSON.stringify(count)},'1'); if(process.env.QUEUE_FAIL){console.error('SECRET-SENTINEL');process.exit(1);} console.log('Queued message ssh-17 for thread ${id}.');`, { mode: 0o700 });
   writeFileSync(join(path, 'ssh'), `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process'); const flag=process.argv.at(-1).endsWith('--version')?'--version':'--stdio-request'; const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},flag],{input:require('node:fs').readFileSync(0),encoding:'utf8',env:{...process.env,CODEX_HOME:${JSON.stringify(home)},SESSION_PEER_CODEX_HOMES:'[]'}});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const local = { ...env, PATH: path + delimiter + env.PATH, SESSION_PEER_CODEX_HOMES: '{invalid-local' };
   const args = ['send', '--host', 'fixture', '--to', `codex:${id}`, '--codex-bin', queue, '--message', 'fixture', '--no-from'];
@@ -231,21 +233,21 @@ test('SSH resolves Codex homes at destination and preserves resolution/queue met
 test('Codex queue passes dash bodies as one --message= argv and drops inherited CODEX_SQLITE_HOME', async t => {
   const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
   const queue = join(path, 'queue'), calls = join(path, 'calls');
-  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(calls)},JSON.stringify({args:process.argv.slice(2),sqlite:process.env.CODEX_SQLITE_HOME??null})+'\\n'); console.log('Queued message q-1 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
+  writeFileSync(queue, `#!${process.execPath}\n${codexVersion}require('node:fs').appendFileSync(${JSON.stringify(calls)},JSON.stringify({args:process.argv.slice(2),sqlite:process.env.CODEX_SQLITE_HOME??null})+'\\n'); console.log('Queued message q-1 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
   const bodies = ['- first item', '--help', '-x', '--', '-1', '-\nsecond line'];
   for (const body of bodies) {
     const sent = await invoke(['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, `--message=${body}`, '--no-from'], { ...env, CODEX_SQLITE_HOME: join(path, 'elsewhere') });
     assert.equal(sent.status, 'queued', JSON.stringify(sent));
   }
   const recorded = readFileSync(calls, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  assert.deepEqual(recorded.map(call => call.args), bodies.map(body => ['queue', '--thread', id, `--message=${body}`]));
+  assert.deepEqual(recorded.map(call => call.args), bodies.map(body => ['queue', '--thread', id, `--message=${body}`, '-c', `sqlite_home=${JSON.stringify(home)}`]));
   assert.ok(recorded.every(call => call.sqlite === null));
 });
 
 test('a configured Codex sqlite_home is refused before dry-run or queue', async t => {
   const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
   const queue = join(path, 'queue'), count = join(path, 'count');
-  writeFileSync(queue, `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(count)},'1');`, { mode: 0o700 });
+  writeFileSync(queue, `#!${process.execPath}\n${codexVersion}require('node:fs').appendFileSync(${JSON.stringify(count)},'1');`, { mode: 0o700 });
   const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, '--message', 'fixture', '--no-from'];
   writeFileSync(join(home, 'config.toml'), 'model = "x"\n# sqlite_home = "/commented"\n[profiles.p]\nmodel = "y"\n');
   assert.equal((await invoke([...args, '--dry-run'], env)).status, 'validated');
@@ -268,7 +270,7 @@ test('a saved inactive home needs opt-in and still rejects relocated or unreadab
   const inactive = await inspectWriter(home, id);
   assert.equal(inactive.activity, 'inactive'); assert.equal(inactive.writerLock, 'absent');
   const queue = join(path, 'inactive-queue'), calls = join(path, 'inactive-calls');
-  writeFileSync(queue, `#!${process.execPath}\nconst fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(process.argv.slice(2))+'\\n');console.log('Queued message inactive-queue-96 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
+  writeFileSync(queue, `#!${process.execPath}\n${codexVersion}const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(process.argv.slice(2))+'\\n');console.log('Queued message inactive-queue-96 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
   const recorded = (): string[][] => {
     try { return readFileSync(calls, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
@@ -300,7 +302,7 @@ test('a saved inactive home needs opt-in and still rejects relocated or unreadab
   assert.equal(sent.codexHomeResolution.reason, 'explicit_inactive_opt_in');
   assertSelectedInactive(sent);
   assert.equal(sent.queueId, 'inactive-queue-96');
-  assert.deepEqual(recorded(), [['queue', '--thread', id, '--message=inactive fixture']]);
+  assert.deepEqual(recorded(), [['queue', '--thread', id, '--message=inactive fixture', '-c', `sqlite_home=${JSON.stringify(home)}`]]);
   const baselineCalls = recorded().length;
   for (const key of ['sqlite_home', String.raw`"sqlite\u005fhome"`, String.raw`"sqlite\U0000005fhome"`]) {
     const text = `${key} = "/fixture/relocated"\n`; writeFileSync(config, text);
@@ -333,7 +335,7 @@ test('a saved inactive home needs opt-in and still rejects relocated or unreadab
 test('SSH preflight accepts a verified version despite noisy stderr and propagates remote exit codes', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process');if(process.argv.at(-1).endsWith('--version')){console.error('curl: (7) Failed to connect: Connection refused');console.log('session-peer 0.5.0 (typescript)');process.exit(0);}const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:require('node:fs').readFileSync(0,'utf8'),encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process');if(process.argv.at(-1).endsWith('--version')){console.error('curl: (7) Failed to connect: Connection refused');console.log('session-peer 0.5.1 (typescript)');process.exit(0);}const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:require('node:fs').readFileSync(0,'utf8'),encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const remoteEnv = { ...env, PATH: path + delimiter + env.PATH };
   // #55 + #49/#51 over SSH: a flag-like body travels as --message=<text> and posts literally.
   const sent = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message=--dry-run', '--no-from'], remoteEnv);
@@ -358,10 +360,14 @@ test('Windows --remote-bin doubles every PowerShell single-quote variant', async
 });
 
 test('opt-in handoff context stays bound to selected generation and rechecks storage before fencing', async t => {
- const {path} = setup(t), home = join(path,'home'); database(home); await holder(t,path,home);
+ const {path,env} = setup(t), home = join(path,'home'); database(home); await holder(t,path,home);
+ t.mock.method(process,'cwd',()=>path);
+ const previous = {...process.env}; Object.assign(process.env,env);
+ t.after(()=>{for(const key of Object.keys(process.env))if(!(key in previous))delete process.env[key];Object.assign(process.env,previous);});
+ const queue = join(path,'queue'); writeFileSync(queue,`#!${process.execPath}\n${codexVersion}`,{mode:0o700});
  const owner = await inspectWriter(home,id); const crypto = await import('node:crypto'); const expected = crypto.createHash('sha256').update(owner.identity).digest('hex');
  let effects = 0;
- await assert.rejects(send({ to:`codex:${id}`,home,codexBin:process.execPath,message:'fixture',hooks:{
+ await assert.rejects(send({ to:`codex:${id}`,home,codexBin:queue,message:'fixture',hooks:{
    resolved(context) {assert.equal(context.generation,expected);writeFileSync(join(home,'config.toml'),'sqlite_home = "/fixture/relocated"');},
    beforeEffect() {effects++;}
  }}), /unsupported_codex_sqlite_home/);
@@ -374,6 +380,41 @@ test('ordinary SSH results cannot opt themselves into handoff or claim unsolicit
  // Fixture values are data, never part of the executable JavaScript source.
  const config={log,handoff:{...h,targetGeneration:'\');throw new Error("fixture data executed");//\u2028\u2029'}};
  writeFileSync(fake+'.json',JSON.stringify(config),{mode:0o600});
- writeFileSync(fake,`#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).includes('--version')){console.log('session-peer 0.5.0 (typescript)');process.exit(0);}const fs=require('node:fs');const config=JSON.parse(fs.readFileSync(__filename+'.json','utf8'));let input='';process.stdin.on('data',p=>input+=p);process.stdin.on('end',()=>{fs.appendFileSync(config.log,'1');console.log(JSON.stringify({schemaVersion:1,command:'send',host:'fixture',ok:true,status:'posted',submitted:true,consumptionConfirmed:false,dryRun:false,target:{agent:'claude',pid:123,name:null},remoteMarker:'kept',handoff:config.handoff,handoffQuery:{status:'unknown'},handoffWarning:'fixture-only'}));});`,{mode:0o700});
+ writeFileSync(fake,`#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).includes('--version')){console.log('session-peer 0.5.1 (typescript)');process.exit(0);}const fs=require('node:fs');const config=JSON.parse(fs.readFileSync(__filename+'.json','utf8'));let input='';process.stdin.on('data',p=>input+=p);process.stdin.on('end',()=>{fs.appendFileSync(config.log,'1');console.log(JSON.stringify({schemaVersion:1,command:'send',host:'fixture',ok:true,status:'posted',submitted:true,consumptionConfirmed:false,dryRun:false,target:{agent:'claude',pid:123,name:null},remoteMarker:'kept',handoff:config.handoff,handoffQuery:{status:'unknown'},handoffWarning:'fixture-only'}));});`,{mode:0o700});
  const r=await invoke(['send','--host','fixture','--to','123','--message','fixture','--no-from','--no-reply-to'],{...env,PATH:path+delimiter+(env.PATH??'')});assert.equal(r.code,0);assert.equal(r.status,'posted');assert.equal(r.submitted,true);assert.equal(r.target.name,null);assert.equal(r.remoteMarker,'kept');assert.equal('handoff' in r,false);assert.equal('handoffQuery' in r,false);assert.equal('handoffWarning' in r,false);assert.equal(readFileSync(log,'utf8'),'1');
+});
+
+
+test('malformed exponent configuration refuses Codex dry-run and send before the fixture queue', async t => {
+  const { path, env } = setup(t), home = join(path, 'home'); database(home); await holder(t, path, home);
+  const queue = join(path, 'queue'), count = join(path, 'count'), config = join(home, 'config.toml');
+  writeFileSync(count, '');
+  writeFileSync(queue, `#!${process.execPath}\n${codexVersion}require('node:fs').appendFileSync(${JSON.stringify(count)},'1'); console.log('Queued message toml-051 for thread '+process.argv[4]+'.');`, { mode: 0o700 });
+  const args = ['send', '--to', `codex:${id}`, '--codex-home', home, '--codex-bin', queue, '--message', 'fixture', '--no-from', '--no-reply-to'];
+  // Valid single exponent signs remain acceptable; dry-run never invokes queue.
+  for (const number of ['3e+20', '3e-20']) {
+    writeFileSync(config, `numeric_setting = ${number}\n[profiles.p]\nweight = ${number}\n`);
+    const result = await invoke([...args, '--dry-run'], env);
+    assert.equal(result.status, 'validated', number); assert.equal(result.submitted, false);
+    assert.equal(readFileSync(count, 'utf8'), '');
+  }
+  for (const number of ['3e++20', '3e--20']) {
+    for (const text of [`numeric_setting = ${number}\n`, `[profiles.p]\nweight = ${number}\n`]) {
+      writeFileSync(config, text);
+      for (const extra of [['--dry-run'], []]) {
+        const result = await invoke([...args, ...extra], env);
+        assert.equal(result.error, 'codex_config_unreadable', text);
+        assert.equal(result.status, 'refused'); assert.equal(result.submitted, false);
+        assert.equal(result.code, 1); assert.equal(readFileSync(count, 'utf8'), '');
+      }
+    }
+  }
+  // This parser correction does not add support for an explicit root override.
+  writeFileSync(config, 'numeric_setting = 3e+20\nsqlite_home = "/fixture/relocated"\n');
+  for (const extra of [['--dry-run'], []]) {
+    const result = await invoke([...args, ...extra], env);
+    assert.equal(result.error, 'unsupported_codex_sqlite_home');
+    assert.equal(result.status, 'refused'); assert.equal(result.submitted, false);
+    assert.equal(readFileSync(count, 'utf8'), '');
+  }
 });

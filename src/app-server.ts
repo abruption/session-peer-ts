@@ -14,6 +14,7 @@ import { performance } from 'node:perf_hooks';
 import type { Readable, Writable } from 'node:stream';
 import { TextDecoder } from 'node:util';
 import { run } from './process.js';
+import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, codexStoragePin, decodeLsofFilename } from './codex-storage.js';
 import { CANDIDATE_PROFILES, NATIVE_PROFILES, platformProfiled, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 import { procOwnedFiles, type OpenedFile, type ProcReader } from './linux-proc.js';
 import { fileURLToPath } from 'node:url';
@@ -114,7 +115,8 @@ type ClientTransport = MetadataOnlyTransport | NativeQueueTransport;
 export type NativeQueuePort = Pick<AppServerPort, 'queueOnce' | 'close'>;
 export type NativeQueueOptions = {
   binary: string; scope: AppServerScope; message: string; clientUserMessageId: string; deadlineMs: number;
-  verifyOwner: (scope: AppServerScope) => Promise<boolean>; beforeEffect: () => Promise<void>; env?: NodeJS.ProcessEnv;
+  verifyOwner: (scope: AppServerScope) => Promise<boolean>; beforeEffect: () => Promise<void>;
+  verifyStorage?: () => Promise<void>; verifyStorageSync?: () => void; env?: NodeJS.ProcessEnv;
 };
 export function nativeQueueCapability(context: AppServerContext): {
   queueSupported: boolean; observationSupported: false;
@@ -284,7 +286,8 @@ export class BoundedAppServerClient implements AppServerPort {
   private fault?: AppServerFault; private closing?: Promise<void>; private readonly timer: ReturnType<typeof setTimeout>;
   private constructor(readonly scope: AppServerScope, private readonly transport: ClientTransport,
     private readonly deadlineMs: number, private readonly verifyOwner: (scope: AppServerScope) => Promise<boolean>,
-    private readonly nativeQueue = false, private readonly beforeEffect: () => Promise<void> = async () => {}) {
+    private readonly nativeQueue = false, private readonly beforeEffect: () => Promise<void> = async () => {},
+    private readonly beforeWrite: () => void = () => {}) {
     this.timer = setTimeout(() => this.fail('deadline'), Math.max(1, deadlineMs - performance.now()));
     transport.input.on('data', this.receive);
     transport.input.once('end', this.ended); transport.input.once('error', this.errored);
@@ -307,12 +310,12 @@ export class BoundedAppServerClient implements AppServerPort {
   }
   static async connectNativeQueueWire(scope: AppServerScope, transport: NativeQueueTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, beforeEffect: () => Promise<void>,
-    profile: NativeProfile): Promise<NativeQueuePort> {
-    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, profile);
+    profile: NativeProfile, beforeWrite: () => void): Promise<NativeQueuePort> {
+    return this.connectWire(scope, transport, deadlineMs, verifyOwner, true, beforeEffect, profile, beforeWrite);
   }
   private static async connectWire(scope: AppServerScope, transport: ClientTransport, deadlineMs: number,
     verifyOwner: (scope: AppServerScope) => Promise<boolean>, nativeQueue: boolean,
-    beforeEffect: () => Promise<void> = async () => {}, profile?: NativeProfile): Promise<BoundedAppServerClient> {
+    beforeEffect: () => Promise<void> = async () => {}, profile?: NativeProfile, beforeWrite?: () => void): Promise<BoundedAppServerClient> {
     let original: AppServerScope;
     try { original = scopeValue(scope); } catch { await disposeTransport(transport); throw new AppServerFault('invalid_scope', false); }
     if (transport.qualification !== 'hermetic_fixture_only' && !(nativeQueue && transport.qualification === 'native_queue_only_stdio')) {
@@ -322,7 +325,7 @@ export class BoundedAppServerClient implements AppServerPort {
     if (!Number.isFinite(remaining) || remaining <= 0 || remaining > APP_SERVER_LIMITS.lifetimeMs) {
       await disposeTransport(transport); throw new AppServerFault('deadline', false);
     }
-    const client = new BoundedAppServerClient(original, transport, deadlineMs, verifyOwner, nativeQueue, beforeEffect);
+    const client = new BoundedAppServerClient(original, transport, deadlineMs, verifyOwner, nativeQueue, beforeEffect, beforeWrite);
     try {
       await client.owner();
       if (nativeQueue) {
@@ -361,8 +364,8 @@ export class BoundedAppServerClient implements AppServerPort {
     return new Promise((resolve, reject) => {
       const wait = { reject };
       this.operations.add(wait);
-      promise.then(value => { this.operations.delete(wait); resolve(value); }, () => {
-        this.operations.delete(wait); this.fail(failureCode); reject(this.fault);
+      promise.then(value => { this.operations.delete(wait); resolve(value); }, error => {
+        this.operations.delete(wait); this.fail(error instanceof AppServerFault ? error.code : failureCode); reject(this.fault);
       });
     });
   }
@@ -438,6 +441,7 @@ export class BoundedAppServerClient implements AppServerPort {
       // owner after that await, before marking an attempt or writing the RPC.
       // The ledger may already be fenced; this never authorizes a new effect.
       await this.owner();
+      this.beforeWrite();
       this.check();
     }
     return new Promise((resolve, reject) => {
@@ -519,9 +523,10 @@ async function beforeDeadline<T>(deadlineMs: number, operation: () => Promise<T>
     });
   });
 }
-async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, deadlineMs: number): Promise<void> {
+type SqliteBindingProof = readonly Readonly<{ path: string; dev: bigint | null; ino: bigint | null }>[];
+async function verifyOwnedSqliteBinding(pid: number | undefined, home: string, deadlineMs: number): Promise<SqliteBindingProof> {
   if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
-  verifyOpenedSqlite(await darwinOpenedFiles(pid, deadlineMs), home);
+  return verifyOpenedSqlite(await darwinOpenedFiles(pid, deadlineMs), home);
 }
 async function darwinOpenedFiles(pid: number, deadlineMs: number): Promise<OpenedFile[]> {
   // Only the owned app-server PID is queried, never a session inventory/PID scan.
@@ -541,7 +546,10 @@ async function darwinOpenedFiles(pid: number, deadlineMs: number): Promise<Opene
   for (const raw of result.stdout.split('\0')) {
     const field = raw.replace(/^\n/, '');
     if (field.startsWith('f')) { current = {}; files.push(current); }
-    else if (current && field.startsWith('n')) current.name = lsofFilename(field.slice(1));
+    else if (current && field.startsWith('n')) {
+      try { current.name = decodeLsofFilename(field.slice(1)); }
+      catch { throw new AppServerFault('storage_binding_unverified', false); }
+    }
     else if (current && /^D0x[0-9a-f]+$/i.test(field)) current.dev = BigInt(field.slice(1));
     else if (current && /^i[0-9]+$/.test(field)) current.ino = BigInt(field.slice(1));
   }
@@ -549,8 +557,9 @@ async function darwinOpenedFiles(pid: number, deadlineMs: number): Promise<Opene
 }
 // Exact canonical state/queue paths (and only their own WAL/SHM sidecars) must
 // be opened by the owned PID with the inode now at that canonical path.
-function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
+function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): SqliteBindingProof {
   const required = ['state_5.sqlite', 'queue_1.sqlite'];
+  const proof = new Map<string, Readonly<{ path: string; dev: bigint | null; ino: bigint | null }>>();
   for (const file of required) {
     const expected = join(home, file);
     const opened = files.filter(row => row.name && [file, file + '-wal', file + '-shm'].includes(basename(row.name)));
@@ -561,7 +570,36 @@ function verifyOpenedSqlite(files: Partial<OpenedFile>[], home: string): void {
         const canonical = lstatSync(row.name!, { bigint: true });
         if (!canonical.isFile() || canonical.isSymbolicLink() || row.dev !== canonical.dev || row.ino !== canonical.ino)
           throw new Error('storage identity changed');
+        const prior = proof.get(row.name!);
+        if (prior && (prior.dev !== row.dev || prior.ino !== row.ino)) throw new Error('conflicting opened identities');
+        // Retain the opened FD's identity, not a later sample of the pathname.
+        proof.set(row.name!, Object.freeze({ path: row.name!, dev: row.dev, ino: row.ino }));
       } catch { throw new AppServerFault('storage_binding_unverified', false); }
+    }
+  }
+  // The fixed WAL/SHM paths may not be opened yet. Retain their named presence
+  // and identity too, without claiming FD evidence for these additional paths.
+  for (const file of required) for (const suffix of ['', '-wal', '-shm']) {
+    const path = join(home, file + suffix); if (proof.has(path)) continue;
+    try {
+      const info = lstatSync(path, { bigint: true });
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error();
+      proof.set(path, Object.freeze({ path, dev: info.dev, ino: info.ino }));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new AppServerFault('storage_binding_unverified', false);
+      proof.set(path, Object.freeze({ path, dev: null, ino: null }));
+    }
+  }
+  return Object.freeze([...proof.values()]);
+}
+function revalidateSqliteBinding(proof: SqliteBindingProof | undefined): void {
+  if (!proof) throw new AppServerFault('storage_binding_unverified', false);
+  for (const expected of proof) {
+    try {
+      const info = lstatSync(expected.path, { bigint: true });
+      if (!info.isFile() || info.isSymbolicLink() || info.dev !== expected.dev || info.ino !== expected.ino) throw new Error();
+    } catch (error) {
+      if (expected.dev !== null || (error as NodeJS.ErrnoException).code !== 'ENOENT') throw new AppServerFault('storage_binding_unverified', false);
     }
   }
 }
@@ -596,7 +634,7 @@ export async function artifactDigest(path: string, deadlineMs: number, maxBytes 
 // refused rather than trusted to have exec'd the right storage owner. An
 // injected reader (hermetic tests) runs in-process; production uses the worker.
 export async function verifyProcfsSqliteBinding(pid: number | undefined, home: string, deadlineMs: number, binary: string,
-  reader?: ProcReader): Promise<void> {
+  reader?: ProcReader): Promise<SqliteBindingProof> {
   if (!pid || pid < 2 || performance.now() >= deadlineMs) throw new AppServerFault('storage_binding_unverified', false);
   let files: OpenedFile[];
   const uid = process.getuid?.();
@@ -617,27 +655,7 @@ export async function verifyProcfsSqliteBinding(pid: number | undefined, home: s
     } catch { throw new AppServerFault('storage_binding_unverified', false); }
   }
   if (performance.now() >= deadlineMs) throw new AppServerFault('deadline', false);
-  verifyOpenedSqlite(files, home);
-}
-// lsof field output escapes backslashes and non-ASCII bytes even with NUL field
-// delimiters. Decode the protected system tool's filename representation, then
-// compare exact canonical paths; never accept a prefix/substring match.
-function lsofFilename(raw: string): string {
-  const bytes: number[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    if (raw[i] !== '\\') {
-      const char = String.fromCodePoint(raw.codePointAt(i)!);
-      bytes.push(...Buffer.from(char)); i += char.length - 1; continue;
-    }
-    const next = raw[++i];
-    if (next === '\\') { bytes.push(92); continue; }
-    if (next === 'x' && /^[0-9a-f]{2}$/i.test(raw.slice(i + 1, i + 3))) {
-      bytes.push(parseInt(raw.slice(i + 1, i + 3), 16)); i += 2; continue;
-    }
-    throw new AppServerFault('storage_binding_unverified', false);
-  }
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(bytes)); }
-  catch { throw new AppServerFault('storage_binding_unverified', false); }
+  return verifyOpenedSqlite(files, home);
 }
 function executableIdentity(binary: string): string {
   try {
@@ -668,18 +686,34 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
   // Reject malformed effect input before even a version probe or bootstrap can
   // start the binary and access/create native files in the selected home.
   validateQueueInput(options, false);
+  if (!await beforeDeadline(options.deadlineMs, () => options.verifyOwner(original), 'owner_changed')) throw new AppServerFault('owner_changed', false);
+  if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  const consumerCwd = await codexConsumerCwd(original.codexHome, original.threadId).catch(() => {
+    throw new AppServerFault('storage_binding_unverified', false);
+  });
+  const checkStorage = (version?: string) => {
+    const value = classifyCodexStorage({ home: original.codexHome, queueCwd: original.codexHome,
+      consumerCwds: [consumerCwd], ownedAppServer: true, version, environment: options.env ?? process.env });
+    if (value.status !== 'classified') throw new AppServerFault('storage_binding_unverified', false);
+    return value;
+  };
+  const initialStorage = checkStorage();
+  const consumerDatabase = codexConsumerSnapshotSync(original.codexHome, original.threadId).database;
+  const revalidateStorage = async (version?: string) => {
+    if (await codexConsumerCwd(original.codexHome, original.threadId).catch(() => '') !== consumerCwd ||
+        checkStorage(version).fingerprint !== initialStorage.fingerprint) throw new AppServerFault('storage_binding_unverified', false);
+  };
   // In the qualified versions config.sqlite_home precedes CODEX_SQLITE_HOME. Pin BOTH env and
   // a quoted CLI value so an ordinary config A->B->A load cannot redirect us.
   // Managed policy can still supersede the CLI pin, hence the FD-path check.
-  const env: NodeJS.ProcessEnv = { ...(options.env ?? process.env), CODEX_HOME: original.codexHome,
-    CODEX_SQLITE_HOME: original.codexHome };
-  if (!await beforeDeadline(options.deadlineMs, () => options.verifyOwner(original), 'owner_changed')) throw new AppServerFault('owner_changed', false);
-  if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
+  const inherited = Object.fromEntries(Object.entries(options.env ?? process.env).filter(([key]) => !['CODEX_HOME', 'CODEX_SQLITE_HOME'].includes(key.toUpperCase())));
+  const env: NodeJS.ProcessEnv = { ...inherited, CODEX_HOME: original.codexHome,
+    CODEX_SQLITE_HOME: original.codexHome, PWD: initialStorage.queueCwd! };
   const binaryIdentity = executableIdentity(options.binary);
   const probeRemaining = options.deadlineMs - performance.now();
   if (probeRemaining <= 0) throw new AppServerFault('deadline', false);
   const version = await run(options.binary, ['--version'], {
-    env, timeout: probeRemaining, limit: 4096,
+    env, cwd: initialStorage.queueCwd, timeout: probeRemaining, limit: 4096,
   });
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
   const nativeVersion = version.stdout.trim().slice('codex-cli '.length);
@@ -688,6 +722,7 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
     throw new AppServerFault('unsupported_version', false);
   }
   verifyExecutableIdentity(options.binary, binaryIdentity);
+  await revalidateStorage(nativeVersion);
   if (performance.now() >= options.deadlineMs) throw new AppServerFault('deadline', false);
   if (profile.artifact) {
     // Pinned executable bytes, hashed within the original deadline; the stable
@@ -704,8 +739,9 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
     verifyOwnedSqliteBinding(pid, original.codexHome, options.deadlineMs);
   const transport: NativeQueueTransport = { qualification: 'native_queue_only_stdio',
     ...spawnOwnedStdio(options.binary, ['app-server', '--stdio', '-c', 'analytics.enabled=false',
-      '-c', `sqlite_home=${JSON.stringify(original.codexHome)}`], env, original.codexHome) };
+      '-c', codexStoragePin(original.codexHome)], env, original.codexHome) };
   let client: NativeQueuePort | undefined;
+  let lastBinding: SqliteBindingProof | undefined;
   try {
     verifyExecutableIdentity(options.binary, binaryIdentity);
     let effectGuarded = false;
@@ -714,12 +750,26 @@ export async function nativeQueueOnceWithProfiles(options: NativeQueueOptions,
       if (valid && effectGuarded) {
         // Run after the LAST asynchronous owner verification. The durable guard
         // and owner probe can both await I/O and change canonical file bindings.
-        verifyExecutableIdentity(options.binary, binaryIdentity);
-        await bind(transport.pid);
+        try {
+          await options.verifyStorage?.();
+          await revalidateStorage(nativeVersion);
+          lastBinding = await bind(transport.pid);
+        } catch (error) { throw error instanceof AppServerFault ? error : new AppServerFault('storage_binding_unverified', false); }
       }
       return valid;
-    }, async () => { await options.beforeEffect(); effectGuarded = true; }, profile);
-    await bind(transport.pid);
+    }, async () => { await options.beforeEffect(); effectGuarded = true; }, profile, () => {
+      // The effect writer calls this after its final await, before setting the
+      // attempted marker. No async callback follows these continuity checks.
+      try {
+        options.verifyStorageSync?.();
+        if (checkStorage(nativeVersion).fingerprint !== initialStorage.fingerprint) throw new Error();
+        const current = codexConsumerSnapshotSync(original.codexHome, original.threadId);
+        if (current.database !== consumerDatabase || current.cwd !== consumerCwd) throw new Error();
+        revalidateSqliteBinding(lastBinding);
+        verifyExecutableIdentity(options.binary, binaryIdentity);
+      } catch (error) { throw error instanceof AppServerFault ? error : new AppServerFault('storage_binding_unverified', false); }
+    });
+    lastBinding = await bind(transport.pid);
     return await client.queueOnce({ clientUserMessageId: options.clientUserMessageId, message: options.message });
   } finally { if (client) await client.close(); else await disposeTransport(transport); }
 }

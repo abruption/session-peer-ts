@@ -41,9 +41,10 @@ test('published skill 0.2.1 complete bytes match the recorded release and finite
   assert.deepEqual(validateSkillMetadata(text, '0.3.6'), expected);
   assert.deepEqual(validateSkillMetadata(text, '0.4.0'), expected);
   assert.deepEqual(validateSkillMetadata(text, '0.5.0'), expected);
+  assert.deepEqual(validateSkillMetadata(text, '0.5.1'), expected);
   const path = fileURLToPath(url);
   assert.deepEqual(inspectSkill(path), { ...expected, path });
-  for (const runtime of ['0.3.2', '0.3.3', '0.3.4', '0.3.7', '0.4.1', '0.5.1', '0.6.0']) {
+  for (const runtime of ['0.3.2', '0.3.3', '0.3.4', '0.3.7', '0.4.1', '0.5.2', '0.6.0']) {
     assert.deepEqual(validateSkillMetadata(text, runtime), {
       status: 'incompatible', code: 'skill_contract_mismatch', verification: 'metadata_only'
     });
@@ -87,8 +88,18 @@ test('TS skill baseline list and guarded Codex dry-run examples never submit', t
   const doctorHelp = invoke(['doctor', '--help']); assert.equal(doctorHelp.status, 0);
   assert.match(doctorHelp.stdout, /^Usage: session-peer doctor /);
   const optedIn = invoke([...args, '--allow-inactive-codex-home']);
-  assert.equal(optedIn.status, 0, optedIn.stdout); const result = JSON.parse(optedIn.stdout);
-  assert.equal(result.submitted, false); assert.equal(result.status, 'validated');
-  assert.equal(result.codexHome, realpathSync(home)); assert.equal(result.codexHomeResolution.reason, 'explicit_inactive_opt_in');
+  const result = JSON.parse(optedIn.stdout);
+  if (process.platform === 'win32') {
+    assert.equal(optedIn.status, 1, optedIn.stdout);
+    assert.equal(result.status, 'refused');
+    assert.equal(result.error, 'codex_storage_platform_unqualified');
+    assert.equal(result.retryAllowed, false);
+  } else {
+    assert.equal(optedIn.status, 0, optedIn.stdout);
+    assert.equal(result.status, 'validated');
+    assert.equal(result.codexHome, realpathSync(home));
+  }
+  assert.equal(result.submitted, false);
+  assert.equal(result.codexHomeResolution.reason, 'explicit_inactive_opt_in');
   assert.deepEqual(readFileSync(path), before); assert.deepEqual(readdirSync(home), ['state_5.sqlite']);
 });

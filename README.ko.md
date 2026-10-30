@@ -3,8 +3,7 @@
 # session-peer (TypeScript)
 
 [![npm 버전](https://img.shields.io/npm/v/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
-[![npm 주간 다운로드](https://img.shields.io/npm/dw/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
-[![npm 월간 다운로드](https://img.shields.io/npm/dm/session-peer?logo=npm)](https://www.npmjs.com/package/session-peer)
+[![npm 최근 18개월 다운로드](https://img.shields.io/npm/d18m/session-peer?label=downloads%20%2818%20months%29&logo=npm)](https://www.npmjs.com/package/session-peer)
 [![CI](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/session-peer-ts/actions/workflows/ci.yml)
 [![Node 지원](https://img.shields.io/node/v/session-peer?logo=node.js)](https://www.npmjs.com/package/session-peer)
 [![MIT 라이선스](https://img.shields.io/npm/l/session-peer)](LICENSE)
@@ -18,11 +17,15 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 </div>
 
+일반 Codex 전송은 로그인 home 등 클라우드 정책 적용 여부를 분류할 수 없는 경우에도 거부합니다. 경로를 선택하기 전에 [저장소 검증 범위](docs/api.md#codex-storage-configuration)를 확인하세요.
+
+이 소스는 Codex의 추가 설정 계층을 검사합니다. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부하며, 일반 Claude 경로는 별도입니다. 설치 전에 [검증 범위](docs/api.md#codex-storage-configuration)와 선택한 릴리스를 확인하세요.
+
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**문서·소스 기준 버전: 0.5.0.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6과 0.5.0은 서로의 SSH 사전 확인을 거부합니다.
+**문서·소스 기준 버전: 0.5.1.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6 버전과 0.5.1 버전은 서로의 SSH 사전 확인을 거부합니다.
 
-**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 0.5.0 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.
+**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 0.5.1 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.
 
 <a id="demo"></a>
 ## 시연
@@ -67,15 +70,15 @@ PowerShell에서는 `Get-Command session-peer -All`로 PATH(명령 검색 경로
 실행 파일을 찾는지 확인하세요. 사용할 구현을 선택하고 다른 패키지 관리자가 설치한
 파일을 `--force`로 덮어쓰지 마세요. 설치와 갱신은 사용자가 npm으로 직접 수행합니다.
 
-**0.5.0 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](docs/guide.ko.md#소스에서-빌드)를 사용하세요.
+**0.5.1 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](docs/guide.ko.md#소스에서-빌드)를 사용하세요.
 
 ```sh
-npm view session-peer@0.5.0 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.5.0
+npm view session-peer@0.5.1 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.5.1
 session-peer --version
 ```
 
-예상 결과는 `session-peer 0.5.0 (typescript)`입니다. 별도 경로에 설치하거나,
+예상 결과는 `session-peer 0.5.1 (typescript)`입니다. 별도 경로에 설치하거나,
 소스에서 빌드하거나, Windows에서 설치·제거하는 방법은 [사용자 가이드](docs/guide.ko.md#설치)를 참고하세요.
 
 선택 사항인 `sp` 단축 명령은 0.3.0 이상에 포함되며(0.2.1 이하에는 없음) 자동으로
@@ -86,13 +89,13 @@ session-peer --version
 ### 업데이트
 
 npm으로 설치한 클라이언트는 사용자가 직접 npm으로 업데이트합니다. 사용 가능한 배포 태그
-(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 선택한 0.5.0으로
+(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 선택한 0.5.1 버전으로
 업데이트합니다. `session-peer` CLI는 업데이트를 설치하지 않습니다. `session-peer
 update --check`는 새 버전이 있는지 확인할 뿐입니다.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.5.0
+npm install --global --ignore-scripts session-peer@0.5.1
 session-peer --version
 ```
 

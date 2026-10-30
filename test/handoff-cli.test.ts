@@ -152,9 +152,9 @@ test('prepared inactive Codex binding retains lock and saved-home evidence witho
  for (const change of ['unchanged','lock','database'] as const) await t.test(change, async t=>{
   const f=await fixture(t),home=join(f.path,'codex-home'),locks=join(home,'thread-writer-locks');mkdirSync(locks,{recursive:true});
   const dbPath=join(home,'state_5.sqlite');
-  const database=()=>{const db=new DatabaseSync(dbPath);try{db.exec('CREATE TABLE threads(id TEXT)');db.prepare('INSERT INTO threads VALUES (?)').run(id);}finally{db.close();}};database();
+  const database=()=>{const db=new DatabaseSync(dbPath);try{db.exec('CREATE TABLE threads(id TEXT, cwd TEXT)');db.prepare('INSERT INTO threads VALUES (?, ?)').run(id,home);}finally{db.close();}};database();
   const log=join(f.path,'queue-calls');writeFileSync(log,'');f.env.FIXTURE_QUEUE_LOG=log;f.env.SESSION_PEER_CODEX_HOMES='[]';
-  const binary=join(f.path,'fake-codex');writeFileSync(binary,`#!${process.execPath}\nrequire('node:fs').appendFileSync(process.env.FIXTURE_QUEUE_LOG,'call\\n');console.log('Queued message inactive-queue for thread '+process.argv[4]+'.');`,{mode:0o700});
+  const binary=join(f.path,'fake-codex');writeFileSync(binary,`#!${process.execPath}\nif(process.argv[2]==='--version'){console.log('codex-cli 0.165.0');process.exit(0);}require('node:fs').appendFileSync(process.env.FIXTURE_QUEUE_LOG,'call\\n');console.log('Queued message inactive-queue for thread '+process.argv[4]+'.');`,{mode:0o700});
   const target=['--to','codex:'+id,'--codex-home',home,'--codex-bin',binary,'--allow-inactive-codex-home','--message-file',f.file];
   const before=await inspectWriter(home,id);assert.equal(before.activity,'inactive');assert.equal(before.writerLock,'absent');
   assert.equal((await f.invoke(['handoff','init'])).code,0);
