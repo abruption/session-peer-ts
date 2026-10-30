@@ -2,6 +2,27 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## 0.5.2 finite row — 2026-10-30 KST release preparation
+
+The 0.5.2 source explicitly accepts exactly the four profiles accepted by public
+0.5.1: skill 0.1.0, 0.2.0, 0.2.1 and 0.3.0. Compiled default, explicit
+`undefined`, explicit 0.5.2 and outer `inspectSkill` use this finite row. Matching
+metadata returns exactly `compatible / skill_contract_compatible / metadata_only`;
+changed profiles and unreviewed 0.5.3/0.6.0 identities remain incompatible.
+Malformed runtime identities remain `unknown / skill_metadata_missing` with no
+`verification` property. Historical matrix rows, metadata grammar and bounded
+reader behavior are unchanged.
+
+Storage-layer refusal is independent of this metadata-only acceptance. The new
+row does not authenticate skill content, qualify a send route, expand native
+support, publish/install a skill or change the existing immutable guidance pin.
+Runtime publication remains a separate exact-source/artifact approval step.
+
+The dated sections below describe their own source checkpoints. For example,
+0.5.2 rejection by the historical 0.5.1 validator remains a historical helper
+result, not the result of the compiled 0.5.2 validator. Supplying a historical
+runtime string to a newer helper is not execution of that historical CLI.
+
 ## 0.5.1 finite row — 2026-10-27 KST release preparation
 
 The 0.5.1 source candidate explicitly accepts the same four exact metadata

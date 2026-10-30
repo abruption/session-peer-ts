@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { reply } from '../dist/protocol.js';
+import { reply, VERSION } from '../dist/protocol.js';
 import { replyUri } from '../dist/replies.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
@@ -45,7 +45,7 @@ function fixture(t: TestContext) {
 const fs=require('node:fs'),{spawnSync}=require('node:child_process');
 fs.appendFileSync(${JSON.stringify(sshLog)},'1');
 if(process.argv.includes('-G')){console.log('user fixture-user');process.exit(0);}
-if(process.argv.at(-1).endsWith('--version')){console.log('session-peer 0.5.1 (typescript)');process.exit(0);}
+if(process.argv.at(-1).endsWith('--version')){console.log('session-peer ${VERSION} (typescript)');process.exit(0);}
 const input=fs.readFileSync(0,'utf8');
 const result=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});
 process.stdout.write(result.stdout);process.exit(result.status);`, { mode: 0o700 });
