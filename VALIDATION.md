@@ -1646,7 +1646,7 @@ All three operating systems run Node 22/24. The checks differ:
 | Platform | Automated scope |
 | --- | --- |
 | macOS/Linux | Full contract suite, type checks, Python reference fixtures, package smoke, release pack/artifact checks and audit. |
-| Windows x64 | Build/type checks, Claude named-pipe/auth/stale-record fixtures, held/free kernel locks, writer ownership and pre-submit races, native queue outcome fixtures, PowerShell/.cmd SSH framing through a fake endpoint, package/native-load smoke and audit. |
+| Windows x64 | Build/type checks, Claude named-pipe/auth/stale-record fixtures, held/free kernel locks, writer ownership and pre-submit races, Codex storage-refusal fixtures and synthetic native-exit/SSH response outcomes, PowerShell/.cmd SSH framing through a fake endpoint, package/native-load smoke and audit. |
 
 Windows runs its native suite, not the POSIX/Python reference suite. Both
 Windows Node jobs are required by the aggregate release gate. The x64/Node 24
