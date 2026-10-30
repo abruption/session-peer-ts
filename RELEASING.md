@@ -9,6 +9,75 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.5.2 storage guards and release consistency preparation — 2026-10-30 KST
+
+Preparation baseline is merged main
+`1b9e762c154e1050b04f98d5c36cee0d332cf484`, including #169 and #160.
+The release target carries bounded Codex storage-layer guards, the dated scoped
+parity comparison and deterministic current-version maintenance. The local
+qualification reporter from #160 is repository-only: its script, tests and two
+review/design documents are excluded from the npm archive. It adds no installed
+CLI command, SDK export or remote deployment authority. Draft #155 and native
+input experiments #82/#142 remain excluded.
+
+**Availability changes must be prominent in the release notes.** Ordinary Codex
+submission refuses signed-in file-auth homes (`auth.json` metadata), keyring/auto
+credential-store selections and other cloud-unclassifiable contexts without
+reading credentials/cache contents. This can refuse an account that would not
+actually receive cloud policy. A separately qualified owned stdio app-server
+route still needs actual opened-storage binding. Windows Codex send/dry-run
+refuse because local storage classification is unqualified. Existing ordinary
+Claude paths are separate. Missing cwd, unsafe configuration, daemon/remote
+context, unavailable metadata helpers and observable evidence changes can also
+refuse; see [the storage contract](docs/api.md#codex-storage-configuration).
+
+The exact loader-source review covers Codex 0.160.1, 0.162.1 and 0.165.0; it does
+not expand native observation qualification. The recorded macOS arm64 observation
+profiles, original-writer boundaries, pre-effect refusal, unknown/no-resend
+semantics and separate operator-confirmed receipt remain bounded as before.
+Linux/Windows observation and automated receipt ACK are not enabled. The finite
+0.5.2 doctor row carries only the same four exact skill profiles as 0.5.1; it
+neither publishes/installs a skill nor changes its independent source pin.
+
+Read-only registry baseline checked for this preparation: latest=0.5.1,
+preview=0.1.0-preview.1 and target 0.5.2 absent. Previous stable integrity is
+`sha512-m+bXuJ0UpPYZQIwh9g9b11S2EqjquE1J0D2WYM3yOIGKk7s68AG05O1ARgKH5nK3QKidfHXgANmHAJQWJzkTrw==`.
+Previous provenance endpoint:
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.5.1`.
+Recheck the registry immediately before staging. This public metadata read is
+not an authenticated ownership, pending-stage, publisher or package-MFA audit.
+
+1. Review and merge the release preparation under normal protections. Require
+   exact merged-main release gate, macOS/Ubuntu Node 22/24, Windows Node 22/24
+   and CodeQL success, with source review appropriate to the final changes.
+2. Freshly verify npm ownership, pending stages, the stage-only Trusted Publisher
+   mapping, package publish-MFA policy and the protected npm environment/main
+   restriction. Historical settings-read exceptions apply only to their named
+   releases; an unread gate needs a current explicit user exception. Do not
+   change protections or authentication mode to pass a gate.
+3. Verify reproducible exact-source archive bytes, every packaged Markdown file,
+   isolated installation/version/removal, public types and shorthand lifecycle.
+   Verify compiled/default/undefined/inspectSkill acceptance of the four exact
+   profiles and rejection of malformed/unsupported inputs. Check that the
+   reporter and its two source-only design documents remain excluded.
+4. Obtain separate source approval naming the exact merged 40-character main
+   SHA, `session-peer@0.5.2`, `stable-stage` and eventual latest promotion to
+   0.5.2. Preparation or PR merge does not identify or approve a future source.
+5. Dispatch only the approved source/version/mode once. Inspect retained Actions
+   bytes before protected-environment approval; compare staged bytes and
+   provenance before the separate final npm 2FA approval. Never automatically
+   retry an uncertain upload or approve a stage.
+6. Verify public bytes, registry signatures/provenance and isolated lifecycle;
+   preserve preview and append the dated publication evidence. Create an
+   authorized annotated `v0.5.2` tag and GitHub Release on the verified publication
+   source only after their separate approval. No fleet/global installation.
+
+SSH endpoints must both use exactly 0.5.2; 0.5.1 and 0.5.2 refuse one another at
+preflight. Upgrade both endpoints explicitly. Runtime publication is separate
+from companion skill publication, pin adoption and installation. The dated
+0.5.1 procedure and its settings-read exception below are historical and must
+not be replayed for 0.5.2.
+
 ## 0.5.1 dependency hotfix procedure — 2026-10-27 KST
 
 Issue #163 pins smol-toml 1.9.1 to reject malformed repeated exponent signs in

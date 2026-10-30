@@ -1,4 +1,55 @@
-# Validation record — updated 2026-10-20 KST
+# Validation record — updated 2026-10-30 KST
+
+## 0.5.2 preparation scope — 2026-10-30 KST
+
+Preparation baseline is merged main
+`1b9e762c154e1050b04f98d5c36cee0d332cf484`: #169's storage guards, scoped parity
+matrix and current-version maintenance, plus #160's repository-only local static
+qualification reporter. This release preparation selects package/banner/current
+examples 0.5.2 and one finite doctor row preserving the four exact 0.5.1 skill
+profiles. Historical evidence, the ordinary Python 1.1.0 oracle, frozen handoff
+fixtures, native observation profiles and independent skill pins stay separate.
+
+The guarded local loader-source versions are Codex 0.160.1, 0.162.1 and 0.165.0.
+Source review and fixture refusal tests are not new native submission, positive
+managed-preference/MDM, Linux/Windows observation, live delivery or ACK
+qualification. Ordinary signed-in file-auth/keyring/cloud-unclassifiable homes
+can refuse even when their accounts would not receive cloud policy. Windows
+Codex send/dry-run remain unqualified and refuse before submission; ordinary
+Claude behavior is separate. The owned stdio route requires its actual opened
+storage binding. Existing unknown/no-resend and explicit operator-confirmed
+receipt boundaries are retained.
+
+The reporter measures only operator-selected local static metadata/digests and
+keeps execution/ownership/qualification predicates independent. Its source
+script, tests and two review/design documents are excluded from the npm archive;
+it is not an installed command, SDK API, readiness certificate, deployment or
+cleanup engine. Draft #155 and experiments #82/#142 remain excluded. The
+remaining remote/platform acceptance gates in #20/#23/#130/#131/#132 are not
+completed by this release preparation.
+
+For source provenance, #169's reviewed head
+`76f556cca869da95ad4368af914bad6f0f43af3d` passed its current-head matrix and
+release gate; its macOS Node 24 retry followed an execution-free hosted-runner
+capacity cancellation. #160's integrated head
+`d2760958ebf5f1f160fb716af54e63dabcce8862` passed 12 checks in
+[run 40980450661](https://github.com/abruption/session-peer-ts/actions/runs/40980450661).
+Its local full suite recorded 503 tests: 491 pass, 0 fail, 11 platform skips and
+1 existing TODO. The earlier integrated macOS Node 24 result had observation
+`unsupported` instead of `pending`; the original cause remains unconfirmed.
+The follow-up added assertion diagnostics only and did not relax outcomes,
+deadlines or product guards. A later pass does not establish that original cause.
+These 0.5.1 implementation-head results do not substitute for final 0.5.2
+source, package, profile and exact merged-main checks.
+
+At this dated preparation checkpoint the public registry baseline is
+latest=0.5.1, preview=0.1.0-preview.1 and target 0.5.2 absent. Fresh authenticated
+publisher/MFA/pending-stage checks, final-source approval, staging and publication
+belong to their separate release gates. No new live-host/native/model/ACK
+experiment, existing user-session input, global installation or operational
+change is claimed. Final release-preparation PR and artifact records must name
+the exact tested source and bytes before source/publication approval.
+
 
 ## 0.5.1 dependency patch preparation — 2026-10-27 KST
 
@@ -1595,7 +1646,7 @@ All three operating systems run Node 22/24. The checks differ:
 | Platform | Automated scope |
 | --- | --- |
 | macOS/Linux | Full contract suite, type checks, Python reference fixtures, package smoke, release pack/artifact checks and audit. |
-| Windows x64 | Build/type checks, Claude named-pipe/auth/stale-record fixtures, held/free kernel locks, writer ownership and pre-submit races, native queue outcome fixtures, PowerShell/.cmd SSH framing through a fake endpoint, package/native-load smoke and audit. |
+| Windows x64 | Build/type checks, Claude named-pipe/auth/stale-record fixtures, held/free kernel locks, writer ownership and pre-submit races, Codex storage-refusal fixtures and synthetic native-exit/SSH response outcomes, PowerShell/.cmd SSH framing through a fake endpoint, package/native-load smoke and audit. |
 
 Windows runs its native suite, not the POSIX/Python reference suite. Both
 Windows Node jobs are required by the aggregate release gate. The x64/Node 24

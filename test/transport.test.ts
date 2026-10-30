@@ -9,7 +9,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { probeLock, inspectWriter } from '../dist/writer.js';
 import { send } from '../dist/send.js';
-import { reply, envelope } from '../dist/protocol.js';
+import { reply, envelope, VERSION } from '../dist/protocol.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 // Answers `ssh -G` user metadata lookups without logging them as SSH dispatches.
@@ -138,7 +138,7 @@ test('queue failure after spawn is unknown, never retried or leaked', async t =>
 test('SSH refuses another implementation or the previous TS release before submission', async t => {
   const { path, env } = setup(t);
   const calls = join(path, 'ssh-calls');
-  for (const banner of ['session-peer 1.0.2', 'session-peer 0.4.0 (typescript)']) {
+  for (const banner of ['session-peer 1.0.2', 'session-peer 0.4.0 (typescript)', 'session-peer 0.5.1 (typescript)']) {
   writeFileSync(calls, '');
   writeFileSync(join(path, 'ssh'), `#!${process.execPath}\n${sshConfigUser}const fs=require('node:fs');fs.appendFileSync(${JSON.stringify(calls)},process.argv.at(-1)+'\\n');console.log(${JSON.stringify(banner)});`, { mode: 0o700 });
   const result = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'not-sent'], { ...env, PATH: path + delimiter + env.PATH });
@@ -173,20 +173,20 @@ test('SSH preflight reports allowlisted causes without leaking stderr or sending
 test('SSH request framing: no message in remote command; response loss never retries', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer 0.5.1 (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process'); const a=process.argv.slice(2);if(a.at(-1).endsWith('--version')){console.log('session-peer ${VERSION} (typescript)');process.exit(0);}if(a.at(-1).includes('SECRET-SENTINEL'))process.exit(99);const input=require('node:fs').readFileSync(0,'utf8');const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input,encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const result = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message', 'SECRET-SENTINEL', '--no-from'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(result.status, 'posted'); assert.equal(messages.length, 1);
   // Valid JSON mixed with banner/trailing output is not a verified response.
   for (const command of ['send', 'list']) for (const prefix of [true, false]) {
     const response = JSON.stringify({ schemaVersion: 1, command, host: 'fixture', ok: true, status: 'posted', submitted: true, consumptionConfirmed: false });
     const stdout = prefix ? 'untrusted banner\n' + response : response + '\ntrailing junk';
-    writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.5.1 (typescript)');else console.log(${JSON.stringify(stdout)});`, { mode: 0o700 });
+    writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer ${VERSION} (typescript)');else console.log(${JSON.stringify(stdout)});`, { mode: 0o700 });
     const unverified = await invoke([command, '--host', 'fixture', ...(command === 'send' ? ['--to', 'fixture', '--message', 'not-provable'] : [])], { ...env, PATH: path + delimiter + env.PATH });
     assert.equal(unverified.status, command === 'send' ? 'unknown' : 'refused');
     assert.equal(unverified.submitted, command === 'send' ? null : false);
     assert.equal(unverified.retryAllowed, false);
   }
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer 0.5.1 (typescript)');else process.exit(255);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).endsWith('--version'))console.log('session-peer ${VERSION} (typescript)');else process.exit(255);`, { mode: 0o700 });
   const lost = await invoke(['send', '--host', 'fixture', '--to', 'fixture', '--message', 'lost'], { ...env, PATH: path + delimiter + env.PATH });
   assert.equal(lost.status, 'unknown'); assert.equal(lost.retryAllowed, false); assert.equal(messages.length, 1);
 });
@@ -335,7 +335,7 @@ test('a saved inactive home needs opt-in and still rejects relocated or unreadab
 test('SSH preflight accepts a verified version despite noisy stderr and propagates remote exit codes', async t => {
   const { path, env } = setup(t), messages = await inbox(t, path);
   const ssh = join(path, 'ssh');
-  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process');if(process.argv.at(-1).endsWith('--version')){console.error('curl: (7) Failed to connect: Connection refused');console.log('session-peer 0.5.1 (typescript)');process.exit(0);}const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:require('node:fs').readFileSync(0,'utf8'),encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
+  writeFileSync(ssh, `#!${process.execPath}\n${sshConfigUser}const {spawnSync}=require('node:child_process');if(process.argv.at(-1).endsWith('--version')){console.error('curl: (7) Failed to connect: Connection refused');console.log('session-peer ${VERSION} (typescript)');process.exit(0);}const r=spawnSync(${JSON.stringify(process.execPath)},[${JSON.stringify(cli)},'--stdio-request'],{input:require('node:fs').readFileSync(0,'utf8'),encoding:'utf8',env:process.env});process.stdout.write(r.stdout);process.exit(r.status);`, { mode: 0o700 });
   const remoteEnv = { ...env, PATH: path + delimiter + env.PATH };
   // #55 + #49/#51 over SSH: a flag-like body travels as --message=<text> and posts literally.
   const sent = await invoke(['send', '--host', 'fixture', '--to', String(process.pid), '--message=--dry-run', '--no-from'], remoteEnv);
@@ -380,7 +380,7 @@ test('ordinary SSH results cannot opt themselves into handoff or claim unsolicit
  // Fixture values are data, never part of the executable JavaScript source.
  const config={log,handoff:{...h,targetGeneration:'\');throw new Error("fixture data executed");//\u2028\u2029'}};
  writeFileSync(fake+'.json',JSON.stringify(config),{mode:0o600});
- writeFileSync(fake,`#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).includes('--version')){console.log('session-peer 0.5.1 (typescript)');process.exit(0);}const fs=require('node:fs');const config=JSON.parse(fs.readFileSync(__filename+'.json','utf8'));let input='';process.stdin.on('data',p=>input+=p);process.stdin.on('end',()=>{fs.appendFileSync(config.log,'1');console.log(JSON.stringify({schemaVersion:1,command:'send',host:'fixture',ok:true,status:'posted',submitted:true,consumptionConfirmed:false,dryRun:false,target:{agent:'claude',pid:123,name:null},remoteMarker:'kept',handoff:config.handoff,handoffQuery:{status:'unknown'},handoffWarning:'fixture-only'}));});`,{mode:0o700});
+ writeFileSync(fake,`#!${process.execPath}\n${sshConfigUser}if(process.argv.at(-1).includes('--version')){console.log('session-peer ${VERSION} (typescript)');process.exit(0);}const fs=require('node:fs');const config=JSON.parse(fs.readFileSync(__filename+'.json','utf8'));let input='';process.stdin.on('data',p=>input+=p);process.stdin.on('end',()=>{fs.appendFileSync(config.log,'1');console.log(JSON.stringify({schemaVersion:1,command:'send',host:'fixture',ok:true,status:'posted',submitted:true,consumptionConfirmed:false,dryRun:false,target:{agent:'claude',pid:123,name:null},remoteMarker:'kept',handoff:config.handoff,handoffQuery:{status:'unknown'},handoffWarning:'fixture-only'}));});`,{mode:0o700});
  const r=await invoke(['send','--host','fixture','--to','123','--message','fixture','--no-from','--no-reply-to'],{...env,PATH:path+delimiter+(env.PATH??'')});assert.equal(r.code,0);assert.equal(r.status,'posted');assert.equal(r.submitted,true);assert.equal(r.target.name,null);assert.equal(r.remoteMarker,'kept');assert.equal('handoff' in r,false);assert.equal('handoffQuery' in r,false);assert.equal('handoffWarning' in r,false);assert.equal(readFileSync(log,'utf8'),'1');
 });
 

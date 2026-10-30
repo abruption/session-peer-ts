@@ -1,5 +1,40 @@
 # Python compatibility and npm migration
 
+
+## 0.5.2 storage guards and release consistency — 2026-10-30 KST
+
+The 0.5.2 source carries the storage guards and scoped maintenance work from
+[#169](https://github.com/abruption/session-peer-ts/pull/169). Doctor and dispatch
+share bounded local configuration-layer inspection for exact Codex loader
+versions 0.160.1, 0.162.1 and 0.165.0. Canonical executable, saved/live cwd,
+original writer and opened-store evidence are rechecked before native effect;
+unknown outcomes still do not authorize fallback or resend.
+
+**Availability change:** ordinary Codex sends refuse signed-in file-auth homes,
+keyring/auto or other cloud-unclassifiable contexts without reading credentials.
+A separately qualified owned stdio route requires actual opened-storage binding.
+Windows Codex send/dry-run refuse while local storage classification is
+unqualified. Configuration symlinks, missing consumer context or trusted system
+metadata tools, and unclassified daemon/remote contexts can also refuse.
+Conservative project/selector inspection can reject unused settings. These
+refusals are not new platform/native/MDM/ACK qualification; see the
+[storage scope](docs/api.md#codex-storage-configuration).
+
+The current feature matrix below retains its exact dated TS/Python comparison
+baseline and explicit defer decisions; it is not silently repinned to a newer
+Python oracle. The source-only current-version updater changes registered
+current spans while preserving historical evidence and independent pins.
+
+[#160](https://github.com/abruption/session-peer-ts/pull/160) adds a repository-only
+read-only qualification reporter and checklist. They do not add an installed
+CLI command/SDK operation or prove runtime readiness, ownership or qualification;
+the reporter and its two design documents are excluded from the npm archive.
+The deferred deployment/recovery harness #155 and research #82/#142 remain
+excluded. The finite 0.5.2 skill row carries exactly the four profiles from
+0.5.1; no skill publication, installation pin or native observation row changes.
+SSH endpoints must both use exactly 0.5.2. Check the selected release record for
+publication and exact artifact verification.
+
 ## 0.5.1 parser correctness patch — 2026-10-27 KST
 
 Issue #163 updates only the TOML parser dependency from 1.9.0 to 1.9.1.
@@ -55,7 +90,7 @@ the installation pin; runtime publication is not companion-skill publication.
 <a id="current-scoped-feature-matrix"></a>
 ## Current scoped feature matrix
 
-Current source/package version: **0.5.1**.
+Current source/package version: **0.5.2**.
 
 Reviewed **2026-10-29 KST** against TS **0.5.1** source
 [`90481b148584926ea328ed956327f3050d9be9cb`](https://github.com/abruption/session-peer-ts/tree/90481b148584926ea328ed956327f3050d9be9cb)

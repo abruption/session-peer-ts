@@ -14,9 +14,9 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**Documentation and source version: 0.5.1.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and 0.5.1 refuse each other’s SSH preflight.
+**Documentation and source version: 0.5.2.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and 0.5.2 refuse each other’s SSH preflight.
 
-**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. The 0.5.1 source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported.
+**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. The 0.5.2 source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported.
 
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
@@ -61,15 +61,15 @@ Check `type -a session-peer` on macOS/Linux or `Get-Command session-peer -All`
 in PowerShell before installing. Choose the intended PATH entry; do not use
 `--force` to overwrite another manager’s files.
 
-**Version 0.5.1 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).
+**Version 0.5.2 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).
 
 ```sh
-npm view session-peer@0.5.1 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.5.1
+npm view session-peer@0.5.2 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.5.2
 session-peer --version
 ```
 
-Expected: `session-peer 0.5.1 (typescript)`. For isolated installation, source
+Expected: `session-peer 0.5.2 (typescript)`. For isolated installation, source
 builds, Windows and removal, see the detailed guide below.
 
 Optional `sp` shorthand ships with 0.3.0 and later (not 0.2.1 or earlier) and is
@@ -79,12 +79,12 @@ never enabled automatically. See [explicit activation and collisions](docs/short
 
 Use npm for an npm-managed installation. Check the available tags and review
 the target version, then install that exact version; this example updates an
-older npm installation to the selected 0.5.1 release. The CLI does not install updates;
+older npm installation to the selected 0.5.2 release. The CLI does not install updates;
 `session-peer update --check` only reports them.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.5.1
+npm install --global --ignore-scripts session-peer@0.5.2
 session-peer --version
 ```
 
