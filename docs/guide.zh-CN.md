@@ -81,6 +81,12 @@ Unicode 14.0.0 默认 full casefold 精确匹配，不进行规范化或模糊�
 冲突时须指定 PID。这些源码功能不会追溯到已经发布的 0.1.0 包。
 
 
+### macOS 上的 Claude 配置档案
+
+如果 `CLAUDE_CONFIG_DIR` 和 `ANTHROPIC_CONFIG_DIR` 都没有非空值，Claude 探索除 `~/.claude/sessions` 外，还会检查 `~/Library/Application Support/orca/claude-profiles` 下各直接子档案的 `home/sessions`。显式设置环境变量时只使用指定的会话登记目录。Linux 和 Windows 不会扫描这一 macOS 路径。配置档案数和登记项数均有上限。
+
+其他探索来源出错时，已读取的会话仍保留在列表中，同时返回探索不完整的诊断信息和失败退出码。发送和发件人识别要求信息完整且无冲突。指向同一实际登记目录的别名可以合并为一行；PID 或收件端点信息冲突时，不会按目录顺序或指定 PID 来决定目标。选择和 handoff 连续性检查保留原始登记信息的依据，并在提交前重新检查。列表和 dry-run 不连接收件端点。这些检查不证明 native 代次、消息消费或收讫确认 ACK。
+
 ## 环境要求
 
 macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x**。不支持 Node 26。原生锁依赖需要匹配的 x64/arm64 预编译二进制，本包不是纯 JavaScript 实现。Codex 发送需要 `codex`，macOS/Linux 还需要 `lsof`、`ps`；Windows 使用原生锁和 Restart Manager 验证所有者。Claude 需要运行中的 TUI 及可访问的原生 inbox。SSH 使用已有密钥和主机信任，远端必须安装**同版本**客户端。

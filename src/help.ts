@@ -29,6 +29,8 @@ Production automated receipt bootstrap and Windows ledger are unsupported.
 Missing history never authorizes retry. Secrets must never be passed through argv.`;
   if (command === 'list') return `Usage: session-peer list [options]
 List reachable Claude and saved Codex sessions. Listing is not send authorization.
+On macOS, Claude includes bounded known Orca profiles unless CLAUDE_CONFIG_DIR or
+ANTHROPIC_CONFIG_DIR selects one registry. Incomplete/conflicting inventory refuses send.
   --agent claude|codex                Filter one agent (default: both)
   --codex-home HOME                   Pin Codex listing to one home
   --all                              Include stale Claude/archived Codex rows

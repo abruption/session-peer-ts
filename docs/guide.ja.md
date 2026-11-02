@@ -82,6 +82,12 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 公開済み 0.1.0 にこのソース機能が遡及適用されることはありません。
 
 
+### macOS の Claude プロファイル
+
+`CLAUDE_CONFIG_DIR` と `ANTHROPIC_CONFIG_DIR` に空でない値がない場合、Claude の探索は `~/.claude/sessions` に加え、`~/Library/Application Support/orca/claude-profiles` 直下の各プロファイルの `home/sessions` を確認します。環境変数でパスを指定した場合は、その登録情報ディレクトリだけを使います。Linux と Windows ではこの macOS パスを探索しません。プロファイル数と登録項目数には上限があります。
+
+別の探索先でエラーが起きても読み取れたセッションは一覧に残し、探索が不完全であることを診断情報と失敗終了コードで示します。送信と送信者の識別には、完全で矛盾のない根拠が必要です。同じ実体の登録ディレクトリを指す別名は一つの行にまとめられますが、PID や inbox の情報が競合する場合は、ディレクトリの順番や PID の指定では解決しません。選択と handoff の連続性検査は元の登録情報の根拠を保持し、提出直前に再確認します。一覧と dry-run は inbox に接続しません。これらの検査は native の世代、メッセージの消費、受領確認 ACK を証明しません。
+
 ## 必要条件
 
 macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対象外です。ネイティブロック依存には対応する x64/arm64 バイナリが必要で、純 JavaScript パッケージではありません。Codex 送信には `codex` が必要で、macOS/Linux では `lsof`・`ps` も必要です。Windows はネイティブロックと Restart Manager で所有者を確認します。Claude にはアクセス可能な inbox を持つ稼働中 TUI が必要です。SSH は既存の鍵・ホスト信頼と、接続先の**同一バージョン**のクライアントを使います。

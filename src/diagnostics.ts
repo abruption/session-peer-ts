@@ -1,14 +1,13 @@
 // Diagnostics read bounded configuration and metadata, returning sanitized checks.
 // Never probe/connect to an inbox,
 // acquire a writer lock, execute an agent binary, or write configuration.
-import { accessSync, constants, readdirSync, readFileSync, statSync } from 'node:fs';
+import { accessSync, constants, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
-import { listingCandidates } from './discovery.js';
+import { claudeInventory, listingCandidates } from './discovery.js';
 import { classifyCodexStorage, storageDiagnostic } from './codex-storage.js';
 import { inspectSkill } from './skill-metadata.js';
 import { batchShim } from './process.js';
-import { windowsProcessStart } from './windows.js';
 
 type Check = { status: string; code: string; [key: string]: unknown };
 const failure = (error: unknown, missing: string, unknown: string): Check => {
@@ -73,64 +72,24 @@ export async function diagnoseCodex(home?: string, binary?: string): Promise<Rec
     sendAuthorized: false };
 }
 export function diagnoseClaude(): Record<string, unknown> {
-  const directory = join(process.env.CLAUDE_CONFIG_DIR || process.env.ANTHROPIC_CONFIG_DIR || join(homedir(), '.claude'), 'sessions');
-  const result = { sessionsDir: directory, records: 0, invalidRecords: 0, aliveSessions: 0,
-    availableInboxes: 0, staleRecords: 0, unknownInspections: 0, permissionFailures: 0 };
-  let entries: string[];
-  try {
-    if (!statSync(directory).isDirectory()) return { ...result, ready: false, status: 'unsupported', code: 'sessions_path_not_directory' };
-    entries = readdirSync(directory).sort();
-  } catch (error) { return { ...result, ready: false, ...failure(error, 'sessions_dir_missing', 'sessions_dir_unreadable') }; }
-  for (const entry of entries) {
-    if (!/^[0-9]+\.json$/.test(entry)) continue;
-    let record: Record<string, unknown>;
-    try {
-      const path = join(directory, entry), info = statSync(path);
-      if (!info.isFile() || info.size > 65536) { result.invalidRecords++; continue; }
-      const value: unknown = JSON.parse(readFileSync(path, 'utf8'));
-      if (!value || typeof value !== 'object' || Array.isArray(value)) { result.invalidRecords++; continue; }
-      record = value as Record<string, unknown>;
-    } catch (error) {
-      if (['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) result.permissionFailures++;
-      else if (error instanceof SyntaxError) result.invalidRecords++;
-      else result.unknownInspections++;
-      continue;
-    }
-    const pid = record.pid;
-    if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 1 || pid > 2147483647) { result.invalidRecords++; continue; }
-    result.records++;
-    if (pid !== Number(entry.slice(0, -5))) { result.staleRecords++; continue; }
-    let live = false;
-    if (process.platform === 'win32') {
-      const ticks = windowsProcessStart(pid);
-      if (ticks === undefined || typeof record.startedAt !== 'number' || !Number.isSafeInteger(record.startedAt) || record.startedAt <= 0) { result.unknownInspections++; continue; }
-      live = Number((ticks - 116444736000000000n) / 10000n) <= record.startedAt + 2000;
-    } else {
-      try { process.kill(pid, 0); live = true; }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') { result.unknownInspections++; continue; }
-      }
-    }
-    if (!live) { result.staleRecords++; continue; }
-    result.aliveSessions++;
-    const socket = typeof record.messagingSocketPath === 'string' ? record.messagingSocketPath : '';
-    if (process.platform === 'win32') {
-      // A named pipe advertisement is not proof that the pipe exists or accepts connections.
-      if (/^\\\\\.\\pipe\\[^\r\n]+$/i.test(socket)) result.availableInboxes++;
-    } else if (socket) {
-      try { if (statSync(socket).isSocket()) result.availableInboxes++; }
-      catch (error) {
-        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
-          result.unknownInspections++;
-          if (['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) result.permissionFailures++;
-        }
-      }
-    }
+  const inventory = claudeInventory(), rows = inventory.sessions;
+  const result = { sessionsDir: inventory.directories[0], records: inventory.records,
+    invalidRecords: inventory.invalidRecords, aliveSessions: rows.filter(row => row.alive).length,
+    availableInboxes: rows.filter(row => row.reachable).length,
+    staleRecords: rows.filter(row => !row.alive && row.staleReason !== 'process_unverified').length,
+    unknownInspections: inventory.unknownInspections, permissionFailures: inventory.permissionFailures };
+  if (inventory.selectedStatus !== 'present' && (inventory.selectedStatus !== 'missing' || inventory.errors.length === 0) &&
+      rows.length === 0 && inventory.directories.length === 1) {
+    const status = inventory.selectedStatus;
+    return { ...result, ready: false, status, code: status === 'missing' ? 'sessions_dir_missing' :
+      status === 'unsupported' ? 'sessions_path_not_directory' : status === 'permission_denied' ? 'permission_denied' : 'sessions_dir_unreadable' };
   }
-  const ready = result.availableInboxes > 0 && result.permissionFailures === 0 && result.unknownInspections === 0;
+  const ready = result.availableInboxes > 0 && inventory.errors.length === 0 && result.unknownInspections === 0;
   const code = result.permissionFailures ? 'permission_denied' : result.unknownInspections ? 'inspection_unknown' :
-    result.availableInboxes ? 'inbox_advertised' : result.aliveSessions ? 'inbox_unavailable' : 'no_live_sessions';
+    inventory.errors.length ? 'claude_discovery_incomplete' : result.availableInboxes ? 'inbox_advertised' :
+      result.aliveSessions ? 'inbox_unavailable' : 'no_live_sessions';
   return { ...result, ready, status: ready ? 'available' : 'unavailable', code,
+    ...(inventory.errors.length ? { errors: inventory.errors } : {}),
     verification: process.platform === 'win32' ? 'process_and_pipe_advertisement' : 'process_and_filesystem',
     inboxConnected: false, sendAuthorized: false };
 }
