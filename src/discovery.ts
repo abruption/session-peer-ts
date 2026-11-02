@@ -100,7 +100,7 @@ function endpointIdentity(socket: string): string | null {
   const alias = lstatSync(socket), canonical = realpathSync(socket), target = lstatSync(canonical);
   return target.isSocket() ? JSON.stringify([canonical, alias.dev, alias.ino, target.dev, target.ino]) : null;
 }
-function claudeLive(record: Row, matches: boolean, unknown?: () => void): boolean {
+function claudeLive(record: Row, matches: boolean, unknown?: () => void, absent?: () => void): boolean {
   if (!matches) return false;
   const pid = Number(record.pid);
   if (pid <= 1) return false; // Known-invalid PID is stale, not a failed native inspection.
@@ -110,7 +110,15 @@ function claudeLive(record: Row, matches: boolean, unknown?: () => void): boolea
   }
   const started = typeof record.startedAt === 'number' && Number.isSafeInteger(record.startedAt) && record.startedAt > 0 ? record.startedAt : NaN;
   const ticks = windowsProcessStart(pid);
-  const actual = ticks === undefined ? NaN : Number((ticks - 116444736000000000n) / 10000n);
+  if (ticks === undefined) {
+    // A stale registry for a positively absent PID is not an inventory failure.
+    // Signal 0 is absence-only evidence here; it never establishes a live
+    // Windows incarnation or replaces the native creation-time check.
+    try { process.kill(pid, 0); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') { absent?.(); return false; } }
+    unknown?.(); return false;
+  }
+  const actual = Number((ticks - 116444736000000000n) / 10000n);
   if (!Number.isFinite(started) || !Number.isFinite(actual)) { unknown?.(); return false; }
   return actual <= started + 2000;
 }
@@ -123,14 +131,18 @@ export function claudeInventory(): ClaudeInventory {
     invalidRecords: 0, permissionFailures: 0, unknownInspections: 0, selectedStatus: 'missing' };
   const errors = inventory.errors;
   const directories: { directory: string; chain: DirectoryProof[]; automatic: boolean }[] = [];
-  // Keep every observed source (including absence) fenced until the WHOLE
-  // inventory is complete. A later registry read can mutate an earlier source.
+  // Keep every observed source, numeric record and POSIX endpoint (including
+  // absence) fenced until the WHOLE inventory is complete. Later reads can
+  // mutate an earlier source without changing a directory entry.
   const scanEvidence: InventoryProof[] = [];
-  function observeDirectory(path: string, sameUser: boolean, direct = true): DirectoryProof {
+  function observeMetadata(path: string, direct = true): void {
     let identity: string | null;
     try { identity = recordIdentity(direct ? lstatSync(path) : statSync(path)); }
     catch (error) { if (!missing(error)) throw error; identity = null; }
     scanEvidence.push({ path, direct, identity });
+  }
+  function observeDirectory(path: string, sameUser: boolean, direct = true): DirectoryProof {
+    observeMetadata(path, direct);
     return safeDirectory(path, sameUser, direct);
   }
   function failure(code: string, error?: unknown) {
@@ -193,7 +205,13 @@ export function claudeInventory(): ClaudeInventory {
         if (!/^[0-9]+\.json$/.test(entry)) continue;
         const path = join(directory, entry);
         let read: ReturnType<typeof claudeRecord>;
-        try { read = claudeRecord(path, privateRecord); }
+        try {
+          // Every numeric record, including invalid/unreachable ones, remains
+          // fenced: an in-place edit can introduce a competing identity without
+          // changing its directory's metadata. Never reread bodies in the fence.
+          observeMetadata(path);
+          read = claudeRecord(path, privateRecord);
+        }
         catch (error) {
           if (['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) failure('record_unavailable', error);
           else if (error instanceof SyntaxError || error instanceof TypeError || missing(error)) invalid();
@@ -206,18 +224,27 @@ export function claudeInventory(): ClaudeInventory {
         if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid < 1 || pid > 2147483647) { invalid(); continue; }
         inventory.records++;
         const matches = pid === Number(entry.slice(0, -5));
-        let processUnknown = false;
-        const live = claudeLive(record, matches, () => { processUnknown = true; inventory.unknownInspections++; failure('process_unverified'); });
+        let processUnknown = false, processAbsent = false;
+        const live = claudeLive(record, matches, () => { processUnknown = true; inventory.unknownInspections++; failure('process_unverified'); }, () => { processAbsent = true; });
         const socket = typeof record.messagingSocketPath === 'string' ? record.messagingSocketPath : '';
         let endpoint: string | null = null;
-        try { endpoint = endpointIdentity(socket); }
-        catch (error) {
+        try {
+          if (socket && !socket.includes('\0') && process.platform !== 'win32') {
+            // Track both advertised alias and followed endpoint, including an
+            // observed absence. Retargeting an unselected alias can otherwise
+            // introduce a conflict after its registry record was inspected.
+            observeMetadata(socket); observeMetadata(socket, false);
+          }
+          endpoint = endpointIdentity(socket);
+          if (endpoint && process.platform !== 'win32') observeMetadata(String(JSON.parse(endpoint)[0]));
+        } catch (error) {
           if (!missing(error)) { inventory.unknownInspections++; failure('endpoint_unavailable', error); }
         }
         const row: Row = { agent: 'claude', pid, socket, alive: live, reachable: live && endpoint !== null };
         for (const key of ['name', 'status', 'cwd', 'kind', 'version', 'tmux']) row[key] = record[key] ?? null;
         if (!matches) row.staleReason = 'record_pid_mismatch';
-        else if (processUnknown || (!live && process.platform === 'win32')) row.staleReason = 'process_unverified';
+        else if (processUnknown) row.staleReason = 'process_unverified';
+        else if (!live && process.platform === 'win32') row.staleReason = processAbsent ? 'process_absent' : 'process_unverified';
         claudeProofs.set(row, { directory, canonical, chain, record: path, recordIdentity: read!.identity, privateRecord,
           endpoint, startedAt: typeof record.startedAt === 'number' ? record.startedAt : null });
         inventory.sessions.push(row);

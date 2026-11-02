@@ -61,6 +61,13 @@ test('Windows discovery samples each PID once; stale and failed probes cannot au
   writeFileSync(join(directory, '123.json'), JSON.stringify(record));
   const ticks = 116444736000000000n + BigInt(startedAt - 1000) * 10000n + 1237n;
   let done = result(String(ticks)), calls = 0;
+  // This fixture models a present PID whose native inspection fails. Confirmed
+  // absence is a different case and must not depend on the host's real PID 123.
+  const kill = process.kill;
+  t.mock.method(process, 'kill', ((pid: number, signal?: number | NodeJS.Signals) => {
+    if (pid === 123 && signal === 0) return true;
+    return kill(pid, signal);
+  }) as typeof process.kill);
   t.mock.method(childProcess, 'spawnSync', () => { calls++; return done; });
   syncBuiltinESMExports();
   assert.equal((claude(false).sessions as Record<string, unknown>[]).length, 1);

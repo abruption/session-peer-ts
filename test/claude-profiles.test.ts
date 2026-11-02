@@ -338,6 +338,8 @@ test('Windows known-invalid PID 1 stays a stale record without invoking native i
   const f = fixture(t, 'win32'), directory = f.directory();
   fs.writeFileSync(join(directory, '1.json'), JSON.stringify({ pid: 1, name: 'known-stale' }));
   let inspections = 0;
+  const kill = process.kill;
+  t.mock.method(process, 'kill', ((pid: number, signal?: number | NodeJS.Signals) => pid === 123 && signal === 0 ? true : kill(pid, signal)) as typeof process.kill);
   t.mock.method(childProcess, 'spawnSync', () => { inspections++; throw new Error('fixture native inspector unavailable'); });
   syncBuiltinESMExports();
   let value = found();
@@ -349,4 +351,87 @@ test('Windows known-invalid PID 1 stays a stale record without invoking native i
   value = found(); assert.equal(inspections, 1);
   assert.equal(value.discovery.claude.status, 'error', 'failed inspection of a valid PID must still fail closed');
   assert.ok(value.discovery.claude.errors?.includes('process_unverified'));
+});
+
+
+test('Windows verified absent stale PID does not suppress healthy sessions; real inspection failures stay incomplete', t => {
+  const f = fixture(t, 'win32'), directory = f.directory(), startedAt = Date.now();
+  const stale = process.pid === 123 ? 124 : 123;
+  fs.writeFileSync(join(directory, `${stale}.json`), JSON.stringify({ pid: stale, name: 'stale', startedAt, messagingSocketPath: String.raw`\\.\pipe\stale` }));
+  fs.writeFileSync(join(directory, `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: 'healthy', startedAt, messagingSocketPath: String.raw`\\.\pipe\healthy` }));
+  const ticks = String(116444736000000000n + BigInt(startedAt - 1000) * 10000n);
+  let failHealthy = false, absence = true;
+  const kill = process.kill;
+  t.mock.method(process, 'kill', ((pid: number, signal?: number | NodeJS.Signals) => {
+    if (pid === stale && signal === 0) throw Object.assign(new Error('fixture absent'), { code: absence ? 'ESRCH' : 'EPERM' });
+    return kill(pid, signal);
+  }) as typeof process.kill);
+  t.mock.method(childProcess, 'spawnSync', ((_file: unknown, args: string[]) => {
+    const healthy = args.some(arg => arg.includes(`GetProcessById(${process.pid})`));
+    return { pid: 99, status: healthy && !failHealthy ? 0 : 1, signal: null, stdout: healthy && !failHealthy ? ticks : '', stderr: '', output: [] };
+  }) as any); syncBuiltinESMExports();
+  let value = found(); assert.equal(value.discovery.claude.status, 'ok');
+  assert.equal(value.sessions.find(row => row.pid === stale)!.staleReason, 'process_absent');
+  assert.deepEqual((claude(false).sessions as any[]).map(row => row.name), ['healthy']);
+  assert.equal(diagnoseClaude().ready, true);
+  failHealthy = true; value = found(); assert.equal(value.discovery.claude.status, 'error');
+  assert.ok(value.discovery.claude.errors?.includes('process_unverified'));
+  failHealthy = false; absence = false; value = found();
+  assert.equal(value.discovery.claude.status, 'error', 'EPERM is not proof of absence');
+});
+
+test('final metadata fence catches another record edited in place into a target-name collision', { skip: process.platform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root), directory = f.directory();
+  const otherRoot = join(f.root, 'other'); fs.mkdirSync(otherRoot);
+  const otherSocket = await inbox(t, otherRoot);
+  f.record(directory, process.pid, socket.path, 'target');
+  const other = process.pid === 123 ? 124 : 123;
+  const path = f.record(directory, other, otherSocket.path, 'other!');
+  const kill = process.kill;
+  t.mock.method(process, 'kill', ((pid: number, signal?: number | NodeJS.Signals) => pid === other && signal === 0 ? true : kill(pid, signal)) as typeof process.kill);
+  let armed = false, reads = 0, changed = false;
+  const read = fs.readSync;
+  t.mock.method(fs, 'readSync', ((...args: any[]) => {
+    const count = (read as any)(...args);
+    if (armed && count > 0 && ++reads === 3) {
+      // Two numeric records are read in final rediscovery, then the selected
+      // record is reread. Editing the OTHER inode changes no directory entry.
+      const before = fs.statSync(path);
+      f.record(directory, other, otherSocket.path, 'target');
+      fs.utimesSync(path, before.atime, new Date(before.mtimeMs + 2000));
+      const after = fs.statSync(path); assert.equal(after.ino, before.ino); assert.equal(after.size, before.size);
+      changed = true;
+    }
+    return count;
+  }) as typeof fs.readSync); syncBuiltinESMExports();
+  await assert.rejects(send({ to: 'target', message: 'fixture', hooks: {
+    resolved() {}, beforeEffect() { armed = true; }
+  } }), refuse('claude_discovery_incomplete'));
+  assert.equal(changed, true); socket.untouched(); otherSocket.untouched();
+});
+
+for (const priorAlias of [false, true]) test(`final metadata fence catches unselected endpoint ${priorAlias ? 'alias retarget' : 'appearance'} after inventory`, { skip: process.platform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root), directory = f.directory();
+  const otherRoot = join(f.root, 'other'); fs.mkdirSync(otherRoot);
+  const otherSocket = await inbox(t, otherRoot), alias = join(f.root, 'unselected-alias');
+  if (priorAlias) fs.symlinkSync(otherSocket.path, alias);
+  f.record(directory, process.pid, socket.path, 'target');
+  const other = process.pid === 123 ? 124 : 123;
+  f.record(directory, other, alias, 'other');
+  const kill = process.kill;
+  t.mock.method(process, 'kill', ((pid: number, signal?: number | NodeJS.Signals) => pid === other && signal === 0 ? true : kill(pid, signal)) as typeof process.kill);
+  let armed = false, reads = 0, changed = false;
+  const read = fs.readSync;
+  t.mock.method(fs, 'readSync', ((...args: any[]) => {
+    const count = (read as any)(...args);
+    if (armed && count > 0 && ++reads === 3) {
+      if (priorAlias) fs.unlinkSync(alias);
+      fs.symlinkSync(socket.path, alias); changed = true;
+    }
+    return count;
+  }) as typeof fs.readSync); syncBuiltinESMExports();
+  await assert.rejects(send({ to: 'target', message: 'fixture', hooks: {
+    resolved() {}, beforeEffect() { armed = true; }
+  } }), refuse('claude_discovery_incomplete'));
+  assert.equal(changed, true); socket.untouched(); otherSocket.untouched();
 });
