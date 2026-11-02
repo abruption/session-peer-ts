@@ -128,7 +128,7 @@ Claude 이름은 Unicode 14.0.0의 기본 완전 대소문자 접기(full casefo
 <a id="requirements"></a>
 ### macOS의 Claude 프로필
 
-`CLAUDE_CONFIG_DIR`과 `ANTHROPIC_CONFIG_DIR`에 비어 있지 않은 값이 없으면, Claude 탐색은 `~/.claude/sessions`와 함께 `~/Library/Application Support/orca/claude-profiles` 바로 아래 프로필의 `home/sessions`를 확인합니다. 환경변수로 경로를 지정하면 해당 registry(세션 등록 정보 디렉터리)만 사용합니다. Linux와 Windows에서는 이 macOS 경로를 탐색하지 않습니다. 프로필 수와 등록 항목 수에 상한을 둡니다.
+`CLAUDE_CONFIG_DIR`과 `ANTHROPIC_CONFIG_DIR`에 비어 있지 않은 값이 없으면, Claude 탐색은 `~/.claude/sessions`와 함께 `~/Library/Application Support/orca/claude-profiles` 바로 아래 프로필의 `home/sessions`를 확인합니다. 환경변수로 경로를 지정하면 해당 registry(세션 등록 정보 디렉터리)만 사용합니다. Linux와 Windows에서는 이 macOS 경로를 탐색하지 않습니다. 프로필 수와 등록 항목 수에 상한을 둡니다. 자동 탐색한 프로필 디렉터리와 등록 파일은 현재 사용자 소유여야 하며 다른 사용자나 그룹이 쓸 수 없어야 합니다. 안전 조건을 충족하지 못한 경로가 있으면 탐색을 불완전한 것으로 처리합니다.
 
 다른 탐색 경로에서 오류가 나더라도 읽은 세션은 목록에 남기고, 탐색이 불완전하다는 진단과 실패 종료 코드를 반환합니다. 전송과 발신자 식별에는 완전하고 충돌 없는 근거가 필요합니다. 같은 실제 등록 디렉터리를 가리키는 별칭은 한 행으로 합칠 수 있지만, PID나 받은 메시지함 정보가 충돌하면 디렉터리 순서나 PID 지정으로 대상을 결정하지 않습니다. 선택과 handoff 연속성 검사는 원래 등록 정보의 근거를 유지하고 제출 직전에 다시 확인합니다. 목록과 dry-run은 받은 메시지함에 연결하지 않습니다. 이 검사가 native 세대, 메시지 소비 또는 수령 확인 ACK를 증명하지는 않습니다.
 

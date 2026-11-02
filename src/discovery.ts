@@ -40,15 +40,16 @@ export const CLAUDE_ENTRY_LIMIT = 4096;
 const CLAUDE_RECORD_LIMIT = 1024 * 1024;
 type DirectoryProof = { path: string; identity: string; sameUser: boolean; direct: boolean };
 type ClaudeProof = { directory: string; canonical: string; chain: DirectoryProof[]; record: string;
-  recordIdentity: string; endpoint: string | null; startedAt: unknown };
+  recordIdentity: string; privateRecord: boolean; endpoint: string | null; startedAt: unknown };
 const claudeProofs = new WeakMap<Row, ClaudeProof>();
 type InventoryProof = { path: string; direct: boolean; identity: string | null };
 const claudeInventories = new WeakMap<Row, readonly InventoryProof[]>();
-const nodeIdentity = (s: Stats) => [s.dev, s.ino, s.uid].join(':');
+const nodeIdentity = (s: Stats) => [s.dev, s.ino, s.uid, s.mode].join(':');
+const privateNode = (s: Stats) => typeof process.getuid === 'function' && s.uid === process.getuid() && (s.mode & 0o022) === 0;
 const recordIdentity = (s: Stats) => [nodeIdentity(s), s.size, s.mtimeMs, s.ctimeMs, s.birthtimeMs].join(':');
 function safeDirectory(path: string, sameUser: boolean, direct = true): DirectoryProof {
   const node = direct ? lstatSync(path) : statSync(path);
-  if (!node.isDirectory() || (sameUser && process.getuid && node.uid !== process.getuid())) throw new Error('unsafe_directory');
+  if (!node.isDirectory() || (sameUser && !privateNode(node))) throw new Error('unsafe_directory');
   return { path, sameUser, direct, identity: nodeIdentity(node) };
 }
 function directoryUnchanged(proof: DirectoryProof): boolean {
@@ -70,14 +71,15 @@ function boundedEntries(path: string, limit: number): { entries: string[]; limit
 // are not persisted. Read at most 1 MiB + one
 // overflow byte; stable descriptor/path checks are observational, not an atomic
 // filesystem snapshot or a deadline for blocking filesystem I/O.
-function claudeRecord(file: string): { value: unknown; identity: string } | undefined {
+function claudeRecord(file: string, requirePrivate = false): { value: unknown; identity: string } | undefined {
   const before = lstatSync(file);
-  if (!before.isFile() || before.size > CLAUDE_RECORD_LIMIT) return undefined;
+  if (!before.isFile() || before.size > CLAUDE_RECORD_LIMIT || (requirePrivate && !privateNode(before))) return undefined;
   const flags = constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW);
   const fd = openSync(file, flags);
   try {
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.size > CLAUDE_RECORD_LIMIT || recordIdentity(opened) !== recordIdentity(before)) return undefined;
+    if (!opened.isFile() || opened.size > CLAUDE_RECORD_LIMIT || (requirePrivate && !privateNode(opened)) ||
+        recordIdentity(opened) !== recordIdentity(before)) return undefined;
     const bytes = Buffer.alloc(CLAUDE_RECORD_LIMIT + 1);
     let length = 0;
     while (length < bytes.length) {
@@ -86,7 +88,8 @@ function claudeRecord(file: string): { value: unknown; identity: string } | unde
       length += count;
     }
     const final = fstatSync(fd), current = lstatSync(file);
-    if (length > CLAUDE_RECORD_LIMIT || !current.isFile() || recordIdentity(final) !== recordIdentity(opened) ||
+    if (length > CLAUDE_RECORD_LIMIT || !current.isFile() ||
+        (requirePrivate && (!privateNode(final) || !privateNode(current))) || recordIdentity(final) !== recordIdentity(opened) ||
         recordIdentity(current) !== recordIdentity(opened)) return undefined;
     return { value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length))), identity: recordIdentity(opened) };
   } finally { closeSync(fd); }
@@ -100,8 +103,8 @@ function endpointIdentity(socket: string): string | null {
 function claudeLive(record: Row, matches: boolean, unknown?: () => void): boolean {
   if (!matches) return false;
   const pid = Number(record.pid);
+  if (pid <= 1) return false; // Known-invalid PID is stale, not a failed native inspection.
   if (process.platform !== 'win32') {
-    if (pid <= 1) return false;
     try { process.kill(pid, 0); return true; }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') unknown?.(); return false; }
   }
@@ -163,6 +166,14 @@ export function claudeInventory(): ClaudeInventory {
       if (!directoryUnchanged(baseProof) || recordIdentity(lstatSync(base)) !== before) failure('profile_inventory_changed');
     } catch (error) { if (!missing(error)) failure('profile_inventory_unavailable', error); }
   }
+  // Resolve the strictest requirements before deduplicating aliases. A legacy
+  // default path can alias an automatic registry; scanning that alias first
+  // must not downgrade the automatic record ownership/write-mode checks.
+  const automaticDirectories = new Set<string>();
+  for (const item of directories.filter(item => item.automatic)) {
+    try { automaticDirectories.add(realpathSync(item.directory)); }
+    catch (error) { failure('profile_directory_unavailable', error); }
+  }
   const multiple = directories.some(item => item.automatic) || directories.length > 1 || errors.length > 0;
   const invalid = () => { inventory.invalidRecords++; if (multiple) failure('session_record_unavailable'); };
   let enumerated = 0;
@@ -171,6 +182,7 @@ export function claudeInventory(): ClaudeInventory {
     try {
       if (!chain.every(directoryUnchanged)) throw new Error('registry_changed');
       const canonical = realpathSync(directory), scanKey = canonical + ':' + chain.at(-1)!.identity;
+      const privateRecord = automaticDirectories.has(canonical);
       if (scanned.has(scanKey)) continue;
       scanned.add(scanKey);
       const before = recordIdentity(statSync(directory));
@@ -181,7 +193,7 @@ export function claudeInventory(): ClaudeInventory {
         if (!/^[0-9]+\.json$/.test(entry)) continue;
         const path = join(directory, entry);
         let read: ReturnType<typeof claudeRecord>;
-        try { read = claudeRecord(path); }
+        try { read = claudeRecord(path, privateRecord); }
         catch (error) {
           if (['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) failure('record_unavailable', error);
           else if (error instanceof SyntaxError || error instanceof TypeError || missing(error)) invalid();
@@ -206,7 +218,7 @@ export function claudeInventory(): ClaudeInventory {
         for (const key of ['name', 'status', 'cwd', 'kind', 'version', 'tmux']) row[key] = record[key] ?? null;
         if (!matches) row.staleReason = 'record_pid_mismatch';
         else if (processUnknown || (!live && process.platform === 'win32')) row.staleReason = 'process_unverified';
-        claudeProofs.set(row, { directory, canonical, chain, record: path, recordIdentity: read!.identity,
+        claudeProofs.set(row, { directory, canonical, chain, record: path, recordIdentity: read!.identity, privateRecord,
           endpoint, startedAt: typeof record.startedAt === 'number' ? record.startedAt : null });
         inventory.sessions.push(row);
       }
@@ -268,7 +280,7 @@ export function claudeSelectionIdentity(row: Row): string {
   if (!proof) throw new Refusal('target_changed', 1);
   try {
     if (!proof.chain.every(directoryUnchanged) || realpathSync(proof.directory) !== proof.canonical) throw new Error();
-    const read = claudeRecord(proof.record), value = read?.value as Row | undefined;
+    const read = claudeRecord(proof.record, proof.privateRecord), value = read?.value as Row | undefined;
     if (!read || !value || read.identity !== proof.recordIdentity || value.pid !== row.pid ||
         (value.messagingSocketPath ?? '') !== row.socket ||
         (typeof value.startedAt === 'number' ? value.startedAt : null) !== proof.startedAt ||

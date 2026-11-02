@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
+import childProcess from 'node:child_process';
 import { claude, CLAUDE_PROFILE_LIMIT, CLAUDE_ENTRY_LIMIT } from '../dist/discovery.js';
 import { send } from '../dist/send.js';
 import { sender } from '../dist/replies.js';
@@ -267,4 +268,85 @@ for (const existingBase of [false, true]) test(`metadata-only final fence catche
   } }), refuse('claude_discovery_incomplete'));
   assert.equal(changed, true); assert.equal(reads, 3, 'the fence must not recursively read registry records');
   socket.untouched();
+});
+
+for (const component of ['base', 'profile', 'home', 'sessions'] as const) test(`automatic ${component} directory rejects group/world writes while healthy defaults remain visible`, { skip: process.platform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root); f.record(f.directory(), process.pid, socket.path);
+  const profile = f.directory('a');
+  const path = component === 'base' ? f.base : component === 'profile' ? join(f.base, 'a') : component === 'home' ? join(f.base, 'a/home') : profile;
+  for (const mode of [0o775, 0o777]) {
+    fs.chmodSync(path, mode);
+    const value = found(); assert.equal(value.sessions.length, 1);
+    assert.equal(value.discovery.claude.status, 'error');
+    await assert.rejects(send({ to: 'fixture', message: 'fixture', dryRun: true }), refuse('claude_discovery_incomplete'));
+  }
+  fs.chmodSync(path, 0o755); socket.untouched();
+});
+
+test('canonical default alias cannot downgrade writable automatic record policy; isolated explicit/default admission stays legacy', { skip: process.platform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root), profile = f.directory('a');
+  const file = f.record(profile, process.pid, socket.path); fs.chmodSync(file, 0o666);
+  fs.mkdirSync(join(f.root, '.claude')); fs.symlinkSync(profile, f.defaultDir, 'dir');
+  const value = found(); assert.equal(value.sessions.length, 0);
+  assert.ok(value.discovery.claude.errors?.includes('session_record_unavailable'));
+  await assert.rejects(send({ to: 'fixture', message: 'fixture', dryRun: true }), refuse('claude_discovery_incomplete'));
+  process.env.CLAUDE_CONFIG_DIR = join(profile, '..');
+  assert.equal(found().discovery.claude.status, 'ok', 'explicit single-root legacy policy remains unchanged');
+  assert.equal((await send({ to: 'fixture', message: 'fixture', dryRun: true })).submitted, false);
+  delete process.env.CLAUDE_CONFIG_DIR;
+  fs.unlinkSync(f.defaultDir); fs.renameSync(profile, f.defaultDir); fs.rmSync(f.base, { recursive: true });
+  assert.equal(found().discovery.claude.status, 'ok', 'single-default legacy policy remains unchanged');
+  socket.untouched();
+});
+
+for (const phase of ['before', 'opened', 'final'] as const) for (const field of ['uid', 'mode'] as const) test(`automatic record ${field} is checked at ${phase} without hiding healthy default rows`, { skip: process.platform === 'win32' || !process.getuid }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root); f.record(f.directory(), process.pid, socket.path);
+  const path = f.record(f.directory('a'), 123, socket.path + '-missing', 'unsafe');
+  const open = fs.openSync, lstat = fs.lstatSync, fstat = fs.fstatSync;
+  let descriptor = -1, inspections = 0;
+  const alter = (info: fs.Stats) => {
+    Object.defineProperty(info, field, { value: field === 'uid' ? process.getuid!() + 1 : info.mode | 0o022 }); return info;
+  };
+  t.mock.method(fs, 'openSync', ((item: any, ...args: any[]) => {
+    const fd = (open as any)(item, ...args); if (item === path) descriptor = fd; return fd;
+  }) as typeof fs.openSync);
+  t.mock.method(fs, 'lstatSync', ((item: any, ...args: any[]) => {
+    const info = (lstat as any)(item, ...args); return phase === 'before' && item === path ? alter(info) : info;
+  }) as typeof fs.lstatSync);
+  t.mock.method(fs, 'fstatSync', ((fd: number, ...args: any[]) => {
+    const info = (fstat as any)(fd, ...args);
+    if (fd === descriptor && ++inspections === (phase === 'opened' ? 1 : 2) && phase !== 'before') return alter(info);
+    return info;
+  }) as typeof fs.fstatSync); syncBuiltinESMExports();
+  const value = found(); assert.deepEqual(value.sessions.map(row => row.name), ['fixture']);
+  assert.ok(value.discovery.claude.errors?.includes('session_record_unavailable'));
+  if (phase === 'before') assert.equal(descriptor, -1, 'unsafe automatic metadata must be refused before open');
+  else assert.equal(inspections, phase === 'opened' ? 1 : 2);
+  socket.untouched();
+});
+
+test('automatic record mode changes during the async effect hook refuse before connecting', { skip: process.platform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root), file = f.record(f.directory('a'), process.pid, socket.path);
+  await assert.rejects(send({ to: 'fixture', message: 'fixture', hooks: {
+    resolved() {}, beforeEffect() { fs.chmodSync(file, 0o666); }
+  } }), refuse('claude_discovery_incomplete'));
+  socket.untouched();
+});
+
+
+test('Windows known-invalid PID 1 stays a stale record without invoking native inspection or marking discovery incomplete', t => {
+  const f = fixture(t, 'win32'), directory = f.directory();
+  fs.writeFileSync(join(directory, '1.json'), JSON.stringify({ pid: 1, name: 'known-stale' }));
+  let inspections = 0;
+  t.mock.method(childProcess, 'spawnSync', () => { inspections++; throw new Error('fixture native inspector unavailable'); });
+  syncBuiltinESMExports();
+  let value = found();
+  assert.equal(value.discovery.claude.status, 'ok'); assert.equal(inspections, 0);
+  assert.equal(value.sessions.length, 1); assert.equal(value.sessions[0]!.alive, false);
+  assert.equal(value.sessions[0]!.reachable, false); assert.deepEqual(claude(false).sessions, []);
+  fs.unlinkSync(join(directory, '1.json'));
+  fs.writeFileSync(join(directory, '123.json'), JSON.stringify({ pid: 123, name: 'uninspectable-valid-pid', startedAt: 42 }));
+  value = found(); assert.equal(inspections, 1);
+  assert.equal(value.discovery.claude.status, 'error', 'failed inspection of a valid PID must still fail closed');
+  assert.ok(value.discovery.claude.errors?.includes('process_unverified'));
 });
