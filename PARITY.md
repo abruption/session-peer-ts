@@ -1400,6 +1400,8 @@ scope, not a publication claim or blanket Python runtime parity.
 | Windows handoff storage | Required capability reports unsupported; ordinary published Windows send/SSH are separate | Private DACL/reparse storage and owned cleanup qualification [#131](https://github.com/abruption/session-peer-ts/issues/131) |
 | SSH handoff | Explicit same-version destination preparation/ledger, strict binding and one send; unsupported goals refuse before effect | Real remote native client-ID observation remains unqualified; actual Linux queues/manual ACK do not establish it |
 
+The [#132 local receipt-bootstrap design proposal](docs/design/receipt-bootstrap.md) records the owner-selected manual collector and explicit authority delegation, with a separate proposed Claude receipt-context contract. It does not enable a producer/collector, change v1 generation rules or qualify a platform.
+
 An automatic receipt collector, if later implemented, still records only a
 receiver's explicit receipt. Visible replies, arbitrary message text, queue
 deletions and turn completion never authorize ACK promotion. The frozen design
