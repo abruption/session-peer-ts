@@ -217,8 +217,7 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     const rechecked = select();
     if (row.pid !== rechecked.pid || row.socket !== rechecked.socket ||
         claudeSelectionIdentity(row) !== identity || claudeSelectionIdentity(rechecked) !== identity) throw new Refusal('target_changed', 1);
-    revalidateClaudeInventory(row);
-    revalidateClaudeInventory(rechecked);
+    revalidateClaudeInventory(row, rechecked);
   };
   finalCheck();
   if (options.dryRun) return result;

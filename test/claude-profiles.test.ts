@@ -2,24 +2,39 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
 import childProcess from 'node:child_process';
-import { claude, CLAUDE_PROFILE_LIMIT, CLAUDE_ENTRY_LIMIT } from '../dist/discovery.js';
+import { claude, CLAUDE_PROFILE_LIMIT, CLAUDE_ENTRY_LIMIT, CLAUDE_ACL_LIMITS } from '../dist/discovery.js';
 import { send } from '../dist/send.js';
 import { sender } from '../dist/replies.js';
 import { diagnoseClaude } from '../dist/diagnostics.js';
 import { help } from '../dist/help.js';
 
+const actualPlatform = process.platform;
+function aclMetadata(args: readonly string[], marker = ''): string {
+  // Synthetic helper output only, not native macOS ACL qualification. Filenames
+  // are escaped and never interpreted as permissions or ACL entry lines.
+  return args.slice(2).map(path => `-rw-------${marker} 1 501 20 1 Jan 1 2026 ${JSON.stringify(path)}\n`).join('');
+}
+function aclResult(stdout: string, extra: Record<string, unknown> = {}) {
+  return { pid: 99, status: 0, signal: null, stdout, stderr: '', output: [], ...extra };
+}
 function fixture(t: TestContext, platform = 'darwin') {
   const root = fs.mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-profiles-'));
   const prior = { ...process.env }, descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
   Object.assign(process.env, { HOME: root, USERPROFILE: root, CLAUDE_CONFIG_DIR: '', ANTHROPIC_CONFIG_DIR: '',
     CLAUDE_CODE_MESSAGING_SOCKET: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '' });
   Object.defineProperty(process, 'platform', { value: platform });
+  if (platform === 'darwin' && actualPlatform !== 'darwin') {
+    const spawn = childProcess.spawnSync;
+    t.mock.method(childProcess, 'spawnSync', ((file: unknown, args: string[], options: unknown) =>
+      file === '/bin/ls' ? aclResult(aclMetadata(args)) : (spawn as any)(file, args, options)) as any);
+    syncBuiltinESMExports();
+  }
   const base = join(root, 'Library/Application Support/orca/claude-profiles');
   const defaultDir = join(root, '.claude/sessions');
   t.after(() => {
@@ -434,4 +449,122 @@ for (const priorAlias of [false, true]) test(`final metadata fence catches unsel
     resolved() {}, beforeEffect() { armed = true; }
   } }), refuse('claude_discovery_incomplete'));
   assert.equal(changed, true); socket.untouched(); otherSocket.untouched();
+});
+
+
+for (const representation of ['suffix', 'xattr-plus-entry'] as const) test(`automatic registry rejects extended ACL metadata (${representation}) even when uid/mode are otherwise valid`, { skip: actualPlatform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root), directory = f.directory('a');
+  const path = f.record(directory, process.pid, socket.path, 'forged-valid-shape');
+  const before = fs.statSync(path); assert.equal(before.uid, process.getuid!()); assert.equal(before.mode & 0o022, 0);
+  t.mock.method(childProcess, 'spawnSync', ((_file: unknown, args: string[]) => {
+    assert.equal(_file, '/bin/ls');
+    return aclResult(aclMetadata(args, representation === 'suffix' ? '+' : '@') +
+      (representation === 'xattr-plus-entry' ? ' 0: user:501 allow write\n' : ''));
+  }) as any); syncBuiltinESMExports();
+  const value = found(); assert.ok(value.discovery.claude.errors?.includes('claude_extended_acl'));
+  assert.equal(value.sessions.length, 1, 'readable rows survive explicit incomplete inventory diagnostics');
+  await assert.rejects(send({ to: 'forged-valid-shape', message: 'fixture', dryRun: true }), refuse('claude_discovery_incomplete'));
+  socket.untouched();
+});
+
+for (const failure of ['exit', 'stderr', 'timeout', 'bad-shape', 'missing-record', 'overflow'] as const) test(`automatic ACL inspection ${failure} fails closed without reflecting helper data`, { skip: actualPlatform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root); f.record(f.directory('a'), process.pid, socket.path);
+  t.mock.method(childProcess, 'spawnSync', ((_file: unknown, args: string[]) => {
+    const output = aclMetadata(args);
+    return failure === 'exit' ? aclResult(output, { status: 1 }) :
+      failure === 'stderr' ? aclResult(output, { stderr: 'private-native-detail' }) :
+      failure === 'timeout' ? aclResult(output, { error: Object.assign(new Error('private-native-detail'), { code: 'ETIMEDOUT' }) }) :
+      failure === 'bad-shape' ? aclResult('private-native-detail\n') :
+      failure === 'missing-record' ? aclResult(aclMetadata(args.slice(0, -1))) :
+      aclResult('x'.repeat(CLAUDE_ACL_LIMITS.batchOutput + 1));
+  }) as any); syncBuiltinESMExports();
+  const value = found(); assert.ok(value.discovery.claude.errors?.includes('claude_acl_unavailable'));
+  assert.equal(JSON.stringify(value).includes('private-native-detail'), false);
+  await assert.rejects(send({ to: 'fixture', message: 'fixture', dryRun: true }), refuse('claude_discovery_incomplete'));
+  socket.untouched();
+});
+
+test('ACL metadata helper batches absolute arguments with fixed executable, sanitized environment and finite bounds', { skip: actualPlatform === 'win32' }, t => {
+  const f = fixture(t), directory = f.directory('a');
+  for (let i = 2; i < 260; i++) f.record(directory, i, '', `stale-${i}`);
+  t.mock.method(process, 'kill', () => { throw Object.assign(new Error('fixture absent'), { code: 'ESRCH' }); });
+  let calls = 0, inspected = 0;
+  t.mock.method(childProcess, 'spawnSync', ((file: unknown, args: string[], options: any) => {
+    calls++; assert.equal(file, '/bin/ls'); assert.deepEqual(args.slice(0, 2), ['-ldebn', '--']);
+    assert.ok(args.length - 2 <= CLAUDE_ACL_LIMITS.batchPaths);
+    assert.ok(args.slice(2).every(path => path.startsWith('/')));
+    assert.ok(args.slice(2).reduce((sum, path) => sum + Buffer.byteLength(path) + 1, 0) <= CLAUDE_ACL_LIMITS.argumentBytes);
+    assert.deepEqual(options.env, { PATH: '/usr/bin:/bin', LC_ALL: 'C' });
+    assert.equal(options.maxBuffer, CLAUDE_ACL_LIMITS.batchOutput); assert.equal(options.killSignal, 'SIGKILL');
+    assert.ok(options.timeout > 0 && options.timeout <= CLAUDE_ACL_LIMITS.timeoutMs);
+    inspected += args.length - 2; return aclResult(aclMetadata(args));
+  }) as any); syncBuiltinESMExports();
+  assert.equal(found().discovery.claude.status, 'ok'); assert.equal(calls, 3); assert.equal(inspected, 262);
+});
+
+test('automatic profile names containing escaped ACL-looking newlines do not become helper records', { skip: actualPlatform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root);
+  f.record(f.directory('a\n 0: user:501 allow write\t@+'), process.pid, socket.path);
+  const value = found(); assert.equal(value.discovery.claude.status, 'ok');
+  assert.equal((await send({ to: 'fixture', message: 'fixture', dryRun: true })).submitted, false); socket.untouched();
+});
+
+test('ACL added after the async effect hook is refused at final inspection', { skip: actualPlatform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root); f.record(f.directory('a'), process.pid, socket.path);
+  let acl = false;
+  t.mock.method(childProcess, 'spawnSync', ((_file: unknown, args: string[]) => aclResult(aclMetadata(args, acl ? '+' : ''))) as any);
+  syncBuiltinESMExports();
+  await assert.rejects(send({ to: 'fixture', message: 'fixture', hooks: {
+    resolved() {}, beforeEffect() { acl = true; }
+  } }), refuse('claude_discovery_incomplete'));
+  socket.untouched();
+});
+
+test('final combined ACL inspection is followed by metadata revalidation before connection', { skip: actualPlatform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root), directory = f.directory('a');
+  const path = f.record(directory, process.pid, socket.path);
+  let armed = false, callsAfterHook = 0, changed = false;
+  t.mock.method(childProcess, 'spawnSync', ((_file: unknown, args: string[]) => {
+    // The final select inspects ACLs once, then the combined row fence inspects
+    // once. Simulate a metadata mutation after that helper sampled clear ACLs.
+    if (armed && ++callsAfterHook === 2) {
+      fs.utimesSync(path, new Date(), new Date(Date.now() + 2000)); changed = true;
+    }
+    return aclResult(aclMetadata(args));
+  }) as any); syncBuiltinESMExports();
+  await assert.rejects(send({ to: 'fixture', message: 'fixture', hooks: {
+    resolved() {}, beforeEffect() { armed = true; }
+  } }), refuse('claude_discovery_incomplete'));
+  assert.equal(changed, true); assert.equal(callsAfterHook, 2, 'one combined ACL check, no recursive inspection');
+  socket.untouched();
+});
+
+test('legacy explicit/default-only discovery performs no ACL helper execution', { skip: actualPlatform === 'win32' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root); f.record(f.directory(), process.pid, socket.path);
+  t.mock.method(childProcess, 'spawnSync', () => { throw new Error('legacy discovery must not inspect ACLs'); }); syncBuiltinESMExports();
+  assert.equal(found().discovery.claude.status, 'ok');
+  assert.equal((await send({ to: 'fixture', message: 'fixture', dryRun: true })).submitted, false);
+  socket.untouched();
+});
+
+test('native macOS owner-only ACL on a private task fixture is conservatively rejected', { skip: actualPlatform !== 'darwin' }, async t => {
+  const f = fixture(t), socket = await inbox(t, f.root), directory = f.directory('a');
+  const file = f.record(directory, process.pid, socket.path), uid = fs.statSync(file).uid, mode = fs.statSync(file).mode;
+  for (const path of [file, directory]) {
+    const added = childProcess.spawnSync('/bin/chmod', ['+a', `user:${userInfo().username} allow write`, path],
+      { encoding: 'utf8', timeout: 3000, maxBuffer: 4096 });
+    if (added.status !== 0 && /Operation not supported|Not supported/i.test(added.stderr ?? '')) {
+      t.skip('temporary filesystem does not support fixture ACLs'); return;
+    }
+    assert.equal(added.status, 0, 'fixture ACL setup must succeed');
+    try {
+      if (path === file) { assert.equal(fs.statSync(file).uid, uid); assert.equal(fs.statSync(file).mode, mode); }
+      const value = found(); assert.ok(value.discovery.claude.errors?.includes('claude_extended_acl'));
+      await assert.rejects(send({ to: 'fixture', message: 'fixture', dryRun: true }), refuse('claude_discovery_incomplete'));
+    } finally {
+      const removed = childProcess.spawnSync('/bin/chmod', ['-N', path], { encoding: 'utf8', timeout: 3000, maxBuffer: 4096 });
+      assert.equal(removed.status, 0, 'remove only the fixture ACL added by this test');
+    }
+  }
+  assert.equal(found().discovery.claude.status, 'ok'); socket.untouched();
 });

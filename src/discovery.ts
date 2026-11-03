@@ -2,6 +2,7 @@
 // Windows Claude metadata uses native process inspection.
 import { closeSync, constants, fstatSync, lstatSync, openSync, opendirSync, readlinkSync, readSync, readdirSync, realpathSync, statSync, type Stats } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { windowsProcessStart } from './windows.js';
@@ -44,9 +45,60 @@ type ClaudeProof = { directory: string; canonical: string; chain: DirectoryProof
 const claudeProofs = new WeakMap<Row, ClaudeProof>();
 type InventoryProof = { path: string; direct: boolean; identity: string | null };
 const claudeInventories = new WeakMap<Row, readonly InventoryProof[]>();
+const claudeAclPaths = new WeakMap<Row, readonly string[]>();
+export const CLAUDE_ACL_LIMITS = Object.freeze({ paths: 1 + 3 * CLAUDE_PROFILE_LIMIT + CLAUDE_ENTRY_LIMIT,
+  batchPaths: 128, argumentBytes: 32768, batchOutput: 262144, totalOutput: 8388608, batches: 128, timeoutMs: 5000 });
 const nodeIdentity = (s: Stats) => [s.dev, s.ino, s.uid, s.mode].join(':');
 const privateNode = (s: Stats) => typeof process.getuid === 'function' && s.uid === process.getuid() && (s.mode & 0o022) === 0;
 const recordIdentity = (s: Stats) => [nodeIdentity(s), s.size, s.mtimeMs, s.ctimeMs, s.birthtimeMs].join(':');
+// Node exposes POSIX mode bits, not macOS extended ACLs. Conservatively reject
+// ANY extended ACL on automatic registries, including owner-only ACLs. The
+// trusted system metadata helper receives only absolute paths and a minimal C
+// locale environment; no shell, PATH lookup, agent binary or filename parsing.
+// -b escapes embedded newlines and -n avoids account-name lookups. ACL entries
+// must also be rejected when an xattr '@' masks the '+' permission suffix.
+function inspectClaudeAcls(input: readonly string[]): 'clear' | 'acl' | 'unknown' {
+  const paths = [...new Set(input)];
+  if (!paths.length) return 'clear';
+  if (process.platform !== 'darwin' || paths.length > CLAUDE_ACL_LIMITS.paths) return 'unknown';
+  const batches: string[][] = []; let batch: string[] = [], bytes = 0;
+  for (const path of paths) {
+    const size = Buffer.byteLength(path, 'utf8') + 1;
+    if (!isAbsolute(path) || path.includes('\0') || size > CLAUDE_ACL_LIMITS.argumentBytes) return 'unknown';
+    if (batch.length && (batch.length >= CLAUDE_ACL_LIMITS.batchPaths || bytes + size > CLAUDE_ACL_LIMITS.argumentBytes)) {
+      batches.push(batch); batch = []; bytes = 0;
+    }
+    batch.push(path); bytes += size;
+  }
+  if (batch.length) batches.push(batch);
+  if (batches.length > CLAUDE_ACL_LIMITS.batches) return 'unknown';
+  const cutoff = performance.now() + CLAUDE_ACL_LIMITS.timeoutMs; let output = 0;
+  for (const entries of batches) {
+    const remaining = Math.floor(cutoff - performance.now());
+    if (remaining < 1) return 'unknown';
+    let done: ReturnType<typeof spawnSync>;
+    try {
+      done = spawnSync('/bin/ls', ['-ldebn', '--', ...entries], { encoding: 'utf8',
+        env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeout: remaining,
+        maxBuffer: CLAUDE_ACL_LIMITS.batchOutput, killSignal: 'SIGKILL' });
+    } catch { return 'unknown'; }
+    if (done.error || done.status !== 0 || done.signal || typeof done.stdout !== 'string' ||
+        typeof done.stderr !== 'string' || done.stderr.length || performance.now() >= cutoff) return 'unknown';
+    const size = Buffer.byteLength(done.stdout, 'utf8'); output += size;
+    if (size > CLAUDE_ACL_LIMITS.batchOutput || output > CLAUDE_ACL_LIMITS.totalOutput) return 'unknown';
+    const lines = done.stdout.split('\n'); if (lines.at(-1) === '') lines.pop();
+    let records = 0;
+    for (const line of lines) {
+      if (/^\s+\d+:/.test(line)) return 'acl';
+      const mode = /^[-dlcbps][rwxstST-]{9}([+@]?)\s/.exec(line);
+      if (!mode) return 'unknown';
+      if (mode[1] === '+') return 'acl';
+      records++;
+    }
+    if (records !== entries.length) return 'unknown';
+  }
+  return 'clear';
+}
 function safeDirectory(path: string, sameUser: boolean, direct = true): DirectoryProof {
   const node = direct ? lstatSync(path) : statSync(path);
   if (!node.isDirectory() || (sameUser && !privateNode(node))) throw new Error('unsafe_directory');
@@ -135,6 +187,7 @@ export function claudeInventory(): ClaudeInventory {
   // absence) fenced until the WHOLE inventory is complete. Later reads can
   // mutate an earlier source without changing a directory entry.
   const scanEvidence: InventoryProof[] = [];
+  const aclPaths = new Set<string>();
   function observeMetadata(path: string, direct = true): void {
     let identity: string | null;
     try { identity = recordIdentity(direct ? lstatSync(path) : statSync(path)); }
@@ -143,7 +196,9 @@ export function claudeInventory(): ClaudeInventory {
   }
   function observeDirectory(path: string, sameUser: boolean, direct = true): DirectoryProof {
     observeMetadata(path, direct);
-    return safeDirectory(path, sameUser, direct);
+    const proof = safeDirectory(path, sameUser, direct);
+    if (sameUser) aclPaths.add(path);
+    return proof;
   }
   function failure(code: string, error?: unknown) {
     if (!errors.includes(code)) errors.push(code);
@@ -210,6 +265,7 @@ export function claudeInventory(): ClaudeInventory {
           // fenced: an in-place edit can introduce a competing identity without
           // changing its directory's metadata. Never reread bodies in the fence.
           observeMetadata(path);
+          if (privateRecord) aclPaths.add(path);
           read = claudeRecord(path, privateRecord);
         }
         catch (error) {
@@ -253,6 +309,8 @@ export function claudeInventory(): ClaudeInventory {
           recordIdentity(statSync(directory)) !== before) failure('sessions_directory_changed');
     } catch (error) { failure('sessions_directory_unavailable', error); }
   }
+  const aclStatus = inspectClaudeAcls([...aclPaths]);
+  if (aclStatus !== 'clear') failure(aclStatus === 'acl' ? 'claude_extended_acl' : 'claude_acl_unavailable');
   for (const observed of scanEvidence) {
     let current: string | null;
     try { current = recordIdentity(observed.direct ? lstatSync(observed.path) : statSync(observed.path)); }
@@ -263,7 +321,10 @@ export function claudeInventory(): ClaudeInventory {
     if (current !== observed.identity) failure('claude_inventory_changed');
   }
   const frozenEvidence = Object.freeze(scanEvidence.map(item => Object.freeze({ ...item })));
-  for (const row of inventory.sessions) claudeInventories.set(row, frozenEvidence);
+  const frozenAclPaths = Object.freeze([...aclPaths]);
+  for (const row of inventory.sessions) {
+    claudeInventories.set(row, frozenEvidence); claudeAclPaths.set(row, frozenAclPaths);
+  }
   // Exact registry aliases are scanned once. Divergent live PID, inbox-string or
   // underlying socket claims are conflicts, independent of directory order.
   const byPid = new Map<number, Row[]>(), bySocket = new Map<string, Row[]>(), byEndpoint = new Map<string, Row[]>();
@@ -289,18 +350,31 @@ export function claudeInventory(): ClaudeInventory {
 // Metadata-only final fence: identity validation above/below can itself read
 // registry files. Call this AFTER those reads, without recursively rediscovering
 // or reading another record and opening another unfenced inventory window.
-export function revalidateClaudeInventory(row: Row): void {
-  const evidence = claudeInventories.get(row);
-  if (!evidence) throw new Refusal('claude_discovery_incomplete', 1);
-  for (const observed of evidence) {
-    let current: string | null;
-    try { current = recordIdentity(observed.direct ? lstatSync(observed.path) : statSync(observed.path)); }
-    catch (error) {
-      if (!missing(error)) throw new Refusal('claude_discovery_incomplete', 1);
-      current = null;
-    }
-    if (current !== observed.identity) throw new Refusal('claude_discovery_incomplete', 1);
+export function revalidateClaudeInventory(row: Row, other?: Row): void {
+  const rows = other ? [row, other] : [row];
+  const evidence: InventoryProof[] = [], paths = new Set<string>();
+  for (const selected of rows) {
+    const metadata = claudeInventories.get(selected), acls = claudeAclPaths.get(selected);
+    if (!metadata || !acls) throw new Refusal('claude_discovery_incomplete', 1);
+    evidence.push(...metadata); for (const path of acls) paths.add(path);
   }
+  const metadataUnchanged = () => {
+    for (const observed of evidence) {
+      let current: string | null;
+      try { current = recordIdentity(observed.direct ? lstatSync(observed.path) : statSync(observed.path)); }
+      catch (error) {
+        if (!missing(error)) throw new Refusal('claude_discovery_incomplete', 1);
+        current = null;
+      }
+      if (current !== observed.identity) throw new Refusal('claude_discovery_incomplete', 1);
+    }
+  };
+  // An ACL/path mutation while the synchronous helper is running must not be
+  // accepted from an earlier clear result. These remain observational checks,
+  // not an atomic filesystem snapshot or a universal kernel-I/O deadline.
+  metadataUnchanged();
+  if (inspectClaudeAcls([...paths]) !== 'clear') throw new Refusal('claude_discovery_incomplete', 1);
+  metadataUnchanged();
 }
 export function claudeSelectionIdentity(row: Row): string {
   const proof = claudeProofs.get(row);

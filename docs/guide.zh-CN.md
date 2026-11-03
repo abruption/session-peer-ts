@@ -83,7 +83,7 @@ Unicode 14.0.0 默认 full casefold 精确匹配，不进行规范化或模糊�
 
 ### macOS 上的 Claude 配置档案
 
-如果 `CLAUDE_CONFIG_DIR` 和 `ANTHROPIC_CONFIG_DIR` 都没有非空值，Claude 探索除 `~/.claude/sessions` 外，还会检查 `~/Library/Application Support/orca/claude-profiles` 下各直接子档案的 `home/sessions`。显式设置环境变量时只使用指定的会话登记目录。Linux 和 Windows 不会扫描这一 macOS 路径。配置档案数和登记项数均有上限。自动发现的配置档案目录和登记文件必须归当前用户所有，且其他用户或用户组不可写入；不满足安全条件的来源会使探索被标记为不完整。
+如果 `CLAUDE_CONFIG_DIR` 和 `ANTHROPIC_CONFIG_DIR` 都没有非空值，Claude 探索除 `~/.claude/sessions` 外，还会检查 `~/Library/Application Support/orca/claude-profiles` 下各直接子档案的 `home/sessions`。显式设置环境变量时只使用指定的会话登记目录。Linux 和 Windows 不会扫描这一 macOS 路径。配置档案数和登记项数均有上限。自动发现的配置档案目录和登记文件必须归当前用户所有，且其他用户或用户组不可写入；不满足安全条件的来源会使探索被标记为不完整。对 macOS 自动探索来源的扩展 ACL（额外访问权限）一律保守拒绝，包括仅指定所有者的 ACL。检查使用受限的系统元数据工具，不执行代理。
 
 其他探索来源出错时，已读取的会话仍保留在列表中，同时返回探索不完整的诊断信息和失败退出码。发送和发件人识别要求信息完整且无冲突。指向同一实际登记目录的别名可以合并为一行；PID 或收件端点信息冲突时，不会按目录顺序或指定 PID 来决定目标。选择和 handoff 连续性检查保留原始登记信息的依据，并在提交前重新检查。列表和 dry-run 不连接收件端点。这些检查不证明 native 代次、消息消费或收讫确认 ACK。
 
