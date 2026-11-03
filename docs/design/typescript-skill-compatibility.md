@@ -2,6 +2,35 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## 0.6.0 finite row — 2026-11-03 KST release preparation
+
+The 0.6.0 source preparation adds one explicit runtime row accepting exactly the
+four existing profiles: skill 0.1.0, 0.2.0, 0.2.1 and 0.3.0, with their existing
+metadata values. Compiled default, explicit `undefined`, explicit 0.6.0 and outer
+`inspectSkill` use this finite row. Matching metadata returns exactly
+`compatible / skill_contract_compatible / metadata_only`; changed profiles and
+unreviewed stable runtime identities such as 0.5.3, 0.6.1 and 0.7.0 remain
+incompatible. Malformed identities, including 0.6.0-preview.1 and 00.6.0, remain
+`unknown / skill_metadata_missing` with the `verification` property absent.
+All historical matrix rows, exact profile values, grammar and bounded reader
+behavior remain unchanged.
+
+The installation guidance retains independently published skill 0.2.1 source
+`0f494cabd05901c03161dc91792dcf89f8e96631`, 13,996 raw UTF-8 bytes, SHA-256
+`8c3520f95e0d6807303be96bfa06df69887ddaf76be05f1905505d0a956820c3`.
+This row neither publishes a new skill nor changes its installation pin, body,
+minimum/full metadata or permissions. In particular it does not establish that
+an older skill documents new runtime receipt operations. Optional operations
+still require the selected runtime's help, platform and separately validated
+route. Metadata compatibility is not content authentication, authorization,
+recipient identity, delivery or ACK evidence.
+
+This section records source preparation only, not publication or completed
+receipt/native qualification. The dated 0.5.2 checkpoint below retains that
+historical validator's rejection of then-unreviewed 0.6.0; supplying 0.6.0 to the
+new helper is not execution of the old published 0.5.2 validator. No historical
+artifact or immutable complete-skill fixture is rewritten.
+
 ## 0.5.2 finite row — 2026-10-30 KST release preparation
 
 The 0.5.2 source explicitly accepts exactly the four profiles accepted by public
