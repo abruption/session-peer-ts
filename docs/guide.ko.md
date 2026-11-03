@@ -132,6 +132,26 @@ Claude 이름은 Unicode 14.0.0의 기본 완전 대소문자 접기(full casefo
 
 다른 탐색 경로에서 오류가 나더라도 읽은 세션은 목록에 남기고, 탐색이 불완전하다는 진단과 실패 종료 코드를 반환합니다. 전송과 발신자 식별에는 완전하고 충돌 없는 근거가 필요합니다. 같은 실제 등록 디렉터리를 가리키는 별칭은 한 행으로 합칠 수 있지만, PID나 받은 메시지함 정보가 충돌하면 디렉터리 순서나 PID 지정으로 대상을 결정하지 않습니다. 선택과 handoff 연속성 검사는 원래 등록 정보의 근거를 유지하고 제출 직전에 다시 확인합니다. 목록과 dry-run은 받은 메시지함에 연결하지 않습니다. 이 검사가 native 세대, 메시지 소비 또는 수령 확인 ACK를 증명하지는 않습니다.
 
+### 명시적 로컬 수령 확인
+
+수령 확인 receipt는 일반 posted/queued 전송 근거와 별개입니다. 소유자가 비공개 상태를 직접 초기화하고, 터미널에서 실행 상태를 유지하는 수집기를 직접 시작합니다. 서비스 등록이나 자동 시작은 하지 않습니다. 다음 명령의 `serve`는 사용자가 중지할 때까지 종료되지 않습니다.
+
+```sh
+session-peer receipt init --state-dir "$HOME/.session-peer-receipts" --json
+session-peer receipt serve --state-dir "$HOME/.session-peer-receipts" --json
+```
+
+다른 터미널에서 수령 확인 권한 위임을 명시적으로 요청합니다. 수신자는 비공개 표준 입력으로 receipt 전용 처리기를 별도로 호출해야 합니다. 아래 두 번째 명령이 스스로 receipt를 가져오지는 않습니다. 권한 토큰을 셸 명령문·인자·환경변수·URI·공개 출력·발신자 또는 수집기 파일에 넣지 않고 비공개 stdin/FD로 전달할 수 있는 도구만 사용하세요. 허용된 수신자의 native 큐·대화 기록에는 토큰이 남을 수 있습니다.
+
+```sh
+session-peer send --to claude:NAME --message "Receipt fixture" --request-ack --receipt-collector "$HOME/.session-peer-receipts/s" --wait-for acknowledged --wait-timeout 30 --json
+session-peer receipt respond --collector "$HOME/.session-peer-receipts/s" --receipt - --json
+```
+
+검증 결과의 `token_possession`은 위임받은 토큰의 소지만 증명하며, 모델 신원·메시지 소비·작업 완료를 증명하지 않습니다. Claude는 native 세대를 알 수 없는 별도의 v2 위임 receipt context를 사용합니다. Codex는 원래 세대에 결합한 v1을 유지하고, 비공개 stdin을 사용하는 검증된 owned RPC 경로만 허용합니다. 토큰을 native `--message` 인자로 넘기는 대체 경로는 없습니다. 기존 수동 `operator_confirmed` 근거와도 다릅니다.
+
+수집기는 같은 기기의 소유자 전용 경로만 사용합니다. 보존 용량 제한이 함께 적용되어 작은 기록 약 511개부터 새 수령 확인 요청이 거부될 수 있으며, 자동 정리·초기화로 이력을 버리지 않습니다. 역방향 SSH 수집기와 Windows managed 저장소는 미지원입니다. 각 명시적 대기는 자신의 마감 시각을 유지합니다. status/wait는 비공개 상태 분류를 기록할 수 있지만 native 메시지를 다시 제출하지 않습니다. 결과를 알 수 없다고 자동 재전송하지 않습니다. 기존 native·플랫폼 검증 범위는 그대로이며, fixture 성공이 실제 에이전트 receipt 검증을 뜻하지는 않습니다.
+
 ## 요구사항
 
 macOS, Linux 또는 Windows와 **Node 22.x의 22.13 이상 또는 24.x**가 필요합니다.

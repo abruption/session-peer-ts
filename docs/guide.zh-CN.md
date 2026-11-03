@@ -87,6 +87,26 @@ Unicode 14.0.0 默认 full casefold 精确匹配，不进行规范化或模糊�
 
 其他探索来源出错时，已读取的会话仍保留在列表中，同时返回探索不完整的诊断信息和失败退出码。发送和发件人识别要求信息完整且无冲突。指向同一实际登记目录的别名可以合并为一行；PID 或收件端点信息冲突时，不会按目录顺序或指定 PID 来决定目标。选择和 handoff 连续性检查保留原始登记信息的依据，并在提交前重新检查。列表和 dry-run 不连接收件端点。这些检查不证明 native 代次、消息消费或收讫确认 ACK。
 
+### 显式本地收讫确认
+
+receipt 与通常的 posted/queued 提交依据分开。所有者显式初始化私有状态，并手动启动前台 collector；不会注册服务或自动启动。以下 `serve` 会持续运行，直到所有者将其停止。
+
+```sh
+session-peer receipt init --state-dir "$HOME/.session-peer-receipts" --json
+session-peer receipt serve --state-dir "$HOME/.session-peer-receipts" --json
+```
+
+在另一个终端中显式请求委托 receipt 权限。接收方必须通过私有 stdin 单独调用 receipt 专用 handler。下面第二个命令不会自行获取 receipt。只能使用能够通过私有 stdin/FD 传输令牌的 producer，不得把令牌放入 shell 命令文本、参数、环境变量、URI、公开输出或发送方/collector 的文件中。获准接收方的 native 队列和历史记录可能保留令牌。
+
+```sh
+session-peer send --to claude:NAME --message "Receipt fixture" --request-ack --receipt-collector "$HOME/.session-peer-receipts/s" --wait-for acknowledged --wait-timeout 30 --json
+session-peer receipt respond --collector "$HOME/.session-peer-receipts/s" --receipt - --json
+```
+
+`token_possession` 仅证明持有获委托的令牌，不证明模型身份、消息消费或任务完成。Claude 使用单独的 v2 delegated receipt context，native 代次仍未知。Codex 保持绑定原始代次的 v1，仅允许使用私有 stdin 的已验证 owned RPC 路径；不会退回到把令牌放入 native `--message` 参数的路径。它也不同于现有的手动 `operator_confirmed` 依据。
+
+collector 仅限同一设备上的所有者私有路径。保留容量的限制共同生效，小记录约 511 条时就可能拒绝新的收讫确认请求；不会通过自动清理或重置丢弃历史记录。反向 SSH collector 和 Windows managed storage 仍不支持。每次显式 wait 保留自己的截止时间。status/wait 可以记录私有状态分类，但不重新提交 native 消息。未知结果不会触发自动重发。现有 native/平台验证范围保持不变；fixture 成功不代表已验证真实代理的 receipt。
+
 ## 环境要求
 
 macOS、Linux 或 Windows native；Node **22.x 中的 22.13 及以上，或 24.x**。不支持 Node 26。原生锁依赖需要匹配的 x64/arm64 预编译二进制，本包不是纯 JavaScript 实现。Codex 发送需要 `codex`，macOS/Linux 还需要 `lsof`、`ps`；Windows 使用原生锁和 Restart Manager 验证所有者。Claude 需要运行中的 TUI 及可访问的原生 inbox。SSH 使用已有密钥和主机信任，远端必须安装**同版本**客户端。

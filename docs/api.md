@@ -407,3 +407,28 @@ voluntary receipt producer/authenticated collector bootstrap [#132](https://gith
 are future extensions. An automatic collector would still require an explicit
 receiver receipt; it must never infer ACK from messages or turn completion.
 Unsupported required goals refuse before effect; no post-attempt fallback or resend.
+
+## Explicit local receipt bootstrap (source implementation)
+
+The `receipt` owner commands and `send --receipt-collector SOCKET` select a local, manually operated receipt route. They do not start services, discover alternate collectors, wake a session, answer an approval or resend a native message. Read the [operator guide](guide.md#explicit-local-receipts) before supplying private receipt input.
+
+- `receipt init` creates a fresh managed format-2 store. Existing unmanaged format-1 history is not migrated or adopted. New legacy owner commands refuse a managed context; managed status and waits require the live collector.
+- `receipt serve` is a foreground process with a single mutation and monotonic-clock owner. A second owner refuses. Unexpected state/key/endpoint replacement is not repaired. Cleanup may be unconfirmed; that does not authorize removal of an unrelated path.
+- `receipt respond --receipt -` accepts only a bounded private receipt frame on stdin, through the explicitly selected private endpoint. A successful invocation records authenticated receipt evidence only; it cannot send a message. Never put capability data in argv, environment, URI, shell command text or public output.
+- The generic CLI envelope stays `schemaVersion:1`. Codex's nested handoff/receipt stays v1 with the original non-null native generation. Claude uses a separate nested handoff/receipt v2 with `targetGeneration:null` and `receiptContext:{kind:"delegated_context",id:UUID}`. A v1 validator must reject that new scope rather than synthesizing a generation or downgrading it.
+- `token_possession` means delegated receipt authority, not native/model identity, consumption, completion or responsibility acceptance. Existing `operator_confirmed` evidence remains a separate manual assurance. The intended recipient's native queue/history may retain delegated authority.
+- Codex delegation uses only the qualified owned RPC route with private stdin. A token-bearing body is never passed through a native `--message` argument or a legacy queue fallback. Unsupported required ACK refuses before effect. Best-effort unsupported bootstrap can retain ordinary submission facts without minting an unused token.
+- The original ACK operation is opened before the effect fence and uses the original total budget. A fast authenticated receipt can occupy one reserved candidate slot until positive native submission is recorded. Unknown/refused outcomes cannot be promoted by that receipt. ACK eligibility is classified through the collector's serialized transition; it never backdates an ACK or rewrites a terminal timeout.
+- Each independent wait has its own immutable operation ID/deadline. Polling does not open another wait, extend authority or submit native input. A fresh collector cannot revive unused old-clock authority. Committed receipts and terminal waits are retained.
+
+IPC is separately versioned and limited to the closed receipt operations described in the [reviewed design](https://github.com/abruption/session-peer-ts/blob/d922d6e20345f10b914ee9cf4da40476fd044f5d/docs/design/receipt-bootstrap.md). Request/response frames are at most 16,384 bytes including LF; each raw private receipt is at most 4,096 bytes. The collector admits at most 16 live connections, with finite per-read/write and total exchange budgets. Unknown post-attempt responses never authorize automatic retry. These bounds do not promise a deadline for arbitrary kernel-blocked filesystem I/O or protect against a hostile same-user writer.
+
+Windows managed storage and reverse-SSH receipt collection remain unsupported. Existing native observation qualification remains unchanged. OS/IPC fixtures, synthetic native transports and actual live-agent receipts are separate evidence categories; this source description is not a release or live-model qualification claim.
+
+### Original-budget IPC 2 and retained-context limits
+
+Private IPC 2 `hello.clockReferenceMs` is an opaque collector monotonic reference. A client captures its remaining total milliseconds after that reply and echoes the fixed reference/span in `wait-open`; the actor anchors the original cutoff to the earlier reference. Network, preparation and mint latency cannot start a renewed wait budget. This does not depend on clocks sharing an origin or on UTC comparisons. Public CLI/receipt/handoff version namespaces are unchanged by the private IPC revision.
+
+Explicit revoke/quarantine rejects further receipt presentations, including duplicates, while owner status retains committed ACK evidence. TTL expiry alone does not erase the authenticated identical-receipt retrieval exception. A late flag refers to the first recorded wait; a later wait cannot renew it. Context limits apply jointly: the current conservative 64-KiB retained reservation can fill a 32-MiB store at about 511 small intents before the separate 10,000-record upper bound. There is no automatic retirement or deletion. A full-store refusal never authorizes dropping history or resending.
+
+Before a managed intent is established, bootstrap refusal can have no handoff IDs; the client does not fabricate an epoch/correlation/operation for unavailable storage. Once an operation is established, its original verified IDs/deadline and independently known native facts are preserved on later failures without inventing a durable terminal result.
