@@ -16,7 +16,7 @@ const qualified = {skip:process.platform === 'win32'};
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const tempRoot = process.env.TASK_TEMP ?? tmpdir();
 function fixture(t: TestContext, clock?: {monotonic():number;utc():number}) {
-  const root = fs.mkdtempSync(join(tempRoot,'codex-send-')); fs.chmodSync(root,0o700);
+  const root = fs.realpathSync(fs.mkdtempSync(join(tempRoot,'codex-send-'))); fs.chmodSync(root,0o700);
   const registry = join(root,'sessions'); fs.mkdirSync(registry,{mode:0o700});
   const record = join(registry,'123.json'); fs.writeFileSync(record,'{}',{mode:0o600});
   const s = fs.lstatSync(record), identity = [s.dev,s.ino,s.uid,s.mode,s.size,s.mtimeMs,s.ctimeMs,s.birthtimeMs].join(':');
@@ -129,6 +129,13 @@ test('SIGINT stops only original pending wait once without native cancellation o
   const result=await managedReceiptSend(options,{collector:f.socket,waitFor:'acknowledged',seconds:10},f.deps);
   assert.equal(result.exitCode,130);assert.equal(f.effects,1);assert.equal(f.order.filter(op=>op==='wait-stop').length,1);
   assert.equal((result.value.handoff as {wait:{status:string}}).wait.status,'stopped');
+});
+test('SIGINT observed while the fence reply is pending refuses before native input',qualified,async t=>{
+  const f=fixture(t);f.fault((op,response)=>{if(op==='fence')process.emit('SIGINT');return response;});
+  const result=await managedReceiptSend(options,{collector:f.socket,waitFor:'acknowledged',seconds:10},f.deps);
+  assert.equal(f.effects,0);assert.equal(result.value.submitted,false);assert.equal(result.exitCode,130);
+  assert.equal((result.value.handoff as {wait:{status:string}}).wait.status,'stopped');
+  assert.equal(f.order.filter(op=>op==='wait-stop').length,1);
 });
 test('a terminal timeout observed with SIGINT remains timeout exit 1 rather than a new stopped outcome',qualified,async t=>{
   const f=fixture(t);f.fault((op,response)=>{

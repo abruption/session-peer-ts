@@ -122,6 +122,12 @@ function exercise(scenario: string): void {
   const root = fs.realpathSync(fs.mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(),'codex-producer-')));
   fs.chmodSync(root,0o700);
   try {
+    // setup-node tool-cache ownership/mode can differ from a supported private
+    // installation. Normalize only our fresh fixture binary, never the host.
+    let node=process.execPath;const native=fs.statSync(fs.realpathSync(node));
+    if(![0,process.getuid?.()].includes(native.uid)||(native.mode&0o022)!==0){
+      node=join(root,'node');fs.copyFileSync(process.execPath,node);fs.chmodSync(node,0o700);
+    }
     const directory = join(root,'installation'); fs.mkdirSync(directory,{mode:0o700});
     fs.writeFileSync(join(root,'package.json'),'{"type":"module"}\n',{mode:0o600});
     for (const name of bundle) {
@@ -133,7 +139,7 @@ function exercise(scenario: string): void {
     }
     // Real CLI imports smol-toml; link only this existing dependency installation.
     fs.symlinkSync(fs.realpathSync(join(project,'node_modules')),join(root,'node_modules'),'junction');
-    const child = spawnSync(process.execPath,['--input-type=module','--eval',worker,directory,scenario],{
+    const child = spawnSync(node,['--input-type=module','--eval',worker,directory,scenario],{
       encoding:'utf8',timeout:15000,maxBuffer:64*1024,
       env:{PATH:'/usr/bin:/bin',LANG:'C',LC_ALL:'C',SESSION_PEER_TAILSCALE:'off'}
     });

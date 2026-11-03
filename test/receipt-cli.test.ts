@@ -10,18 +10,38 @@ import { spawn } from 'node:child_process';
 import { ReceiptState } from '../dist/receipt-state.js';
 import { startReceiptCollector, receiptExchange } from '../dist/receipt-collector.js';
 import { renderOutput } from '../dist/output.js';
+import { postSocket } from '../dist/send.js';
+import { Refusal } from '../dist/discovery.js';
 
 const posix = { skip: process.platform === 'win32' }, cli = resolve('dist/cli.js');
-function fixture(t: TestContext) {
+function fixture(t: TestContext, producerFixture=false) {
   const root = fs.realpathSync(fs.mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-rc-'))); fs.chmodSync(root, 0o700);
   const config = join(root, 'claude'), sessions = join(config, 'sessions'); fs.mkdirSync(sessions, { recursive: true, mode: 0o700 });
+  let node=process.execPath;const native=fs.statSync(fs.realpathSync(node));
+  if(producerFixture&&(![0,process.getuid?.()].includes(native.uid)||(native.mode&0o022)!==0)){
+    node=join(root,'node');fs.copyFileSync(process.execPath,node);fs.chmodSync(node,0o700);
+  }
+  let entry=cli;
+  if(producerFixture){
+    // Model an explicit private installation, not the CI checkout's umask.
+    const installation=join(root,'installation');fs.mkdirSync(installation,{mode:0o700});
+    const directory=fs.opendirSync(resolve('dist'));let count=0;
+    try{for(;;){const item=directory.readSync();if(!item)break;assert.ok(++count<=128);
+      if(!item.name.endsWith('.js'))continue;
+      const from=resolve('dist',item.name),stat=fs.lstatSync(from);assert.ok(stat.isFile()&&!stat.isSymbolicLink()&&stat.size<=4*1024*1024);
+      const to=join(installation,item.name);fs.copyFileSync(from,to);fs.chmodSync(to,0o600);
+    }}finally{directory.closeSync();}
+    fs.writeFileSync(join(root,'package.json'),'{"type":"module"}',{mode:0o600});
+    fs.symlinkSync(fs.realpathSync(resolve('node_modules')),join(root,'node_modules'),'junction');
+    entry=join(installation,'cli.js');
+  }
   const env = { ...process.env, HOME: root, USERPROFILE: root, CLAUDE_CONFIG_DIR: config, ANTHROPIC_CONFIG_DIR: '',
     CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_CODEX_HOMES: '[]',
     SESSION_PEER_HANDOFF_HOME: join(root, 'unused-legacy'), SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_NO_UPDATE_NOTICE: '1', NODE_OPTIONS: '' };
   const closers: (() => void | Promise<void>)[] = [];
   t.after(async () => { for (const close of closers.reverse()) await close(); fs.rmSync(root, { recursive: true, force: true }); });
   function invoke(args: string[], input?: string) {
-    const child = spawn(process.execPath, [cli, ...args], { env, cwd: root, stdio: ['pipe','pipe','pipe'] });
+    const child = spawn(node, [entry, ...args], { env, cwd: root, stdio: ['pipe','pipe','pipe'] });
     let stdout = '', stderr = '', size = 0;
     const timer = setTimeout(() => child.kill('SIGKILL'), 40000);
     child.stdout.on('data', chunk => { size += chunk.length; if (size > 1048576) child.kill('SIGKILL'); else stdout += chunk; });
@@ -36,7 +56,7 @@ function fixture(t: TestContext) {
 }
 const opts = (t: string) => ['send','--to',t,'--message','original receipt fixture','--no-from','--no-reply-to','--json'];
 test('real CLI sends one private delegation and accepts a handler receipt before native submission returns', posix, async t => {
-  const f = fixture(t), state = join(f.root,'state'), collectorPath = join(state,'s'), inbox = join(f.root,'i');
+  const f = fixture(t,true), state = join(f.root,'state'), collectorPath = join(state,'s'), inbox = join(f.root,'i');
   ReceiptState.initialize(state, collectorPath); const collector = await startReceiptCollector(state,collectorPath);
   let count = 0, delegated: any, handler: any;
   const server = createServer({allowHalfOpen:true}, socket => {
@@ -120,6 +140,13 @@ test('private CLI input timeout is bounded without reflecting unfinished receipt
   const timer=setTimeout(()=>child.kill('SIGKILL'),8000);const[code,signal]=await once(child,'close');clearTimeout(timer);
   assert.equal(signal,null);assert.notEqual(code,0);assert.equal(output.includes('PRIVATE_STDIN_SENTINEL'),false);
   assert.equal(JSON.parse(output).ok,false);
+});
+test('the actual socket write boundary honors a late guard without writing recipient input',posix,async t=>{
+  const f=fixture(t),path=join(f.root,'i');let bytes=0,guards=0;
+  const server=createServer(socket=>{socket.on('data',part=>{bytes+=part.length;});socket.on('end',()=>socket.end());});
+  server.listen(path);await once(server,'listening');f.cleanup(()=>new Promise<void>(ok=>server.close(()=>ok())));
+  await assert.rejects(postSocket(path,'PRIVATE_INPUT_NOT_WRITTEN',1000,()=>{guards++;throw new Refusal('stopped_by_operator',130);}),{code:'stopped_by_operator'});
+  await new Promise<void>(ok=>setImmediate(ok));assert.equal(guards,1);assert.equal(bytes,0);
 });
 test('delegated text output does not call receipt evidence native identity or model consumption',()=>{
   const text=renderOutput({command:'send',ok:true,status:'posted',submitted:true,handoff:{schemaVersion:2,correlationId:'fixture',state:'acknowledged',ack:{status:'acknowledged',assurance:'token_possession'}}},'text');
