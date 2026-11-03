@@ -1,4 +1,41 @@
-# Validation record — updated 2026-10-30 KST
+# Validation record — updated 2026-11-03 KST
+
+## 0.6.0 preparation scope — 2026-11-03 KST
+
+The candidate tracks [#175](https://github.com/abruption/session-peer-ts/issues/175)
+and combines merged Orca Claude profile discovery
+([#165](https://github.com/abruption/session-peer-ts/issues/165),
+[#173](https://github.com/abruption/session-peer-ts/pull/173)) with
+[#176](https://github.com/abruption/session-peer-ts/pull/176)'s staged local
+receipt implementation for [#132](https://github.com/abruption/session-peer-ts/issues/132).
+The final integrated source, current-head test/CI/review results and exact
+archive hash are pending their own validation record. Earlier feature or
+metadata-only checkpoints must not be presented as final release evidence.
+
+The new collector is explicitly started and stopped by its operator; it does
+not start a service, wake a session or resend messages. Codex retains the v1
+non-null generation contract on the qualified owned native queue route.
+Claude's v2 delegated receipt context deliberately does not prove a native
+generation. Authenticated receipt submission proves neither model identity nor
+message consumption, injection or completion. Sender/collector output does not
+publish the private capability; the intended recipient's native input/history
+may retain it. Unknown effects keep the no-retry/no-resend boundary.
+
+The implementation's local CLI, private IPC, storage and synthetic transport
+checks do not establish new live native/model/SSH receipt or ACK qualification.
+Existing platform refusals and native observation profiles remain bounded;
+Linux/Windows observation and Windows managed receipt storage are not enabled.
+[#73](https://github.com/abruption/session-peer-ts/issues/73)'s transcript/body
+probe is closed NO-GO and is not included as a runtime feature. Existing
+companion skill publication and its immutable source/hash pin remain separate
+and unchanged; metadata compatibility is not new workflow coverage.
+
+This preparation makes no public 0.6.0 availability, fresh npm authentication or
+publisher/MFA-policy audit, stage approval, installation or operational claim.
+Exact merged-source approval, protected-environment approval, final npm stage
+approval, publication verification and any authorized tag/release remain future
+release gates. Historical publication records below retain their original
+versions, dates and evidence limits.
 
 <a id="public-052--2026-10-30-kst"></a>
 
