@@ -8,9 +8,15 @@ and combines merged Orca Claude profile discovery
 [#173](https://github.com/abruption/session-peer-ts/pull/173)) with
 [#176](https://github.com/abruption/session-peer-ts/pull/176)'s staged local
 receipt implementation for [#132](https://github.com/abruption/session-peer-ts/issues/132).
-The final integrated source, current-head test/CI/review results and exact
-archive hash are pending their own validation record. Earlier feature or
-metadata-only checkpoints must not be presented as final release evidence.
+The integrated source `ef1ba36b7d9b4f4ac7917527fdb8d2db009d5def` passed
+660 tests: 648 pass, 0 fail, 11 skip and 1 existing TODO on Node 24/macOS arm64,
+using the pinned Python reference `8ca77cf31254c8287a2593fe484bb30a7dba2727`.
+Build/types, scoped versions and repository links/structure passed. The exact
+95-file package passed reproducible packing, isolated install, native binding,
+shorthand lifecycle and uninstall. Final PR-head CI/reviews and exact merged-main
+release evidence remain separate gates; the candidate archive identity is
+recorded in the release PR and its source-bound manifest, not inferred from an
+earlier feature or metadata-only artifact.
 
 The new collector is explicitly started and stopped by its operator; it does
 not start a service, wake a session or resend messages. Codex retains the v1
