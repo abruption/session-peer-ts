@@ -24,7 +24,10 @@ export function sender(): Sender | undefined {
     claudeClaimed = true;
     const pid = /(\d+)\.sock$/.exec(socket)?.[1];
     let rows: Record<string, unknown>[] = [];
-    try { rows = claude(true).sessions as Record<string, unknown>[]; } catch { rows = []; }
+    try {
+      const found = claude(true) as { sessions: Record<string, unknown>[]; discovery: { claude: { status: string } } };
+      if (found.discovery.claude.status === 'ok') rows = found.sessions;
+    } catch { rows = []; }
     const matches = rows.filter(row => row.alive === true && (pid !== undefined ? row.pid === Number(pid) : row.socket === socket));
     if (matches.length === 1) {
       const row = matches[0]!, name = typeof row.name === 'string' ? row.name : '';

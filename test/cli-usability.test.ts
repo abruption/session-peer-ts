@@ -68,7 +68,12 @@ test('Unicode collision refuses, exact name and PID remain selectable; positiona
  server.listen(socket);await once(server,'listening');t.after(()=>new Promise<void>(ok=>server.close(()=>ok())));
  const other=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});assert.ok(other.pid);
  t.after(async()=>{if(other.exitCode===null){other.kill();await once(other,'close');}});
- const record=(pid:number,name:string)=>writeFileSync(join(home,'.claude/sessions',`${pid}.json`),JSON.stringify({pid,name,startedAt:Date.now(),messagingSocketPath:socket}));
+ // Name ambiguity is independent of conflicting endpoint claims: each live PID
+ // advertises its own fixture inbox; neither inbox is a real agent endpoint.
+ const otherSocket=process.platform==='win32'?socket+'-other':join(home,'inbox2');let otherConnections=0;
+ const otherServer=createServer(s=>{otherConnections++;s.destroy();});
+ otherServer.listen(otherSocket);await once(otherServer,'listening');t.after(()=>new Promise<void>(ok=>otherServer.close(()=>ok())));
+ const record=(pid:number,name:string,inbox=socket)=>writeFileSync(join(home,'.claude/sessions',`${pid}.json`),JSON.stringify({pid,name,startedAt:Date.now(),messagingSocketPath:inbox}));
  record(process.pid,'Straße');
  const call=async(target:string,body:string[],dry=true)=>{
   const preload=process.platform==='win32'?['--import',pathToFileURL(resolve('test/fixtures/windows-inspection-diagnostic.mjs')).href]:[];
@@ -97,11 +102,12 @@ test('Unicode collision refuses, exact name and PID remain selectable; positiona
  };
  const normalized=await call('STRASSE',['hello']);
  assert.equal(normalized.status,'validated',JSON.stringify(normalized));
- record(other.pid,'STRASSE');assert.equal((await call('straße',['hello'])).error,'ambiguous_target');assert.equal(messages.length,0);
+ record(other.pid,'STRASSE',otherSocket);assert.equal((await call('straße',['hello'])).error,'ambiguous_target');assert.equal(messages.length,0);
  assert.equal((await call(String(process.pid),['hello'])).status,'validated');
  assert.equal((await call('strass',['hello'])).error,'no_reachable_target');
  // Native Windows named-pipe posting has separate owner fixtures; this suite validates selection only there.
  if(process.platform!=='win32') {assert.equal((await call(String(process.pid),['--','-literal'],false)).status,'posted');assert.equal(messages.length,1);assert.equal(JSON.parse(messages[0]!).message.content,'-literal');}
+ assert.equal(otherConnections,0);
 });
 test('text output retains unknown semantics and escapes terminal controls',()=>{
  assert.match(renderOutput({command:'send',ok:false,error:'outcome_unknown',submitted:null},'text'),/Do not retry automatically/);

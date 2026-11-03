@@ -118,11 +118,11 @@ test('Claude process/inbox inspection never connects or exposes record fields', 
 test('permissions and unknown process inspection cannot authorize readiness', t => {
   const f = fixture(t); const dir = join(f.root, '.claude/sessions'); mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${process.pid}.json`), JSON.stringify({ pid: process.pid }));
-  const read = fs.readFileSync;
-  t.mock.method(fs, 'readFileSync', ((path: any, ...args: any[]) => {
+  const open = fs.openSync;
+  t.mock.method(fs, 'openSync', ((path: any, ...args: any[]) => {
     if (String(path).endsWith(`${process.pid}.json`)) throw Object.assign(new Error('native-secret'), { code: 'EACCES' });
-    return (read as any)(path, ...args);
-  }) as typeof fs.readFileSync); syncBuiltinESMExports();
+    return (open as any)(path, ...args);
+  }) as typeof fs.openSync); syncBuiltinESMExports();
   const result = diagnoseClaude(); assert.equal(result.code, 'permission_denied'); assert.equal(result.ready, false);
   assert.equal(JSON.stringify(result).includes('native-secret'), false);
 });
@@ -197,11 +197,11 @@ test('uninspectable POSIX process is unknown, not live or stale', { skip: proces
 test('unreadable Claude metadata is unknown while malformed JSON is invalid', t => {
   const f = fixture(t); const dir = join(f.root, '.claude/sessions'); mkdirSync(dir, { recursive: true });
   const path = join(dir, `${process.pid}.json`); writeFileSync(path, '{}');
-  const stat = fs.statSync;
-  t.mock.method(fs, 'statSync', ((item: any, ...args: any[]) => {
+  const stat = fs.lstatSync;
+  t.mock.method(fs, 'lstatSync', ((item: any, ...args: any[]) => {
     if (item === path) throw Object.assign(new Error('native-detail'), { code: 'EIO' });
     return (stat as any)(item, ...args);
-  }) as typeof fs.statSync); syncBuiltinESMExports();
+  }) as typeof fs.lstatSync); syncBuiltinESMExports();
   const result = diagnoseClaude(); assert.equal(result.code, 'inspection_unknown'); assert.equal(result.unknownInspections, 1);
   assert.equal(result.invalidRecords, 0); assert.equal(JSON.stringify(result).includes('native-detail'), false);
 });

@@ -1,10 +1,8 @@
 import { createHash } from 'node:crypto';
 import { casefold } from './casefold.js';
 import { createConnection } from 'node:net';
-import { closeSync, constants, fstatSync, lstatSync, openSync, type BigIntStats } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { claude, Refusal } from './discovery.js';
+import { lstatSync } from 'node:fs';
+import { claude, claudeSelectionIdentity, revalidateClaudeInventory, Refusal } from './discovery.js';
 import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, codexStoragePin, codexWriterCwd, codexWriterStorage, storageDiagnostic, type StorageCheck } from './codex-storage.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { HomeRefusal, resolveWriter, revalidateWriter, uuid, type HomeResolution } from './writer.js';
@@ -60,32 +58,6 @@ export async function postSocket(path: string, text: string, timeout?: number): 
       });
     });
   });
-}
-// A private continuity fingerprint, not proof of a native incarnation. Do not
-// read or persist registry contents (which can include authentication material).
-function claudeBindingIdentity(row: Record<string, unknown>): string {
-  const stable = (s: BigIntStats) => [s.dev,s.ino,s.uid,s.size,s.mtimeNs,s.ctimeNs,s.birthtimeNs].map(String);
-  const same = (a: BigIntStats,b: BigIntStats) => JSON.stringify(stable(a))===JSON.stringify(stable(b));
-  const directory=process.env.CLAUDE_CONFIG_DIR || process.env.ANTHROPIC_CONFIG_DIR || join(homedir(),'.claude');
-  const path=join(directory,'sessions',String(row.pid)+'.json');
-  try {
-    const before=lstatSync(path,{bigint:true});
-    if(!before.isFile() || before.size>1024n*1024n)throw new Error();
-    const fd=openSync(path,constants.O_RDONLY | (process.platform==='win32'?0:constants.O_NOFOLLOW | constants.O_NONBLOCK));
-    let metadata:string[];
-    try {
-      const opened=fstatSync(fd,{bigint:true});
-      if(!opened.isFile() || !same(before,opened) || !same(opened,lstatSync(path,{bigint:true})))throw new Error();
-      metadata=stable(opened);
-    } finally {closeSync(fd);}
-    let socket:string[]|null=null;
-    if(process.platform!=='win32'){
-      const file=lstatSync(String(row.socket),{bigint:true});
-      if(!file.isSocket())throw new Error();
-      socket=stable(file);
-    }
-    return createHash('sha256').update(JSON.stringify({pid:row.pid,name:row.name,socketPath:row.socket,metadata,socket})).digest('hex');
-  } catch {throw new Refusal('target_changed',1);}
 }
 export async function send(options: SendOptions): Promise<Record<string, unknown>> {
   checkMessage(options.message, options.to.startsWith('codex:'));
@@ -224,14 +196,16 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
   const target = options.to.replace(/^claude:/, '');
   if (!target) throw new Refusal('no_reachable_target');
   const select = () => {
-    const rows = claude(false).sessions as Record<string, unknown>[];
+    const inventory = claude(false) as { sessions: Record<string, unknown>[]; discovery: { claude: { status: string } } };
+    if (inventory.discovery.claude.status !== 'ok') throw new Refusal('claude_discovery_incomplete', 1);
+    const rows = inventory.sessions;
     const matches = rows.filter(r => /^\d+$/.test(target) ? r.pid === Number(target) :
       typeof r.name === 'string' && casefold(r.name) === casefold(target));
     if (matches.length !== 1) throw new Refusal(matches.length ? 'ambiguous_target' : 'no_reachable_target', 2);
     return matches[0]!;
   };
   const row = select();
-  const identity = options.hooks ? claudeBindingIdentity(row) : undefined;
+  const identity = claudeSelectionIdentity(row);
   const result = { ...base, target: { agent: 'claude', pid: row.pid, name: row.name }, status: options.dryRun ? 'validated' : 'posted' };
   if (options.hooks) {
     // Existing POSIX Claude discovery proves PID/socket reachability, not a
@@ -239,12 +213,21 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
     const body = await options.hooks.resolved({ agent: 'claude', target: String(row.pid), generation: null, writerIdentity: identity }, result);
     if (body !== undefined) { checkMessage(body); options = { ...options, message: body }; result.chars = [...body].length; }
   }
+  const finalCheck = () => {
+    const rechecked = select();
+    if (row.pid !== rechecked.pid || row.socket !== rechecked.socket ||
+        claudeSelectionIdentity(row) !== identity || claudeSelectionIdentity(rechecked) !== identity) throw new Refusal('target_changed', 1);
+    revalidateClaudeInventory(row, rechecked);
+  };
+  finalCheck();
   if (options.dryRun) return result;
-  const rechecked = select();
-  if (row.pid !== rechecked.pid || row.socket !== rechecked.socket ||
-      (identity !== undefined && claudeBindingIdentity(rechecked) !== identity)) throw new Refusal('target_changed', 1);
   await options.hooks?.beforeEffect?.();
+  const remaining = options.hooks?.timeoutMs?.();
+  const cutoff = remaining === undefined ? undefined : performance.now() + remaining;
+  finalCheck();
+  const timeout = cutoff === undefined ? undefined : Math.floor(cutoff - performance.now());
+  if (timeout !== undefined && (!Number.isFinite(timeout) || timeout < 1)) throw new Refusal('deadline_before_effect', 1);
   if (process.platform === 'win32') await postWindowsPipe(String(row.socket), Number(row.pid), options.message);
-  else await postSocket(String(row.socket), options.message, options.hooks?.timeoutMs?.());
+  else await postSocket(String(row.socket), options.message, timeout);
   return result;
 }

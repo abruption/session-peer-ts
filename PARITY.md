@@ -111,7 +111,7 @@ An issue or Python feature alone does not authorize implementation.
 | Surface | Reviewed TS behavior and Python comparison | Status / boundary |
 | --- | --- | --- |
 | Ordinary discovery, input and submission | Unified Claude/Codex list, bounded Codex-home inventory, text/JSON and positional/stdin input, Unicode name matching, Claude inbox and guarded Codex queue submission | Shipped within existing platform/native contracts; submission never proves consumption |
-| macOS Claude Orca profiles | TS reads one environment-selected/default registry; Python additionally inventories bounded known macOS Orca profiles when no override is set ([TS source](https://github.com/abruption/session-peer-ts/blob/90481b148584926ea328ed956327f3050d9be9cb/src/discovery.ts#L78-L117), [Python source](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/claude.py#L44-L84)) | Partial; [#165](https://github.com/abruption/session-peer-ts/issues/165) is a separate discovery/provenance extension |
+| macOS Claude Orca profiles | Source adds bounded known Orca profile inventory when no explicit Claude directory override is set; original registry provenance follows selection and handoff revalidation. The dated 0.5.1 baseline above used one selected/default registry; Python comparison remains pinned to [f5e7c49](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/claude.py#L44-L84). | [#165](https://github.com/abruption/session-peer-ts/issues/165) source extension; incomplete/conflicting inventory refuses send; no additional native/ACK qualification |
 | Codex storage classification | TS rejects selected-home root `sqlite_home` and malformed TOML, and strips `CODEX_SQLITE_HOME` from native child environments; Python additionally checks system/requirements, managed-preference and project/cwd layers ([TS source](https://github.com/abruption/session-peer-ts/blob/90481b148584926ea328ed956327f3050d9be9cb/src/discovery.ts#L13-L24), [Python source](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/codex.py#L272-L494)) | Partial in published baseline; post-baseline #166 source adds bounded local-layer classification and refusal of unclassifiable storage ([scope](docs/api.md#codex-storage-configuration)). Selected-home or local-layer validation is not whole effective-storage attestation |
 | Doctor and return routes | Read-only local/SSH diagnostics, generated From/Reply-To metadata, explicit reply URI and opt-in return-route probe | Shipped bounded behavior; no executable `Reply:` instruction or Antigravity sender identity |
 | Ordered SSH and typed jump | Repeated hosts, allowlisted options, IPv6 and POSIX-client single-hop jump; Windows-client jump refuses before effect | Partial; remaining Windows-client qualification in [#20](https://github.com/abruption/session-peer-ts/issues/20); no arbitrary options or multi-hop |
@@ -312,6 +312,12 @@ Historical 0.2.0 source anchors and the then-pinned Python oracle:
 | Runtime and native dependency | TS needs Node 22.13+ within 22.x or Node 24.x, plus a matching native lock binary. Python is not a TS runtime fallback. |
 | CLI ownership | Both distributions install `session-peer`; npm does not remove Python/uv/pipx/venv installations. Select one path deliberately and update it through its owning manager. |
 | Skills | Install separately and explicitly; no package `postinstall` downloads a skill or invokes another package manager. |
+
+## Claude profile discovery — #165 source scope
+
+With neither nonempty Claude directory override set, inventory includes the default `~/.claude/sessions` and the immediate `home/sessions` directories of known macOS Orca profiles under `~/Library/Application Support/orca/claude-profiles`. `CLAUDE_CONFIG_DIR` takes precedence over `ANTHROPIC_CONFIG_DIR`; an explicit nonempty override excludes all other Claude registries. Other platforms retain single-directory discovery. Inventory processes at most 128 Orca profile entries and 4,096 registry entries in total, including non-record entries; enumeration reads one extra entry to detect limit exhaustion, each registration JSON remains limited to 1 MiB. Limit exhaustion is incomplete inventory. Automatic profile directories and registry records require current-user ownership and no group/world write permissions, including when a default-path alias reaches the same automatic source; unsafe automatic evidence is incomplete. macOS extended ACLs on automatic sources are conservatively rejected, including owner-only entries. The fixed `/bin/ls -ldebn` metadata helper uses bounded path batches, output and a five-second inspection budget; unknown inspection is incomplete inventory. This is not an agent invocation or an arbitrary-kernel-I/O deadline guarantee. This does not silently strengthen the legacy default/explicit-only policy or establish hostile-same-user protection. This is not a recursive disk scan or a claim of additional native platform qualification.
+
+Successful rows survive incomplete inventory, but listing reports failure and neither target selection nor inferred sender identity may use an incomplete or conflicting inventory. Aliases of the same canonical registry merge; distinct live records claiming the same PID or endpoint remain conflicts even if their text matches; conflicting PID, socket-string or underlying endpoint claims never select a winner by traversal order. Ordinary name ambiguity still refuses. Original registry provenance remains private continuity evidence through selection and the final pre-submission recheck; it does not create an authenticated model identity or a public generation. Listing and dry-run never connect to an inbox. Ordinary posted/queued and ACK semantics remain unchanged.
 
 ## Source unified listing contract — #16 / 0.2.0
 
@@ -737,13 +743,12 @@ it does not replace send's stricter competitor checks. Codex executable paths
 are inspected for accessibility and never executed, even with `--codex-bin`.
 An accessible DB and executable do not verify a live writer (`writerVerified:false`).
 
-Claude checks bounded numeric session records (regular files, maximum 64 KiB),
-process identity and inbox metadata. POSIX checks the socket file; Windows checks
+The #165 source shares Claude inventory across list, send, sender detection and doctor: bounded numeric session records (regular files, maximum 1 MiB), process identity and inbox metadata. Earlier doctor revisions used a separate 64 KiB reader. POSIX checks the socket file; Windows checks
 process identity and a named-pipe advertisement, **not pipe existence or availability
 for connection**. `verification` states this distinction. Invalid records and
 unknown/permission inspections are counted. There is no inbox connection, queue
 submission, lock acquisition, chmod, configuration mutation, wake, login, or
-credential read. Native process arguments, stderr and session names/bodies are
+standalone credential-store read. Session-registration JSON may contain extra fields; raw records are not persisted or emitted by doctor. Native process arguments, stderr and session names/bodies are
 not emitted. Host/home and executable paths are intentionally reported.
 
 `capabilities` describes implementation support: `list/send/doctor:true`,

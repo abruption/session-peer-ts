@@ -169,6 +169,12 @@ native queue output, `queueId`; neither confirms consumption. See the
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
 On SSH, both ends need the same TypeScript client version (0.5.2).
 
+### Claude profiles on macOS
+
+Without a nonempty `CLAUDE_CONFIG_DIR` or `ANTHROPIC_CONFIG_DIR`, Claude discovery also checks the immediate `home/sessions` directories under `~/Library/Application Support/orca/claude-profiles`, alongside `~/.claude/sessions`. Explicit overrides select only their own registry; Linux and Windows do not scan this macOS location. Profile and registry entry limits keep this inventory bounded. Automatically discovered profile directories and registration files must belong to the current user and must not be writable by other users or groups; unsafe sources make discovery incomplete. macOS extended ACLs on these automatic sources are conservatively rejected, including owner-only ACLs, using a bounded trusted system metadata helper. The helper never executes an agent.
+
+Readable sessions remain listed when another source fails, with incomplete-inventory diagnostics and a failing list exit status. Sending and sender identification require complete, conflict-free evidence. Aliases of the same canonical registry can share one row; conflicting PID or inbox claims cannot be resolved by directory order or by choosing a PID. Selection and handoff continuity retain the original registry evidence and recheck it before submission. Listing and dry-run do not connect to an inbox. These checks do not establish a native generation, consumption or ACK.
+
 ## Requirements
 
 macOS, Linux or native Windows; Node **22.13+ within 22.x or 24.x**. Node 26 is not supported.

@@ -222,7 +222,8 @@ test('permission, canonicalization and agent errors preserve other sources with 
   const blocked = f.database(join(f.root, 'blocked'));
   const unresolved = join(f.root, 'unresolved');
   process.env.SESSION_PEER_CODEX_HOMES = JSON.stringify([blocked, unresolved]);
-  const stat = fs.statSync, real = fs.realpathSync, read = fs.readdirSync;
+  const stat = fs.statSync, real = fs.realpathSync, open = fs.opendirSync;
+  mkdirSync(join(f.root, '.claude', 'sessions'), { recursive: true });
   const denied = () => Object.assign(new Error('SECRET-SENTINEL'), { code: 'EACCES' });
   t.mock.method(fs, 'statSync', (...args: Parameters<typeof fs.statSync>) => {
     if (args[0] === join(blocked, 'state_5.sqlite')) throw denied(); return stat(...args);
@@ -230,8 +231,8 @@ test('permission, canonicalization and agent errors preserve other sources with 
   t.mock.method(fs, 'realpathSync', (...args: Parameters<typeof fs.realpathSync>) => {
     if (args[0] === unresolved) throw denied(); return real(...args);
   });
-  t.mock.method(fs, 'readdirSync', (...args: Parameters<typeof fs.readdirSync>) => {
-    if (args[0] === join(f.root, '.claude', 'sessions')) throw denied(); return read(...args);
+  t.mock.method(fs, 'opendirSync', (...args: Parameters<typeof fs.opendirSync>) => {
+    if (args[0] === join(f.root, '.claude', 'sessions')) throw denied(); return open(...args);
   }); syncBuiltinESMExports();
   const result = await listing(undefined, undefined, false);
   assert.equal(result.ok, false); assert.equal(result.sessions.length, 1);

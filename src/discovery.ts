@@ -1,6 +1,8 @@
 // Read-only discovery: no inbox connections, writer selection, queue or DB writes.
 // Windows Claude metadata uses native process inspection.
-import { closeSync, constants, fstatSync, lstatSync, openSync, readlinkSync, readSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, opendirSync, readlinkSync, readSync, readdirSync, realpathSync, statSync, type Stats } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { windowsProcessStart } from './windows.js';
@@ -33,74 +35,364 @@ function canonicalPath(absolute: string, seen: Set<string>): string {
     return parent === absolute ? absolute : join(canonicalPath(parent, seen), absolute.slice(parent.length));
   }
 }
-function alive(pid: number): boolean {
-  if (pid <= 1) return false;
-  try { process.kill(pid, 0); return true; }
-  catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+// Automatic profiles are a macOS Orca convention, not a recursive home scan.
+export const CLAUDE_PROFILE_LIMIT = 128;
+export const CLAUDE_ENTRY_LIMIT = 4096;
+const CLAUDE_RECORD_LIMIT = 1024 * 1024;
+type DirectoryProof = { path: string; identity: string; sameUser: boolean; direct: boolean };
+type ClaudeProof = { directory: string; canonical: string; chain: DirectoryProof[]; record: string;
+  recordIdentity: string; privateRecord: boolean; endpoint: string | null; startedAt: unknown };
+const claudeProofs = new WeakMap<Row, ClaudeProof>();
+type InventoryProof = { path: string; direct: boolean; identity: string | null };
+const claudeInventories = new WeakMap<Row, readonly InventoryProof[]>();
+const claudeAclPaths = new WeakMap<Row, readonly string[]>();
+export const CLAUDE_ACL_LIMITS = Object.freeze({ paths: 1 + 3 * CLAUDE_PROFILE_LIMIT + CLAUDE_ENTRY_LIMIT,
+  batchPaths: 128, argumentBytes: 32768, batchOutput: 262144, totalOutput: 8388608, batches: 128, timeoutMs: 5000 });
+const nodeIdentity = (s: Stats) => [s.dev, s.ino, s.uid, s.mode].join(':');
+const privateNode = (s: Stats) => typeof process.getuid === 'function' && s.uid === process.getuid() && (s.mode & 0o022) === 0;
+const recordIdentity = (s: Stats) => [nodeIdentity(s), s.size, s.mtimeMs, s.ctimeMs, s.birthtimeMs].join(':');
+// Node exposes POSIX mode bits, not macOS extended ACLs. Conservatively reject
+// ANY extended ACL on automatic registries, including owner-only ACLs. The
+// trusted system metadata helper receives only absolute paths and a minimal C
+// locale environment; no shell, PATH lookup, agent binary or filename parsing.
+// -b escapes embedded newlines and -n avoids account-name lookups. ACL entries
+// must also be rejected when an xattr '@' masks the '+' permission suffix.
+function inspectClaudeAcls(input: readonly string[]): 'clear' | 'acl' | 'unknown' {
+  const paths = [...new Set(input)];
+  if (!paths.length) return 'clear';
+  if (process.platform !== 'darwin' || paths.length > CLAUDE_ACL_LIMITS.paths) return 'unknown';
+  const batches: string[][] = []; let batch: string[] = [], bytes = 0;
+  for (const path of paths) {
+    const size = Buffer.byteLength(path, 'utf8') + 1;
+    if (!isAbsolute(path) || path.includes('\0') || size > CLAUDE_ACL_LIMITS.argumentBytes) return 'unknown';
+    if (batch.length && (batch.length >= CLAUDE_ACL_LIMITS.batchPaths || bytes + size > CLAUDE_ACL_LIMITS.argumentBytes)) {
+      batches.push(batch); batch = []; bytes = 0;
+    }
+    batch.push(path); bytes += size;
+  }
+  if (batch.length) batches.push(batch);
+  if (batches.length > CLAUDE_ACL_LIMITS.batches) return 'unknown';
+  const cutoff = performance.now() + CLAUDE_ACL_LIMITS.timeoutMs; let output = 0;
+  for (const entries of batches) {
+    const remaining = Math.floor(cutoff - performance.now());
+    if (remaining < 1) return 'unknown';
+    let done: ReturnType<typeof spawnSync>;
+    try {
+      done = spawnSync('/bin/ls', ['-ldebn', '--', ...entries], { encoding: 'utf8',
+        env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeout: remaining,
+        maxBuffer: CLAUDE_ACL_LIMITS.batchOutput, killSignal: 'SIGKILL' });
+    } catch { return 'unknown'; }
+    if (done.error || done.status !== 0 || done.signal || typeof done.stdout !== 'string' ||
+        typeof done.stderr !== 'string' || done.stderr.length || performance.now() >= cutoff) return 'unknown';
+    const size = Buffer.byteLength(done.stdout, 'utf8'); output += size;
+    if (size > CLAUDE_ACL_LIMITS.batchOutput || output > CLAUDE_ACL_LIMITS.totalOutput) return 'unknown';
+    const lines = done.stdout.split('\n'); if (lines.at(-1) === '') lines.pop();
+    let records = 0;
+    for (const line of lines) {
+      if (/^\s+\d+:/.test(line)) return 'acl';
+      const mode = /^[-dlcbps][rwxstST-]{9}([+@]?)\s/.exec(line);
+      if (!mode) return 'unknown';
+      if (mode[1] === '+') return 'acl';
+      records++;
+    }
+    if (records !== entries.length) return 'unknown';
+  }
+  return 'clear';
 }
-// Local Claude registry metadata is limited to 1 MiB per regular file. The
-// descriptor checks and POSIX nonblocking open also cover replacement by a FIFO
-// between lstat and open; this is not a deadline for network filesystem I/O.
-function claudeRecord(file: string): unknown {
-  const limit = 1024 * 1024, before = lstatSync(file);
-  if (!before.isFile() || before.size > limit) return undefined;
+function safeDirectory(path: string, sameUser: boolean, direct = true): DirectoryProof {
+  const node = direct ? lstatSync(path) : statSync(path);
+  if (!node.isDirectory() || (sameUser && !privateNode(node))) throw new Error('unsafe_directory');
+  return { path, sameUser, direct, identity: nodeIdentity(node) };
+}
+function directoryUnchanged(proof: DirectoryProof): boolean {
+  return safeDirectory(proof.path, proof.sameUser, proof.direct).identity === proof.identity;
+}
+function boundedEntries(path: string, limit: number): { entries: string[]; limited: boolean } {
+  const directory = opendirSync(path), entries: string[] = [];
+  try {
+    while (true) {
+      const item = directory.readSync();
+      if (!item) return { entries: entries.sort(compareText), limited: false };
+      if (entries.length >= limit) return { entries: entries.sort(compareText), limited: true };
+      entries.push(item.name);
+    }
+  } finally { directory.closeSync(); }
+}
+// Reads bounded session-registration JSON, which may contain extra native
+// fields. No separate credential/transcript files are opened and record contents
+// are not persisted. Read at most 1 MiB + one
+// overflow byte; stable descriptor/path checks are observational, not an atomic
+// filesystem snapshot or a deadline for blocking filesystem I/O.
+function claudeRecord(file: string, requirePrivate = false): { value: unknown; identity: string } | undefined {
+  const before = lstatSync(file);
+  if (!before.isFile() || before.size > CLAUDE_RECORD_LIMIT || (requirePrivate && !privateNode(before))) return undefined;
   const flags = constants.O_RDONLY | (process.platform === 'win32' ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW);
   const fd = openSync(file, flags);
   try {
     const opened = fstatSync(fd);
-    if (!opened.isFile() || opened.size > limit || opened.dev !== before.dev || opened.ino !== before.ino) return undefined;
-    const bytes = Buffer.alloc(limit + 1);
+    if (!opened.isFile() || opened.size > CLAUDE_RECORD_LIMIT || (requirePrivate && !privateNode(opened)) ||
+        recordIdentity(opened) !== recordIdentity(before)) return undefined;
+    const bytes = Buffer.alloc(CLAUDE_RECORD_LIMIT + 1);
     let length = 0;
     while (length < bytes.length) {
       const count = readSync(fd, bytes, length, bytes.length - length, length);
       if (!count) break;
       length += count;
     }
-    // Read at most limit + 1 even if metadata grows after the descriptor check.
-    if (length > limit || fstatSync(fd).size > limit) return undefined;
-    return JSON.parse(bytes.subarray(0, length).toString('utf8'));
+    const final = fstatSync(fd), current = lstatSync(file);
+    if (length > CLAUDE_RECORD_LIMIT || !current.isFile() ||
+        (requirePrivate && (!privateNode(final) || !privateNode(current))) || recordIdentity(final) !== recordIdentity(opened) ||
+        recordIdentity(current) !== recordIdentity(opened)) return undefined;
+    return { value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, length))), identity: recordIdentity(opened) };
   } finally { closeSync(fd); }
 }
-export function claude(all: boolean): Row {
-  const directory = join(process.env.CLAUDE_CONFIG_DIR || process.env.ANTHROPIC_CONFIG_DIR || join(homedir(), '.claude'), 'sessions');
-  let entries: string[];
-  try { entries = readdirSync(directory).sort(); }
-  catch (error) {
-    if (missing(error)) entries = [];
-    else throw new Refusal('claude_discovery_failed', 1);
+function endpointIdentity(socket: string): string | null {
+  if (!socket || socket.includes('\0')) return null;
+  if (process.platform === 'win32') return /^\\\\\.\\pipe\\[^\r\n]+$/i.test(socket) ? socket.toLowerCase() : null;
+  const alias = lstatSync(socket), canonical = realpathSync(socket), target = lstatSync(canonical);
+  return target.isSocket() ? JSON.stringify([canonical, alias.dev, alias.ino, target.dev, target.ino]) : null;
+}
+function claudeLive(record: Row, matches: boolean, unknown?: () => void, absent?: () => void): boolean {
+  if (!matches) return false;
+  const pid = Number(record.pid);
+  if (pid <= 1) return false; // Known-invalid PID is stale, not a failed native inspection.
+  if (process.platform !== 'win32') {
+    try { process.kill(pid, 0); return true; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') unknown?.(); return false; }
   }
-  const sessions: Row[] = [];
-  for (const entry of entries) {
-    if (!/^[0-9]+\.json$/.test(entry)) continue;
-    let record: Row;
+  const started = typeof record.startedAt === 'number' && Number.isSafeInteger(record.startedAt) && record.startedAt > 0 ? record.startedAt : NaN;
+  const ticks = windowsProcessStart(pid);
+  if (ticks === undefined) {
+    // A stale registry for a positively absent PID is not an inventory failure.
+    // Signal 0 is absence-only evidence here; it never establishes a live
+    // Windows incarnation or replaces the native creation-time check.
+    try { process.kill(pid, 0); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') { absent?.(); return false; } }
+    unknown?.(); return false;
+  }
+  const actual = Number((ticks - 116444736000000000n) / 10000n);
+  if (!Number.isFinite(started) || !Number.isFinite(actual)) { unknown?.(); return false; }
+  return actual <= started + 2000;
+}
+export type ClaudeInventory = { sessions: Row[]; errors: string[]; directories: string[]; records: number;
+  invalidRecords: number; permissionFailures: number; unknownInspections: number;
+  selectedStatus: 'present' | 'missing' | 'unsupported' | 'permission_denied' | 'unknown' };
+export function claudeInventory(): ClaudeInventory {
+  const selected = join(process.env.CLAUDE_CONFIG_DIR || process.env.ANTHROPIC_CONFIG_DIR || join(homedir(), '.claude'), 'sessions');
+  const inventory: ClaudeInventory = { sessions: [], errors: [], directories: [selected], records: 0,
+    invalidRecords: 0, permissionFailures: 0, unknownInspections: 0, selectedStatus: 'missing' };
+  const errors = inventory.errors;
+  const directories: { directory: string; chain: DirectoryProof[]; automatic: boolean }[] = [];
+  // Keep every observed source, numeric record and POSIX endpoint (including
+  // absence) fenced until the WHOLE inventory is complete. Later reads can
+  // mutate an earlier source without changing a directory entry.
+  const scanEvidence: InventoryProof[] = [];
+  const aclPaths = new Set<string>();
+  function observeMetadata(path: string, direct = true): void {
+    let identity: string | null;
+    try { identity = recordIdentity(direct ? lstatSync(path) : statSync(path)); }
+    catch (error) { if (!missing(error)) throw error; identity = null; }
+    scanEvidence.push({ path, direct, identity });
+  }
+  function observeDirectory(path: string, sameUser: boolean, direct = true): DirectoryProof {
+    observeMetadata(path, direct);
+    const proof = safeDirectory(path, sameUser, direct);
+    if (sameUser) aclPaths.add(path);
+    return proof;
+  }
+  function failure(code: string, error?: unknown) {
+    if (!errors.includes(code)) errors.push(code);
+    if (['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException | undefined)?.code ?? '')) inventory.permissionFailures++;
+  }
+  try {
+    directories.push({ directory: selected, chain: [observeDirectory(selected, false, false)], automatic: false }); inventory.selectedStatus = 'present';
+  } catch (error) {
+    if (!missing(error)) {
+      inventory.selectedStatus = ['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '') ? 'permission_denied' :
+        error instanceof Error && error.message === 'unsafe_directory' ? 'unsupported' : 'unknown';
+      failure('sessions_directory_unavailable', error);
+    }
+  }
+  if (process.platform === 'darwin' && !process.env.CLAUDE_CONFIG_DIR && !process.env.ANTHROPIC_CONFIG_DIR) {
+    const base = join(homedir(), 'Library/Application Support/orca/claude-profiles');
     try {
-      const value: unknown = claudeRecord(join(directory, entry));
-      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-      record = value as Row;
-    } catch { continue; }
-    const pid = record.pid;
-    if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid > 2147483647) continue;
-    const matches = pid === Number(entry.slice(0, -5));
-    let live = matches && process.platform !== 'win32' && alive(pid);
-    if (matches && process.platform === 'win32') {
-      const started = typeof record.startedAt === 'number' && Number.isSafeInteger(record.startedAt) && record.startedAt > 0 ? record.startedAt : NaN;
-      const ticks = windowsProcessStart(pid);
-      const actual = ticks === undefined ? NaN : Number((ticks - 116444736000000000n) / 10000n);
-      live = Number.isFinite(started) && Number.isFinite(actual) && actual <= started + 2000;
-    }
-    const socket = typeof record.messagingSocketPath === 'string' ? record.messagingSocketPath : '';
-    let inbox = false;
-    if (socket) {
-      if (process.platform === 'win32') inbox = /^\\\\\.\\pipe\\[^\r\n]+$/i.test(socket);
-      else try { inbox = statSync(socket).isSocket(); } catch { /* Inaccessible is not reachable. */ }
-    }
-    const row: Row = { agent: 'claude', pid, socket, alive: live, reachable: live && inbox };
-    for (const key of ['name', 'status', 'cwd', 'kind', 'version', 'tmux']) row[key] = record[key] ?? null;
-    if (!matches) row.staleReason = 'record_pid_mismatch';
-    else if (!live && process.platform === 'win32') row.staleReason = 'process_unverified';
-    if (all || row.reachable) sessions.push(row);
+      const baseProof = observeDirectory(base, true), before = recordIdentity(lstatSync(base));
+      const found = boundedEntries(base, CLAUDE_PROFILE_LIMIT);
+      if (found.limited) failure('profile_inventory_limit');
+      for (const name of found.entries) {
+        const profile = join(base, name);
+        try {
+          const node = lstatSync(profile);
+          if (node.isFile()) continue; // Finder/metadata files are not profile homes.
+          const chain = [baseProof, observeDirectory(profile, true), observeDirectory(join(profile, 'home'), true),
+            observeDirectory(join(profile, 'home/sessions'), true)];
+          const directory = join(profile, 'home/sessions');
+          directories.push({ directory, chain, automatic: true }); inventory.directories.push(directory);
+        } catch (error) { if (!missing(error)) failure('profile_directory_unavailable', error); }
+      }
+      if (!directoryUnchanged(baseProof) || recordIdentity(lstatSync(base)) !== before) failure('profile_inventory_changed');
+    } catch (error) { if (!missing(error)) failure('profile_inventory_unavailable', error); }
   }
-  return { sessions, discovery: { claude: { status: 'ok' } } };
+  // Resolve the strictest requirements before deduplicating aliases. A legacy
+  // default path can alias an automatic registry; scanning that alias first
+  // must not downgrade the automatic record ownership/write-mode checks.
+  const automaticDirectories = new Set<string>();
+  for (const item of directories.filter(item => item.automatic)) {
+    try { automaticDirectories.add(realpathSync(item.directory)); }
+    catch (error) { failure('profile_directory_unavailable', error); }
+  }
+  const multiple = directories.some(item => item.automatic) || directories.length > 1 || errors.length > 0;
+  const invalid = () => { inventory.invalidRecords++; if (multiple) failure('session_record_unavailable'); };
+  let enumerated = 0;
+  const scanned = new Set<string>();
+  for (const { directory, chain } of directories) {
+    try {
+      if (!chain.every(directoryUnchanged)) throw new Error('registry_changed');
+      const canonical = realpathSync(directory), scanKey = canonical + ':' + chain.at(-1)!.identity;
+      const privateRecord = automaticDirectories.has(canonical);
+      if (scanned.has(scanKey)) continue;
+      scanned.add(scanKey);
+      const before = recordIdentity(statSync(directory));
+      const found = boundedEntries(directory, CLAUDE_ENTRY_LIMIT - enumerated);
+      enumerated += found.entries.length;
+      if (found.limited) failure('session_inventory_limit');
+      for (const entry of found.entries) {
+        if (!/^[0-9]+\.json$/.test(entry)) continue;
+        const path = join(directory, entry);
+        let read: ReturnType<typeof claudeRecord>;
+        try {
+          // Every numeric record, including invalid/unreachable ones, remains
+          // fenced: an in-place edit can introduce a competing identity without
+          // changing its directory's metadata. Never reread bodies in the fence.
+          observeMetadata(path);
+          if (privateRecord) aclPaths.add(path);
+          read = claudeRecord(path, privateRecord);
+        }
+        catch (error) {
+          if (['EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) failure('record_unavailable', error);
+          else if (error instanceof SyntaxError || error instanceof TypeError || missing(error)) invalid();
+          else { inventory.unknownInspections++; failure('record_unavailable'); }
+          continue;
+        }
+        const value = read?.value;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) { invalid(); continue; }
+        const record = value as Row, pid = record.pid;
+        if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid < 1 || pid > 2147483647) { invalid(); continue; }
+        inventory.records++;
+        const matches = pid === Number(entry.slice(0, -5));
+        let processUnknown = false, processAbsent = false;
+        const live = claudeLive(record, matches, () => { processUnknown = true; inventory.unknownInspections++; failure('process_unverified'); }, () => { processAbsent = true; });
+        const socket = typeof record.messagingSocketPath === 'string' ? record.messagingSocketPath : '';
+        let endpoint: string | null = null;
+        try {
+          if (socket && !socket.includes('\0') && process.platform !== 'win32') {
+            // Track both advertised alias and followed endpoint, including an
+            // observed absence. Retargeting an unselected alias can otherwise
+            // introduce a conflict after its registry record was inspected.
+            observeMetadata(socket); observeMetadata(socket, false);
+          }
+          endpoint = endpointIdentity(socket);
+          if (endpoint && process.platform !== 'win32') observeMetadata(String(JSON.parse(endpoint)[0]));
+        } catch (error) {
+          if (!missing(error)) { inventory.unknownInspections++; failure('endpoint_unavailable', error); }
+        }
+        const row: Row = { agent: 'claude', pid, socket, alive: live, reachable: live && endpoint !== null };
+        for (const key of ['name', 'status', 'cwd', 'kind', 'version', 'tmux']) row[key] = record[key] ?? null;
+        if (!matches) row.staleReason = 'record_pid_mismatch';
+        else if (processUnknown) row.staleReason = 'process_unverified';
+        else if (!live && process.platform === 'win32') row.staleReason = processAbsent ? 'process_absent' : 'process_unverified';
+        claudeProofs.set(row, { directory, canonical, chain, record: path, recordIdentity: read!.identity, privateRecord,
+          endpoint, startedAt: typeof record.startedAt === 'number' ? record.startedAt : null });
+        inventory.sessions.push(row);
+      }
+      if (!chain.every(directoryUnchanged) || realpathSync(directory) !== canonical ||
+          recordIdentity(statSync(directory)) !== before) failure('sessions_directory_changed');
+    } catch (error) { failure('sessions_directory_unavailable', error); }
+  }
+  const aclStatus = inspectClaudeAcls([...aclPaths]);
+  if (aclStatus !== 'clear') failure(aclStatus === 'acl' ? 'claude_extended_acl' : 'claude_acl_unavailable');
+  for (const observed of scanEvidence) {
+    let current: string | null;
+    try { current = recordIdentity(observed.direct ? lstatSync(observed.path) : statSync(observed.path)); }
+    catch (error) {
+      if (!missing(error)) { failure('claude_inventory_changed', error); continue; }
+      current = null;
+    }
+    if (current !== observed.identity) failure('claude_inventory_changed');
+  }
+  const frozenEvidence = Object.freeze(scanEvidence.map(item => Object.freeze({ ...item })));
+  const frozenAclPaths = Object.freeze([...aclPaths]);
+  for (const row of inventory.sessions) {
+    claudeInventories.set(row, frozenEvidence); claudeAclPaths.set(row, frozenAclPaths);
+  }
+  // Exact registry aliases are scanned once. Divergent live PID, inbox-string or
+  // underlying socket claims are conflicts, independent of directory order.
+  const byPid = new Map<number, Row[]>(), bySocket = new Map<string, Row[]>(), byEndpoint = new Map<string, Row[]>();
+  const conflicts = new Set<Row>();
+  for (const row of inventory.sessions) {
+    if (!row.alive) continue;
+    const proof = claudeProofs.get(row)!, endpoint = proof.endpoint;
+    const underlying = endpoint && process.platform !== 'win32' ? JSON.stringify(JSON.parse(endpoint).slice(-2)) : endpoint;
+    const peers = new Set([...(byPid.get(Number(row.pid)) ?? []), ...(row.socket ? bySocket.get(String(row.socket)) ?? [] : []),
+      ...(underlying ? byEndpoint.get(underlying) ?? [] : [])]);
+    for (const other of peers) { conflicts.add(other); conflicts.add(row); }
+    byPid.set(Number(row.pid), [...(byPid.get(Number(row.pid)) ?? []), row]);
+    if (row.socket) bySocket.set(String(row.socket), [...(bySocket.get(String(row.socket)) ?? []), row]);
+    if (underlying) byEndpoint.set(underlying, [...(byEndpoint.get(underlying) ?? []), row]);
+  }
+  if (conflicts.size) failure('conflicting_session_records');
+  for (const row of conflicts) { row.reachable = false; row.staleReason = 'conflicting_session_records'; }
+  return inventory;
+}
+// Private provenance is not serialized in ordinary rows and never becomes a
+// public native-generation claim. It binds the selected registry and endpoint
+// across async hooks; it is not authentication against a same-user writer.
+// Metadata-only final fence: identity validation above/below can itself read
+// registry files. Call this AFTER those reads, without recursively rediscovering
+// or reading another record and opening another unfenced inventory window.
+export function revalidateClaudeInventory(row: Row, other?: Row): void {
+  const rows = other ? [row, other] : [row];
+  const evidence: InventoryProof[] = [], paths = new Set<string>();
+  for (const selected of rows) {
+    const metadata = claudeInventories.get(selected), acls = claudeAclPaths.get(selected);
+    if (!metadata || !acls) throw new Refusal('claude_discovery_incomplete', 1);
+    evidence.push(...metadata); for (const path of acls) paths.add(path);
+  }
+  const metadataUnchanged = () => {
+    for (const observed of evidence) {
+      let current: string | null;
+      try { current = recordIdentity(observed.direct ? lstatSync(observed.path) : statSync(observed.path)); }
+      catch (error) {
+        if (!missing(error)) throw new Refusal('claude_discovery_incomplete', 1);
+        current = null;
+      }
+      if (current !== observed.identity) throw new Refusal('claude_discovery_incomplete', 1);
+    }
+  };
+  // An ACL/path mutation while the synchronous helper is running must not be
+  // accepted from an earlier clear result. These remain observational checks,
+  // not an atomic filesystem snapshot or a universal kernel-I/O deadline.
+  metadataUnchanged();
+  if (inspectClaudeAcls([...paths]) !== 'clear') throw new Refusal('claude_discovery_incomplete', 1);
+  metadataUnchanged();
+}
+export function claudeSelectionIdentity(row: Row): string {
+  const proof = claudeProofs.get(row);
+  if (!proof) throw new Refusal('target_changed', 1);
+  try {
+    if (!proof.chain.every(directoryUnchanged) || realpathSync(proof.directory) !== proof.canonical) throw new Error();
+    const read = claudeRecord(proof.record, proof.privateRecord), value = read?.value as Row | undefined;
+    if (!read || !value || read.identity !== proof.recordIdentity || value.pid !== row.pid ||
+        (value.messagingSocketPath ?? '') !== row.socket ||
+        (typeof value.startedAt === 'number' ? value.startedAt : null) !== proof.startedAt ||
+        !claudeLive(value, true) || endpointIdentity(String(row.socket)) !== proof.endpoint) throw new Error();
+    return createHash('sha256').update(JSON.stringify(proof)).digest('hex');
+  } catch { throw new Refusal('target_changed', 1); }
+}
+export function claude(all: boolean): Row {
+  const inventory = claudeInventory();
+  return { sessions: inventory.sessions.filter(row => all || row.reachable),
+    discovery: { claude: inventory.errors.length ? { status: 'error', code: 'claude_discovery_incomplete', errors: inventory.errors } : { status: 'ok' } } };
 }
 
 // Shared bounded sources; listing accumulates diagnostics while writer inventory
