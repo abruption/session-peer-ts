@@ -236,7 +236,11 @@ test('qualified local opt-in waits for exact client ID injection, not completed 
  const status=await f.invoke(['handoff','status','--correlation-id',h.correlationId]);assert.equal(status.code,0);assert.equal(status.value.handoff.observation.injectionObserved,true);assert.equal(f.calls().length,1);
 });
 test('unknown after possible native write never falls back to legacy queue',qualified,async t=>{
- const f=await fixture(t,'loss');const r=await f.invoke([...f.args,'--wait-for','delivered']);assert.equal(r.code,1,r.stdout);assert.equal(r.value.status,'unknown',r.stdout);assert.equal(r.value.submitted,null);assert.equal(r.value.handoff.submission.status,'unknown');assert.equal(r.value.handoff.wait.status,'failed');assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');
+ const f=await fixture(t,'loss');const r=await f.invoke([...f.args,'--wait-for','delivered']);
+ // A preflight refusal is not evidence of post-write loss. Retain both actual
+ // fixture call logs in the failure, without broadening any effect assertion.
+ const diagnostic=JSON.stringify({result:r.value,queueCalls:f.calls(),nativeCalls:f.nativeCalls()});
+ assert.equal(r.code,1,diagnostic);assert.equal(r.value.status,'unknown',diagnostic);assert.equal(r.value.submitted,null);assert.equal(r.value.handoff.submission.status,'unknown');assert.equal(r.value.handoff.wait.status,'failed');assert.equal(f.calls().length,1);assert.equal(f.calls()[0].method,'thread/queue/add');
 });
 test('positive native acceptance survives a subsequent ledger failure without another submission',qualified,async t=>{
  const f=await fixture(t,'ledger-failure');
