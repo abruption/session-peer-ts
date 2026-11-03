@@ -103,6 +103,7 @@ export async function managedReceiptSend(options: SendOptions, config: ReceiptSe
     budget.beforeEffect(); producer!.revalidate(); revalidateTarget();
     if (endpoint(config.collector) !== endpointIdentity) throw new Refusal('receipt_endpoint_changed',1);
     budget.beforeEffect(); update(await rpc('fence',{...handle!,binding:original!})); fenced = true;
+    if (stopped) throw new Refusal('stopped_by_operator',130);
     producer!.revalidate(); revalidateTarget(); budget.beforeEffect();
   };
   const verifyOwner = async (scope: AppServerScope) => {
@@ -170,13 +171,13 @@ export async function managedReceiptSend(options: SendOptions, config: ReceiptSe
         const frame = {...placeholder,ledgerEpoch:handle.ledgerEpoch,correlationId:handle.correlationId,
           ...(pair.agent === 'claude' ? {receiptContextId:handle.receiptContextId} : {}),capability:minted.body.capability};
         return options.message+'\nCorrelation-Id: '+handle.correlationId+'\nReceipt-Only: '+JSON.stringify({collector:config.collector,receipt:frame});
-      },beforeEffect:authorize,codexRoute:()=> 'owned_app_server',
+      },beforeEffect:authorize,beforeWrite:()=>{if(stopped)throw new Refusal('stopped_by_operator',130);budget.beforeEffect();},codexRoute:()=> 'owned_app_server',
       async submitCodex(_context,message,storage) {
         if (!queueScope || !handle) throw new Unsupported();
         try { return await (deps.nativeQueue ?? nativeQueueOnce)({binary:storage.binary,scope:queueScope,message,clientUserMessageId:handle.correlationId,
-          deadlineMs:budget.cutoff,verifyOwner,beforeEffect:authorize,verifyStorage:()=>storage.revalidate(true),verifyStorageSync:()=>storage.finalCheck(true)}); }
+          deadlineMs:budget.cutoff,verifyOwner,beforeEffect:authorize,verifyStorage:()=>storage.revalidate(true),verifyStorageSync:()=>{if(stopped)throw new Refusal('stopped_by_operator',130);budget.beforeEffect();storage.finalCheck(true);}}); }
         catch(error) { if (error instanceof AppServerFault) { if (error.attempted) throw new UnknownOutcome(); throw new Refusal('receipt_bootstrap_unsupported',1); } throw error; }
-      },timeoutMs:()=> {budget.beforeEffect(); return Math.max(1,Math.floor(budget.observationRemainingMs()));}
+      },timeoutMs:()=> {if(stopped)throw new Refusal('stopped_by_operator',130);budget.beforeEffect(); return Math.max(1,Math.floor(budget.observationRemainingMs()));}
     }});
     knownNative = {...value};
     update(await rpc('submission',{...handle!,status:'submitted'}));

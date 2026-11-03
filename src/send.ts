@@ -19,6 +19,7 @@ export type SendHooks = {
   // Requests private source metadata only; it is not producer/collector approval.
   privateReceiptContext?: true;
   beforeEffect?: () => Promise<void> | void;
+  beforeWrite?: () => void;
   timeoutMs?: () => number;
   codexRoute?: () => 'ordinary' | 'owned_app_server';
   submitCodex?: (context: SendContext, message: string, storage: CodexStorageGuard) => Promise<{ queueId?: string; clientUserMessageId: string }>;
@@ -36,7 +37,7 @@ export function checkMessage(text: string, codex = false): void {
   if (!text.trim() || text.includes('\0') || [...text].length > 1_000_000 ||
       (codex && Buffer.byteLength(text, 'utf8') > 32768)) throw new Refusal('invalid_message', 2);
 }
-export async function postSocket(path: string, text: string, timeout?: number): Promise<void> {
+export async function postSocket(path: string, text: string, timeout?: number, beforeWrite?: () => void): Promise<void> {
   return new Promise((resolve, reject) => {
     let attempted = false, finished = false;
     const startedAt = performance.now();
@@ -45,11 +46,14 @@ export async function postSocket(path: string, text: string, timeout?: number): 
     const finish = (error?: Error) => {
       if (finished) return;
       finished = true; clearTimeout(timer); socket.destroy();
-      if (error) reject(attempted ? new UnknownOutcome() : new Refusal('inbox_unreachable', 1));
+      if (error) reject(attempted ? new UnknownOutcome() : error instanceof Refusal ? error : new Refusal('inbox_unreachable', 1));
       else resolve();
     };
     socket.on('error', error => finish(error));
     socket.once('connect', () => {
+      if (finished) return;
+      try { beforeWrite?.(); }
+      catch (error) { finish(error instanceof Error ? error : new Error('before_write_refused')); return; }
       attempted = true;
       socket.end(JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n', () => {
         // Write completion is submission only, never consumption. Match Python's drain window.
@@ -231,6 +235,6 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
   const timeout = cutoff === undefined ? undefined : Math.floor(cutoff - performance.now());
   if (timeout !== undefined && (!Number.isFinite(timeout) || timeout < 1)) throw new Refusal('deadline_before_effect', 1);
   if (process.platform === 'win32') await postWindowsPipe(String(row.socket), Number(row.pid), options.message);
-  else await postSocket(String(row.socket), options.message, timeout);
+  else await postSocket(String(row.socket), options.message, timeout, options.hooks?.beforeWrite);
   return result;
 }
