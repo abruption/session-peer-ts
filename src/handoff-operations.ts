@@ -18,10 +18,26 @@ import { codexStoragePin } from './codex-storage.js';
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; remote?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
 export type OperationResult = { value: Record<string, unknown>; exitCode: number };
+function unmanaged(path: string): string {
+  // A managed v2 context has one collector writer. New legacy CLI paths must
+  // refuse before even creating an old lock file; historical v1 stays intact.
+  if (process.platform !== 'win32') {
+    for (const marker of ['managed.json', 'collector.lock']) {
+      try { lstatSync(join(path, marker)); throw new Refusal('receipt_managed_context_required', 1); }
+      catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
+          if (error instanceof Refusal) throw error;
+          throw new Refusal('handoff_history_unavailable', 1);
+        }
+      }
+    }
+  }
+  return path;
+}
 export function ledgerPath(): string {
   const path = process.env.SESSION_PEER_HANDOFF_HOME ?? join(homedir(), '.local', 'state', 'session-peer-ts', 'handoff');
   if (!isAbsolute(path)) throw new Refusal('invalid_handoff_ledger', 2);
-  return resolve(path);
+  return unmanaged(resolve(path));
 }
 export function privateMessage(path: string): string {
   const before = lstatSync(path);
@@ -90,7 +106,7 @@ async function settleCutoffEdge(budget: HandoffBudget): Promise<void> {
 }
 class BeforeEffectRefused extends Error {}
 export async function prepareHandoff(options: SendOptions, path = ledgerPath(), correlationId?: string, budget?: HandoffBudget): Promise<OperationResult> {
-  const ledger = new HandoffLedger(path); let handoff: Handoff | undefined;
+  const ledger = new HandoffLedger(unmanaged(path)); let handoff: Handoff | undefined;
   const value = await send({ ...options, dryRun: true, hooks: { resolved(context) {
     budget?.beforeEffect();
     handoff = ledger.prepare(binding(context, options.message), { correlationId });
@@ -98,7 +114,7 @@ export async function prepareHandoff(options: SendOptions, path = ledgerPath(), 
   return { value: { ...value, handoff }, exitCode: 0 };
 }
 export async function handoffSend(options: SendOptions, handoffOptions: HandoffOptions): Promise<OperationResult> {
-  const ledger = new HandoffLedger(handoffOptions.ledgerPath ?? ledgerPath());
+  const ledger = new HandoffLedger(unmanaged(handoffOptions.ledgerPath ?? ledgerPath()));
   const budget = handoffOptions.budget ?? new HandoffBudget(handoffOptions.seconds ?? 30);
   let handoff: Handoff | undefined, snapshot: Record<string, unknown> | undefined;
   let scope: MetadataScope | undefined, queueScope: AppServerScope | undefined, deliverySupported = false, stopped = false, operationId: string | undefined;

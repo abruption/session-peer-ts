@@ -41,7 +41,8 @@ export function renderOutput(value: Record<string, unknown> | Record<string, unk
     lines.push(`${safe(value.status)}: ${safe(target?.agent)}:${safe(target?.pid ?? target?.id)}`);
     if (value.codexHome) lines.push(`Codex home: ${safe(value.codexHome)}`);
     if (value.queueId) lines.push(`Queue ID: ${safe(value.queueId)}`);
-    lines.push(value.submitted === false ? 'Dry run: nothing submitted.' : 'Submitted; consumption/ACK is not confirmed.');
+    lines.push(value.submitted === false ? 'Dry run: nothing submitted.' : value.handoff ?
+      'Submitted; model consumption and completion are not confirmed.' : 'Submitted; consumption/ACK is not confirmed.');
   }
   if (value.ok === false) {
     lines.push(`Error: ${safe(value.error ?? 'operation_failed')}`);
@@ -52,8 +53,11 @@ export function renderOutput(value: Record<string, unknown> | Record<string, unk
   if (value.handoff && typeof value.handoff === 'object') {
     const h = value.handoff as Record<string, unknown>;
     lines.push(`Handoff: ${safe(h.correlationId)} (${safe(h.state)})`);
+    if (h.schemaVersion === 2) lines.push('Receipt scope: delegated context; native generation and model identity are not established.');
     for (const key of ['observation', 'ack', 'wait']) lines.push(`${key}: ${safe(JSON.stringify(h[key]))}`);
   }
+  if (value.receiptBootstrap && typeof value.receiptBootstrap === 'object')
+    lines.push(`Receipt bootstrap: ${safe(JSON.stringify(value.receiptBootstrap))}`);
   if (value.sshTransport && typeof value.sshTransport === 'object') {
     const transport = value.sshTransport as Record<string, unknown>;
     lines.push(`SSH transport: ${safe(transport.status)} (${safe(transport.reason)}); verified remote facts retained.`);

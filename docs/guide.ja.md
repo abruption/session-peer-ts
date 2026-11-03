@@ -88,6 +88,26 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 別の探索先でエラーが起きても読み取れたセッションは一覧に残し、探索が不完全であることを診断情報と失敗終了コードで示します。送信と送信者の識別には、完全で矛盾のない根拠が必要です。同じ実体の登録ディレクトリを指す別名は一つの行にまとめられますが、PID や inbox の情報が競合する場合は、ディレクトリの順番や PID の指定では解決しません。選択と handoff の連続性検査は元の登録情報の根拠を保持し、提出直前に再確認します。一覧と dry-run は inbox に接続しません。これらの検査は native の世代、メッセージの消費、受領確認 ACK を証明しません。
 
+### 明示的なローカル受領確認
+
+receipt は通常の posted/queued という提出根拠とは別です。所有者が非公開状態を明示的に初期化し、フォアグラウンドの collector を手動で開始します。サービス登録や自動起動はしません。次の `serve` は所有者が停止するまで終了しません。
+
+```sh
+session-peer receipt init --state-dir "$HOME/.session-peer-receipts" --json
+session-peer receipt serve --state-dir "$HOME/.session-peer-receipts" --json
+```
+
+別のターミナルで受領確認用の権限委任を明示的に要求します。受信側は非公開 stdin から receipt 専用 handler を別途呼び出します。下の二つ目のコマンド自体が receipt を取得するわけではありません。トークンをシェルのコマンド文字列、引数、環境変数、URI、公開出力、送信者や collector のファイルに含めず、非公開 stdin/FD で渡せる producer だけを使ってください。許可された受信者の native キューや履歴には残る場合があります。
+
+```sh
+session-peer send --to claude:NAME --message "Receipt fixture" --request-ack --receipt-collector "$HOME/.session-peer-receipts/s" --wait-for acknowledged --wait-timeout 30 --json
+session-peer receipt respond --collector "$HOME/.session-peer-receipts/s" --receipt - --json
+```
+
+`token_possession` は委任されたトークンの所持を示すだけで、モデルの身元、メッセージの消費、作業完了を証明しません。Claude は native 世代が不明な別の v2 delegated receipt context を使います。Codex は元の世代に結び付いた v1 を維持し、非公開 stdin を使う検証済み owned RPC 経路だけを許可します。トークンを native の `--message` 引数に入れる代替経路はありません。既存の手動 `operator_confirmed` 根拠とも異なります。
+
+collector は同じ端末の所有者専用経路です。保存容量の制限が重なり、小さい記録でも約 511 件で新しい受領確認要求を拒否する場合があります。自動削除や初期化で履歴を捨てることはありません。逆向き SSH collector と Windows managed storage は未対応です。明示的な各 wait は自分の期限を維持します。status/wait は非公開の状態分類を書き込む場合がありますが、native メッセージを再提出しません。不明な結果から自動再送は行いません。既存の native・プラットフォーム検証範囲は変わらず、fixture の成功は実エージェントの receipt 検証ではありません。
+
 ## 必要条件
 
 macOS / Linux / Windows native、Node **22.x の 22.13 以上、または 24.x**。Node 26 は対象外です。ネイティブロック依存には対応する x64/arm64 バイナリが必要で、純 JavaScript パッケージではありません。Codex 送信には `codex` が必要で、macOS/Linux では `lsof`・`ps` も必要です。Windows はネイティブロックと Restart Manager で所有者を確認します。Claude にはアクセス可能な inbox を持つ稼働中 TUI が必要です。SSH は既存の鍵・ホスト信頼と、接続先の**同一バージョン**のクライアントを使います。

@@ -1426,3 +1426,11 @@ the exact proposed skill 0.3.0/min0.1.0/full0.4.0/probe-help tuple after design/
 review of the complete Draft #37 fixture. That fixture is not a published skill
 or installation pin; final skill bytes require renewed exact review. A new runtime
 version is never automatically compatible by numerical ordering.
+
+## Explicit local receipts — #132 source implementation
+
+The implementation candidate follows the owner-selected [local bootstrap design](https://github.com/abruption/session-peer-ts/blob/d922d6e20345f10b914ee9cf4da40476fd044f5d/docs/design/receipt-bootstrap.md): manual local collector, explicit private-input authority delegation and a separately invoked receipt-only handler. Existing generation-bound Codex v1 semantics remain intact; Claude delegated-context v2 keeps native generation unknown and proves only token possession. This is separate from manual `operator_confirmed` evidence.
+
+Managed format-2 state has one live collector owner and no migration/import/recovery path. Original user-payload digests remain privately encrypted; raw capability values are never persisted by sender/collector. Fast pre-outcome receipts cannot promote an unknown native submission, reopen an effect fence or rewrite terminal wait results. Receipt/status/wait operations have no native submission path. Codex token delivery uses qualified private-stdin RPC only; ordinary argv-based queue submission is never a token-bearing fallback.
+
+The [operator guide](docs/guide.md#explicit-local-receipts) and [API contract](docs/api.md#explicit-local-receipt-bootstrap-source-implementation) describe the opt-in scope. Existing platform/native qualification, same-version SSH rules and independent skill pins remain unchanged. Windows managed storage, reverse-SSH collectors, automatic services, wake, automatic model ACK, resend and exactly-once claims remain outside this implementation. Transcript-derived Claude observation #73 was explicitly closed NO-GO; that decision does not prohibit voluntary receipt submission.

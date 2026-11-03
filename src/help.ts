@@ -17,6 +17,17 @@ Transport:
   known online peers use their MagicDNS name, known offline peers are refused.
   --no-update-notice                  Suppress the opt-in cached update notice
   -h, --help                         Show command help`;
+  if (command === 'receipt') return `Usage: session-peer receipt <operation> --json
+  init --state-dir DIR [--collector SOCKET]    Explicitly create fresh private managed state
+  serve --state-dir DIR [--collector SOCKET]   Start a foreground local collector; stop with Ctrl-C
+  respond --collector SOCKET --receipt -      Read one private receipt from stdin; never prompt an agent
+  status|revoke --collector SOCKET --ledger-epoch UUID --correlation-id UUID
+  wait --collector SOCKET --ledger-epoch UUID --correlation-id UUID [--wait-timeout SECONDS]
+Explicit POSIX local owner operations only; no automatic start, remote collector, migration or resend.
+Only use separately permitted private stdin/FD tooling. Never put receipt capability data in argv,
+environment, URI, shell command text, public output or sender/collector files.
+Receipt evidence is delegated token possession, not model identity, consumption or completion.
+Status/wait can retain private classifications; they never submit native messages.`;
   if (command === 'handoff' || command === 'ack') return `Usage: session-peer handoff init|prepare|status|wait|confirm --json
   init                               Initialize private POSIX sender ledger explicitly
   prepare --to TARGET --message-file FILE  Reserve a fresh ID without submitting (FILE mode 0600)
@@ -60,7 +71,8 @@ TARGET: Claude name/PID, claude:NAME/PID, codex:UUID, or session-peer reply URI.
 Omit the body or use - for UTF-8 stdin. Only one body source is permitted.
 Unicode names use exact Unicode 14.0.0 default casefold; collisions require PID.
   --correlation-id UUID               Use an already-prepared private handoff ID (opt-in)
-  --request-ack                      Add handoff metadata; automated ACK currently unsupported
+  --request-ack                      Add handoff metadata; no implicit receipt bootstrap
+  --receipt-collector SOCKET          Explicit local receipt bootstrap (requires --request-ack or ACK wait)
   --observe-delivery                 Request optional body-free observation (qualified routes only)
   --wait-for delivered|acknowledged   Refuse before submission if required evidence is unsupported
   --wait-timeout SECONDS             Total budget 1..60 (default 30, includes 5 s cleanup)
@@ -85,8 +97,9 @@ Usage: session-peer <command> [options]
   doctor                             Inspect read-only metadata and capabilities
   update --check                     Check npm for a newer version (no self-update)
   handoff / ack                      Opt-in private evidence operations (see handoff --help)
+  receipt                            Explicit local receipt collector and private handler operations
   --version                          Print exact runtime version
   --help, -h                         Show help; <command> --help for details
 ${common}
-No Relay server, MCP, wake, wait or automatic ACK support.`;
+No Relay server, MCP or wake support. Receipts never imply automatic model ACK or permission to act.`;
 }
