@@ -1,4 +1,47 @@
-# Validation record — updated 2026-10-30 KST
+# Validation record — updated 2026-11-03 KST
+
+## 0.6.0 preparation scope — 2026-11-03 KST
+
+The candidate tracks [#175](https://github.com/abruption/session-peer-ts/issues/175)
+and combines merged Orca Claude profile discovery
+([#165](https://github.com/abruption/session-peer-ts/issues/165),
+[#173](https://github.com/abruption/session-peer-ts/pull/173)) with
+[#176](https://github.com/abruption/session-peer-ts/pull/176)'s staged local
+receipt implementation for [#132](https://github.com/abruption/session-peer-ts/issues/132).
+The integrated source `ef1ba36b7d9b4f4ac7917527fdb8d2db009d5def` passed
+660 tests: 648 pass, 0 fail, 11 skip and 1 existing TODO on Node 24/macOS arm64,
+using the pinned Python reference `8ca77cf31254c8287a2593fe484bb30a7dba2727`.
+Build/types, scoped versions and repository links/structure passed. The exact
+95-file package passed reproducible packing, isolated install, native binding,
+shorthand lifecycle and uninstall. Final PR-head CI/reviews and exact merged-main
+release evidence remain separate gates; the candidate archive identity is
+recorded in the release PR and its source-bound manifest, not inferred from an
+earlier feature or metadata-only artifact.
+
+The new collector is explicitly started and stopped by its operator; it does
+not start a service, wake a session or resend messages. Codex retains the v1
+non-null generation contract on the qualified owned native queue route.
+Claude's v2 delegated receipt context deliberately does not prove a native
+generation. Authenticated receipt submission proves neither model identity nor
+message consumption, injection or completion. Sender/collector output does not
+publish the private capability; the intended recipient's native input/history
+may retain it. Unknown effects keep the no-retry/no-resend boundary.
+
+The implementation's local CLI, private IPC, storage and synthetic transport
+checks do not establish new live native/model/SSH receipt or ACK qualification.
+Existing platform refusals and native observation profiles remain bounded;
+Linux/Windows observation and Windows managed receipt storage are not enabled.
+[#73](https://github.com/abruption/session-peer-ts/issues/73)'s transcript/body
+probe is closed NO-GO and is not included as a runtime feature. Existing
+companion skill publication and its immutable source/hash pin remain separate
+and unchanged; metadata compatibility is not new workflow coverage.
+
+This preparation makes no public 0.6.0 availability, fresh npm authentication or
+publisher/MFA-policy audit, stage approval, installation or operational claim.
+Exact merged-source approval, protected-environment approval, final npm stage
+approval, publication verification and any authorized tag/release remain future
+release gates. Historical publication records below retain their original
+versions, dates and evidence limits.
 
 <a id="public-052--2026-10-30-kst"></a>
 

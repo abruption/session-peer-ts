@@ -9,6 +9,48 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.6.0 preparation — 2026-11-03 KST
+
+This is release preparation, not a publication record or authorization to
+publish. Issue [#175](https://github.com/abruption/session-peer-ts/issues/175)
+tracks the candidate. The merged Orca Claude profile work
+([#165](https://github.com/abruption/session-peer-ts/issues/165),
+[#173](https://github.com/abruption/session-peer-ts/pull/173)) and explicit local
+receipt implementation [#176](https://github.com/abruption/session-peer-ts/pull/176)
+for [#132](https://github.com/abruption/session-peer-ts/issues/132) are separate
+review checkpoints. Final integrated-source checks, archive identity and the
+exact merged-main release gate must be recorded before source approval.
+
+The receipt collector is an explicitly started local foreground process. Codex
+uses the generation-bound v1 receipt contract only on its qualified private
+owned-queue path; Claude uses a separate v2 delegated receipt context and does
+not claim a native generation. A valid receipt authenticates the delegated
+receipt submission within that context; it does not prove model identity,
+message consumption, injection or task completion. It does not turn native
+submission or a queued message into an automatic ACK. Unknown effects must not
+be retried, resent or rerouted. Native observation, platform and SSH
+qualification are not expanded by these local receipt contracts.
+
+[#73](https://github.com/abruption/session-peer-ts/issues/73) is closed as
+NO-GO for transcript/body-based probing. That research is not a runtime feature
+or a source of receipt authority. The existing published companion skill and
+its immutable source pin stay unchanged; a finite doctor compatibility row is
+not evidence that the skill covers the new receipt workflow.
+
+Before any publication, use a new exact-source approval for
+`session-peer@0.6.0`, `stable-stage` and eventual latest promotion to 0.6.0.
+Require current-head macOS/Ubuntu Node 22/24, Windows Node 22/24, repository
+policy, CodeQL and release-gate checks plus reviews of the final changes.
+Verify the reproducible archive, packaged Markdown/source identity and isolated
+package lifecycle against that same source. Fresh npm ownership, pending-stage,
+stage-only Trusted Publisher, package publish-MFA and protected npm environment
+checks remain separate gates; historical exceptions and approvals do not carry
+forward. Protected-environment and final npm stage approvals remain separate.
+Do not dispatch, approve a stage, create `v0.6.0` or publish a GitHub Release
+until their required approvals are obtained. Both SSH endpoints must use the
+same exact runtime version. No global or fleet installation is part of this
+preparation.
+
 ## Public 0.5.2 checkpoint — 2026-10-30 KST
 
 [GitHub v0.5.2](https://github.com/abruption/session-peer-ts/releases/tag/v0.5.2)

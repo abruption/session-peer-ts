@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 import { VERSION } from '../dist/protocol.js';
 
 const cli = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+// The fixture must stay newer than the compiled release, including preview builds.
+const parts = VERSION.split('-')[0]!.split('.').map(Number);
+const fixtureLatest = `${parts[0]}.${parts[1]}.${parts[2]! + 1}`;
 const posix = { skip: process.platform === 'win32' && 'POSIX fake ssh' };
 const hosts = ['alpha', 'beta', 'gamma'];
 async function fixture(t: TestContext) {
@@ -22,7 +25,7 @@ async function fixture(t: TestContext) {
   const requests: string[] = [];
   const server = createServer((request, response) => {
     requests.push(request.url ?? '');
-    response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ latest: '0.5.3' }));
+    response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ latest: fixtureLatest }));
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => {
@@ -59,7 +62,7 @@ process.stdout.write(out);process.exit(r.status);`, { mode: 0o700 });
   };
   const seed = (age = 0) => {
     mkdirSync(cache, { recursive: true, mode: 0o700 });
-    writeFileSync(file, JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry', channel: 'latest', latest: '0.5.3', checkedAt: Date.now() - age }), { mode: 0o600 });
+    writeFileSync(file, JSON.stringify({ schemaVersion: 1, package: 'session-peer', source: 'npm_registry', channel: 'latest', latest: fixtureLatest, checkedAt: Date.now() - age }), { mode: 0o600 });
   };
   const settled = async (count: number) => {
     for (let i = 0; i < 200 && !(requests.length >= count && existsSync(file) && !existsSync(lock)); i++) await delay(50);
@@ -87,7 +90,7 @@ test('repeated --host keeps the request-order array exactly; the notice is clien
   // One destination stays flat and gets the additive client field.
   const single = await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json']);
   const flat = JSON.parse(single.stdout);
-  assert.equal(Array.isArray(flat), false); assert.equal(flat.host, 'alpha'); assert.equal(flat.clientUpdate.latest, '0.5.3');
+  assert.equal(Array.isArray(flat), false); assert.equal(flat.host, 'alpha'); assert.equal(flat.clientUpdate.latest, fixtureLatest);
   await delay(500);
   assert.deepEqual(f.requests, [], 'fresh cache: no refresh'); assert.equal(existsSync(f.receiver), false);
 });
@@ -99,7 +102,7 @@ test('each invocation schedules at most one refresh regardless of host count; re
   for (const item of JSON.parse(first.stdout)) assert.equal('clientUpdate' in item, false);
   await f.settled(1);
   assert.equal(f.requests.length, 1, 'one refresh for three hosts');
-  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, '0.5.3');
+  assert.equal(JSON.parse(readFileSync(f.file, 'utf8')).latest, fixtureLatest);
   f.seed(25 * 3600_000);
   await f.call(f.args(['--output-format', 'text']));
   await f.settled(2);
@@ -119,7 +122,7 @@ test('failure policy: per-host results (including failed ones) may carry the adv
   const on = await f.call(['list', '--agent', 'claude', '--host', 'alpha', '--json'], down);
   const offValue = JSON.parse(off.stdout), { clientUpdate, ...onValue } = JSON.parse(on.stdout);
   assert.equal(offValue.ok, false); assert.equal(offValue.error, 'ssh_unreachable');
-  assert.equal(on.code, off.code); assert.deepEqual(onValue, offValue); assert.equal(clientUpdate.latest, '0.5.3');
+  assert.equal(on.code, off.code); assert.deepEqual(onValue, offValue); assert.equal(clientUpdate.latest, fixtureLatest);
   // Mixed array: element shape and exit code unchanged; text gets one stderr line for the invocation.
   const mixedOff = await f.call(f.args(['--json', '--no-update-notice']), down), mixedOn = await f.call(f.args(['--json']), down);
   assert.equal(mixedOn.code, mixedOff.code); assert.deepEqual(JSON.parse(mixedOn.stdout), JSON.parse(mixedOff.stdout));
@@ -153,7 +156,7 @@ test('clientUpdate is client-local: a remote-supplied value is dropped', posix, 
   assert.equal(localRun.code, 0);
   const { clientUpdate: own, ...local } = JSON.parse(localRun.stdout);
   accepted(local, 'alpha');
-  assert.equal(own.source, 'npm_registry_cache'); assert.equal(own.latest, '0.5.3'); assert.notEqual(own.command, 'fixture-only');
+  assert.equal(own.source, 'npm_registry_cache'); assert.equal(own.latest, fixtureLatest); assert.notEqual(own.command, 'fixture-only');
   const text = await f.call(f.args(['--output-format', 'text', '--no-update-notice']), inject);
   assert.equal(text.code, 0); assert.doesNotMatch(text.stdout, /fixture-only|Error:/); assert.equal(text.stderr, '');
   assert.deepEqual(text.stdout.match(/^Host: .+$/gm), hosts.map(item => `Host: ${item}`));
