@@ -174,9 +174,26 @@ export async function managedReceiptSend(options: SendOptions, config: ReceiptSe
       },beforeEffect:authorize,beforeWrite:()=>{if(stopped)throw new Refusal('stopped_by_operator',130);budget.beforeEffect();},codexRoute:()=> 'owned_app_server',
       async submitCodex(_context,message,storage) {
         if (!queueScope || !handle) throw new Unsupported();
+        // The native adapter deliberately wraps callback failures. Retain only
+        // our own pre-effect Refusal so wrapping cannot erase stop/deadline facts.
+        let guardedRefusal: Refusal | undefined;
+        const beforeEffect = async () => {
+          try { await authorize(); } catch (error) { if (error instanceof Refusal) guardedRefusal=error; throw error; }
+        };
+        const verifyStorageSync = () => {
+          try { if(stopped)throw new Refusal('stopped_by_operator',130);budget.beforeEffect(); }
+          catch (error) { if(error instanceof Refusal)guardedRefusal=error;throw error; }
+          storage.finalCheck(true);
+        };
         try { return await (deps.nativeQueue ?? nativeQueueOnce)({binary:storage.binary,scope:queueScope,message,clientUserMessageId:handle.correlationId,
-          deadlineMs:budget.cutoff,verifyOwner,beforeEffect:authorize,verifyStorage:()=>storage.revalidate(true),verifyStorageSync:()=>{if(stopped)throw new Refusal('stopped_by_operator',130);budget.beforeEffect();storage.finalCheck(true);}}); }
-        catch(error) { if (error instanceof AppServerFault) { if (error.attempted) throw new UnknownOutcome(); throw new Refusal('receipt_bootstrap_unsupported',1); } throw error; }
+          deadlineMs:budget.cutoff,verifyOwner,beforeEffect,verifyStorage:()=>storage.revalidate(true),verifyStorageSync}); }
+        catch(error) { if (error instanceof AppServerFault) {
+          if (error.attempted) throw new UnknownOutcome();
+          if (guardedRefusal) throw guardedRefusal;
+          if (stopped) throw new Refusal('stopped_by_operator',130);
+          throw new Refusal('receipt_bootstrap_unsupported',1);
+        } throw error; }
+
       },timeoutMs:()=> {if(stopped)throw new Refusal('stopped_by_operator',130);budget.beforeEffect(); return Math.max(1,Math.floor(budget.observationRemainingMs()));}
     }});
     knownNative = {...value};
@@ -236,7 +253,9 @@ export async function managedReceiptSend(options: SendOptions, config: ReceiptSe
     }
     if (error instanceof Refusal && error.code === 'stopped_by_operator' &&
         !(handoff?.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator'))
-      error = stopError instanceof Refusal ? stopError : new Refusal('stop_unconfirmed',1);
+      error = handoff?.wait.status === 'timed_out_unknown' ? new Refusal('timed_out_unknown',1) :
+        handoff?.wait.status === 'failed' && handoff.wait.reason ? new Refusal(handoff.wait.reason,1) :
+        stopError instanceof Refusal ? stopError : new Refusal('stop_unconfirmed',1);
     return finish({...snapshot,ok:false,status:uncertain ? 'unknown' : 'refused',submitted:uncertain ? null : false,consumptionConfirmed:false,
       error:error instanceof Refusal ? error.code : uncertain ? 'outcome_unknown' : 'receipt_operation_failed',retryAllowed:false,...(warning ? {handoffWarning:'persistence_failed'} : {})},handoff?.wait.status === 'stopped' && handoff.wait.reason === 'stopped_by_operator' ? 130 : error instanceof Refusal && error.exitCode !== 130 ? error.exitCode : 1);
   } finally { if (required) process.removeListener('SIGINT',stop); }

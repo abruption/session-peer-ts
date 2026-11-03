@@ -10,6 +10,7 @@ import { ReceiptState } from '../dist/receipt-state.js';
 import { HandoffBudget } from '../dist/handoff.js';
 import { Refusal } from '../dist/discovery.js';
 import { UnknownOutcome } from '../dist/process.js';
+import { AppServerFault } from '../dist/app-server.js';
 import type { ReceiptOperation, ReceiptRequestBody, ReceiptResponse } from '../dist/receipt-protocol.js';
 import type { SendOptions } from '../dist/send.js';
 const qualified = {skip:process.platform === 'win32'};
@@ -323,3 +324,38 @@ for(const loseStatus of [false,true])test(`positive native acceptance survives l
   if(loseStatus)assert.equal(result.value.error,'stop_unconfirmed');
   assert.equal(f.order.filter(op=>op==='wait-stop').length,1);assert.equal(f.order.filter(op=>op==='wait-open').length,1);
 });
+
+for (const scenario of ['sync-stop','authorize-stop','owner-stop','sync-deadline','timeout-stop-race','attempted-stop'] as const) {
+  test('Codex native adapter preserves pre-effect reason across wrapping: '+scenario,{skip:process.platform!=='darwin'||process.arch!=='arm64'},async t=>{
+    let mono=0;const clock={monotonic:()=>mono,utc:()=>100000};
+    const f=fixture(t,clock),thread='01900000-0000-7000-8000-000000000001',generation=hash('original codex writer');let writes=0;
+    const budget=new HandoffBudget(10,clock);
+    f.deps.run=async(_binary,args)=>({code:0,stdout:args[0]==='--version'?'codex-cli 0.162.1\n':JSON.stringify({schemaVersion:1,ok:true,generation}),stderr:'',spawned:true,interrupted:false});
+    f.deps.nativeQueue=async input=>{
+      if(scenario==='authorize-stop')process.emit('SIGINT');
+      try{await input.beforeEffect();}catch{throw new AppServerFault('effect_guard_failed',false);}
+      if(scenario==='sync-deadline')mono=6000;
+      else process.emit('SIGINT');
+      if(scenario==='timeout-stop-race')mono=6000;
+      if(scenario==='owner-stop')throw new AppServerFault('owner_changed',false);
+      if(scenario==='attempted-stop'){writes++;throw new AppServerFault('connection_closed',true);}
+      try{input.verifyStorageSync?.();}catch{throw new AppServerFault('storage_binding_unverified',false);}
+      writes++;throw new Error('pre-write guard unexpectedly admitted input');
+    };
+    f.deps.send=async input=>{
+      const context={agent:'codex' as const,target:thread,home:f.root,generation,writerIdentity:generation,binary:'/fixture/qualified-codex'};
+      const snapshot={ok:true,submitted:true,status:'queued',consumptionConfirmed:false};
+      const message=await input.hooks!.resolved(context,snapshot);
+      await input.hooks!.submitCodex!(context,message!,{binary:context.binary,cwd:f.root,async revalidate(){},finalCheck(){}});
+      return snapshot;
+    };
+    const result=await managedReceiptSend({to:'codex:'+thread,message:'original codex task'},{collector:f.socket,waitFor:'acknowledged',budget},f.deps);
+    assert.equal(writes,scenario==='attempted-stop'?1:0);assert.equal(result.value.submitted,scenario==='attempted-stop'?null:false);
+    const h=result.value.handoff as {wait:{status:string;reason?:string}};
+    if(scenario==='sync-deadline'){assert.equal(result.value.error,'deadline_before_effect');assert.equal(result.exitCode,1);}
+    else if(scenario==='timeout-stop-race'){assert.equal(h.wait.status,'timed_out_unknown');assert.equal(result.value.error,'timed_out_unknown');assert.equal(result.exitCode,1);}
+    else if(scenario==='attempted-stop'){assert.equal(result.value.status,'unknown');assert.equal(result.value.error,'outcome_unknown');assert.equal(h.wait.status,'stopped');assert.equal(result.exitCode,130);}
+    else{assert.equal(result.value.error,'stopped_by_operator');assert.equal(h.wait.status,'stopped');assert.equal(result.exitCode,130);}
+    assert.equal(JSON.stringify(result).includes(f.capability),false);
+  });
+}
