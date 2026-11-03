@@ -568,3 +568,16 @@ a prerequisite and cannot enable transcript-derived ACK in this design.
 
 No implementation, platform qualification, live receipt, delivery/ACK result,
 merge, release, installation or operational change is claimed by this proposal.
+
+## Implementation review refinements — 2026-11-03
+
+The following reviewed implementation choices refine the earlier proposal; they do not change existing receipt/handoff v1 or enable a published release:
+
+- Private bootstrap IPC uses **`ipcVersion:2`**, not the historical proposal's IPC 1. Public CLI schema 1, generation-bound Codex receipt/handoff 1, delegated Claude receipt/handoff 2, managed-store 2 and producer challenge protocol 1 remain separate namespaces.
+- `hello` returns a required non-secret `clockReferenceMs`, an opaque coordinate from the live collector's monotonic clock. After receiving that response, the client samples its original total remaining milliseconds exactly once. It does not interpret or compare the collector coordinate with its own clock.
+- `wait-open` adds required `clockReferenceMs` and `remainingMs` to its closed wire body, retaining the original `timeoutSeconds` cap. The collector bounds the span by that cap and anchors `cutoff = reference + remaining - cleanup`. Because the reference precedes the client's remaining-budget measurement, later prepare/mint/IPC delay cannot renew the original deadline. No UTC authority or cross-process absolute-clock assumption is introduced. A future reference, missing pair, invalid integer or oversized span refuses.
+- A terminal ACK/timeout that wins a stop race is read once using the original operation ID. It is not relabelled as a stopped wait or persistence failure. Actual stopped-by-operator results use exit 130; an immutable timeout uses exit 1.
+- Explicit revocation/quarantine refuses further receipt presentations, including duplicate receipt retrieval; the committed ACK remains available through owner status. This preserves existing v1 behavior. TTL expiry alone retains the authenticated read-only identical-receipt exception while detailed history remains available.
+- `late` remains anchored to the first recorded wait, including an insufficient-budget terminal wait. Later waits do not renew that originating cutoff or rewrite earlier terminal results.
+- The intent count and journal bounds apply together. A conservative 64-KiB retained reservation per intent can exhaust the 32-MiB store at about 511 small intents, before the separate 10,000-intent upper bound. There is no automatic deletion/reset/retirement engine. A full store refuses new managed work; discarding history never proves safe resend.
+- IPC read/write/total durations are upper bounds, not promised minimum service time. The client currently uses a stricter one-shot two-second collection budget capped by its remaining total; a post-attempt timeout is unknown, not permission to retry.

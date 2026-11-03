@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { casefold } from './casefold.js';
 import { createConnection } from 'node:net';
 import { lstatSync } from 'node:fs';
-import { claude, claudeSelectionIdentity, revalidateClaudeInventory, Refusal } from './discovery.js';
+import { claude, claudeSelectionIdentity, claudeReceiptProvenance, revalidateClaudeInventory, Refusal, type ClaudeReceiptProvenance } from './discovery.js';
 import { classifyCodexStorage, codexConsumerCwd, codexConsumerSnapshotSync, codexStoragePin, codexWriterCwd, codexWriterStorage, storageDiagnostic, type StorageCheck } from './codex-storage.js';
 import { executable, run, UnknownOutcome } from './process.js';
 import { HomeRefusal, resolveWriter, revalidateWriter, uuid, type HomeResolution } from './writer.js';
@@ -15,7 +15,9 @@ export type CodexStorageGuard = { readonly binary: string; readonly cwd: string;
 export type SendHooks = {
   // Opted-in callers resolve additional handoff context and fencing. Codex
   // sends share the storage guard without creating an implicit handoff ledger.
-  resolved: (context: SendContext, snapshot: Record<string, unknown>) => Promise<string | void> | string | void;
+  resolved: (context: SendContext, snapshot: Record<string, unknown>, provenance?: ClaudeReceiptProvenance) => Promise<string | void> | string | void;
+  // Requests private source metadata only; it is not producer/collector approval.
+  privateReceiptContext?: true;
   beforeEffect?: () => Promise<void> | void;
   timeoutMs?: () => number;
   codexRoute?: () => 'ordinary' | 'owned_app_server';
@@ -210,7 +212,8 @@ export async function send(options: SendOptions): Promise<Record<string, unknown
   if (options.hooks) {
     // Existing POSIX Claude discovery proves PID/socket reachability, not a
     // restart-safe native incarnation. Do not manufacture a generation.
-    const body = await options.hooks.resolved({ agent: 'claude', target: String(row.pid), generation: null, writerIdentity: identity }, result);
+    const body = await options.hooks.resolved({ agent: 'claude', target: String(row.pid), generation: null, writerIdentity: identity }, result,
+      options.hooks.privateReceiptContext && process.platform !== 'win32' ? claudeReceiptProvenance(row) : undefined);
     if (body !== undefined) { checkMessage(body); options = { ...options, message: body }; result.chars = [...body].length; }
   }
   const finalCheck = () => {

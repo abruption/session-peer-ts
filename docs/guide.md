@@ -175,6 +175,26 @@ Without a nonempty `CLAUDE_CONFIG_DIR` or `ANTHROPIC_CONFIG_DIR`, Claude discove
 
 Readable sessions remain listed when another source fails, with incomplete-inventory diagnostics and a failing list exit status. Sending and sender identification require complete, conflict-free evidence. Aliases of the same canonical registry can share one row; conflicting PID or inbox claims cannot be resolved by directory order or by choosing a PID. Selection and handoff continuity retain the original registry evidence and recheck it before submission. Listing and dry-run do not connect to an inbox. These checks do not establish a native generation, consumption or ACK.
 
+### Explicit local receipts
+
+A receipt is separate from ordinary posted/queued evidence. The owner explicitly initializes private state and starts a foreground collector; it is never installed as a service or started automatically. Run the following commands in an operator terminal. `serve` stays in the foreground until stopped.
+
+```sh
+session-peer receipt init --state-dir "$HOME/.session-peer-receipts" --json
+session-peer receipt serve --state-dir "$HOME/.session-peer-receipts" --json
+```
+
+In another terminal, explicitly request receipt delegation. The recipient separately invokes the receipt-only handler with private stdin; the second command below does not obtain a receipt by itself. Use only producer tooling that can supply private stdin/FD data without putting the capability in shell command text, argv, environment, URI, public output or sender/collector files. The authorized recipient's native queue/history can retain it.
+
+```sh
+session-peer send --to claude:NAME --message "Receipt fixture" --request-ack --receipt-collector "$HOME/.session-peer-receipts/s" --wait-for acknowledged --wait-timeout 30 --json
+session-peer receipt respond --collector "$HOME/.session-peer-receipts/s" --receipt - --json
+```
+
+Receipt validation establishes delegated `token_possession`, not model identity, consumption or completion. Claude uses a separate v2 delegated receipt context with unknown native generation; Codex keeps generation-bound v1 and requires the qualified owned RPC route with private stdin. There is no token-bearing native `--message` fallback. Existing manual `operator_confirmed` evidence has a different assurance.
+
+The collector is local and owner-private. Combined retained-capacity limits can refuse new receipt intents at about 511 small records; no automatic cleanup/reset discards history. Reverse SSH collectors and Windows managed storage remain unsupported. Each explicit wait has its own immutable deadline; status/wait can update private classifications but never submit another native message. Unknown outcomes never authorize automatic resend. Existing native/platform qualification limits still apply; fixture results are not live-agent receipt qualification.
+
 ## Requirements
 
 macOS, Linux or native Windows; Node **22.13+ within 22.x or 24.x**. Node 26 is not supported.
