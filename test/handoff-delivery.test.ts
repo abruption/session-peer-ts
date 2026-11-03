@@ -280,7 +280,7 @@ test('unsupported observation version/absent warm store refuse required goals, b
  const missing=await fixture(t,'inject','0.160.1',false);const blocked=await missing.invoke([...missing.args,'--wait-for','delivered']);assert.equal(blocked.code,1);assert.equal(blocked.value.submitted,false);assert.equal(missing.calls().length,0);
 });
 test('deadline without matching injection preserves native queued facts and immutable timed-out wait',qualified,async t=>{
- const f=await fixture(t,'none');const r=await f.invoke([...f.args,'--wait-for','delivered','--wait-timeout','10']);assert.equal(r.code,1,r.stdout);assert.equal(r.value.status,'queued');assert.equal(r.value.submitted,true);assert.equal(r.value.handoff.submission.status,'submitted');assert.equal(r.value.handoff.wait.status,'timed_out_unknown');assert.equal(r.value.handoff.observation.injectionObserved,false);assert.equal(r.value.handoff.ack.status,'not_requested');assert.equal(f.calls().length,1);
+ const f=await fixture(t,'none');const r=await f.invoke([...f.args,'--wait-for','delivered','--wait-timeout','10']);assert.equal(r.code,1,r.stdout);assert.equal(r.value.status,'queued',JSON.stringify({result:r.value,calls:f.calls(),nativeCalls:f.nativeCalls()}));assert.equal(r.value.submitted,true);assert.equal(r.value.handoff.submission.status,'submitted');assert.equal(r.value.handoff.wait.status,'timed_out_unknown');assert.equal(r.value.handoff.observation.injectionObserved,false);assert.equal(r.value.handoff.ack.status,'not_requested');assert.equal(f.calls().length,1);
 });
 test('SIGINT stops an explicit wait without retracting or submitting again',qualified,async t=>{
  const f=await fixture(t,'none');const active=f.start([...f.args,'--wait-for','delivered']);await f.queued();active.child.kill('SIGINT');const r=await active.result;assert.equal(r.code,130,r.stdout);assert.equal(r.value.handoff.wait.status,'stopped');assert.equal(r.value.handoff.wait.reason,'stopped_by_operator');assert.equal(r.value.handoff.retry.allowed,false);assert.equal(f.calls().length,1);assert.notEqual(r.value.submitted,false);
@@ -337,7 +337,7 @@ test('independent wait timeout preserves original submission and never starts an
  assert.equal(result.code,1,result.stdout);assert.equal(result.value.ok,false);
  const waited=validateHandoff(result.value.handoff);
  assert.equal(waited.submission.status,'submitted');assert.equal(waited.targetGeneration,original.targetGeneration);
- assert.equal(waited.wait.status,'timed_out_unknown');assert.equal(waited.observation.injectionObserved,false);
+ assert.equal(waited.wait.status,'timed_out_unknown',JSON.stringify({initial:sent.value,result:result.value,calls:f.calls(),nativeCalls:f.nativeCalls(),qualification:f.ledger().data.records[original.correlationId]?.observationQualification??null}));assert.equal(waited.observation.injectionObserved,false);
  assert.equal(waited.retry.allowed,false);assert.equal(f.calls().length,1);assert.deepEqual(f.nativeCalls(),nativeBefore);assert.ok(performance.now()-started<6000);
  const status=await f.invoke(['handoff','status','--correlation-id',original.correlationId]);
  assert.equal(status.code,0);assert.deepEqual(status.value.handoff.wait,waited.wait);assert.equal(f.calls().length,1);
