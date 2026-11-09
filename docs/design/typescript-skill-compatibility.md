@@ -2,6 +2,25 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## 0.6.1 finite row — 2026-11-09 KST release preparation
+
+The candidate explicitly carries forward the four exact profiles accepted by
+public 0.6.0: skill 0.1.0, 0.2.0, 0.2.1 and 0.3.0 with unchanged metadata.
+Compiled default, explicit `undefined`, explicit 0.6.1 and outer `inspectSkill`
+use this finite row. Matching metadata remains exactly
+`compatible / skill_contract_compatible / metadata_only`; changed profiles and
+unreviewed runtime identities such as 0.6.2 or 0.7.0 remain incompatible.
+Malformed 0.6.1-preview.1 and 00.6.1 remain
+`unknown / skill_metadata_missing` with no `verification` property.
+
+All historical rows, parser/reader behavior and immutable complete-skill
+fixtures remain unchanged. This row does not publish/install a skill, change
+its independent source pin, authenticate content or qualify native delivery,
+receipt/ACK support or a platform. The dated 0.6.0 section below records its
+then-unreviewed 0.6.1 rejection; that historical artifact is not rewritten.
+A new helper accepting an explicit runtime string is not execution of an older
+published CLI. This section records candidate preparation, not public 0.6.1.
+
 ## 0.6.0 finite row — 2026-11-03 KST release preparation
 
 The 0.6.0 source preparation adds one explicit runtime row accepting exactly the

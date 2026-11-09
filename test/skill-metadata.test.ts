@@ -29,7 +29,7 @@ test('finite runtime/profile matrix preserves published 0.3.2 and 0.3.3 profiles
   const legacy = fixtureText(), successor = fixtureText({ ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' });
   assert.deepEqual(validateSkillMetadata(legacy, '0.3.2'), compatible);
   assert.deepEqual(validateSkillMetadata(successor, '0.3.2'), incompatible);
-  assert.equal(VERSION, '0.6.0');
+  assert.equal(VERSION, '0.6.1');
   for (const text of [legacy, successor]) {
     assert.deepEqual(validateSkillMetadata(text, '0.3.3'), compatible);
     assert.deepEqual(validateSkillMetadata(text), compatible);
@@ -43,7 +43,7 @@ test('finite runtime/profile matrix preserves published 0.3.2 and 0.3.3 profiles
 
 test('0.3.4 patch row permits only the two exact published profiles', () => {
   const successor = { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' };
-  assert.equal(VERSION, '0.6.0');
+  assert.equal(VERSION, '0.6.1');
   for (const values of [fields, successor]) {
     assert.deepEqual(validateSkillMetadata(fixtureText(values), '0.3.4'), compatible);
     for (const key of Object.keys(values)) {
@@ -63,7 +63,7 @@ test('0.3.6 release candidate carries forward only the finite 0.3.5 profiles', t
   const { file } = fixture(t);
   const successor = { ...fields, version: '0.2.1', 'runtime-full-version': '0.3.2' };
   const text = fixtureText(successor);
-  assert.equal(VERSION, '0.6.0');
+  assert.equal(VERSION, '0.6.1');
   for (const values of [fields, { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' }, successor]) {
     const profile = fixtureText(values);
     assert.deepEqual(validateSkillMetadata(profile, '0.3.5'), compatible);
@@ -80,12 +80,12 @@ test('0.3.6 release candidate carries forward only the finite 0.3.5 profiles', t
   assert.deepEqual(validateSkillMetadata(text), compatible);
   assert.deepEqual(validateSkillMetadata(text, undefined), compatible);
   writeFileSync(file, text);
-  // The candidate doctor uses compiled 0.6.0; explicit historical rows remain unchanged.
+  // The candidate doctor uses compiled 0.6.1; explicit historical rows remain unchanged.
   assert.deepEqual(inspectSkill(file), { path: file, ...compatible });
   for (const runtime of [null, {}, 0, '', '0.3.5-preview.1', '00.3.5', '0.3.6-preview.1', '00.3.6']) {
     assert.deepEqual(validateSkillMetadata(text, runtime), missing);
   }
-  for (const runtime of ['0.3.5', '0.3.6', '0.4.0', '0.5.0', '0.5.1', '0.5.2', '0.6.0']) {
+  for (const runtime of ['0.3.5', '0.3.6', '0.4.0', '0.5.0', '0.5.1', '0.5.2', '0.6.0', '0.6.1']) {
     for (const key of Object.keys(successor)) {
       assert.deepEqual(validateSkillMetadata(fixtureText({ ...successor, [key]: 'unsupported' }), runtime), incompatible, key);
       const omitted = { ...successor } as Record<string, string>; delete omitted[key];
@@ -385,7 +385,7 @@ test('complete companion 0.2.1 candidate bytes match the exact reviewed fixture 
   assert.equal(createHash('sha256').update(bytes).digest('hex'),
     '96d5a0d049f8a4d193703af3583b198a91079d44ae373de34e94a54e2296a4d6');
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  assert.equal(VERSION, '0.6.0');
+  assert.equal(VERSION, '0.6.1');
   assert.deepEqual(validateSkillMetadata(text), compatible);
   assert.deepEqual(validateSkillMetadata(text, undefined), compatible);
   assert.deepEqual(validateSkillMetadata(text, '0.3.5'), compatible);
@@ -401,7 +401,7 @@ test('complete companion 0.2.1 candidate bytes match the exact reviewed fixture 
 
 test('0.5.2 finite row preserves the four exact 0.4.0, 0.5.0 and 0.5.1 profiles', t => {
   const {file}=fixture(t);
-  assert.equal(VERSION, '0.6.0');
+  assert.equal(VERSION, '0.6.1');
   for(const values of [fields,{...fields,version:'0.2.0','runtime-full-version':'0.3.2'}, {...fields,version:'0.2.1','runtime-full-version':'0.3.2'},{...fields,version:'0.3.0','runtime-full-version':'0.4.0'}]){
     const text=fixtureText(values);
     assert.deepEqual(validateSkillMetadata(text,'0.4.0'),compatible);
@@ -409,11 +409,12 @@ test('0.5.2 finite row preserves the four exact 0.4.0, 0.5.0 and 0.5.1 profiles'
     assert.deepEqual(validateSkillMetadata(text,'0.5.1'),compatible);
     assert.deepEqual(validateSkillMetadata(text,'0.5.2'),compatible);
     assert.deepEqual(validateSkillMetadata(text,'0.6.0'),compatible);
+    assert.deepEqual(validateSkillMetadata(text,'0.6.1'),compatible);
     assert.deepEqual(validateSkillMetadata(text),compatible);
     assert.deepEqual(validateSkillMetadata(text,undefined),compatible);
     writeFileSync(file,text);assert.deepEqual(inspectSkill(file),{path:file,...compatible});
-    for(const runtime of ['0.3.7','0.4.1','0.5.3','0.6.1'])assert.deepEqual(validateSkillMetadata(text,runtime),incompatible);
-    for(const runtime of [null,{},0,'','0.4.0-preview.1','00.4.0','0.5.0-preview.1','00.5.0','0.5.1-preview.1','00.5.1','0.5.2-preview.1','00.5.2','0.6.0-preview.1','00.6.0'])assert.deepEqual(validateSkillMetadata(text,runtime),missing);
+    for(const runtime of ['0.3.7','0.4.1','0.5.3','0.6.2'])assert.deepEqual(validateSkillMetadata(text,runtime),incompatible);
+    for(const runtime of [null,{},0,'','0.4.0-preview.1','00.4.0','0.5.0-preview.1','00.5.0','0.5.1-preview.1','00.5.1','0.5.2-preview.1','00.5.2','0.6.0-preview.1','00.6.0','0.6.1-preview.1','00.6.1'])assert.deepEqual(validateSkillMetadata(text,runtime),missing);
     for(const key of Object.keys(values)){
       assert.deepEqual(validateSkillMetadata(fixtureText({...values,[key]:'unsupported'})),incompatible,key);
       const omitted={...values} as Record<string,string>;delete omitted[key];assert.deepEqual(validateSkillMetadata(fixtureText(omitted)),missing,key);
@@ -436,11 +437,11 @@ test('0.5.2 finite row preserves the four exact 0.4.0, 0.5.0 and 0.5.1 profiles'
 
 
 // Companion PR37 b8ff909 is an immutable review checkpoint, not an install pin.
-test('complete 0.3.0 companion candidate bytes match exact review and the 0.4.0, 0.5.0, 0.5.1, 0.5.2 and 0.6.0 guards', t=>{
+test('complete 0.3.0 companion candidate bytes match exact review and the 0.4.0, 0.5.0, 0.5.1, 0.5.2, 0.6.0 and 0.6.1 guards', t=>{
   const bytes=readFileSync(new URL('./fixtures/ts-skill-0.3.0-candidate.md',import.meta.url));
   assert.equal(bytes.length,20162);assert.ok(bytes.length<=SKILL_METADATA_LIMIT);
   assert.equal(createHash('sha256').update(bytes).digest('hex'),'1ae3690cb5d03777bf448cf06496fed27e4a9329deb03741d6d956a3b13c5ed4');
-  const text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);assert.equal(VERSION, '0.6.0');
+  const text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);assert.equal(VERSION, '0.6.1');
   assert.deepEqual(validateSkillMetadata(text),compatible);
   assert.deepEqual(validateSkillMetadata(text,undefined),compatible);
   assert.deepEqual(validateSkillMetadata(text,'0.4.0'),compatible);
@@ -448,16 +449,17 @@ test('complete 0.3.0 companion candidate bytes match exact review and the 0.4.0,
   assert.deepEqual(validateSkillMetadata(text,'0.5.1'),compatible);
   assert.deepEqual(validateSkillMetadata(text,'0.5.2'),compatible);
   assert.deepEqual(validateSkillMetadata(text,'0.6.0'),compatible);
+  assert.deepEqual(validateSkillMetadata(text,'0.6.1'),compatible);
   const {file}=fixture(t);writeFileSync(file,bytes);assert.deepEqual(inspectSkill(file),{path:file,...compatible});
-  for(const runtime of ['0.3.2','0.3.3','0.3.4','0.3.5','0.3.6','0.3.7','0.4.1','0.5.3','0.6.1'])assert.deepEqual(validateSkillMetadata(text,runtime),incompatible);
-  for(const runtime of [null,{},0,'','0.4.0-preview.1','00.4.0','0.5.0-preview.1','00.5.0','0.5.1-preview.1','00.5.1','0.5.2-preview.1','00.5.2','0.6.0-preview.1','00.6.0'])assert.deepEqual(validateSkillMetadata(text,runtime),missing);
+  for(const runtime of ['0.3.2','0.3.3','0.3.4','0.3.5','0.3.6','0.3.7','0.4.1','0.5.3','0.6.2'])assert.deepEqual(validateSkillMetadata(text,runtime),incompatible);
+  for(const runtime of [null,{},0,'','0.4.0-preview.1','00.4.0','0.5.0-preview.1','00.5.0','0.5.1-preview.1','00.5.1','0.5.2-preview.1','00.5.2','0.6.0-preview.1','00.6.0','0.6.1-preview.1','00.6.1'])assert.deepEqual(validateSkillMetadata(text,runtime),missing);
   // Only bounded metadata is interpreted; candidate body instructions stay inert.
 });
 
 
-test('0.6.0 compiled finite row retains exact profiles and every historical runtime boundary', t => {
+test('0.6.1 compiled finite row retains exact profiles and every historical runtime boundary', t => {
   const { file } = fixture(t);
-  assert.equal(VERSION, '0.6.0');
+  assert.equal(VERSION, '0.6.1');
   const known = [
     fields,
     { ...fields, version: '0.2.0', 'runtime-full-version': '0.3.2' },
@@ -467,7 +469,7 @@ test('0.6.0 compiled finite row retains exact profiles and every historical runt
   const rows: [string, string[]][] = [
     ['0.3.2', ['0.1.0']], ['0.3.3', ['0.1.0', '0.2.0']], ['0.3.4', ['0.1.0', '0.2.0']],
     ['0.3.5', ['0.1.0', '0.2.0', '0.2.1']], ['0.3.6', ['0.1.0', '0.2.0', '0.2.1']],
-    ...['0.4.0', '0.5.0', '0.5.1', '0.5.2', '0.6.0'].map(runtime =>
+    ...['0.4.0', '0.5.0', '0.5.1', '0.5.2', '0.6.0', '0.6.1'].map(runtime =>
       [runtime, ['0.1.0', '0.2.0', '0.2.1', '0.3.0']] as [string, string[]]),
   ];
   for (const profile of known) {
@@ -479,10 +481,10 @@ test('0.6.0 compiled finite row retains exact profiles and every historical runt
     assert.deepEqual(validateSkillMetadata(text), compatible);
     assert.deepEqual(validateSkillMetadata(text, undefined), compatible);
     writeFileSync(file, text); assert.deepEqual(inspectSkill(file), { path: file, ...compatible });
-    for (const runtime of ['0.3.7', '0.4.1', '0.5.3', '0.6.1', '0.7.0', '1.0.0']) {
+    for (const runtime of ['0.3.7', '0.4.1', '0.5.3', '0.6.2', '0.7.0', '1.0.0']) {
       assert.deepEqual(validateSkillMetadata(text, runtime), incompatible);
     }
-    for (const runtime of [null, {}, 0, '', '0.6.0-preview.1', '00.6.0']) {
+    for (const runtime of [null, {}, 0, '', '0.6.0-preview.1', '00.6.0', '0.6.1-preview.1', '00.6.1']) {
       assert.deepEqual(validateSkillMetadata(text, runtime), missing);
     }
     for (const key of Object.keys(profile)) {
