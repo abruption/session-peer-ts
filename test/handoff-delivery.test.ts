@@ -7,20 +7,24 @@ import fs from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,realpathSync,rmSync,statSync,writeFileSync,watch} from 'node:fs';
 import {join,delimiter,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {validateHandoff} from '../dist/handoff.js';
 import {HandoffLedger,payloadDigest} from '../dist/handoff-ledger.js';
 import {handoffSend} from '../dist/handoff-operations.js';
 const qualified={skip:process.platform!=='darwin'||process.arch!=='arm64'};
 const thread='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',cli=resolve('dist/cli.js');
+const diagnosticPreload=fileURLToPath(new URL('./fixtures/owner-probe-diagnostics.mjs',import.meta.url));
 const schema=`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
 CREATE TABLE thread_items(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,item_id TEXT NOT NULL,rollout_ordinal INTEGER NOT NULL,item_json TEXT NOT NULL,item_type TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id,item_id));
 CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_ordinal) WHERE item_type='userMessage';
 CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rollout_byte_offset INTEGER NOT NULL,next_rollout_ordinal INTEGER NOT NULL);`;
 async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-hd-'))),home=join(root,'home'),bin=join(root,'bin');chmodSync(root,0o700);mkdirSync(home,{mode:0o700});mkdirSync(bin,{mode:0o700});mkdirSync(join(home,'thread-writer-locks'),{mode:0o700});
+ const probeLog=join(root,'owner-probes.jsonl');writeFileSync(probeLog,'',{mode:0o600});
+ const probes=()=>readFileSync(probeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
  let history:DatabaseSync|undefined;
- t.after(()=>{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}});
+ t.after(()=>{try{const events=probes();if(events.length)t.diagnostic(JSON.stringify({ownerProbeSummary:{count:events.length,maxElapsedMs:Math.max(...events.map(e=>e.elapsedMs)),outcomes:Object.fromEntries([...new Set(events.map(e=>e.outcome))].map(k=>[k,events.filter(e=>e.outcome===k).length]))}}));}finally{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}}});
  const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT, cwd TEXT)');state.prepare('INSERT INTO threads VALUES(?,?)').run(thread,home);state.close();
  // Model a live warm WAL store: keep the owner connection open so other
  // fixture connections cannot remove/recreate WAL and SHM between probes.
@@ -60,11 +64,11 @@ if(mode==='ledger-failure')fs.chmodSync(path.join(process.env.SESSION_PEER_HANDO
 if(mode==='inject'){const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(path.join(process.env.CODEX_HOME,'thread_history_1.sqlite'));db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(r.params.threadId,'turn-fixture','native-item-not-client-id',1,JSON.stringify({type:'userMessage',id:'native-item-not-client-id',clientId:r.params.clientUserMessageId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');db.close();}
 console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture',clientUserMessageId:r.params.clientUserMessageId,input:r.params.input}}}));
 }});`,{mode:0o700});
- const env={...process.env,HOME:root,USERPROFILE:root,CODEX_HOME:home,SESSION_PEER_CODEX_HOMES:'[]',CLAUDE_CONFIG_DIR:join(root,'.claude'),SESSION_PEER_TAILSCALE:'off',SESSION_PEER_UPDATE_NOTICE:'',CODEX_THREAD_ID:'',CODEX_SESSION_ID:'',PATH:bin+delimiter+(process.env.PATH??''),SESSION_PEER_HANDOFF_HOME:join(root,'state','handoff')};
+ const env={...process.env,SESSION_PEER_TEST_OWNER_PROBE_LOG:probeLog,HOME:root,USERPROFILE:root,CODEX_HOME:home,SESSION_PEER_CODEX_HOMES:'[]',CLAUDE_CONFIG_DIR:join(root,'.claude'),SESSION_PEER_TAILSCALE:'off',SESSION_PEER_UPDATE_NOTICE:'',CODEX_THREAD_ID:'',CODEX_SESSION_ID:'',PATH:bin+delimiter+(process.env.PATH??''),SESSION_PEER_HANDOFF_HOME:join(root,'state','handoff')};
  const args=['send','--to','codex:'+thread,'--codex-home',home,'--codex-bin',codex,'--message','fixture request','--no-from','--no-reply-to'];
  let activeSend:undefined|{child:ReturnType<typeof spawn>;closed:()=>boolean;output:()=>{stdout:string;stderr:string}};
- function start(options:string[]){const child=spawn(process.execPath,[cli,...options,'--json'],{env});let stdout='',stderr='',closedOutput=false;child.once('close',()=>{closedOutput=true;});child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);if(options[0]==='send')activeSend={child,closed:()=>closedOutput,output:()=>({stdout,stderr})};child.stdin.end();const timer=setTimeout(()=>child.kill('SIGKILL'),15000);const closed=once(child,'close');const result=closed.then(([code,signal])=>{clearTimeout(timer);assert.equal(signal,null,stderr);return{code,value:JSON.parse(stdout),stdout,stderr};});void result.catch(()=>{});t.after(async()=>{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await closed;}});return{child,result};}
- async function invoke(options:string[]){return start(options).result;}
+ function start(options:string[],preload?:string){const child=spawn(process.execPath,['--import',diagnosticPreload,...(preload?['--import',preload]:[]),cli,...options,'--json'],{env});let stdout='',stderr='',closedOutput=false;child.once('close',()=>{closedOutput=true;});child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);if(options[0]==='send')activeSend={child,closed:()=>closedOutput,output:()=>({stdout,stderr})};child.stdin.end();const timer=setTimeout(()=>child.kill('SIGKILL'),15000);const closed=once(child,'close');const result=closed.then(([code,signal])=>{clearTimeout(timer);assert.equal(signal,null,stderr);return{code,value:JSON.parse(stdout),stdout,stderr};});void result.catch(()=>{});t.after(async()=>{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await closed;}});return{child,result};}
+ async function invoke(options:string[],preload?:string){return start(options,preload).result;}
  assert.equal((await invoke(['handoff','init'])).code,0);
  const calls=()=>readFileSync(log,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
  const nativeCalls=()=>readFileSync(nativeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
@@ -122,7 +126,7 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
   });
  }
  function inject(clientId:string){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));try{db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(thread,'turn-fixture','after-submit-item',1,JSON.stringify({type:'userMessage',id:'after-submit-item',clientId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');}finally{db.close();}}
- return{root,home,codex,env,calls,nativeCalls,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
+ return{root,home,codex,env,calls,nativeCalls,probes,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
 async function directEnvironment<T>(f:{root:string;env:NodeJS.ProcessEnv},action:()=>Promise<T>):Promise<T>{
  const saved={...process.env},cwd=process.cwd();Object.assign(process.env,f.env);process.chdir(f.root);
@@ -368,8 +372,9 @@ test('independent wait cannot adopt another owner or reconstruct missing retaine
  assert.equal(refused.code,1,refused.stdout);const changed=validateHandoff(refused.value.handoff);
  assert.equal(changed.wait.status,'unsupported');assert.equal(changed.submission.status,'submitted');assert.equal(changed.targetGeneration,original.targetGeneration);
  assert.equal(changed.observation.injectionObserved,false);assert.equal(wrong.calls().length,1);assert.deepEqual(wrong.nativeCalls(),wrongNative);
+ assert.ok(wrong.probes().some(event=>event.phase==='wait'&&event.outcome==='unverified_reply'));
  const old=await fixture(t,'none');const sent=await old.invoke([...old.args,'--observe-delivery']);
- assert.equal(sent.code,0,sent.stdout);const handoff=validateHandoff(sent.value.handoff),oldNative=old.nativeCalls();
+ assert.equal(sent.code,0,JSON.stringify({result:sent.value,queueCalls:old.calls(),nativeCalls:old.nativeCalls(),ownerProbes:old.probes()}));const handoff=validateHandoff(sent.value.handoff),oldNative=old.nativeCalls();
  const retained=old.ledger();delete retained.data.records[handoff.correlationId].observationQualification;
  retained.digest=payloadDigest(JSON.stringify(retained.data));
  writeFileSync(old.ledgerFile,JSON.stringify(retained),{mode:0o600});old.inject(handoff.correlationId);
@@ -430,3 +435,33 @@ test('exact qualified 0.162.1 native profile retains its own source when resumin
  assert.equal(result.value.handoff.wait.status,'satisfied');assert.equal(result.value.handoff.ack.status,'not_requested');
  assert.equal(f.calls().length,1);assert.deepEqual(f.nativeCalls(),nativeBefore);
 });
+
+for(const mode of ['timeout','invalid_reply','generation_mismatch','process_error'] as const){
+ test('owner probe diagnostic distinguishes '+mode+' without authorizing a queue',qualified,async t=>{
+  const f=await fixture(t,'none'),loader=join(f.root,'owner-probe-control.mjs'),reply=join(f.root,'owner-probe-reply.mjs');
+  writeFileSync(reply,mode==='timeout'?'await new Promise(resolve=>setTimeout(resolve,1200));':
+   `process.stdout.write(JSON.stringify(${JSON.stringify(mode==='invalid_reply'?{schemaVersion:1,ok:true,generation:'f'.repeat(64),unexpected:'PRIVATE_PROBE_SENTINEL'}:{schemaVersion:1,ok:true,generation:'f'.repeat(64)})})+'\\n');`,{mode:0o600});
+  writeFileSync(loader,`import cp from 'node:child_process';import{syncBuiltinESMExports}from'node:module';
+const spawn=cp.spawn;let count=0;
+cp.spawn=function(binary,args,options){
+ if(binary===process.execPath&&Array.isArray(args)&&String(args[0]).endsWith('/handoff-writer-probe.js')&&++count===3){
+  ${mode==='process_error'?"return spawn.call(this,binary+'-missing',args,options);":mode==='timeout'?`return spawn.call(this,binary,['--import',${JSON.stringify(reply)},...args],options);`:`return spawn.call(this,binary,[${JSON.stringify(reply)}],options);`}
+ }
+ return spawn.call(this,binary,args,options);
+};syncBuiltinESMExports();`,{mode:0o600});
+  const sent=await f.invoke([...f.args,'--observe-delivery'],loader),events=f.probes();
+  const diagnostic=JSON.stringify({result:sent.value,queueCalls:f.calls(),ownerProbes:events});
+  assert.equal(sent.code,1,diagnostic);assert.equal(sent.value.error,'app_server_owner_changed',diagnostic);
+  assert.equal(sent.value.submitted,false);assert.deepEqual(f.calls(),[]);assert.equal(events.length,3,diagnostic);
+  assert.deepEqual(events.slice(0,2).map(e=>e.outcome),['matched','matched']);
+  assert.equal(events[2].outcome,mode);assert.equal(events[2].timeoutMs,800);
+  if(mode==='timeout'){assert.equal(events[2].stopReason,'timeout');assert.equal(events[2].interrupted,true);assert.ok(events[2].elapsedMs>=700);}
+  if(mode==='process_error'){assert.equal(events[2].stopReason,'process_error');assert.equal(events[2].spawned,false);}
+  for(const event of events){
+   assert.deepEqual(Object.keys(event).sort(),['schemaVersion','phase','outcome','elapsedMs','timeoutMs','spawned','code','interrupted','stopReason'].sort());
+   assert.ok(Buffer.byteLength(JSON.stringify(event))<=512);assert.equal(event.phase,'send');
+   assert.equal(JSON.stringify(event).includes(f.root),false);assert.equal(JSON.stringify(event).includes(thread),false);
+  }
+  assert.equal(diagnostic.includes('PRIVATE_PROBE_SENTINEL'),false);assert.equal(diagnostic.includes('f'.repeat(64)),false);
+ });
+}

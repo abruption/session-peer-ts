@@ -112,12 +112,14 @@ test('SSH remaining duration charges setup/frame time and never renews cleanup o
 async function fixture(t: TestContext) {
   const root = realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-ssh-handoff-'))); chmodSync(root, 0o700);
   const destination = join(root, 'destination'), origin = join(root, 'origin'), socket = join(root, 'socket'), log = join(root, 'calls.jsonl');
-  const preparationLog = join(root, 'preparations.jsonl');
+  const preparationLog = join(root, 'preparations.jsonl'), probeLog=join(root,'owner-probes.jsonl');writeFileSync(probeLog,'',{mode:0o600});
+  const diagnosticPreload=fileURLToPath(new URL('./fixtures/owner-probe-diagnostics.mjs',import.meta.url));
+  const ownerProbes=()=>readFileSync(probeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
   mkdirSync(origin); mkdirSync(join(destination, '.claude', 'sessions'), { recursive: true }); writeFileSync(log, ''); writeFileSync(preparationLog, '');
   const messages: string[] = [];
   const server = createServer(s => { let body = ''; s.on('data', part => { body += part; }); s.on('end', () => { messages.push(body); s.end(); }); });
   server.listen(socket); await once(server, 'listening');
-  t.after(async () => { await new Promise<void>(resolve => server.close(() => resolve())); rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { try{const events=ownerProbes();if(events.length)t.diagnostic(JSON.stringify({ownerProbeSummary:{count:events.length,maxElapsedMs:Math.max(...events.map(e=>e.elapsedMs)),outcomes:Object.fromEntries([...new Set(events.map(e=>e.outcome))].map(k=>[k,events.filter(e=>e.outcome===k).length]))}}));}finally{try{await new Promise<void>(resolve => server.close(() => resolve()));}finally{rmSync(root, { recursive: true, force: true });}} });
   writeFileSync(join(destination, '.claude', 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: 'fixture', messagingSocketPath: socket }));
   writeFileSync(join(root, 'ssh'), `#!${process.execPath}
 const fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2);
@@ -128,23 +130,23 @@ fs.appendFileSync(process.env.FIXTURE_LOG,JSON.stringify(request)+'\\n');
 if(process.env.FIXTURE_PARTIAL_PREPARE&&request.handoff?.preparation){process.stdout.write('{');process.exit(0);}
 const env={...process.env,HOME:process.env.FIXTURE_DEST,USERPROFILE:process.env.FIXTURE_DEST,CLAUDE_CONFIG_DIR:process.env.FIXTURE_DEST+'/.claude',SESSION_PEER_HANDOFF_HOME:process.env.FIXTURE_DEST+'/state/handoff'};
 const selector=args.at(-1).match(/ --handoff-remaining-ms=([1-9][0-9]{0,4})$/);
-const child=cp.spawn(process.execPath,[process.env.FIXTURE_CLI,'--stdio-request',...(selector?['--handoff-remaining-ms='+selector[1]]:[])],{env,cwd:env.HOME,stdio:['pipe','pipe','inherit']});
+const child=cp.spawn(process.execPath,['--import',process.env.FIXTURE_DIAGNOSTIC_PRELOAD,process.env.FIXTURE_CLI,'--stdio-request',...(selector?['--handoff-remaining-ms='+selector[1]]:[])],{env,cwd:env.HOME,stdio:['pipe','pipe','inherit']});
 let output='';child.stdout.on('data',part=>{output+=part;process.stdout.write(part);});
 child.stdin.end(input);child.on('close',(code,signal)=>{if(request.handoff?.preparation)fs.appendFileSync(process.env.FIXTURE_PREPARATIONS,output);if(signal)process.kill(process.pid,signal);else process.exitCode=request.handoff?.preparation&&process.env.FIXTURE_PREPARE_EXIT255?255:code;});
 `, { mode: 0o700 });
-  const common = { ...process.env, CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_UPDATE_NOTICE: '',
+  const common = { ...process.env, SESSION_PEER_TEST_OWNER_PROBE_LOG:probeLog,FIXTURE_DIAGNOSTIC_PRELOAD:diagnosticPreload,CODEX_HOME: '', CODEX_THREAD_ID: '', CODEX_SESSION_ID: '', SESSION_PEER_TAILSCALE: 'off', SESSION_PEER_UPDATE_NOTICE: '',
     PATH: root + delimiter + process.env.PATH, FIXTURE_VERSION: VERSION_LINE, FIXTURE_LOG: log, FIXTURE_PREPARATIONS: preparationLog, FIXTURE_CLI: cli, FIXTURE_DEST: destination };
   const destEnv = { ...common, HOME: destination, USERPROFILE: destination, CLAUDE_CONFIG_DIR: join(destination, '.claude'), SESSION_PEER_HANDOFF_HOME: join(destination, 'state', 'handoff') };
   const originEnv = { ...common, HOME: origin, USERPROFILE: origin, CLAUDE_CONFIG_DIR: join(origin, '.claude'), SESSION_PEER_HANDOFF_HOME: join(origin, 'state', 'handoff') };
   async function invoke(args: string[], destinationSide = false, input?: string, extra: NodeJS.ProcessEnv = {}) {
-    const child = spawn(process.execPath, [cli, ...args], { env: { ...(destinationSide ? destEnv : originEnv), ...extra }, cwd: destinationSide ? destination : origin });
+    const child = spawn(process.execPath, ['--import',diagnosticPreload,cli, ...args], { env: { ...(destinationSide ? destEnv : originEnv), ...extra }, cwd: destinationSide ? destination : origin });
     let stdout = '', stderr = ''; child.stdout.on('data', part => { stdout += part; }); child.stderr.on('data', part => { stderr += part; }); child.stdin.end(input);
     // Harness margin permits cleanup/reporting; the request budget is unchanged.
     const timer = setTimeout(() => child.kill('SIGKILL'), 20000);
     const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null, stderr);
     return { code, value: JSON.parse(stdout), stdout, stderr };
   }
-  return { root, destination, origin, destEnv, messages, invoke, calls: () => readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
+  return { root, destination, origin, destEnv, messages, invoke, ownerProbes, calls: () => readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
     preparations: () => readFileSync(preparationLog, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
     args: ['send', '--host', 'fixture', '--to', String(process.pid), '--message=fixture body', '--no-from', '--no-reply-to', '--json'] };
 }
@@ -196,7 +198,8 @@ for (const mode of ['inject', 'none', 'loss'] as const) {
     const f = await codexFixture(t, mode), started = performance.now();
     const sent = await f.invoke(f.args, false, undefined, f.env);
     assert.equal(sent.code, mode === 'inject' ? 0 : 1, sent.stdout);
-    const calls = f.calls(); assert.equal(calls.length, 2);
+    const diagnostic=JSON.stringify({result:sent.value,queueCalls:f.queueCalls(),nativeCalls:f.nativeCalls(),ownerProbes:f.ownerProbes()});
+    const calls = f.calls(); assert.equal(calls.length, 2,diagnostic);
     assert.equal(calls[0].handoff.preparation, true); assert.equal(calls[1].handoff.preparation, undefined);
     assert.ok(calls[1].handoff.remainingMs < calls[0].handoff.remainingMs);
     const original = f.preparations()[0], initial = validateHandoff(original.handoff);
@@ -206,7 +209,7 @@ for (const mode of ['inject', 'none', 'loss'] as const) {
     assert.equal(calls[1].args[calls[1].args.indexOf('--correlation-id') + 1], initial.correlationId);
     assert.equal(calls[1].args[calls[1].args.indexOf('--codex-home') + 1], original.codexHome);
     assert.equal(calls[1].args[calls[1].args.indexOf('--to') + 1], `codex:${original.target.id}`);
-    assert.deepEqual(f.queueCalls(), [{ method: 'thread/queue/add', clientId: initial.correlationId, threadId: thread, codexHome: f.home }]);
+    assert.deepEqual(f.queueCalls(), [{ method: 'thread/queue/add', clientId: initial.correlationId, threadId: thread, codexHome: f.home }],diagnostic);
     assert.equal(f.nativeCalls().some(call => call.command === 'queue'), false);
     assert.equal(f.messages.length, 0); assert.equal(existsSync(join(f.origin, 'state', 'handoff')), false);
     const retained = f.ledger().data.records[initial.correlationId];
