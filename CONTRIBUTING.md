@@ -99,8 +99,14 @@ do not authorize npm publication, production deployment or service restarts.
 CI exercises release packaging without publishing. The manual publishing
 workflow has separate confirmation and environment-approval gates; see
 RELEASING.md before dispatching it. Never add publish credentials to PR tests.
-Dependabot automatic update PRs are not enabled; dependency changes are manual
-reviewed PRs with lockfile, audit, native-load and platform tests.
-Dependabot vulnerability alerts are enabled, and `.github/workflows/audit.yml`
-runs `npm audit` and `npm audit signatures` weekly (and on manual dispatch) so
-new advisories surface between commits. Triage an alert with a manual PR.
+Dependabot version updates for npm and GitHub Actions run weekly. Minor/patch
+updates are grouped; major upgrades remain separate reviewed PRs. Auto-merge is
+not enabled. GitHub vulnerability alerts and security-update settings are separate.
+Keep lockfile, audit, native-load and platform tests for dependency updates.
+The existing audit workflow still runs npm audit and registry signature checks.
+
+The `secret-scan` workflow uses a checksum-pinned MIT Gitleaks CLI, not the
+licensed Gitleaks GitHub Action. It scans full fetched Git history on PRs, main
+pushes, weekly schedules and manual dispatch. Output is redacted and no secret
+reports are uploaded. Treat a finding as requiring investigation; never blanket
+allowlist credentials or assume a clean scan proves no past exposure.

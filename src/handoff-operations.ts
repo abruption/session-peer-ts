@@ -1,6 +1,7 @@
 // Opt-in integration only. Default CLI imports this without opening storage or
 // starting an observer/collector. Production receipt bootstrap is unqualified.
 import { homedir, hostname } from 'node:os';
+import { channel } from 'node:diagnostics_channel';
 import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync } from 'node:fs';
 import { HandoffLedger, payloadDigest, type HandoffBinding } from './handoff-ledger.js';
@@ -11,9 +12,50 @@ import { metadataCapability, observeMetadata, resumeMetadataObservation, metadat
 import { checkMessage, queueId, send, type SendContext, type SendOptions } from './send.js';
 import { Refusal } from './discovery.js';
 import { HomeRefusal } from './writer.js';
-import { executable, run, UnknownOutcome } from './process.js';
+import { executable, run, UnknownOutcome, type Done } from './process.js';
 import { currentPlatform, selectNativeProfile, validateNativeProfiles, type NativeProfile } from './native-profiles.js';
 import { codexStoragePin } from './codex-storage.js';
+
+// Internal observations only: no I/O or public protocol changes. Never publish
+// paths, identifiers, generations, native output or arguments on this channel.
+const ownerProbeChannel = channel('session-peer.handoff.owner-probe');
+type ProbeOutcome = 'matched' | 'generation_mismatch' | 'invalid_reply' | 'unverified_reply' |
+  'timeout' | 'output_limit' | 'process_error' | 'nonzero_exit' | 'interrupted' | 'stopped' | 'aborted' | 'budget_exhausted';
+async function retainedOwnerProbe(scope: MetadataScope, budget: HandoffBudget, ownerArgs: string[],
+  phase: 'send' | 'wait', stopped: () => boolean, signal?: AbortSignal): Promise<boolean> {
+  const observed = ownerProbeChannel.hasSubscribers, started = observed ? performance.now() : 0;
+  let timeoutMs = 0;
+  const report = (outcome: ProbeOutcome, result?: Done) => {
+    if (!observed) return;
+    ownerProbeChannel.publish(Object.freeze({schemaVersion:1,phase,outcome,
+      elapsedMs:Math.max(0,Math.round((performance.now()-started)*1000)/1000),
+      timeoutMs:Math.max(0,timeoutMs),spawned:result?.spawned ?? false,
+      code:result?.code ?? null,interrupted:result?.interrupted ?? false,stopReason:result?.stopReason ?? null}));
+  };
+  if (stopped()) { report('stopped'); return false; }
+  if (signal?.aborted) { report('aborted'); return false; }
+  if (budget.observationRemainingMs() < 1) { report('budget_exhausted'); return false; }
+  const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
+  timeoutMs = Math.min(800,budget.observationRemainingMs());
+  let result: Done;
+  try { result = await run(process.execPath,[worker,scope.home,scope.threadId,...ownerArgs],
+    {timeout:timeoutMs,limit:4096,env:{...process.env,NODE_OPTIONS:undefined,NODE_PATH:undefined}}); }
+  catch (error) { report('process_error'); throw error; }
+  if (stopped()) { report('stopped',result); return false; }
+  if (signal?.aborted) { report('aborted',result); return false; }
+  if (result.code !== 0 || result.interrupted) {
+    report(result.stopReason ?? (result.interrupted ? 'interrupted' : 'nonzero_exit'),result); return false;
+  }
+  try {
+    const value = JSON.parse(result.stdout);
+    const valid = value.schemaVersion === 1 && value.ok === true &&
+      Object.keys(value).every(key=>['schemaVersion','ok','generation'].includes(key)) && /^[0-9a-f]{64}$/.test(value.generation);
+    const matched = valid && value.generation === scope.generation;
+    report(matched ? 'matched' : valid ? 'generation_mismatch' :
+      value.schemaVersion === 1 && value.ok === false ? 'unverified_reply' : 'invalid_reply',result);
+    return matched;
+  } catch { report('invalid_reply',result); return false; }
+}
 
 export type HandoffOptions = { correlationId?: string; requestAck?: boolean; observeDelivery?: boolean; remote?: boolean;
   waitFor?: Exclude<WaitFor, 'none'>; seconds?: number; ledgerPath?: string; payload?: string; budget?: HandoffBudget; resultOverhead?: number };
@@ -138,13 +180,8 @@ export async function handoffSend(options: SendOptions, handoffOptions: HandoffO
   };
   const persist = <T>(action: () => T) => persistWithinBudget(budget, action);
   const authorize = async () => { if (stopped) throw new Refusal('stopped_by_operator', 130); budget.beforeEffect(); handoff = await persist(() => { if (stopped) throw new Refusal('stopped_by_operator', 130); return ledger.commitEffect(handoff!.correlationId, original!, budget); }); fenced = true; ownWait(); };
-  const verifyOwner = async (target: MetadataScope, signal?: AbortSignal) => {
-    if (stopped || signal?.aborted || budget.observationRemainingMs() < 1) return false;
-    const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
-    const result = await run(process.execPath, [worker, target.home, target.threadId, ...ownerArgs], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
-    if (signal?.aborted || stopped || result.code !== 0 || result.interrupted) return false;
-    try { const value = JSON.parse(result.stdout); return value.schemaVersion === 1 && value.ok === true && Object.keys(value).every(key => ['schemaVersion','ok','generation'].includes(key)) && /^[0-9a-f]{64}$/.test(value.generation) && value.generation === target.generation; } catch { return false; }
-  };
+  const verifyOwner = (target: MetadataScope, signal?: AbortSignal) =>
+    retainedOwnerProbe(target,budget,ownerArgs,'send',()=>stopped,signal);
   const finish = (value: Record<string, unknown>, exitCode: number): OperationResult => ({ value: { ...value, ...(handoff ? { handoff } : {}) }, exitCode });
   if (handoffOptions.waitFor) process.on('SIGINT', stop);
   try {
@@ -275,17 +312,8 @@ export async function waitForHandoff(ledger: HandoffLedger, id: string, goal: 'd
   const persist = <T>(action: () => T) => persistWithinBudget(budget, action);
   const ownWait = () => { if (operationId) handoff = ledger.operationStatus(id, operationId); };
   const ownerArgs = ownerProbeArgs(context?.qualification);
-  const verifyOwner = async (scope: MetadataScope, signal: AbortSignal) => {
-    if (stopped || signal.aborted || budget.observationRemainingMs() < 1) return false;
-    const worker = fileURLToPath(new URL('./handoff-writer-probe.js', import.meta.url));
-    const result = await run(process.execPath, [worker, scope.home, scope.threadId, ...ownerArgs], { timeout: Math.min(800, budget.observationRemainingMs()), limit: 4096, env: { ...process.env, NODE_OPTIONS: undefined, NODE_PATH: undefined } });
-    if (stopped || signal.aborted || result.code !== 0 || result.interrupted) return false;
-    try {
-      const value = JSON.parse(result.stdout);
-      return value.schemaVersion === 1 && value.ok === true && Object.keys(value).every(key => ['schemaVersion','ok','generation'].includes(key)) &&
-        /^[0-9a-f]{64}$/.test(value.generation) && value.generation === scope.generation;
-    } catch { return false; }
-  };
+  const verifyOwner = (scope: MetadataScope, signal: AbortSignal) =>
+    retainedOwnerProbe(scope,budget,ownerArgs,'wait',()=>stopped,signal);
   process.on('SIGINT', stop);
   try {
     handoff = await persist(() => ledger.beginWait(id, goal, budget, { observationSupported: context !== undefined }));
