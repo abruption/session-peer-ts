@@ -14,7 +14,7 @@ import {HandoffLedger,payloadDigest} from '../dist/handoff-ledger.js';
 import {handoffSend} from '../dist/handoff-operations.js';
 const qualified={skip:process.platform!=='darwin'||process.arch!=='arm64'};
 const thread='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',cli=resolve('dist/cli.js');
-const diagnosticPreload=fileURLToPath(new URL('./fixtures/owner-probe-diagnostics.mjs',import.meta.url));
+const diagnosticPreload=new URL('./fixtures/owner-probe-diagnostics.mjs',import.meta.url).href;
 const schema=`CREATE TABLE thread_turns(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,status TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id));
 CREATE TABLE thread_items(thread_id TEXT NOT NULL,turn_id TEXT NOT NULL,item_id TEXT NOT NULL,rollout_ordinal INTEGER NOT NULL,item_json TEXT NOT NULL,item_type TEXT NOT NULL,PRIMARY KEY(thread_id,turn_id,item_id));
 CREATE INDEX idx_thread_items_user_messages ON thread_items(thread_id,rollout_ordinal) WHERE item_type='userMessage';
