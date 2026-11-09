@@ -9,6 +9,49 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.6.1 preparation — 2026-11-09 KST
+
+Issue [#188](https://github.com/abruption/session-peer-ts/issues/188) tracks
+preparation from merged main `a86eb11242f922a5f8959516bf8cb2f9b4b41e5a`
+([#179](https://github.com/abruption/session-peer-ts/pull/179), including
+[#181](https://github.com/abruption/session-peer-ts/pull/181)). The patch adds
+bounded internal owner-validation diagnostics and test-only evidence capture.
+Dependabot and redacted secret scanning are repository maintenance; their
+configuration is not installed as a CLI feature. The runtime has no default
+diagnostic file I/O. Explicit observers can add work within the unchanged
+operation budget. Owner/storage predicates, the 800-ms probe limit, at-most-one
+submission and unknown/no-resend behavior remain unchanged.
+
+[#180](https://github.com/abruption/session-peer-ts/issues/180) remains open.
+The historical macOS failures were not naturally reproduced in the instrumented
+runs, so this release must not claim a causal repair, harmless flakiness or a
+new platform/native/ACK qualification. The candidate adds only an explicit
+0.6.1 doctor row for the same four exact skill profiles; grammar, reader,
+existing rows, skill bodies and immutable installation pins are unchanged.
+Both SSH endpoints must use the same exact runtime version: 0.6.0 and 0.6.1 do
+not pass one another's version preflight.
+
+Public registry metadata checked for preparation reports latest=0.6.0,
+preview=0.1.0-preview.1 and 0.6.1 absent. The public 0.6.0 integrity is
+`sha512-/EsNpj+Gq4siicBVH8u5UTGbUICQhipyGOY2khG+BW1ken9Z23s/zacOn+tJu//DUuq+G0yc7wwFJbgQHC6+AA==`;
+its provenance endpoint is
+`https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.6.0`.
+This public metadata read is not an authenticated ownership, pending-stage,
+Trusted Publisher or publish-MFA audit. Historical settings-read exceptions and
+approvals do not carry forward.
+
+Preparation does not authorize publication. Before any dispatch, require final
+PR reviews, exact merged-main macOS/Ubuntu/Windows Node 22/24, CodeQL and release
+gate success; reproducible source-bound archive, packaged Markdown identity and
+isolated lifecycle checks; fresh ownership, pending-stage, stage-only Trusted
+Publisher, publish-MFA and protected-environment checks. Obtain a separate
+approval naming the exact merged main SHA, archive digest, `session-peer@0.6.1`,
+`stable-stage` and eventual latest promotion. GitHub npm environment and final
+npm stage 2FA approvals remain separate. Do not automatically retry an uncertain
+upload. Tags and GitHub Release publication also require separate authorization.
+No workflow dispatch, staging, tag, release, package publication or global/fleet
+installation is performed as part of this preparation.
+
 ## 0.6.0 preparation — 2026-11-03 KST
 
 This is release preparation, not a publication record or authorization to

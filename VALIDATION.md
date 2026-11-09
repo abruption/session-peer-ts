@@ -1,4 +1,39 @@
-# Validation record — updated 2026-11-03 KST
+# Validation record — updated 2026-11-09 KST
+
+## 0.6.1 preparation scope — 2026-11-09 KST
+
+The release candidate for [#188](https://github.com/abruption/session-peer-ts/issues/188)
+starts from merged main `a86eb11242f922a5f8959516bf8cb2f9b4b41e5a`, including
+[#179](https://github.com/abruption/session-peer-ts/pull/179) and
+[#181](https://github.com/abruption/session-peer-ts/pull/181). It carries internal
+owner-probe instrumentation, explicit test-only ordered capture and repository
+update/secret-scan configuration. It does not claim to fix the still-unverified
+historical failures in [#180](https://github.com/abruption/session-peer-ts/issues/180).
+Normal passing, expected negative and artificially injected outcomes are kept
+separate. No timeout, assertion, owner/storage guard or platform refusal is
+weakened. The explicit 0.6.1 metadata row retains the same four exact profiles;
+no companion body or immutable installation pin changes.
+
+The predecessor branch `b609755193637c0c1542cd91bd10dc480f5dfc2a` passed all 13
+generated checks. macOS Node 22 and 24 each had 672 total, 660 pass, 0 fail,
+11 platform skips and 1 existing TODO; original targets passed with zero
+recorded capture drops. These are predecessor results, not validation of this
+version-bumped candidate. Current candidate checks and archive identity are
+recorded in the release PR and source-bound manifest after actual execution.
+Final merged-main validation and approvals remain separate future gates.
+
+The version-bumped candidate passed local macOS arm64 Node 24.22.1 build/types
+and the full suite: 672 total, 660 pass, 0 fail, 11 platform skips and 1 existing
+TODO, using pinned Python reference `8ca77cf31254c8287a2593fe484bb30a7dba2727`.
+Repository/version/link checks and `git diff --check` passed. The read-only public
+0.6.0 tarball SHA-256 matches its prior record:
+`23a422252fb945c07f06184207b07c80ec280360cd29c97949c2c941398336f4`;
+its SHA-512 matches current registry integrity. This is not a fresh signature,
+provenance trust or authenticated npm policy audit. Package lifecycle, final
+PR-head CI/reviews and merged-main gates are recorded separately after execution.
+
+No authenticated npm policy audit, staging, publication, native/model/session
+input, fleet installation or operational change is implied by preparation.
 
 ## 0.6.0 preparation scope — 2026-11-03 KST
 

@@ -90,7 +90,7 @@ the installation pin; runtime publication is not companion-skill publication.
 <a id="current-scoped-feature-matrix"></a>
 ## Current scoped feature matrix
 
-Current source/package version: **0.6.0**.
+Current source/package version: **0.6.1**.
 
 Reviewed **2026-10-29 KST** against TS **0.5.1** source
 [`90481b148584926ea328ed956327f3050d9be9cb`](https://github.com/abruption/session-peer-ts/tree/90481b148584926ea328ed956327f3050d9be9cb)
