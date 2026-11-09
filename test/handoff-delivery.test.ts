@@ -22,9 +22,11 @@ CREATE TABLE thread_history_projection_state(thread_id TEXT PRIMARY KEY,next_rol
 async function fixture(t:TestContext,mode='inject',version='0.160.1',warm=true){
  const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-hd-'))),home=join(root,'home'),bin=join(root,'bin');chmodSync(root,0o700);mkdirSync(home,{mode:0o700});mkdirSync(bin,{mode:0o700});mkdirSync(join(home,'thread-writer-locks'),{mode:0o700});
  const probeLog=join(root,'owner-probes.jsonl');writeFileSync(probeLog,'',{mode:0o600});
- const probes=()=>readFileSync(probeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+ const probeRecords=()=>readFileSync(probeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+ const probes=()=>probeRecords().filter(value=>!Object.hasOwn(value,'captureSummary'));
+ const probeCaptures=()=>probeRecords().filter(value=>Object.hasOwn(value,'captureSummary')).map(value=>value.captureSummary);
  let history:DatabaseSync|undefined;
- t.after(()=>{try{const events=probes();if(events.length)t.diagnostic(JSON.stringify({ownerProbeSummary:{count:events.length,maxElapsedMs:Math.max(...events.map(e=>e.elapsedMs)),outcomes:Object.fromEntries([...new Set(events.map(e=>e.outcome))].map(k=>[k,events.filter(e=>e.outcome===k).length]))}}));}finally{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}}});
+ t.after(()=>{try{const events=probes();t.diagnostic(JSON.stringify({ownerProbeSummary:{count:events.length,maxElapsedMs:events.length?Math.max(...events.map(e=>e.elapsedMs)):null,outcomes:Object.fromEntries([...new Set(events.map(e=>e.outcome))].map(k=>[k,events.filter(e=>e.outcome===k).length])),stopReasons:Object.fromEntries([...new Set(events.map(e=>e.stopReason??'none'))].map(k=>[k,events.filter(e=>(e.stopReason??'none')===k).length]))},ownerProbeTrace:events.slice(0,64),traceOmitted:Math.max(0,events.length-64),captureSummaries:probeCaptures().slice(0,16),captureSummariesOmitted:Math.max(0,probeCaptures().length-16)}));}finally{try{history?.close();}finally{rmSync(root,{recursive:true,force:true});}}});
  const state=new DatabaseSync(join(home,'state_5.sqlite'));state.exec('CREATE TABLE threads(id TEXT, cwd TEXT)');state.prepare('INSERT INTO threads VALUES(?,?)').run(thread,home);state.close();
  // Model a live warm WAL store: keep the owner connection open so other
  // fixture connections cannot remove/recreate WAL and SHM between probes.
@@ -126,7 +128,7 @@ console.log(JSON.stringify({id:r.id,result:{queuedSubmission:{id:'queue-fixture'
   });
  }
  function inject(clientId:string){const db=new DatabaseSync(join(home,'thread_history_1.sqlite'));try{db.prepare('INSERT INTO thread_items VALUES(?,?,?,?,?,?)').run(thread,'turn-fixture','after-submit-item',1,JSON.stringify({type:'userMessage',id:'after-submit-item',clientId,content:[{text:'PRIVATE_BODY_SENTINEL'}]}),'userMessage');}finally{db.close();}}
- return{root,home,codex,env,calls,nativeCalls,probes,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
+ return{root,home,codex,env,calls,nativeCalls,probes,probeCaptures,args,invoke,start,queued,initialized,ledger,ledgerFile,pendingWait,inject,foreignOwner:()=>writeFileSync(lsof+'.data','p'+held.pid+'\0ccodex-fixture\0u'+((process.getuid?.()??0)+1)+'\0',{mode:0o600}),releaseInitialize:()=>writeFileSync(initializeRelease,'release')};
 }
 async function directEnvironment<T>(f:{root:string;env:NodeJS.ProcessEnv},action:()=>Promise<T>):Promise<T>{
  const saved={...process.env},cwd=process.cwd();Object.assign(process.env,f.env);process.chdir(f.root);
@@ -367,14 +369,14 @@ test('independent wait SIGINT records its persisted operation as stopped without
 
 test('independent wait cannot adopt another owner or reconstruct missing retained qualification',qualified,async t=>{
  const wrong=await fixture(t,'none');const submitted=await wrong.invoke([...wrong.args,'--observe-delivery']);
- assert.equal(submitted.code,0,submitted.stdout);const original=validateHandoff(submitted.value.handoff),wrongNative=wrong.nativeCalls();wrong.foreignOwner();
+ assert.equal(submitted.code,0,JSON.stringify({result:submitted.value,queueCalls:wrong.calls(),nativeCalls:wrong.nativeCalls(),ownerProbes:wrong.probes(),ownerProbeCaptures:wrong.probeCaptures()}));const original=validateHandoff(submitted.value.handoff),wrongNative=wrong.nativeCalls();wrong.foreignOwner();
  const refused=await wrong.invoke(['handoff','wait','--correlation-id',original.correlationId,'--wait-for','delivered','--wait-timeout','10']);
  assert.equal(refused.code,1,refused.stdout);const changed=validateHandoff(refused.value.handoff);
  assert.equal(changed.wait.status,'unsupported');assert.equal(changed.submission.status,'submitted');assert.equal(changed.targetGeneration,original.targetGeneration);
  assert.equal(changed.observation.injectionObserved,false);assert.equal(wrong.calls().length,1);assert.deepEqual(wrong.nativeCalls(),wrongNative);
  assert.ok(wrong.probes().some(event=>event.phase==='wait'&&event.outcome==='unverified_reply'));
  const old=await fixture(t,'none');const sent=await old.invoke([...old.args,'--observe-delivery']);
- assert.equal(sent.code,0,JSON.stringify({result:sent.value,queueCalls:old.calls(),nativeCalls:old.nativeCalls(),ownerProbes:old.probes()}));const handoff=validateHandoff(sent.value.handoff),oldNative=old.nativeCalls();
+ assert.equal(sent.code,0,JSON.stringify({result:sent.value,queueCalls:old.calls(),nativeCalls:old.nativeCalls(),ownerProbes:old.probes(),ownerProbeCaptures:old.probeCaptures()}));const handoff=validateHandoff(sent.value.handoff),oldNative=old.nativeCalls();
  const retained=old.ledger();delete retained.data.records[handoff.correlationId].observationQualification;
  retained.digest=payloadDigest(JSON.stringify(retained.data));
  writeFileSync(old.ledgerFile,JSON.stringify(retained),{mode:0o600});old.inject(handoff.correlationId);
@@ -465,3 +467,26 @@ cp.spawn=function(binary,args,options){
   assert.equal(diagnostic.includes('PRIVATE_PROBE_SENTINEL'),false);assert.equal(diagnostic.includes('f'.repeat(64)),false);
  });
 }
+
+test('test-only owner capture reports dropped records at the per-process bound',async t=>{
+ const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-probe-capture-')));chmodSync(root,0o700);
+ t.after(()=>rmSync(root,{recursive:true,force:true}));const file=join(root,'capture.jsonl');writeFileSync(file,'',{mode:0o600});
+ const script="import{channel}from'node:diagnostics_channel';const c=channel('session-peer.handoff.owner-probe');for(let i=0;i<80;i++)c.publish({schemaVersion:1,phase:'send',outcome:'matched',elapsedMs:1,timeoutMs:800,spawned:true,code:0,interrupted:false,stopReason:null});";
+ const done=spawnSync(process.execPath,['--import',diagnosticPreload,'--input-type=module','--eval',script],{env:{...process.env,SESSION_PEER_TEST_OWNER_PROBE_LOG:file},encoding:'utf8',timeout:5000});
+ assert.equal(done.status,0,done.stderr);assert.equal(done.signal,null);assert.equal(done.stdout,'');
+ const rows=readFileSync(file,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+ assert.equal(rows.filter(row=>!Object.hasOwn(row,'captureSummary')).length,64);
+ assert.deepEqual(rows.at(-1),{captureSummary:{observed:80,captured:64,dropped:16}});
+ assert.ok(statSync(file).size<=32768);
+});
+
+test('test-only owner capture rejects unexpected private fields without writing them',async t=>{
+ const root=realpathSync(mkdtempSync(join(process.env.TASK_TEMP??tmpdir(),'codex-probe-private-')));chmodSync(root,0o700);
+ t.after(()=>rmSync(root,{recursive:true,force:true}));const file=join(root,'capture.jsonl');writeFileSync(file,'',{mode:0o600});
+ const script="import{channel}from'node:diagnostics_channel';const c=channel('session-peer.handoff.owner-probe');const valid={schemaVersion:1,phase:'send',outcome:'matched',elapsedMs:1,timeoutMs:800,spawned:true,code:0,interrupted:false,stopReason:null};c.publish({...valid,privatePath:'PRIVATE_CAPTURE_SENTINEL'});c.publish(valid);const disguised={...valid};Object.defineProperty(disguised,'toJSON',{value:()=>({privatePath:'PRIVATE_CAPTURE_SENTINEL'})});c.publish(disguised);";
+ const done=spawnSync(process.execPath,['--import',diagnosticPreload,'--input-type=module','--eval',script],{env:{...process.env,SESSION_PEER_TEST_OWNER_PROBE_LOG:file},encoding:'utf8',timeout:5000});
+ assert.equal(done.status,0,done.stderr);assert.equal(done.signal,null);assert.equal(done.stdout,'');
+ const raw=readFileSync(file,'utf8'),rows=raw.trim().split('\n').map(line=>JSON.parse(line));
+ assert.equal(rows.length,3);assert.deepEqual(rows.at(-1),{captureSummary:{observed:3,captured:2,dropped:1}});
+ assert.equal(raw.includes('PRIVATE_CAPTURE_SENTINEL'),false);assert.equal(raw.includes('privatePath'),false);
+});

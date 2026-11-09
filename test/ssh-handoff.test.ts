@@ -114,12 +114,14 @@ async function fixture(t: TestContext) {
   const destination = join(root, 'destination'), origin = join(root, 'origin'), socket = join(root, 'socket'), log = join(root, 'calls.jsonl');
   const preparationLog = join(root, 'preparations.jsonl'), probeLog=join(root,'owner-probes.jsonl');writeFileSync(probeLog,'',{mode:0o600});
   const diagnosticPreload=fileURLToPath(new URL('./fixtures/owner-probe-diagnostics.mjs',import.meta.url));
-  const ownerProbes=()=>readFileSync(probeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+  const probeRecords=()=>readFileSync(probeLog,'utf8').trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
+  const ownerProbes=()=>probeRecords().filter(value=>!Object.hasOwn(value,'captureSummary'));
+  const probeCaptures=()=>probeRecords().filter(value=>Object.hasOwn(value,'captureSummary')).map(value=>value.captureSummary);
   mkdirSync(origin); mkdirSync(join(destination, '.claude', 'sessions'), { recursive: true }); writeFileSync(log, ''); writeFileSync(preparationLog, '');
   const messages: string[] = [];
   const server = createServer(s => { let body = ''; s.on('data', part => { body += part; }); s.on('end', () => { messages.push(body); s.end(); }); });
   server.listen(socket); await once(server, 'listening');
-  t.after(async () => { try{const events=ownerProbes();if(events.length)t.diagnostic(JSON.stringify({ownerProbeSummary:{count:events.length,maxElapsedMs:Math.max(...events.map(e=>e.elapsedMs)),outcomes:Object.fromEntries([...new Set(events.map(e=>e.outcome))].map(k=>[k,events.filter(e=>e.outcome===k).length]))}}));}finally{try{await new Promise<void>(resolve => server.close(() => resolve()));}finally{rmSync(root, { recursive: true, force: true });}} });
+  t.after(async () => { try{const events=ownerProbes();t.diagnostic(JSON.stringify({ownerProbeSummary:{count:events.length,maxElapsedMs:events.length?Math.max(...events.map(e=>e.elapsedMs)):null,outcomes:Object.fromEntries([...new Set(events.map(e=>e.outcome))].map(k=>[k,events.filter(e=>e.outcome===k).length])),stopReasons:Object.fromEntries([...new Set(events.map(e=>e.stopReason??'none'))].map(k=>[k,events.filter(e=>(e.stopReason??'none')===k).length]))},ownerProbeTrace:events.slice(0,64),traceOmitted:Math.max(0,events.length-64),captureSummaries:probeCaptures().slice(0,16),captureSummariesOmitted:Math.max(0,probeCaptures().length-16)}));}finally{try{await new Promise<void>(resolve => server.close(() => resolve()));}finally{rmSync(root, { recursive: true, force: true });}} });
   writeFileSync(join(destination, '.claude', 'sessions', `${process.pid}.json`), JSON.stringify({ pid: process.pid, name: 'fixture', messagingSocketPath: socket }));
   writeFileSync(join(root, 'ssh'), `#!${process.execPath}
 const fs=require('node:fs'),cp=require('node:child_process'),args=process.argv.slice(2);
@@ -146,7 +148,7 @@ child.stdin.end(input);child.on('close',(code,signal)=>{if(request.handoff?.prep
     const [code, signal] = await once(child, 'close'); clearTimeout(timer); assert.equal(signal, null, stderr);
     return { code, value: JSON.parse(stdout), stdout, stderr };
   }
-  return { root, destination, origin, destEnv, messages, invoke, ownerProbes, calls: () => readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
+  return { root, destination, origin, destEnv, messages, invoke, ownerProbes, probeCaptures, calls: () => readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
     preparations: () => readFileSync(preparationLog, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)),
     args: ['send', '--host', 'fixture', '--to', String(process.pid), '--message=fixture body', '--no-from', '--no-reply-to', '--json'] };
 }
@@ -197,8 +199,8 @@ for (const mode of ['inject', 'none', 'loss'] as const) {
   test(`qualified SSH Codex ${mode} keeps destination preparation binding and at most one native queue`, qualified, async t => {
     const f = await codexFixture(t, mode), started = performance.now();
     const sent = await f.invoke(f.args, false, undefined, f.env);
-    assert.equal(sent.code, mode === 'inject' ? 0 : 1, sent.stdout);
-    const diagnostic=JSON.stringify({result:sent.value,queueCalls:f.queueCalls(),nativeCalls:f.nativeCalls(),ownerProbes:f.ownerProbes()});
+    const diagnostic=JSON.stringify({result:sent.value,queueCalls:f.queueCalls(),nativeCalls:f.nativeCalls(),ownerProbes:f.ownerProbes(),ownerProbeCaptures:f.probeCaptures()});
+    assert.equal(sent.code, mode === 'inject' ? 0 : 1, diagnostic);
     const calls = f.calls(); assert.equal(calls.length, 2,diagnostic);
     assert.equal(calls[0].handoff.preparation, true); assert.equal(calls[1].handoff.preparation, undefined);
     assert.ok(calls[1].handoff.remainingMs < calls[0].handoff.remainingMs);
