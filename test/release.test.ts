@@ -8,7 +8,7 @@ import { validatePackage, validateDispatch, validateGitHubGate, validateRegistry
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const sha = 'a'.repeat(40);
 const env = { GITHUB_REPOSITORY: 'abruption/session-peer-ts', GITHUB_REF: 'refs/heads/main',
-  GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_SHA: sha, RELEASE_SHA: sha, RELEASE_MODE: 'stable-stage',
+  GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_SHA: sha, RELEASE_SHA: sha, RELEASE_ARCHIVE_SHA256: 'c'.repeat(64), RELEASE_MODE: 'stable-stage',
   RELEASE_VERSION: pkg.version, RELEASE_CONFIRMATION: `session-peer@${pkg.version} stable-stage` };
 
 test('release dispatch binds stable and preview modes to exact versions, tags and main', () => {
@@ -20,10 +20,11 @@ test('release dispatch binds stable and preview modes to exact versions, tags an
   for (const patch of [{ GITHUB_REF: 'refs/heads/feature' }, { GITHUB_REPOSITORY: 'fork/session-peer-ts' },
     { GITHUB_EVENT_NAME: 'pull_request' }, { RELEASE_VERSION: '9.0.0' }, { RELEASE_SHA: 'b'.repeat(40) }, { RELEASE_SHA: undefined }, { RELEASE_MODE: 'publish' },
     { RELEASE_MODE: 'bootstrap-token' }, { RELEASE_MODE: 'trusted-stage' },
-    { RELEASE_CONFIRMATION: '' }, { GITHUB_SHA: 'main; echo unsafe' }]) {
+    { RELEASE_ARCHIVE_SHA256: undefined }, { RELEASE_ARCHIVE_SHA256: 'A'.repeat(64) },
+    { RELEASE_ARCHIVE_SHA256: 'c'.repeat(64) + '\n' }, { RELEASE_CONFIRMATION: '' }, { GITHUB_SHA: 'main; echo unsafe' }]) {
     assert.throws(() => validateDispatch(pkg, { ...env, ...patch }));
   }
-  for (const patch of [{ private: true }, { version: '1.0.0' }, { version: '0.5.2' }, { version: '0.6.0' }, { publishConfig: { ...pkg.publishConfig, tag: 'preview' } },
+  for (const patch of [{ private: true }, { version: '1.0.0' }, { version: '0.5.2' }, { version: '0.6.1' }, { publishConfig: { ...pkg.publishConfig, tag: 'preview' } },
     { repository: { url: 'https://example.com' } }, { scripts: { ...pkg.scripts, prepublishOnly: 'echo unsafe' } }]) {
     assert.throws(() => validatePackage({ ...pkg, ...patch }));
   }
@@ -49,13 +50,13 @@ test('release gate rejects moved main, absent/failed/pending CI and missing envi
   assert.throws(() => validateGitHubGate(sha, main, runs, { name: 'npm', protection_rules: [{ type: 'required_reviewers', reviewers: [] }] }));
 });
 
-test('0.6.1 stable staging requires verified 0.6.0 and unchanged preview/tag baselines', () => {
+test('0.6.2 stable staging requires verified 0.6.1 and unchanged preview/tag baselines', () => {
   const previewDist = { integrity: 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==',
     attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.1.0-preview.1' } };
-  const stableDist = { integrity: 'sha512-/EsNpj+Gq4siicBVH8u5UTGbUICQhipyGOY2khG+BW1ken9Z23s/zacOn+tJu//DUuq+G0yc7wwFJbgQHC6+AA==',
-    attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.6.0' } };
-  const current = { name: pkg.name, versions: { '0.6.0': { dist: stableDist }, '0.1.0-preview.1': { dist: previewDist } },
-    'dist-tags': { latest: '0.6.0', preview: '0.1.0-preview.1' } };
+  const stableDist = { integrity: 'sha512-N7ZFgG1YUOvDosCAm+aOprOTLHPSeFWvb43dP1DJV3YYNyg2cf1YlTSQ1EGb63GKK1Lak/y2gXXv8hn2CSDp1Q==',
+    attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.6.1' } };
+  const current = { name: pkg.name, versions: { '0.6.1': { dist: stableDist }, '0.1.0-preview.1': { dist: previewDist } },
+    'dist-tags': { latest: '0.6.1', preview: '0.1.0-preview.1' } };
   validateRegistryState(pkg, 'stable-stage', current);
   assert.throws(() => validateRegistryState(pkg, 'stable-stage', null));
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', current));
@@ -71,10 +72,10 @@ test('0.6.1 stable staging requires verified 0.6.0 and unchanged preview/tag bas
     versions: { ...current.versions, '0.1.0-preview.1': { dist: { ...previewDist, attestations: undefined } } } }));
   const preview = { ...pkg, version: '0.1.0-preview.2', publishConfig: { ...pkg.publishConfig, tag: 'preview' } };
   assert.throws(() => validateRegistryState(preview, 'trusted-stage', { ...current, 'dist-tags': { latest: '0.1.0-preview.0' } }), /latest_points_to_prerelease/);
-  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.0': { dist: { ...stableDist, integrity: 'tampered' } } } }), /verified_stable_changed/);
-  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.0': { dist: { ...stableDist, attestations: undefined } } } }));
+  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.1': { dist: { ...stableDist, integrity: 'tampered' } } } }), /verified_stable_changed/);
+  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.1': { dist: { ...stableDist, attestations: undefined } } } }));
   validateRegistryState(preview, 'trusted-stage', { ...current,
-    'dist-tags': { latest: '0.6.0', preview: '0.1.0-preview.1' } });
+    'dist-tags': { latest: '0.6.1', preview: '0.1.0-preview.1' } });
 });
 
 test('release artifact binds version, allowlist, commit, SHA-256 and registry integrity', () => {
@@ -83,7 +84,12 @@ test('release artifact binds version, allowlist, commit, SHA-256 and registry in
     files: packageFiles, sha256: createHash('sha256').update(bytes).digest('hex'),
     integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}` };
   validateArtifact(pkg, manifest, bytes, sha);
-  for (const patch of [{ filename: '../escape.tgz' }, { version: '1.0.0' }, { version: '0.6.0' }, { commit: 'b'.repeat(40) },
+  validateArtifact(pkg, manifest, bytes, sha, manifest.sha256);
+  assert.throws(() => validateArtifact(pkg, manifest, bytes, sha, '0'.repeat(64)),
+    /approved_archive_sha256_changed/);
+  assert.throws(() => validateArtifact(pkg, manifest, bytes, sha, ''),
+    /approved_archive_sha256_invalid/);
+  for (const patch of [{ filename: '../escape.tgz' }, { version: '1.0.0' }, { version: '0.6.1' }, { commit: 'b'.repeat(40) },
     { files: [...packageFiles, '.npmrc'] }, { sha256: '0'.repeat(64) }, { integrity: 'sha512-invalid' }]) {
     assert.throws(() => validateArtifact(pkg, { ...manifest, ...patch }, bytes, sha));
   }
@@ -126,7 +132,14 @@ test('publish workflow stages stable and preview through OIDC without tokens or 
   assert.match(source, /if: inputs.mode == 'trusted-stage'\n        env:\n          NODE_AUTH_TOKEN: ''\n        run: npm stage publish .* --tag preview /);
   assert.match(source, /NPM_CONFIG_FETCH_RETRIES: '0'/);
   assert.doesNotMatch(source, /npm dist-tag|npm unpublish/);
-  const publishJob = source.split('\n  publish:\n')[1];
+  const archivedDigestBinding = /RELEASE_ARCHIVE_SHA256: \$\{\{ inputs.archive_sha256 \}\}/;
+  const [prepareJob, publishJob] = source.split('\n  publish:\n');
+  assert.match(prepareJob, /archive_sha256:[\s\S]*?required: true/);
+  const jobEnv = (job: string) => job.match(/^    env:\n((?:^      [A-Z0-9_]+: .+\n)+)/m)?.[1] ?? '';
+  assert.match(jobEnv(prepareJob), archivedDigestBinding);
+  assert.match(jobEnv(publishJob), archivedDigestBinding);
+  const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  assert.doesNotMatch(ci, /RELEASE_ARCHIVE_SHA256/);
   assert.doesNotMatch(publishJob, /npm (ci|run build|test)/);
   assert.match(publishJob, /npm stage publish/);
   assert.match(publishJob, /node scripts\/release.mjs preflight && node scripts\/release.mjs artifact/);

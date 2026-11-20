@@ -1,5 +1,13 @@
 # Validation record — updated 2026-11-09 KST
 
+## 0.6.2 release verification scope
+
+The patch requires the approved raw tarball SHA-256 in both publication jobs.
+The release helper tests cover a matching digest, invalid dispatch inputs, and
+a tarball and manifest that agree with one another but disagree with the
+approved digest. Ordinary nonpublishing packaging retains its existing checks.
+The release PR and release record track actual CI, source and archive evidence.
+
 ## 0.6.1 preparation scope — 2026-11-09 KST
 
 The release candidate for [#188](https://github.com/abruption/session-peer-ts/issues/188)

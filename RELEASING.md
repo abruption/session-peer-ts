@@ -9,6 +9,37 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.6.2 release supply-chain hardening
+
+[#190](https://github.com/abruption/session-peer-ts/issues/190) adds verification
+of the independently reviewed npm tarball SHA-256 to the manual publication
+workflow. Build and pack the exact merged main source with locked dependencies
+and the publication toolchain (Ubuntu 24.04, Node 24, npm 11.15.0, and
+`npm ci --ignore-scripts`). Compare the raw tarball digest with the exact main
+Ubuntu Node 24 CI package manifest. If the bytes differ, record the toolchain
+versions and resolve the difference before dispatch. Approve the source SHA,
+tarball SHA-256, version and release mode before dispatch.
+
+For this stable release, dispatch with `source_sha`, `archive_sha256`
+(the approved 64 lowercase hex characters), `version=0.6.2`,
+`mode=stable-stage` and `confirmation=session-peer@0.6.2 stable-stage`.
+Prepare checks the rebuilt tarball against the dispatch digest before retaining
+it. The protected npm job rechecks the downloaded tarball against the same
+digest, as well as the manifest, source and package allowlist, before staging.
+On a mismatch, stop and compare the artifact and toolchain to the approved
+source and digest. Local and CI packaging without publication remains available
+without a dispatch digest.
+
+Verify fresh npm ownership, pending stages, stage-only publisher, package MFA,
+and the protected environment. Verify the retained Actions archive before
+environment approval, then the staged archive and provenance before final npm
+approval. Verify public bytes, signatures and provenance before tagging and
+creating the GitHub Release. In the approved source checkout, put the retained
+Actions artifact in `release-dist/` and set `GITHUB_SHA` and
+`RELEASE_ARCHIVE_SHA256` to the approved values for
+`node scripts/release.mjs verify`. The previous stable baseline is 0.6.1 and preview
+is 0.1.0-preview.1. Both SSH endpoints require exactly the same TS version.
+
 ## 0.6.1 preparation — 2026-11-09 KST
 
 Issue [#188](https://github.com/abruption/session-peer-ts/issues/188) tracks
