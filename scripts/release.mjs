@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 export const repository = 'abruption/session-peer-ts';
 export const registry = 'https://registry.npmjs.org';
-const stableVersion = '0.6.1';
-const previousStable = '0.6.0';
-const previousStableIntegrity = 'sha512-/EsNpj+Gq4siicBVH8u5UTGbUICQhipyGOY2khG+BW1ken9Z23s/zacOn+tJu//DUuq+G0yc7wwFJbgQHC6+AA==';
+const stableVersion = '0.6.2';
+const previousStable = '0.6.1';
+const previousStableIntegrity = 'sha512-N7ZFgG1YUOvDosCAm+aOprOTLHPSeFWvb43dP1DJV3YYNyg2cf1YlTSQ1EGb63GKK1Lak/y2gXXv8hn2CSDp1Q==';
 const verifiedPreview = '0.1.0-preview.1';
 const verifiedPreviewIntegrity = 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==';
 export const packageFiles = ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md',
@@ -30,7 +30,7 @@ export function validatePackage(pkg) {
   assert.deepEqual(pkg.exports, { '.': { types: './dist/index.d.ts', import: './dist/index.js' } });
   assert.equal(pkg.private, false);
   assert.ok(pkg.version === stableVersion || /^\d+\.\d+\.\d+-preview\.\d+$/.test(pkg.version),
-    'only reviewed preview versions and 0.6.1 stable are supported');
+    'only reviewed preview versions and 0.6.2 stable are supported');
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
   assert.equal(pkg.repository.url, `git+https://github.com/${repository}.git`);
   assert.deepEqual(pkg.publishConfig, { registry: `${registry}/`, access: 'public',
@@ -38,6 +38,11 @@ export function validatePackage(pkg) {
   for (const hook of ['preinstall', 'install', 'postinstall', 'prepare', 'prepack', 'prepublishOnly', 'publish', 'postpublish']) {
     assert.equal(pkg.scripts?.[hook], undefined, `no ${hook} lifecycle hook`);
   }
+}
+
+function validateApprovedDigest(sha256) {
+  assert.ok(typeof sha256 === 'string' && sha256.length === 64 && /^[a-f0-9]+$/.test(sha256),
+    'approved_archive_sha256_invalid');
 }
 
 export function validateDispatch(pkg, env) {
@@ -48,6 +53,7 @@ export function validateDispatch(pkg, env) {
   assert.match(env.GITHUB_SHA ?? '', /^[a-f0-9]{40}$/);
   assert.equal(env.RELEASE_MODE, pkg.version === stableVersion ? 'stable-stage' : 'trusted-stage');
   assert.equal(env.RELEASE_SHA, env.GITHUB_SHA, 'approved_source_sha_changed');
+  validateApprovedDigest(env.RELEASE_ARCHIVE_SHA256);
   assert.equal(env.RELEASE_VERSION, pkg.version);
   assert.equal(env.RELEASE_CONFIRMATION, `${pkg.name}@${pkg.version} ${env.RELEASE_MODE}`);
 }
@@ -123,7 +129,7 @@ async function preflight(pkg) {
   console.log('Publication preflight passed; no package uploaded.');
 }
 
-export function validateArtifact(pkg, manifest, bytes, sha) {
+export function validateArtifact(pkg, manifest, bytes, sha, approvedSha256) {
   validatePackage(pkg);
   assert.equal(manifest.name, pkg.name);
   assert.equal(manifest.version, pkg.version);
@@ -131,7 +137,12 @@ export function validateArtifact(pkg, manifest, bytes, sha) {
   assert.match(manifest.commit ?? '', /^[a-f0-9]{40}$/);
   if (sha) assert.equal(manifest.commit, sha);
   assert.deepEqual(manifest.files, packageFiles);
-  assert.equal(manifest.sha256, digest(bytes, 'sha256'));
+  const archiveSha256 = digest(bytes, 'sha256');
+  if (approvedSha256 !== undefined) {
+    validateApprovedDigest(approvedSha256);
+    assert.equal(archiveSha256, approvedSha256, 'approved_archive_sha256_changed');
+  }
+  assert.equal(manifest.sha256, archiveSha256);
   assert.equal(manifest.integrity, `sha512-${digest(bytes, 'sha512', 'base64')}`);
 }
 
@@ -140,7 +151,7 @@ function artifact(pkg) {
   // Validate filename before using it as a path.
   assert.equal(manifest.filename, `${pkg.name}-${pkg.version}.tgz`);
   const filename = resolve('release-dist', manifest.filename);
-  validateArtifact(pkg, manifest, readFileSync(filename), process.env.GITHUB_SHA);
+  validateArtifact(pkg, manifest, readFileSync(filename), process.env.GITHUB_SHA, process.env.RELEASE_ARCHIVE_SHA256);
   const files = execFileSync('tar', ['-tzf', filename], { encoding: 'utf8' }).trim().split('\n').sort();
   assert.deepEqual(files, packageFiles.map(file => `package/${file}`).sort());
   const packed = JSON.parse(execFileSync('tar', ['-xOf', filename, 'package/package.json'], { encoding: 'utf8' }));
@@ -237,6 +248,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } catch (error) {
     // Do not echo response bodies, process environments or child-process output.
     const diagnostic = /approved_source_sha_changed/.test(error.message) ? 'approved_source_sha_changed'
+      : /approved_archive_sha256_invalid/.test(error.message) ? 'approved_archive_sha256_invalid'
+      : /approved_archive_sha256_changed/.test(error.message) ? 'approved_archive_sha256_changed'
       : /verified_stable_changed/.test(error.message) ? 'verified_stable_changed'
       : /stable_baseline_changed/.test(error.message) ? 'stable_baseline_changed'
       : /stable_preview_baseline_changed/.test(error.message) ? 'stable_preview_baseline_changed'

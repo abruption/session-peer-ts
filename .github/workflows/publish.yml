@@ -16,6 +16,10 @@ on:
         description: Exact reviewed main commit SHA (40 hexadecimal characters)
         required: true
         type: string
+      archive_sha256:
+        description: Approved npm tarball SHA-256 (64 lowercase hexadecimal characters)
+        required: true
+        type: string
       version:
         description: Exact package.json version
         required: true
@@ -37,6 +41,8 @@ jobs:
     if: github.repository == 'abruption/session-peer-ts' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      RELEASE_ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
     permissions:
       contents: read
       actions: read
@@ -100,6 +106,7 @@ jobs:
       NPM_CONFIG_IGNORE_SCRIPTS: 'true'
       RELEASE_MODE: ${{ inputs.mode }}
       RELEASE_SHA: ${{ inputs.source_sha }}
+      RELEASE_ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
@@ -134,4 +141,4 @@ jobs:
       - name: Mark staged output as awaiting human approval, not a release
         run: |
           echo 'Staged only. Review the npm stage ID above and approve with 2FA on npmjs.com. No public release is claimed.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'After approval, download this run artifact and run node scripts/release.mjs verify from this exact source commit.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'After approval, download this run artifact and run node scripts/release.mjs verify from this exact source commit with GITHUB_SHA and RELEASE_ARCHIVE_SHA256 set to the approved values.' >> "$GITHUB_STEP_SUMMARY"
