@@ -154,9 +154,9 @@ test('Korean templates use a fixed noun instead of number-dependent particles', 
   ]) {
     const bad = structuredClone(inventory);
     const entry = bad.find(value => value.file === 'README.ko.md')!;
-    const slot = entry.templates.find(value => value.line.includes('{{version}} 버전은'))!;
+    const slot = entry.templates.find(value => value.line.includes('{{version}} 버전입니다'))!;
     const before = slot.line;
-    slot.line = before.replace('{{version}} 버전은', span);
+    slot.line = before.replace('{{version}} 버전입니다', span);
     const data = files();
     const original = data.get(entry.file)!;
     const changed = original.replace(before.replaceAll('{{version}}', version), slot.line.replaceAll('{{version}}', version));
@@ -170,9 +170,9 @@ test('Korean fixed nouns and pronunciation-independent forms stay valid', () => 
   for (const span of ['{{version}} 버전은', '{{version}} 버전을', '{{version}} 버전으로', '버전({{version}})을', '{{version}}의', '{{version}}에서']) {
     const good = structuredClone(inventory);
     const entry = good.find(value => value.file === 'README.ko.md')!;
-    const slot = entry.templates.find(value => value.line.includes('{{version}} 버전은'))!;
+    const slot = entry.templates.find(value => value.line.includes('{{version}} 버전입니다'))!;
     const before = slot.line;
-    slot.line = before.replace('{{version}} 버전은', span);
+    slot.line = before.replace('{{version}} 버전입니다', span);
     const data = files();
     data.set(entry.file, data.get(entry.file)!.replace(before.replaceAll('{{version}}', version), slot.line.replaceAll('{{version}}', version)));
     assert.deepEqual(planCurrentVersions(version, data, good), [], span);

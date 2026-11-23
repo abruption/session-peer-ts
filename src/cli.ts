@@ -2,43 +2,41 @@
 import { handoffCommand, handoffSend, prepareHandoff, privateMessage } from './handoff-operations.js';
 import { receiptCommand } from './receipt-command.js';
 import { managedReceiptSend } from './receipt-send.js';
-import { canonicalId, closed, HANDOFF_LIMITS, HandoffBudget, parseStrictJson, parseWaitTimeout, safeInteger, systemClock, type Handoff } from './handoff.js';
-import { doctor } from './diagnostics.js';
+import { canonicalId, closed, HANDOFF_LIMITS, HandoffBudget, parseStrictJson, parseWaitTimeout, safeInteger, systemClock } from './handoff.js';
+import { executeLocal, executeSsh, failure, type Agent, type ParsedOptions as Options } from './execution.js';
 import { help } from './help.js';
 import { renderOutput, type OutputFormat } from './output.js';
 import { hostname } from 'node:os';
 import { lstatSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import { listing, Refusal } from './discovery.js';
-import { executable, run, UnknownOutcome, type Done } from './process.js';
-import { checkMessage, send, CodexUnknownOutcome } from './send.js';
-import { HomeRefusal } from './writer.js';
-import { responseOutcome } from './ssh-response.js';
+import { Refusal } from './discovery.js';
+import { checkMessage } from './send.js';
+import { enableCliSignalForwarding, stopCliChildren } from './process.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
-import { CHANNELS, checkUpdate, noticeText, refreshCache, refuseSelfUpdate, REFRESH_ARG, updateNotice, UpdateRefusal } from './updates.js';
-import { jumpOptions, sshConfig, sshJump, sshOptions, sshUser, type SshJump, type SshOptions } from './ssh.js';
+import { CHANNELS, checkUpdate, noticeText, refreshCache, refuseSelfUpdate, REFRESH_ARG, updateNotice } from './updates.js';
+import { sshJump, sshOptions, type SshJump } from './ssh.js';
 import { configuredHost, detectedHost, isSelf, probeReturnRoute, unsafeReturnHost, replyUri, returnHost, route, sender, tailnet, type Tailnet } from './replies.js';
 
-type Options = { command: 'list' | 'send' | 'doctor' | 'update'; values: Map<string, string>; flags: Set<string>; hosts: string[]; ssh: SshOptions; jump?: SshJump;
-  address?: { uri: string; transport: 'local' | 'ssh'; implicit: boolean } };
 const FLAGS = ['--json', '--all', '--dry-run', '--no-from', '--no-reply-to', '--no-update-notice', '--allow-inactive-codex-home', '--check-return-route', '--check', '--request-ack', '--observe-delivery'];
 const VALUES = ['--agent', '--codex-home', '--codex-bin', '--output-format', '--to', '--message', '-m', '--host', '--remote-bin', '--remote-platform', '--ssh-control-path', '--reply-address', '--ssh-opt', '--ssh-jump', '--reply-to', '--return-route-host', '--channel', '--correlation-id', '--wait-for', '--wait-timeout', '--message-file', '--receipt-collector'];
 // Repeated in order; every other value option is single.
 const REPEATED = ['--host', '--ssh-opt'];
-// Requested destinations, so a command-wide refusal can be attributed to each.
-let requested: string[] = [];
+function requestedHosts(args: string[]): string[] {
+  // Collect hosts before option validation so a command-wide refusal can be
+  // attributed to each of them. A value option consumes its following token.
+  const requested: string[] = [];
+  for (let i = 1; i < args.length && args[i] !== '--'; i++) {
+    const token = args[i]!, key = token.split('=')[0]!;
+    if (key === '--host') {
+      const value = token.includes('=') ? token.slice(7) : args[++i];
+      if (value !== undefined) requested.push(value);
+    } else if (VALUES.includes(key) && !token.includes('=')) i++;
+  }
+  return requested;
+}
 export function parse(args: string[]): Options {
   const command = args[0];
   if (command !== 'list' && command !== 'send' && command !== 'doctor' && command !== 'update') throw new Refusal('unsupported_command');
-  // Collect requested hosts before any other validation, so that even a syntax
-  // refusal with several --host values is attributed to each of them. Value
-  // options consume their next token, as in the loop below; `--` ends options.
-  requested = [];
-  for (let i = 1; i < args.length && args[i] !== '--'; i++) {
-    const token = args[i]!, key = token.split('=')[0]!;
-    if (key === '--host') { const value = token.includes('=') ? token.slice(7) : args[++i]; if (value !== undefined) requested.push(value); }
-    else if (VALUES.includes(key) && !token.includes('=')) i++;
-  }
   let address: Options['address'];
   const values = new Map<string, string>(), flags = new Set<string>(), repeated = new Map<string, string[]>(REPEATED.map(k => [k, []]));
   let positional: string | undefined;
@@ -198,153 +196,15 @@ async function input(limit = 4_100_000, preserveBOM = false, timeoutMs?: number)
   } finally { if(timer) clearTimeout(timer); }
 }
 
-const quote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
-// Classify only the no-message version preflight. Never expose SSH stderr,
-// which can contain user paths or agent output.
-export function sshPreflightFailure(result: Done, expected: string): string | undefined {
-  if (result.interrupted) return 'ssh_preflight_timeout';
-  if (!result.spawned) return 'ssh_unavailable';
-  // A verified version is success even when login scripts write to stderr.
-  if (result.code === 0 && result.stdout.trim() === expected) return undefined;
-  const detail = result.stderr;
-  if (/host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|no [^\n]*host key is known/i.test(detail))
-    return 'ssh_host_key_untrusted';
-  if (/permission denied \(|authentication failed|too many authentication failures|tailnet policy does not permit/i.test(detail))
-    return 'ssh_authentication_refused';
-  if (/could not resolve hostname|name or service not known|network is unreachable|no route to host|connection timed out|connection refused|operation timed out/i.test(detail))
-    return 'ssh_unreachable';
-  if (result.code === 127 && /not found|no such file|not recognized/i.test(detail))
-    return 'remote_cli_missing';
-  if (result.code === 0 && result.stdout.trim() !== expected) return 'remote_version_mismatch';
-  if (result.code !== 0) return 'ssh_preflight_failed';
-  return undefined;
+enableCliSignalForwarding();
+const mcpWorker = Boolean(process.send) && process.env.SESSION_PEER_MCP_WORKER === '1';
+const stopMcpWorker = () => { stopCliChildren(); process.exit(130); };
+if (mcpWorker) {
+  process.on('message', message => { if (message === 'session-peer:cancel') stopMcpWorker(); });
+  process.once('disconnect', stopMcpWorker);
 }
-async function remote(options: Options, ssh: string, target: string, resolved: { canonical: string; options: string[] }, message?: string, returnTo?: string, budget?: HandoffBudget): Promise<{ value: Record<string, unknown>; exitCode: number }> {
-  const { values, flags, command } = options;
-  const binary = values.get('--remote-bin') ?? 'session-peer';
-  const windows = values.get('--remote-platform') === 'win32';
-  const invoke = (flag: string) => {
-    if (!windows) return `${quote(binary)} ${flag}`;
-    // PowerShell also closes single-quoted strings on U+2018-U+201B.
-    // PowerShell otherwise maps every native nonzero exit to 1. A failed
-    // invocation has no native exit code and must not accidentally exit 0.
-    const code = `& '${binary.replace(/['\u2018-\u201b]/g, '$&$&')}' ${flag}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
-    return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(code, 'utf16le').toString('base64')}`;
-  };
-  // OpenSSH keeps the first value obtained, so the fixed hardening options
-  // precede the allowlisted user options and cannot be overridden by them.
-  const base = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=10',
-    ...(options.jump ? jumpOptions(ssh, options.jump) : []),
-    ...(values.has('--ssh-control-path') ? ['-S', values.get('--ssh-control-path')!] : []), ...resolved.options, ...options.ssh.args, '--', target];
-  budget?.beforeEffect();
-  const preflight = await run(ssh, [...base, invoke('--version')], { timeout: budget ? Math.max(1, Math.min(15000, budget.observationRemainingMs())) : 15000 });
-  const preflightError = sshPreflightFailure(preflight, VERSION_LINE);
-  if (preflightError) throw new Refusal(preflightError, 1);
-  const args = [command, '--json'];
-  for (const [key, value] of values) if (['--agent', '--codex-home', '--codex-bin', '--to'].includes(key)) args.push(key, value);
-  if (flags.has('--all')) args.push('--all');
-  if (flags.has('--dry-run')) args.push('--dry-run');
-  if (flags.has('--allow-inactive-codex-home')) args.push('--allow-inactive-codex-home');
-  if (command === 'send') args.push(`--message=${message!}`, '--no-from', '--no-reply-to');
-  // The destination probes back to this machine; the request carries only the host.
-  if (returnTo) args.push('--return-route-host', returnTo);
-  const context = budget ? { correlationId: values.get('--correlation-id'), requestAck: flags.has('--request-ack'),
-    observeDelivery: flags.has('--observe-delivery'), waitFor: values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined } : undefined;
-  if (context) {
-    for (const key of ['--correlation-id', '--wait-for', '--wait-timeout']) if (values.has(key)) args.push(key, values.get(key)!);
-    for (const key of ['--request-ack', '--observe-delivery']) if (flags.has(key)) args.push(key);
-  }
-  const execute = (requestArgs: string[], preparation = false) => {
-    budget?.beforeEffect();
-    const remainingMs = budget ? Math.floor(budget.remainingMs()) : undefined;
-    if (remainingMs !== undefined && (remainingMs < 1 || remainingMs > 60000)) throw new Refusal('invalid_handoff_budget', 1);
-    return run(ssh, [...base, invoke(`--stdio-request${remainingMs === undefined ? '' : ` --handoff-remaining-ms=${remainingMs}`}`)], {
-      timeout: budget ? Math.max(1, budget.remainingMs() - 200) : 90000, rawStdout: true,
-      input: JSON.stringify({ schemaVersion: 1, args: requestArgs,
-        ...(remainingMs !== undefined ? { handoff: { schemaVersion: 1, remainingMs, ...(preparation ? { preparation: true } : {}) } } : {}) })
-    });
-  };
-  let prepared: Pick<Handoff, 'correlationId' | 'ledgerEpoch' | 'targetGeneration'> | undefined;
-  let destinationHost: string | undefined;
-  let boundTo = values.get('--to'), boundHome = values.get('--codex-home');
-  if (budget) {
-    // This round reserves a destination-owned intent and performs zero native
-    // submissions. An incomplete response is never replayed or guessed into send.
-    const preparation = await execute(args, true);
-    let checked: ReturnType<typeof responseOutcome>;
-    try { checked = responseOutcome(preparation, { command, to: boundTo, home: boundHome, dryRun: true,
-      allowInactive: flags.has('--allow-inactive-codex-home'), handoff: { ...context, preparation: true } }); }
-    catch { throw new Refusal('remote_preparation_unverified', 1); }
-    if (checked.value.ok === true && checked.exitCode !== 0) throw new Refusal('remote_preparation_unverified', 1);
-    if (checked.exitCode !== 0 || checked.value.ok !== true) return { value: { ...checked.value, host: resolved.canonical, sshHost: target }, exitCode: checked.exitCode || 1 };
-    const h = checked.value.handoff as Handoff | undefined;
-    if (!h) throw new Refusal('remote_preparation_unverified', 1);
-    prepared = { correlationId: h.correlationId, ledgerEpoch: h.ledgerEpoch, targetGeneration: h.targetGeneration };
-    destinationHost = checked.value.host as string;
-    const nativeTarget = checked.value.target as { id?: string; pid?: number };
-    boundTo = boundTo!.startsWith('codex:') ? `codex:${nativeTarget.id!}` : `claude:${nativeTarget.pid!}`;
-    if (boundTo.startsWith('codex:')) boundHome = checked.value.codexHome as string;
-    const replace = (key: string, value: string) => { const index = args.indexOf(key); if (index >= 0) args[index + 1] = value; else args.push(key, value); };
-    replace('--to', boundTo); replace('--correlation-id', h.correlationId);
-    if (boundHome !== undefined) replace('--codex-home', boundHome);
-  }
-  const done = await execute(args);
-  const uncertain = () => { if (command === 'send' && !flags.has('--dry-run') && done.spawned) throw new UnknownOutcome(); throw new Refusal('remote_response_unverified', 1); };
-  let verified: ReturnType<typeof responseOutcome>;
-  try { verified = responseOutcome(done, { command, to: boundTo, dryRun: flags.has('--dry-run'), returnTo,
-    home: boundHome, allowInactive: flags.has('--allow-inactive-codex-home'), ...(context ? { handoff: { ...context, correlationId: prepared!.correlationId, prepared, destinationHost } } : {}) }); }
-  catch { return uncertain(); }
-  const { value } = verified;
-  // `clientUpdate` is client-local: a remote-supplied value is never trusted or shown.
-  delete value.clientUpdate;
-  return { value: { ...value, host: resolved.canonical, sshHost: target }, exitCode: verified.exitCode };
-}
-function failure(error: unknown, command: string, where: string): { value: Record<string, unknown>; exitCode: number } {
-  const unknown = error instanceof UnknownOutcome;
-  const refusal = error instanceof Refusal ? error : new Refusal('operation_failed', 1);
-  const homeResolution = error instanceof HomeRefusal || error instanceof CodexUnknownOutcome ? error.codexHomeResolution : undefined;
-  return { exitCode: unknown ? 1 : refusal.exitCode, value: { schemaVersion: 1, host: where, command, ok: false,
-    error: unknown ? 'outcome_unknown' : refusal.code, status: unknown ? 'unknown' : 'refused',
-    submitted: unknown ? null : false, consumptionConfirmed: false, retryAllowed: false,
-    ...(homeResolution === undefined ? {} : { codexHomeResolution: homeResolution }),
-    ...(error instanceof UpdateRefusal ? error.guidance : {}) } };
-}
-// Destinations run in order, one attempt each. A failure or unknown outcome is
-// reported for that destination only; it is never retried or failed over.
-async function remotes(options: Options, status: Tailnet | undefined, message?: string, returnTo?: string, firstBudget?: HandoffBudget): Promise<{ value: Record<string, unknown>[]; exitCode: number }> {
-  const ssh = executable('ssh'), results: Record<string, unknown>[] = [];
-  let exitCode = 0;
-  for (const requestedHost of options.hosts) {
-    const target = host(requestedHost);
-    let outcome: { value: Record<string, unknown>; exitCode: number }, user: Partial<Awaited<ReturnType<typeof sshUser>>> = {}, canonical = target;
-    try {
-      const budget = firstBudget ? results.length === 0 ? firstBudget : new HandoffBudget(parseWaitTimeout(options.values.get('--wait-timeout') ?? '30')) : undefined;
-      budget?.beforeEffect();
-      // A known offline or ambiguous tailnet peer is refused before any SSH process.
-      const resolved = route(target, status); canonical = resolved.canonical;
-      const hostName = resolved.hostName ? ['-o', `HostName=${resolved.hostName}`] : [];
-      // One `ssh -G` serves the user metadata and, for a resolved peer, shows
-      // whether ssh_config already pins a HostKeyAlias. Ours is added only when
-      // the configuration was read and has none; an unread one is never overridden.
-      let alias: string[] = [];
-      try {
-        const config = await sshConfig(ssh, target, { ...options.ssh, args: [...hostName, ...options.ssh.args] }, !!resolved.hostName);
-        user = config.user;
-        if (resolved.hostKeyAlias && config.read && !config.hostKeyAlias) alias = ['-o', `HostKeyAlias=${resolved.hostKeyAlias}`];
-      } catch { user = { sshUser: null, sshUserSource: 'unknown' }; }
-      // Metadata never blocks or aborts a destination; earlier results are kept.
-      outcome = await remote(options, ssh, target, { canonical, options: [...hostName, ...alias] }, message, returnTo, budget);
-    }
-    // One destination keeps the existing flat local-host failure shape.
-    catch (error) { outcome = failure(error, options.command, options.hosts.length === 1 ? hostname() : canonical !== target ? canonical : requestedHost); }
-    results.push({ ...outcome.value, ...(options.hosts.length > 1 && canonical === target ? { host: requestedHost } : {}), sshHost: target, ...user,
-      ...(options.jump ? { sshJump: options.jump.spec } : {}) });
-    exitCode = options.hosts.length === 1 ? outcome.exitCode : outcome.exitCode === 0 && exitCode === 0 ? 0 : 1;
-  }
-  return { value: results, exitCode };
-}
-
 let command = 'unknown';
+let requested: string[] = [];
 let format: OutputFormat = 'json';
 let wire = false;
 let wireWatchdog: ReturnType<typeof setTimeout> | undefined;
@@ -422,6 +282,7 @@ try {
       args = record.args;
     }
     command = ['list', 'send', 'doctor', 'update'].includes(args[0] ?? '') ? args[0]! : 'unknown';
+    if (command !== 'unknown') requested = requestedHosts(args);
     const options = parse(args);
     if (wire && options.values.has('--receipt-collector')) throw new Refusal('remote_receipt_unsupported', 1);
     const handoffEnabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
@@ -454,9 +315,11 @@ try {
         message = options.values.get('--message');
         if (message === undefined || (!wire && message === '-')) {
           if (wire) throw new Refusal('remote_message_required');
-          message = await input(4_100_000, false, handoffBudget?.observationRemainingMs());
+          message = await input(4_100_000, mcpWorker, handoffBudget?.observationRemainingMs());
         }
       }
+      if (mcpWorker && process.env.SESSION_PEER_MCP_BODY_BYTES !== String(Buffer.byteLength(message, 'utf8')))
+        throw new Refusal('worker_input_incomplete');
       checkMessage(message); rawMessage = message;
       const noFrom = options.flags.has('--no-from'), noReply = options.flags.has('--no-reply-to');
       if (options.address) {
@@ -498,7 +361,7 @@ try {
     }
     let result: Record<string, unknown> = {}, exitCode: number | undefined, results: Record<string, unknown>[] | undefined;
     // Propagate the verified remote exit code so SSH and local refusals match.
-    if (options.hosts.length) ({ value: results, exitCode } = await remotes(options, await tailnetStatus(), message, returnTo, handoffBudget));
+    if (options.hosts.length) ({ value: results, exitCode } = await executeSsh({ options, context: { tailnet: await tailnetStatus(), returnTo, budget: handoffBudget }, message }));
     else if (command === 'send') {
       const settings = { to: options.values.get('--to')!, home: options.values.get('--codex-home'), codexBin: options.values.get('--codex-bin'), message: message!, dryRun: options.flags.has('--dry-run'), allowInactive: options.flags.has('--allow-inactive-codex-home') };
       const enabled = options.flags.has('--request-ack') || options.flags.has('--observe-delivery') || options.values.has('--correlation-id') || options.values.has('--wait-for') || options.values.has('--wait-timeout');
@@ -508,16 +371,16 @@ try {
         waitFor: options.values.get('--wait-for') as 'acknowledged' | undefined,
         seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget }));
       else if (enabled) ({ value: result, exitCode } = await handoffSend(settings, { remote: wireContext !== undefined, correlationId: options.values.get('--correlation-id'), requestAck: options.flags.has('--request-ack'), observeDelivery: options.flags.has('--observe-delivery'), waitFor: options.values.get('--wait-for') as 'delivered' | 'acknowledged' | undefined, seconds: parseWaitTimeout(options.values.get('--wait-timeout') ?? '30'), payload: rawMessage, budget: handoffBudget, resultOverhead: Buffer.byteLength(JSON.stringify(routing)) + 1024 }));
-      else result = await send(settings);
+      else result = await executeLocal({ command: 'send', settings });
     }
     else if (command === 'update') result = options.flags.has('--check') ? await checkUpdate(options.values.get('--channel')) : refuseSelfUpdate(options.values.get('--channel'));
     else if (command === 'doctor') {
-      result = await doctor(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.values.get('--codex-bin'));
+      result = await executeLocal({ command: 'doctor', agent: options.values.get('--agent') as Agent | undefined, home: options.values.get('--codex-home'), binary: options.values.get('--codex-bin') });
       // Opt-in reverse probe: locally, or on the destination when it arrives over the wire.
       const probeTo = wire ? options.values.get('--return-route-host') : returnTo;
       if (options.flags.has('--check-return-route') || probeTo) result.returnRoute = await probeReturnRoute(probeTo && returnHost(probeTo), await tailnetStatus(), wire);
     }
-    else result = await listing(options.values.get('--agent') as 'claude' | 'codex' | undefined, options.values.get('--codex-home'), options.flags.has('--all'));
+    else result = await executeLocal({ command: 'list', agent: options.values.get('--agent') as Agent | undefined, home: options.values.get('--codex-home'), all: options.flags.has('--all') });
     if (command === 'send') { results = results?.map(item => ({ ...item, ...routing })); result = { ...result, ...routing }; }
     // Wire-only request context for remote home canonicalization. The caller
     // validates and removes this scalar; ordinary local result shape is unchanged.
@@ -547,4 +410,11 @@ try {
   console.log(renderOutput(!wire && requested.length > 1 ? requested.map(item => ({ ...value, host: item })) : value, format));
   process.exitCode = exitCode;
   }
-} finally { if (wireWatchdog) clearTimeout(wireWatchdog); }
+} finally {
+  if (wireWatchdog) clearTimeout(wireWatchdog);
+  if (mcpWorker) {
+    stopCliChildren();
+    process.removeListener('disconnect', stopMcpWorker);
+    process.disconnect?.();
+  }
+}

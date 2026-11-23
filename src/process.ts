@@ -1,4 +1,4 @@
-import childProcess, { spawn } from 'node:child_process';
+import childProcess, { spawn, type ChildProcess } from 'node:child_process';
 import { accessSync, constants, realpathSync, statSync } from 'node:fs';
 import { delimiter, isAbsolute, join } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
@@ -35,13 +35,25 @@ export type Done = { code: number | null; stdout: string; stderr: string; spawne
 // equivalent here: only the child is killed and descendants may linger; the
 // tree backend below is a candidate that is deliberately not used (#131).
 const groups = new Set<number>();
+const cliChildren = new Set<ChildProcess>();
+let forwardCliSignals = false;
+// The executable explicitly owns process exit. In-process callers retain
+// their own signal handlers and still get per-child timeout cleanup.
+export function enableCliSignalForwarding(): void { forwardCliSignals = true; }
 const posix = process.platform !== 'win32';
 const reap = (pid: number | undefined) => { if (pid) try { process.kill(-pid, 'SIGKILL'); } catch { /* Already gone (ESRCH). */ } };
+// Used only by a CLI started with a private MCP worker IPC channel.
+export function stopCliChildren(): void {
+  if (posix) for (const pid of groups) reap(pid);
+  else for (const child of cliChildren) {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+  }
+}
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 // A detached group no longer receives the terminal's Ctrl-C, so forward
 // termination signals as a group kill, then re-raise with default handling.
 function forward(signal: NodeJS.Signals) {
-  for (const pid of groups) reap(pid);
+  stopCliChildren();
   groups.clear();
   for (const name of signals) process.removeListener(name, forward);
   process.kill(process.pid, signal);
@@ -54,7 +66,9 @@ export function run(binary: string, args: string[], options: {
     let stopReason: StopReason | undefined;
     const chunks: Buffer[] = [], outputDecoder = new StringDecoder('utf8'), diagnosticDecoder = new StringDecoder('utf8');
     const child = spawn(binary, args, { shell: false, env: options.env ?? process.env, cwd: options.cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: posix });
+    if (forwardCliSignals) cliChildren.add(child);
     const release = () => {
+      cliChildren.delete(child);
       if (child.pid === undefined || !groups.delete(child.pid) || groups.size) return;
       for (const name of signals) process.removeListener(name, forward);
     };
@@ -78,7 +92,7 @@ export function run(binary: string, args: string[], options: {
     const timer = setTimeout(() => stop('timeout'), options.timeout ?? 3000);
     const register = () => {
       if (finished || stopped || !posix || child.pid === undefined || groups.has(child.pid)) return;
-      if (!groups.size) for (const name of signals) process.on(name, forward);
+      if (forwardCliSignals && !groups.size) for (const name of signals) process.on(name, forward);
       groups.add(child.pid);
     };
     // Register as soon as the PID exists, so a signal arriving before the
