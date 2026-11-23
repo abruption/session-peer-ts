@@ -44,10 +44,12 @@ for (const file of locales) {
     ...locales.map(name => `](${name})`)]) {
     assert.ok(content.includes(token), `${file}: missing contract token ${token}`);
   }
-  const topLevelHeadings = file === 'README.ko.md'
-    ? ['시연', '빠른 시작', '문서', '라이선스', '지원 및 보안']
-    : ['Demo', 'Quick Start', 'Docs', 'License', 'Support and security'];
-  const quickStartHeadings = file === 'README.ko.md' ? ['설치', '업데이트'] : ['Install', 'Update'];
+  const [topLevelHeadings, quickStartHeadings] = {
+    'README.md': [['Demo', 'Quick Start', 'Docs', 'License', 'Support and security'], ['Install', 'Update']],
+    'README.ko.md': [['시연', '빠른 시작', '문서', '라이선스', '지원 및 보안'], ['설치', '업데이트']],
+    'README.ja.md': [['デモ', 'クイックスタート', 'ドキュメント', 'ライセンス', 'サポートとセキュリティ'], ['インストール', '更新']],
+    'README.zh-CN.md': [['演示', '快速开始', '文档', '许可证', '支持与安全'], ['安装', '更新']],
+  }[file];
   assert.deepEqual([...content.matchAll(/^## (.+)$/gm)].map(match => match[1]),
     topLevelHeadings, `${file}: entry-page structure`);
   assert.deepEqual([...content.matchAll(/^### (.+)$/gm)].map(match => match[1]), quickStartHeadings,

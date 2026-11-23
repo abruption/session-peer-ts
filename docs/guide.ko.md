@@ -1,39 +1,14 @@
 # 사용자 가이드 — session-peer (TypeScript)
 
-일반 Codex 큐는 `auth.json`이 있는 로그인 home 등에서 클라우드 정책 적용 여부를 분류할 수 없으면 `codex_cloud_storage_unverified`로 거부합니다. 자격정보·캐시 내용은 읽지 않으며, 별도로 검증하는 owned app-server 경로에는 실제 저장소 바인딩 증거가 필요합니다.
-
-이 소스는 Codex home·시스템·macOS 관리 설정과 큐 실행 프로세스 및 대상 프로세스의 실제 작업 경로에 적용되는 프로젝트 설정을 검사합니다. [저장소 검증 범위와 거부 조건](api.md#codex-storage-configuration)을 확인하세요. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부합니다. doctor와 dry-run은 Codex를 실행하지 않으며 로더 버전은 미확인으로 남깁니다.
-
-현재 기능 차이와 포팅 결정은 [날짜가 명시된 비교표](../PARITY.md#current-scoped-feature-matrix)에서 확인하세요. TypeScript의 공개 기능과 별도로 고정한 Python 비교 기준을 구분합니다.
-
 [README로 돌아가기](../README.ko.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**문서·소스 기준 버전: 0.6.2.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](../VALIDATION.md), 릴리스 절차는 [RELEASING.md](../RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6 버전과 0.6.2 버전은 서로의 SSH 사전 확인을 거부합니다.
+이 가이드에서는 CLI 설치와 사용 방법을 설명합니다.
 
-**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 0.6.2 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.
+**문서와 소스의 기준은 0.6.2 버전입니다.** SSH 양쪽에서 같은 TypeScript 버전을 사용해야 합니다.
 
-이 가이드는 0.6.2 버전을 다룹니다([0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes)). 0.3.0에는 여러 호스트를 통한 SSH 전송, 발신자 정보와 회신 경로, 업데이트 확인, 선택 기능인 `sp` 단축 명령이 추가됐습니다([0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance)). [0.3.1 공개 릴리스 기록](../VALIDATION.md#public-031--2026-10-04-kst)은 이전 버전의 발행 내역입니다. 아래에서 0.1.0을 언급할 때는 이전 버전을 설명합니다.
-
-<a id="마이그레이션-경계-033-후보"></a>
-
-## 마이그레이션 경계 (0.4.0)
-
-[0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)은 릴리스 소스와 산출물을 고정합니다. SSH 사전 확인은 정확히 같은 TS 버전 표시를 검사하며 커밋 해시는 검사하지 않습니다. 소스 빌드의 검토 커밋 일치는 운영자가 별도로 확인해야 합니다.
-
-- Python Claude JSON에서는 `status`, `submitted`, `consumptionConfirmed`가 생략될 수 있습니다. TS는 `validated`/`posted`, 명시적 `submitted`, `consumptionConfirmed:false`를 사용합니다. 없는 필드는 false나 null이 아닙니다. Claude 이름은 null일 수 있고 Codex `queueId`는 선택 필드입니다. 제출은 ACK를 증명하지 않습니다.
-- Claude 세션 디렉터리가 없으면 빈 목록과 `status:ok`가 반환됩니다. 선택적 Codex 홈이 없으면 `absent`, 읽을 수 있는 DB와 오류가 모두 없으면 전체 상태가 `not_installed`입니다. 빈 목록이나 doctor 완료는 전송 권한을 부여하지 않습니다.
-- 반복 `--host`는 요청 순서대로 배열을 반환합니다. 호스트별 실행 단계의 실패는 종료코드 1로 집계하지만, 실행 전 명령 전체 거부(호스트 중복이나 빈 메시지 등)는 배열 출력에서도 종료코드 2를 유지합니다. 공개 0.3.2는 SSH 종료 255나 시간 초과 후 완전한 응답의 근거도 잃을 수 있습니다. 0.3.3은 요청에 맞는 완전한 사실을 보존하며 로컬 종료코드 1과 `sshTransport`를 반환합니다. 불완전하거나 잘못된 근거는 unknown으로 남습니다. unknown이면 자동 재전송하지 않습니다.
-- 0.2.0에 도입된 기본 doctor는 Codex를 실행하거나 inbox에 제출하지 않습니다. 0.3.0부터 명시적 `--check-return-route`는 사용할 수 있는 비로컬 대상에 한해 제한된 역방향 SSH 무동작 명령을 실행합니다. 자기 경로는 SSH 없이 `verified`, `transport:local`, `self_route_normalized`를 반환하며, 호스트가 없으면 접속 확인 전에 실패합니다. `--check-reply-to`는 지원하지 않습니다. verified는 로컬 경로 정규화 또는 한 번의 SSH 무동작 명령 성공을 의미하며, ACK 인증이나 일반적인 역방향 접근 보장이 아닙니다.
-- 같은 기기의 Reply-To를 로컬로 바꾸려면 명시된 OS 사용자가 일치하고 정확한 로컬 이름으로 확인되며 명시적 SSH 옵션이 없어야 합니다. 발신자 근거가 충돌하면 신원을 생략하고, Claude 이름을 사용할 수 없으면 PID를 사용합니다.
-- npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 공개 TS 0.3.5는 공개 스킬 `0.2.1`과 기존 `0.1.0`·`0.2.0`의 정확한 프로필을 허용하며, 공개 TS 0.3.2·0.3.3·0.3.4는 `0.2.1`을 거부합니다. 설치 절에는 별도로 공개된 스킬 소스를 고정했습니다.
-- Windows 검증은 공개 0.3.1, Windows 10 x64, 관리자 계정, PowerShell 5.1, Node 24.16.0에서 수행했습니다. 오프라인 설치, 래퍼·네이티브 잠금, 운영자의 doctor·없는 대상 dry-run과 로컬 fixture 31개가 검증됐습니다. Node 22는 버전 표시·네이티브 잠금 확인만 수행했습니다. 비관리자, 다른 아키텍처, F6 런타임 검사, 이전 Linux 실험의 최신 규칙 검증은 남아 있습니다. 이는 0.3.2 실기 ACK나 배포 도우미 검증이 아닙니다.
-
-[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 0.4.0 소스의 개발 비교 기준은 Python 1.1.0이며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 구현의 자동 ACK·원래 발신자의 SSH 수신 확인 수집기·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
-
-
-[0.4.0 handoff 설계와 구현 범위](../PARITY.md#handoff-v1-design-candidate--69)
+일반 Codex 전송에는 [저장소 검사 규칙](api.md#codex-storage-configuration)이 적용됩니다. Windows에서 Codex 전송과 dry-run은 큐에 넣기 전에 중단됩니다.
 
 ## 목차
 
@@ -43,6 +18,7 @@
 - [설치](#설치)
 - [사용법](#사용법)
 - [성공의 의미](#성공의-의미)
+- [마이그레이션 경계](#마이그레이션-경계-040)
 - [개발·검증](#개발검증)
 - [npm 릴리스](#npm-릴리스)
 - [관련 프로젝트](#관련-프로젝트)
@@ -443,6 +419,33 @@ Codex는 커널의 flock, 파일 식별자, 같은 사용자가 소유한 프로
 신호를 보내지 않습니다. 탐색 결과에 포함된 이름·경로·ID는 공유 전에 가리세요.
 
 <a id="development-and-verification"></a>
+<a id="마이그레이션-경계-033-후보"></a>
+
+## 마이그레이션 경계 (0.4.0)
+
+일반 Codex 큐는 `auth.json`이 있는 로그인 home 등에서 클라우드 정책 적용 여부를 분류할 수 없으면 `codex_cloud_storage_unverified`로 거부합니다. 자격정보·캐시 내용은 읽지 않으며, 별도로 검증하는 owned app-server 경로에는 실제 저장소 바인딩 증거가 필요합니다.
+
+이 소스는 Codex home·시스템·macOS 관리 설정과 큐 실행 프로세스 및 대상 프로세스의 실제 작업 경로에 적용되는 프로젝트 설정을 검사합니다. [저장소 검증 범위와 거부 조건](api.md#codex-storage-configuration)을 확인하세요. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부합니다. doctor와 dry-run은 Codex를 실행하지 않으며 로더 버전은 미확인으로 남깁니다.
+
+현재 기능 차이와 포팅 결정은 [날짜가 명시된 비교표](../PARITY.md#current-scoped-feature-matrix)에서 확인하세요. TypeScript의 공개 기능과 별도로 고정한 Python 비교 기준을 구분합니다.
+
+[0.3.0 변경 사항](../PARITY.md#030-remote-usability-and-maintenance), [0.3.1 신뢰성 수정](../PARITY.md#031-reliability-fixes), [0.3.1 공개 기록](../VALIDATION.md#public-031--2026-10-04-kst)을 참고하세요. 문서의 0.1.0 설명은 이전 버전을 가리킵니다.
+
+[0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)은 릴리스 소스와 산출물을 고정합니다. SSH 사전 확인은 정확히 같은 TS 버전 표시를 검사하며 커밋 해시는 검사하지 않습니다. 소스 빌드의 검토 커밋 일치는 운영자가 별도로 확인해야 합니다.
+
+- Python Claude JSON에서는 `status`, `submitted`, `consumptionConfirmed`가 생략될 수 있습니다. TS는 `validated`/`posted`, 명시적 `submitted`, `consumptionConfirmed:false`를 사용합니다. 없는 필드는 false나 null이 아닙니다. Claude 이름은 null일 수 있고 Codex `queueId`는 선택 필드입니다. 제출은 ACK를 증명하지 않습니다.
+- Claude 세션 디렉터리가 없으면 빈 목록과 `status:ok`가 반환됩니다. 선택적 Codex 홈이 없으면 `absent`, 읽을 수 있는 DB와 오류가 모두 없으면 전체 상태가 `not_installed`입니다. 빈 목록이나 doctor 완료는 전송 권한을 부여하지 않습니다.
+- 반복 `--host`는 요청 순서대로 배열을 반환합니다. 호스트별 실행 단계의 실패는 종료코드 1로 집계하지만, 실행 전 명령 전체 거부(호스트 중복이나 빈 메시지 등)는 배열 출력에서도 종료코드 2를 유지합니다. 공개 0.3.2는 SSH 종료 255나 시간 초과 후 완전한 응답의 근거도 잃을 수 있습니다. 0.3.3은 요청에 맞는 완전한 사실을 보존하며 로컬 종료코드 1과 `sshTransport`를 반환합니다. 불완전하거나 잘못된 근거는 unknown으로 남습니다. unknown이면 자동 재전송하지 않습니다.
+- 0.2.0에 도입된 기본 doctor는 Codex를 실행하거나 inbox에 제출하지 않습니다. 0.3.0부터 명시적 `--check-return-route`는 사용할 수 있는 비로컬 대상에 한해 제한된 역방향 SSH 무동작 명령을 실행합니다. 자기 경로는 SSH 없이 `verified`, `transport:local`, `self_route_normalized`를 반환하며, 호스트가 없으면 접속 확인 전에 실패합니다. `--check-reply-to`는 지원하지 않습니다. verified는 로컬 경로 정규화 또는 한 번의 SSH 무동작 명령 성공을 의미하며, ACK 인증이나 일반적인 역방향 접근 보장이 아닙니다.
+- 같은 기기의 Reply-To를 로컬로 바꾸려면 명시된 OS 사용자가 일치하고 정확한 로컬 이름으로 확인되며 명시적 SSH 옵션이 없어야 합니다. 발신자 근거가 충돌하면 신원을 생략하고, Claude 이름을 사용할 수 없으면 PID를 사용합니다.
+- npm, Python, 원격 호스트, 스킬은 각각 별도로 관리합니다. TS는 자체·원격 업데이트를 제공하지 않습니다. 알림은 기본 꺼짐이며 비활성화 설정이 우선합니다. 명시적 `update --check`는 레지스트리를 조회합니다. 공개 TS 0.3.5는 공개 스킬 `0.2.1`과 기존 `0.1.0`·`0.2.0`의 정확한 프로필을 허용하며, 공개 TS 0.3.2·0.3.3·0.3.4는 `0.2.1`을 거부합니다. 설치 절에는 별도로 공개된 스킬 소스를 고정했습니다.
+- Windows 검증은 공개 0.3.1, Windows 10 x64, 관리자 계정, PowerShell 5.1, Node 24.16.0에서 수행했습니다. 오프라인 설치, 래퍼·네이티브 잠금, 운영자의 doctor·없는 대상 dry-run과 로컬 fixture 31개가 검증됐습니다. Node 22는 버전 표시·네이티브 잠금 확인만 수행했습니다. 비관리자, 다른 아키텍처, F6 런타임 검사, 이전 Linux 실험의 최신 규칙 검증은 남아 있습니다. 이는 0.3.2 실기 ACK나 배포 도우미 검증이 아닙니다.
+
+[마이그레이션 상세](../PARITY.md#ordinary-cli-migration-notes--117)와 [Windows 검증 기록](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)을 참고하세요. 위 날짜별 마이그레이션 비교는 당시 공개 버전을 기준으로 합니다. 0.4.0 소스의 개발 비교 기준은 Python 1.1.0이며, 공개 npm 0.3.3의 기존 1.0.2 표시는 바뀌지 않습니다. Python 1.1.0에는 실험적인 로컬 Claude 수신 확인 전용 ACK 경로가 있습니다. 이것이 TS 구현의 자동 ACK·원래 발신자의 SSH 수신 확인 수집기·Windows handoff 지원을 뜻하지는 않습니다. 어느 기준도 종단 간 소비를 보장하지 않으며 Side Session은 실험 범위입니다. Relay/MCP는 이 비교에서 제외합니다.
+
+
+[0.4.0 handoff 설계와 구현 범위](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## 개발·검증
 
 ```sh
@@ -528,6 +531,7 @@ wake/wait/ACK와 소비
 [진단 경계](../PARITY.md#source-read-only-doctor--18--020)를 참고하세요. SSH를 사용할 때는
 양쪽에 같은 버전의 TypeScript 클라이언트를 설치해야 합니다.
 <a id="update-checks-and-notices-030-22"></a>
+
 ### 업데이트 확인과 알림 (0.3.0, #22)
 
 ```sh
@@ -632,11 +636,11 @@ npm `--ignore-scripts`로 설치해도 되며, 설치 후 Skills CLI를 호출�
 
 0.4.0에는 opt-in private POSIX handoff ledger가 포함됩니다. 필수 증거 채널이 unsupported이면 제출 전에 거절하며, best-effort 제출은 ACK를 증명하지 않습니다. 자동 수신 확인 연결 설정, Windows ledger 및 원래 발신자의 SSH 수신 확인 수집기는 미지원입니다. POSIX SSH opt-in은 명시적으로 초기화한 목적지 ledger에서 전송 없는 준비 단계로 대상·home·generation을 고정한 뒤 한 번만 전송합니다. [목적지 SSH 설명](api.md#unreleased-destination-side-ssh-handoff)을 참고하세요. 가짜 SSH fixture는 실제 네트워크 검증과 구분합니다.
 
-[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+[CLI 명세](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
 native 전송 관찰은 macOS arm64의 정확한 Codex 0.160.1/0.162.1과 이미 생성된 메타데이터 저장소에 한정됩니다. 검증 근거가 보존된 전송은 별도 `handoff wait`로 native 상태를 읽기 전용으로 관찰할 수 있습니다. 이 작업은 비공개 ledger에 대기·종료 기록을 저장하며, native 전송을 반복하지 않습니다. 각 대기는 자신의 마감 시각으로만 판단하고 다른 대기와 기존 종료 결과를 보존합니다. 새로 만든 Codex 0.162.1·Claude Code 2.1.296 테스트 세션의 실기 근거와 합성 테스트는 구분합니다. queued/posted, 실제 주입, 턴 종료, 일반 응답은 수령 확인 ACK와 다릅니다. 자동 ACK와 Windows handoff는 미지원입니다.
 
-[Observation](api.md#unreleased-local-delivery-observation--72)
+[전달 관측 명세](api.md#unreleased-local-delivery-observation--72)
 
 Linux·Windows의 native 주입 관측은 미지원입니다. 0.6.2 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.

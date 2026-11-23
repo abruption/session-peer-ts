@@ -12,22 +12,20 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
-
-**文档和源码版本：0.6.2。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](VALIDATION.md)，发布流程见 [RELEASING.md](RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 0.6.2 会拒绝彼此的 SSH 预检。
-
-**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 0.6.2 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。
-
 **发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
 
 </div>
 
-普通 Codex 发送也会拒绝登录 home 等无法判定云端策略适用范围的上下文。选择路径前请确认[存储检查范围](docs/api.md#codex-storage-configuration)。
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-此源码检查 Codex 的更多配置层。Windows 的 Codex 发送和 dry-run 因本地存储检查方式尚未验证而在队列提交前被拒绝；普通 Claude 路径另行处理。安装前请确认[检查范围](docs/api.md#codex-storage-configuration)及所选版本。
+**文档和源码版本：0.6.2。**
 
-## Demo
+Windows 上的 Codex 发送和 dry-run 会在消息入队前停止。无法确认云端存储策略时，普通 Codex 发送也会停止。请参阅 [Codex 存储检查规则](docs/api.md#codex-storage-configuration)和[投递观测范围](docs/api.md#local-delivery-observation--72)。
+
+<a id="demo"></a>
+
+## 演示
 
 ![TypeScript session-peer 0.2.1 的实际 Codex 与 Claude Code 请求和回复](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
@@ -45,14 +43,18 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 遇到 `unknown` (`submitted:null`)、没有回复或目标退出时，不要自动重试。
 `consumptionConfirmed` 始终为 false，请在接收方 TUI 中确认实际回复。
 
-## Quick Start
+<a id="quick-start"></a>
+
+## 快速开始
 
 需要 macOS/Linux/Windows、**Node 22.x 中的 22.13 及以上或 24.x**，以及匹配的
 原生预编译依赖(x64/arm64)。Claude 需要运行中的 TUI inbox；Codex 需要 CLI 和
 可验证的 writer(macOS/Linux 还需要 `lsof`、`ps`)。SSH 需要已有密钥、主机信任
 以及两端**同版本的 TypeScript 客户端**。平台要求与显式非活动队列提交见详细指南。
 
-### Install
+<a id="install"></a>
+
+### 安装
 
 [Python CLI](https://github.com/abruption/session-peer)也使用同名命令。
 安装前，macOS/Linux 使用 `type -a session-peer`，PowerShell 使用
@@ -73,7 +75,9 @@ session-peer --version
 可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
 请参阅[显式启用、冲突与停用(英文)](docs/shorthand.md)。
 
-### Update
+<a id="update"></a>
+
+### 更新
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
 下面示例将旧 npm 安装更新至所选的 0.6.2。CLI 不会安装更新，`session-peer update --check` 只做检查。
@@ -104,7 +108,9 @@ session-peer --version
 <a id="020-只读诊断"></a>
 <a id="显式安装代理技能"></a>
 
-## Docs
+<a id="docs"></a>
+
+## 文档
 
 - [用户指南](docs/guide.zh-CN.md) — CLI 选项、发现、Codex home、SSH、回复、安装方式和技能设置.
 - [API 参考(英文)](docs/api.md).
@@ -112,16 +118,18 @@ session-peer --version
 - [发布证据与平台验证](VALIDATION.md).
 - [开发与贡献](CONTRIBUTING.md).
 - [发布流程](RELEASING.md).
-
 - [0.4.0 handoff 设计与实现范围](PARITY.md#handoff-v1-design-candidate--69).
-
 - [private handoff CLI 与限制](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
 
-## License
+<a id="license"></a>
+
+## 许可证
 
 采用 [MIT 许可证](LICENSE)。
 
-## Support and security
+<a id="support-and-security"></a>
+
+## 支持与安全
 
 使用问题和可复现的缺陷请提交到[议题](https://github.com/abruption/session-peer-ts/issues)。
 漏洞请使用[私密报告](https://github.com/abruption/session-peer-ts/security/advisories/new)或

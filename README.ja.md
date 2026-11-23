@@ -12,22 +12,20 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
-
-**文書・ソースのバージョン: 0.6.2。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](VALIDATION.md)、リリース手順は [RELEASING.md](RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と 0.6.2 は互いの SSH 事前確認を拒否します。
-
-**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 0.6.2 のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。
-
 **実行中の Claude Code・Codex セッションを見つけ、ローカルまたは SSH でメッセージを送信します。**
 Python 不要の Node.js クライアントです。パッケージ名とコマンド名は `session-peer` です。
 
 </div>
 
-通常の Codex 送信は、ログイン済み home などクラウドポリシーの適用範囲を判定できない場合も拒否します。経路を選ぶ前に[ストレージ検証の範囲](docs/api.md#codex-storage-configuration)を確認してください。
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-このソースは Codex の追加設定レイヤーを確認します。Windows の Codex 送信・dry-run はローカルストレージ検査が未検証のためキュー提出前に拒否し、通常の Claude 経路とは区別します。導入前に[検証範囲](docs/api.md#codex-storage-configuration)と選択したリリースを確認してください。
+**ドキュメントとソースのバージョン: 0.6.2。**
 
-## Demo
+Windows では Codex への送信と dry-run はキューに登録する前に停止します。クラウドのストレージポリシーを確認できない環境でも、通常の Codex 送信は停止します。[Codex のストレージ検証規則](docs/api.md#codex-storage-configuration)と[配信観測の範囲](docs/api.md#local-delivery-observation--72)を参照してください。
+
+<a id="demo"></a>
+
+## デモ
 
 ![TypeScript session-peer 0.2.1 による実際の Codex・Claude Code 間の要求と返信](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
@@ -46,7 +44,9 @@ session-peer send --to CLAUDE_PID --message 'API の契約を確認して返信�
 (`submitted:null`)、返信がないこと、対象の終了を理由に自動再送しないでください。
 `consumptionConfirmed` は常に false です。返信は受信側 TUI で確認します。
 
-## Quick Start
+<a id="quick-start"></a>
+
+## クイックスタート
 
 macOS/Linux/Windows、**Node 22.x の 22.13 以降または 24.x**、対応する
 ネイティブ事前ビルド依存関係(x64/arm64)が必要です。Claude は実行中 TUI の inbox、
@@ -54,7 +54,9 @@ Codex は CLI と検証可能な writer が必要です(macOS/Linux は `lsof`�
 SSH は既存の鍵・ホスト信頼設定と両端の**同じバージョンの TypeScript クライアント**を
 必要とします。各 OS の条件と非アクティブなキューへの明示的提出はガイドを参照してください。
 
-### Install
+<a id="install"></a>
+
+### インストール
 
 [Python CLI](https://github.com/abruption/session-peer)も同じコマンド名を使います。
 インストール前に macOS/Linux では `type -a session-peer`、PowerShell では
@@ -75,7 +77,9 @@ Windows・削除の手順は以下の詳細ガイドを参照してください�
 任意の `sp` 短縮名は 0.3.0 以降に含まれ（0.2.1 以前にはありません）、自動では有効になりません。
 [明示的な有効化・衝突・解除(英語)](docs/shorthand.md)を参照してください。
 
-### Update
+<a id="update"></a>
+
+### 更新
 
 npm で導入したクライアントは npm で更新します。タグと対象バージョンを確認してから
 正確なバージョンを指定してください。以下は古い npm 版を選択した 0.6.2 に更新する例です。
@@ -108,7 +112,9 @@ session-peer --version
 <a id="020-の読み取り専用診断"></a>
 <a id="エージェントスキルの明示的な導入"></a>
 
-## Docs
+<a id="docs"></a>
+
+## ドキュメント
 
 - [ユーザーガイド](docs/guide.ja.md) — CLI オプション、探索、Codex home、SSH、返信、導入方法とスキル設定.
 - [API リファレンス(英語)](docs/api.md).
@@ -116,16 +122,18 @@ session-peer --version
 - [リリース証拠・プラットフォーム検証](VALIDATION.md).
 - [開発・貢献](CONTRIBUTING.md).
 - [リリース手順](RELEASING.md).
-
 - [0.4.0 handoff 設計と実装の範囲](PARITY.md#handoff-v1-design-candidate--69).
-
 - [private handoff CLI と制限](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
 
-## License
+<a id="license"></a>
+
+## ライセンス
 
 [MIT ライセンス](LICENSE)で公開しています。
 
-## Support and security
+<a id="support-and-security"></a>
+
+## サポートとセキュリティ
 
 利用上の質問と再現可能な不具合は[イシュー](https://github.com/abruption/session-peer-ts/issues)へ。
 脆弱性は[非公開報告](https://github.com/abruption/session-peer-ts/security/advisories/new)または

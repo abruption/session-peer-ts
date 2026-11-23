@@ -1,39 +1,14 @@
 # 用户指南 — session-peer (TypeScript)
 
-普通 Codex 队列也会拒绝无法判定云端策略适用范围的上下文，包括存在 `auth.json` 的登录 home，并返回 `codex_cloud_storage_unverified`。不会读取凭据或缓存内容；另行验证的 owned app-server 路径仍需实际存储绑定证据。
-
-此源码检查 Codex home、系统配置、macOS 管理配置，以及队列进程和目标进程实际工作目录所适用的项目配置。详见[存储检查范围与拒绝条件](api.md#codex-storage-configuration)。Windows 的 Codex 发送和 dry-run 在本地存储检查方式通过验证前会拒绝队列提交。doctor 和 dry-run 不执行 Codex，加载器版本仍标为未验证。
-
-当前功能差异与移植决策见[注明日期的对照表](../PARITY.md#current-scoped-feature-matrix)。表中区分 TypeScript 已发布的功能与单独固定的 Python 比较基准。
-
 [返回 README](../README.zh-CN.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**文档和源码版本：0.6.2。** 安装前，请审核所选发布版本和注册表元数据。按日期记录的准备与验证结果见 [VALIDATION.md](../VALIDATION.md)，发布流程见 [RELEASING.md](../RELEASING.md)。SSH 两端必须使用相同的 TypeScript 客户端版本；0.3.6 与 0.6.2 会拒绝彼此的 SSH 预检。
+本指南介绍如何安装和使用 CLI。
 
-**0.4.0 handoff 范围：** 可选 native 观测仅限 macOS arm64 上精确 Codex 0.160.1/0.162.1 版本；明确的 `operator_confirmed` 收件确认使用受支持的 POSIX ledger。Linux、Windows 的 native 观测和自动 ACK 收集仍不支持。 0.6.2 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。
+**文档和源码版本：0.6.2。** SSH 两端必须使用相同的 TypeScript 版本。
 
-这是 0.6.2 详细指南（[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)）。0.3.0 新增了多主机 SSH、发送者信息与回复路由、更新检查以及可选的 `sp` 简写（[0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)）。此前的发布记录见 [0.3.1 公开发布证据](../VALIDATION.md#public-031--2026-10-04-kst)；下文 0.1.0 的说明用于旧版本对比。
-
-<a id="迁移边界-033-候选"></a>
-
-## 迁移边界 (0.4.0)
-
-[0.3.2 公开记录](../VALIDATION.md#public-032--2026-10-07-kst)固定了发布源码和产物。SSH 预检验证 TS 版本标识完全一致，不检查提交哈希；源码构建使用的已审核提交需要由操作人员另行对齐。
-
-- Python 的 Claude JSON 可能省略 `status`、`submitted`、`consumptionConfirmed`。TS 使用 `validated`/`posted`、明确的 `submitted` 和 `consumptionConfirmed:false`。缺失字段不等于 false 或 null。Claude 名称可以为 null，Codex `queueId` 是可选字段。提交不能证明 ACK。
-- Claude 会话目录缺失时，返回空列表和 `status:ok`。可选 Codex home 缺失时为 `absent`；没有可读 DB 且没有错误时，整体为 `not_installed`。空列表或 doctor 完成都不授予发送权限。
-- 重复 `--host` 返回按请求顺序排列的数组。主机分别执行期间发生的失败汇总为退出码 1；执行前的命令整体拒绝（如主机重复或消息为空）在数组输出中仍保持退出码 2。公开 0.3.2 在 SSH 退出 255 或超时后，也可能丢失完整响应的证据。0.3.3 保留与请求匹配的完整事实，并返回本地退出码 1 和 `sshTransport`。不完整或无效证据仍为 unknown。unknown 时不得自动重发。
-- 0.2.0 引入的基础 doctor 不执行 Codex，也不向 inbox 提交。0.3.0 起，显式 `--check-return-route` 仅对可用的非本地目标执行有时间限制的反向 SSH 无操作命令。同机自身路由无需 SSH 即返回 `verified`、`transport:local`、`self_route_normalized`；缺少主机时在任何探测前失败。`--check-reply-to` 不受支持。verified 表示本地路由归一化或一次 SSH 无操作命令成功，不是 ACK 认证或通用反向访问保证。
-- 将同机 Reply-To 归一化为本地路径，必须明确指定匹配的 OS 用户、使用可识别的准确本机名称，且没有显式 SSH 选项。发送者证据冲突时省略身份；Claude 名称不可用时使用 PID。
-- npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。公开 TS 0.3.5 接受公开技能 `0.2.1` 及旧 `0.1.0`、`0.2.0` 的精确配置；公开 TS 0.3.2、0.3.3 和 0.3.4 拒绝 `0.2.1`。安装部分固定了独立发布的技能源码。
-- Windows 验证使用公开 0.3.1、Windows 10 x64、管理员账号、PowerShell 5.1 和 Node 24.16.0。验证范围包括离线安装、包装器与原生锁、操作端 doctor 和不存在目标的 dry-run，以及 31 项本地 fixture。Node 22 仅确认版本标识和原生锁。非管理员、其他架构、F6 运行时校验、此前 Linux 实验的最新规则仍未验证。这不是 0.3.2 实机 ACK 或部署辅助工具的验证。
-
-请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。上述带日期的迁移比较针对当时的公开版本。0.4.0 源码的开发比较基准为 Python 1.1.0；公开 npm 0.3.3 原有的 1.0.2 标识保持不变。Python 1.1.0 包含实验性的本地 Claude 收件确认专用 ACK 路径。这不表示 TS 实现支持自动 ACK、原发送方的 SSH 收件确认收集器或 Windows handoff。两种基准均不保证端到端消费，Side Session 仍属实验功能。Relay/MCP 不在比较范围内。
-
-
-[0.4.0 handoff 设计与实现范围](../PARITY.md#handoff-v1-design-candidate--69)
+普通 Codex 发送受[存储检查规则](api.md#codex-storage-configuration)约束。Windows 上的 Codex 发送和 dry-run 会在消息入队前停止。
 
 ## 目录
 
@@ -42,6 +17,7 @@
 - [安装](#安装)
 - [使用](#使用)
 - [成功含义与安全性](#成功含义与安全性)
+- [迁移边界](#迁移边界-040)
 - [开发与验证](#开发与验证)
 - [npm 版本](#npm-版本)
 - [相关项目](#相关项目)
@@ -65,7 +41,7 @@
 
 ### 0.2.0 统一列表
 
-构建后，`node dist/cli.js list --json` 合并列出 Claude/Codex，`list --agent codex --json` 查找已知 home。公开 npm **0.1.0** 仍要求显式 agent，以及 Codex 列表所需的 home；0.2.0 也支持显式命令格式。
+构建后，`node dist/cli.js list --json` 合并列出 Claude/Codex，`list --agent codex --json` 查找已知 home。公开 npm **0.1.0** 仍要求显式 agent，以及 Codex 列表所需的 home；安装命令和显式的 `list`、`send` 命令也适用于 0.1.0。
 
 范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（0.6.2）。
 
@@ -226,6 +202,33 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 
 `consumptionConfirmed` 始终为 false。必须在目标 TUI 中另行确认实际 ACK，不可由排队或轮询 transcript 推断。退出码 0/1/2 分别表示成功/错误/用法错误。错误只返回固定代码，不返回原生 stderr 或消息内容。Codex 使用真实内核 flock、文件身份和同用户进程开始时间进行多次核验，排队前再次检查。不删除 lock，也不向拥有它的代理进程发送信号。发现结果仍包含本地名称、路径、ID，分享前请脱敏。
 
+<a id="迁移边界-033-候选"></a>
+
+## 迁移边界 (0.4.0)
+
+普通 Codex 队列也会拒绝无法判定云端策略适用范围的上下文，包括存在 `auth.json` 的登录 home，并返回 `codex_cloud_storage_unverified`。不会读取凭据或缓存内容；另行验证的 owned app-server 路径仍需实际存储绑定证据。
+
+此源码检查 Codex home、系统配置、macOS 管理配置，以及队列进程和目标进程实际工作目录所适用的项目配置。详见[存储检查范围与拒绝条件](api.md#codex-storage-configuration)。Windows 的 Codex 发送和 dry-run 在本地存储检查方式通过验证前会拒绝队列提交。doctor 和 dry-run 不执行 Codex，加载器版本仍标为未验证。
+
+当前功能差异与移植决策见[注明日期的对照表](../PARITY.md#current-scoped-feature-matrix)。表中区分 TypeScript 已发布的功能与单独固定的 Python 比较基准。
+
+另见 [0.3.0 变更](../PARITY.md#030-remote-usability-and-maintenance)、[0.3.1 可靠性修复](../PARITY.md#031-reliability-fixes)和 [0.3.1 发布记录](../VALIDATION.md#public-031--2026-10-04-kst)。本文提到的 0.1.0 指旧版本。
+
+[0.3.2 公开记录](../VALIDATION.md#public-032--2026-10-07-kst)固定了发布源码和产物。SSH 预检验证 TS 版本标识完全一致，不检查提交哈希；源码构建使用的已审核提交需要由操作人员另行对齐。
+
+- Python 的 Claude JSON 可能省略 `status`、`submitted`、`consumptionConfirmed`。TS 使用 `validated`/`posted`、明确的 `submitted` 和 `consumptionConfirmed:false`。缺失字段不等于 false 或 null。Claude 名称可以为 null，Codex `queueId` 是可选字段。提交不能证明 ACK。
+- Claude 会话目录缺失时，返回空列表和 `status:ok`。可选 Codex home 缺失时为 `absent`；没有可读 DB 且没有错误时，整体为 `not_installed`。空列表或 doctor 完成都不授予发送权限。
+- 重复 `--host` 返回按请求顺序排列的数组。主机分别执行期间发生的失败汇总为退出码 1；执行前的命令整体拒绝（如主机重复或消息为空）在数组输出中仍保持退出码 2。公开 0.3.2 在 SSH 退出 255 或超时后，也可能丢失完整响应的证据。0.3.3 保留与请求匹配的完整事实，并返回本地退出码 1 和 `sshTransport`。不完整或无效证据仍为 unknown。unknown 时不得自动重发。
+- 0.2.0 引入的基础 doctor 不执行 Codex，也不向 inbox 提交。0.3.0 起，显式 `--check-return-route` 仅对可用的非本地目标执行有时间限制的反向 SSH 无操作命令。同机自身路由无需 SSH 即返回 `verified`、`transport:local`、`self_route_normalized`；缺少主机时在任何探测前失败。`--check-reply-to` 不受支持。verified 表示本地路由归一化或一次 SSH 无操作命令成功，不是 ACK 认证或通用反向访问保证。
+- 将同机 Reply-To 归一化为本地路径，必须明确指定匹配的 OS 用户、使用可识别的准确本机名称，且没有显式 SSH 选项。发送者证据冲突时省略身份；Claude 名称不可用时使用 PID。
+- npm、Python、远程主机、技能分别管理。TS 不提供自身更新或远程更新。通知默认关闭，禁用设置优先。显式 `update --check` 仍会查询注册表。公开 TS 0.3.5 接受公开技能 `0.2.1` 及旧 `0.1.0`、`0.2.0` 的精确配置；公开 TS 0.3.2、0.3.3 和 0.3.4 拒绝 `0.2.1`。安装部分固定了独立发布的技能源码。
+- Windows 验证使用公开 0.3.1、Windows 10 x64、管理员账号、PowerShell 5.1 和 Node 24.16.0。验证范围包括离线安装、包装器与原生锁、操作端 doctor 和不存在目标的 dry-run，以及 31 项本地 fixture。Node 22 仅确认版本标识和原生锁。非管理员、其他架构、F6 运行时校验、此前 Linux 实验的最新规则仍未验证。这不是 0.3.2 实机 ACK 或部署辅助工具的验证。
+
+请参阅[迁移详情](../PARITY.md#ordinary-cli-migration-notes--117)和 [Windows 验证记录](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)。上述带日期的迁移比较针对当时的公开版本。0.4.0 源码的开发比较基准为 Python 1.1.0；公开 npm 0.3.3 原有的 1.0.2 标识保持不变。Python 1.1.0 包含实验性的本地 Claude 收件确认专用 ACK 路径。这不表示 TS 实现支持自动 ACK、原发送方的 SSH 收件确认收集器或 Windows handoff。两种基准均不保证端到端消费，Side Session 仍属实验功能。Relay/MCP 不在比较范围内。
+
+
+[0.4.0 handoff 设计与实现范围](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## 开发与验证
 
 ```sh
@@ -276,6 +279,7 @@ session-peer doctor --host user@host --json
 存活进程公布了 pipe，并不证明 pipe 存在或可以连接。`capabilities` 明确将
 wake/wait/ACK 和消费确认标为不支持。可选的 TS 技能元数据检查也不会安装任何内容。
 参见[诊断边界](../PARITY.md#source-read-only-doctor--18--020)。SSH 两端需要相同的 TypeScript 客户端版本。
+
 ### 更新检查与提示（0.3.0，#22）
 
 ```sh
@@ -307,8 +311,7 @@ npm 版本，Python 版 `session-peer` 的发布是独立的版本序列，从�
 不应发起未经请求的网络访问。设置 `SESSION_PEER_UPDATE_NOTICE=1` 开启后，若 24 小时内的
 缓存显示有更新的 npm 稳定版，JSON 结果会增加 `clientUpdate` 对象，文本输出则在 stderr
 写一行。缓存缺失、无效或过期时会启动一个分离的刷新进程，不会延迟或改变命令结果与退出码；
-刷新失败后 1 小时内不再尝试。缓存写入是单次执行的，并在失败时保持关闭：无论是后台刷新还是
-显式检查，写入都只在持有 `npm-update.lock` 时进行，且只覆盖更旧的记录。任何调用都不会接管或
+刷新失败后 1 小时内不再尝试。无论是后台刷新还是显式检查，都只有持有 `npm-update.lock` 的进程可以写入缓存，且只覆盖更旧的记录。任何调用都不会接管或
 删除不是自己创建的锁。若刷新异常退出，或因 I/O 错误未能释放锁而留下锁，后台刷新会停止，`update --check` 会报告
 `cache: "skipped_stale_lock"`。请在没有 session-peer 进程运行时手动删除 `npm-update.lock`。
 
@@ -364,11 +367,11 @@ postinstall 不会调用 Skills CLI，安装此技能不会覆盖 Python 技能�
 
 0.4.0 包含 opt-in private POSIX handoff ledger。所需证据通道 unsupported 时在提交前拒绝；best-effort 提交并不证明 ACK。自动收件确认连接设置、Windows ledger 和原发送方的 SSH 收件确认收集器尚不支持。POSIX SSH opt-in 在已明确初始化的目标 ledger 上进行无发送的准备，固定目标、home、generation 后只发送一次。请参阅[目标端 SSH 说明](api.md#unreleased-destination-side-ssh-handoff)。模拟 SSH fixture 与实际网络验证分别记录。
 
-[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+[CLI 规范](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
-native 观测仅支持 macOS arm64 上的精确 Codex 0.160.1/0.162.1 和已有的元数据存储。保留验证依据的提交可通过独立的 `handoff wait` 只读观测 native 状态。该操作会在私有 ledger 中保存等待和终态记录，但不会再次进行 native 提交。每项等待只按自己的截止时间判断，并保留其他等待及过去的终态。新建专用 Codex 0.162.1、Claude Code 2.1.296 会话的实机依据与合成测试分开记录。queued/posted、注入、轮次结束及普通回复均不等于收件确认 ACK。自动 ACK 和 Windows handoff 仍不支持。
+原生观测仅支持 macOS arm64 上的 Codex 0.160.1 或 0.162.1，且要求元数据存储已初始化并处于可观测状态。保留验证依据的提交可通过独立的 `handoff wait` 只读观测 native 状态。该操作会在私有 ledger 中保存等待和终态记录，但不会再次进行 native 提交。每项等待只按自己的截止时间判断，并保留其他等待及过去的终态。新建专用 Codex 0.162.1、Claude Code 2.1.296 会话的实机依据与合成测试分开记录。queued/posted、注入、轮次结束及普通回复均不等于收件确认 ACK。自动 ACK 和 Windows handoff 仍不支持。
 
-[Observation](api.md#unreleased-local-delivery-observation--72)
+[投递观测规范](api.md#unreleased-local-delivery-observation--72)
 
 Linux、Windows 的 native 注入观察尚不支持。 0.6.2 源码记录了不可选用的 Linux arm64 Codex 0.162.1 候选（固定的上游 `aarch64-unknown-linux-musl` 可执行文件、schema 及一次注入测试），但不启用 Linux 观测；Linux native 观测仍不支持。支持的 POSIX ledger 可将操作人员明确确认的收件事实记录为 `operator_confirmed`，但这不是自动 ACK 收集。0.4.0 范围是已验证的 macOS 观察和操作人员的明确确认。Linux、Windows 观察及 receipt bootstrap 分别作为 [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) 的后续工作。

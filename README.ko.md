@@ -17,15 +17,11 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 </div>
 
-일반 Codex 전송은 로그인 home 등 클라우드 정책 적용 여부를 분류할 수 없는 경우에도 거부합니다. 경로를 선택하기 전에 [저장소 검증 범위](docs/api.md#codex-storage-configuration)를 확인하세요.
-
-이 소스는 Codex의 추가 설정 계층을 검사합니다. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부하며, 일반 Claude 경로는 별도입니다. 설치 전에 [검증 범위](docs/api.md#codex-storage-configuration)와 선택한 릴리스를 확인하세요.
-
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**문서·소스 기준 버전: 0.6.2.** 설치 전에 선택한 릴리스와 레지스트리 메타데이터를 확인하세요. 날짜별 준비·검증 기록은 [VALIDATION.md](VALIDATION.md), 릴리스 절차는 [RELEASING.md](RELEASING.md)에 있습니다. SSH 양쪽에는 같은 TypeScript 클라이언트 버전이 필요하며, 0.3.6 버전과 0.6.2 버전은 서로의 SSH 사전 확인을 거부합니다.
+**문서와 소스의 기준은 0.6.2 버전입니다.**
 
-**0.4.0 handoff 범위:** 선택 기능인 native 관측은 macOS arm64의 정확한 Codex 0.160.1/0.162.1에 한정되며, 명시적 `operator_confirmed` 수령 확인에는 지원되는 POSIX ledger를 사용합니다. Linux·Windows의 native 관측과 자동 ACK 수집은 미지원입니다. 0.6.2 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다.
+Windows에서 Codex 전송과 dry-run은 큐에 넣기 전에 중단됩니다. 클라우드 저장 정책을 확인할 수 없는 환경에서도 일반 Codex 전송이 중단됩니다. [Codex 저장소 검사 규칙](docs/api.md#codex-storage-configuration)과 [전달 관측 범위](docs/api.md#local-delivery-observation--72)를 참고하세요.
 
 <a id="demo"></a>
 ## 시연
@@ -130,9 +126,7 @@ session-peer --version
 - [릴리스 검증 기록·플랫폼 검증](VALIDATION.md).
 - [개발·기여 안내](CONTRIBUTING.md).
 - [릴리스 절차](RELEASING.md).
-
 - [0.4.0 handoff 설계와 구현 범위](PARITY.md#handoff-v1-design-candidate--69).
-
 - [private handoff CLI와 지원 한계](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
 
 <a id="license"></a>
