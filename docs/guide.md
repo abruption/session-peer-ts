@@ -1,73 +1,14 @@
 # User guide — session-peer (TypeScript)
 
-Ordinary Codex queue submission also refuses cloud-unclassifiable contexts, including signed-in file-auth homes with `auth.json`, with `codex_cloud_storage_unverified`. Credential/cache contents are not read; the separately qualified owned app-server route still requires actual storage binding.
-
-This source classifies Codex storage configuration across home, system, managed macOS and physical queue/consumer project contexts. See the [storage guard scope and refusals](api.md#codex-storage-configuration). Windows Codex send/dry-run refuse before queue submission until its local storage adapter is qualified. Doctor and dry-run do not execute Codex and leave its loader version unverified.
-
-See the [dated feature comparison and porting decisions](../PARITY.md#current-scoped-feature-matrix) for shipped TypeScript behavior and the separately pinned Python comparison baseline.
-
 [Back to README](../README.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**Documentation and source version: 0.6.2.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](../VALIDATION.md); release procedures are in [RELEASING.md](../RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and 0.6.2 refuse each other’s SSH preflight.
+Use this guide to install and run the CLI.
 
-**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. The 0.6.2 source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported.
+**Documentation and source version: 0.6.2.** Both SSH endpoints must use the same TypeScript version.
 
-This guide covers version 0.6.2 ([0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes)). Version 0.3.0 introduced multi-host SSH, sender context and return routes, update checks and the optional `sp` shorthand ([0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance)). [Public 0.3.1 release evidence](../VALIDATION.md#public-031--2026-10-04-kst) records a prior publication. References to 0.1.0 below describe the older release.
-
-<a id="migration-boundaries-033-candidate"></a>
-
-## Migration boundaries (0.4.0)
-
-The [public 0.3.2 record](../VALIDATION.md#public-032--2026-10-07-kst) fixes the
-release source and artifact. SSH preflight checks the exact TS version banner,
-not a commit hash; operators must align reviewed source commits separately.
-
-- Python Claude JSON can omit `status`, `submitted` and `consumptionConfirmed`;
-  TS uses `validated`/`posted`, explicit `submitted` and
-  `consumptionConfirmed:false`. An absent field is not false or null. Claude
-  names can be null; Codex `queueId` is optional. Submission never proves ACK.
-- An absent Claude sessions directory yields empty discovery with `status:ok`.
-  Optional missing Codex homes yield `absent` or aggregate `not_installed`.
-  Neither an empty list nor doctor completion grants send authorization.
-- Repeated `--host` returns an ordered array. Per-host dispatch failures make
-  exit 1; command-wide pre-dispatch refusals (such as duplicate hosts or an
-  empty message) retain exit 2, including array output.
-  Ordinary 0.3.2 can lose complete-response evidence after SSH exit 255 or
-  timeout; 0.3.3 preserves complete request-matched facts and reports local exit 1 with `sshTransport`. Partial or invalid evidence remains unknown. Unknown means no automatic resend.
-- Base doctor (introduced in 0.2.0) executes no Codex or inbox submission.
-  Since 0.3.0, explicit `--check-return-route` executes a bounded reverse SSH
-  no-op for a usable non-local destination. A self route instead returns
-  `verified`, `transport:local`, `self_route_normalized` without SSH; a missing
-  host fails before any probe. `--check-reply-to` is unsupported. Verified means
-  local normalization or one successful SSH no-op, not an authenticated ACK or
-  general reverse-access guarantee.
-- Self Reply-To normalization requires a matching explicit OS user, an exact
-  recognized local name and no explicit SSH option. Conflicting sender evidence
-  omits identity; an unusable Claude name falls back to PID.
-- npm, Python, remote hosts and skills have separate owners. TS has no self- or
-  remote updater; notices default off and opt-out wins. Explicit `update --check`
-  still queries the registry. Public TS 0.3.5 accepts the exact published skill `0.2.1` profile alongside `0.1.0` and `0.2.0`; public TS 0.3.2, 0.3.3 and 0.3.4 reject `0.2.1`. The installation section pins the independently published skill source.
-- Windows qualification used published 0.3.1 on Windows 10 x64, an administrator
-  account, PowerShell 5.1 and Node 24.16.0: offline provisioning, wrapper/native
-  locking, operator doctor/nonexistent-target dry-run and 31 local fixtures.
-  Node 22 had banner/native-lock smoke only. Non-admin, other architectures,
-  F6 runtime enforcement and older Linux current-rule gaps remain unverified.
-  This is not 0.3.2 live-ACK or deploy-helper evidence.
-
-See [migration details](../PARITY.md#ordinary-cli-migration-notes--117) and
-[Windows qualification](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst).
-The dated migration comparison above uses the historical public versions.
-The 0.4.0 source uses Python 1.1.0 as its development
-comparison baseline; public npm 0.3.3 retains its historical 1.0.2 marker.
-Python 1.1.0 includes an experimental local Claude receipt-only ACK path.
-That does not establish automated ACK or original-sender SSH collectors in this TS
-implementation. Neither baseline provides an end-to-end consumption guarantee;
-Side Session remains experimental. Relay/MCP are outside this comparison.
-
-
-[0.4.0 handoff design and implementation scope](../PARITY.md#handoff-v1-design-candidate--69)
+[Codex storage restrictions](api.md#codex-storage-configuration) apply to ordinary sends. Windows Codex send and dry-run stop before queueing.
 
 ## Contents
 
@@ -78,6 +19,7 @@ Side Session remains experimental. Relay/MCP are outside this comparison.
 - [Existing installations](#existing-installations)
 - [Use](#use)
 - [What success means](#what-success-means)
+- [Migration boundaries](#migration-boundaries-040)
 - [Development and verification](#development-and-verification)
 - [Package release](#package-release)
 - [Related project](#related-project)
@@ -470,6 +412,67 @@ start time across samples, then revalidates before queueing. No lock is deleted
 and no owning agent process is signaled. Discovery output still contains local
 names/paths/IDs: redact it before sharing.
 
+<a id="migration-boundaries-033-candidate"></a>
+
+## Migration boundaries (0.4.0)
+
+Ordinary Codex queue submission also refuses cloud-unclassifiable contexts, including signed-in file-auth homes with `auth.json`, with `codex_cloud_storage_unverified`. Credential/cache contents are not read; the separately qualified owned app-server route still requires actual storage binding.
+
+This source classifies Codex storage configuration across home, system, managed macOS and physical queue/consumer project contexts. See the [storage guard scope and refusals](api.md#codex-storage-configuration). Windows Codex send/dry-run refuse before queue submission until its local storage adapter is qualified. Doctor and dry-run do not execute Codex and leave its loader version unverified.
+
+See the [dated feature comparison and porting decisions](../PARITY.md#current-scoped-feature-matrix) for shipped TypeScript behavior and the separately pinned Python comparison baseline.
+
+See the [0.3.0 changes](../PARITY.md#030-remote-usability-and-maintenance), [0.3.1 reliability fixes](../PARITY.md#031-reliability-fixes), and [0.3.1 publication record](../VALIDATION.md#public-031--2026-10-04-kst). References to 0.1.0 describe the older release.
+
+The [public 0.3.2 record](../VALIDATION.md#public-032--2026-10-07-kst) fixes the
+release source and artifact. SSH preflight checks the exact TS version banner,
+not a commit hash; operators must align reviewed source commits separately.
+
+- Python Claude JSON can omit `status`, `submitted` and `consumptionConfirmed`;
+  TS uses `validated`/`posted`, explicit `submitted` and
+  `consumptionConfirmed:false`. An absent field is not false or null. Claude
+  names can be null; Codex `queueId` is optional. Submission never proves ACK.
+- An absent Claude sessions directory yields empty discovery with `status:ok`.
+  Optional missing Codex homes yield `absent` or aggregate `not_installed`.
+  Neither an empty list nor doctor completion grants send authorization.
+- Repeated `--host` returns an ordered array. Per-host dispatch failures make
+  exit 1; command-wide pre-dispatch refusals (such as duplicate hosts or an
+  empty message) retain exit 2, including array output.
+  Ordinary 0.3.2 can lose complete-response evidence after SSH exit 255 or
+  timeout; 0.3.3 preserves complete request-matched facts and reports local exit 1 with `sshTransport`. Partial or invalid evidence remains unknown. Unknown means no automatic resend.
+- Base doctor (introduced in 0.2.0) executes no Codex or inbox submission.
+  Since 0.3.0, explicit `--check-return-route` executes a bounded reverse SSH
+  no-op for a usable non-local destination. A self route instead returns
+  `verified`, `transport:local`, `self_route_normalized` without SSH; a missing
+  host fails before any probe. `--check-reply-to` is unsupported. Verified means
+  local normalization or one successful SSH no-op, not an authenticated ACK or
+  general reverse-access guarantee.
+- Self Reply-To normalization requires a matching explicit OS user, an exact
+  recognized local name and no explicit SSH option. Conflicting sender evidence
+  omits identity; an unusable Claude name falls back to PID.
+- npm, Python, remote hosts and skills have separate owners. TS has no self- or
+  remote updater; notices default off and opt-out wins. Explicit `update --check`
+  still queries the registry. Public TS 0.3.5 accepts the exact published skill `0.2.1` profile alongside `0.1.0` and `0.2.0`; public TS 0.3.2, 0.3.3 and 0.3.4 reject `0.2.1`. The installation section pins the independently published skill source.
+- Windows qualification used published 0.3.1 on Windows 10 x64, an administrator
+  account, PowerShell 5.1 and Node 24.16.0: offline provisioning, wrapper/native
+  locking, operator doctor/nonexistent-target dry-run and 31 local fixtures.
+  Node 22 had banner/native-lock smoke only. Non-admin, other architectures,
+  F6 runtime enforcement and older Linux current-rule gaps remain unverified.
+  This is not 0.3.2 live-ACK or deploy-helper evidence.
+
+See [migration details](../PARITY.md#ordinary-cli-migration-notes--117) and
+[Windows qualification](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst).
+The dated migration comparison above uses the historical public versions.
+The 0.4.0 source uses Python 1.1.0 as its development
+comparison baseline; public npm 0.3.3 retains its historical 1.0.2 marker.
+Python 1.1.0 includes an experimental local Claude receipt-only ACK path.
+That does not establish automated ACK or original-sender SSH collectors in this TS
+implementation. Neither baseline provides an end-to-end consumption guarantee;
+Side Session remains experimental. Relay/MCP are outside this comparison.
+
+
+[0.4.0 handoff design and implementation scope](../PARITY.md#handoff-v1-design-candidate--69)
+
 ## Development and verification
 
 ```sh
@@ -551,6 +554,7 @@ pipe exists or accepts connections. `capabilities` explicitly excludes
 wake/wait/ACK and consumption confirmation. Optional TS skill metadata checks
 never install anything. See [diagnostic boundaries](../PARITY.md#source-read-only-doctor--18--020).
 SSH requires the same TypeScript client version on both ends.
+
 ### Update checks and notices (0.3.0, #22)
 
 ```sh
@@ -660,11 +664,11 @@ never enabled automatically. See [explicit activation and collisions](shorthand.
 
 0.4.0 includes an opt-in private POSIX handoff ledger. Required unsupported evidence refuses before submission; best-effort unsupported evidence never proves ACK. Automated receipt bootstrap, Windows ledger and original-sender SSH collectors remain unsupported. POSIX SSH opt-in uses an explicitly initialized destination ledger: no-effect preparation pins target/home/generation before one send. See [destination-side SSH details](api.md#unreleased-destination-side-ssh-handoff); fake-SSH fixtures are distinct from real network qualification.
 
-[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+[CLI contract](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
 Native observation supports exact Codex 0.160.1/0.162.1 on macOS arm64 with an already-warm metadata store. Retained qualified intents can start an independent `handoff wait`: native observation is read-only, while the operation persists private wait/terminal records. No native submission is repeated. Each operation owns its cutoff and preserves other pending or terminal waits. Dedicated new 0.162.1 Codex and Claude Code 2.1.296 sessions supplied local evidence; synthetic tests remain separate. Queued/posted, injection, turn completion and plain reply are distinct from receipt ACK. Automated ACK and Windows handoff remain unsupported.
 
-[Observation](api.md#unreleased-local-delivery-observation--72)
+[Observation reference](api.md#unreleased-local-delivery-observation--72)
 
 Native delivery observation is unsupported on Linux and Windows. The 0.6.2 source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).

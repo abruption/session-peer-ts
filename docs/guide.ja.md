@@ -1,39 +1,14 @@
 # ユーザーガイド — session-peer (TypeScript)
 
-通常の Codex キュー提出も、`auth.json` があるログイン済み home など、クラウドポリシーの適用範囲を判定できない場合は `codex_cloud_storage_unverified` で拒否します。認証情報やキャッシュの内容は読まず、別途検証する owned app-server 経路では実際のストレージとの結び付きを確認する必要があります。
-
-このソースは Codex home、システム設定、macOS 管理設定、送信側と対象プロセスの実際の作業ディレクトリに適用されるプロジェクト設定を確認します。[ストレージ検証の範囲と拒否条件](api.md#codex-storage-configuration)を参照してください。Windows の Codex 送信・dry-run は、ローカルストレージ検査方式の検証が済むまでキュー提出前に拒否します。doctor と dry-run は Codex を実行せず、ローダーのバージョンは未確認のままです。
-
-現在の機能差と移植方針は[日付を明記した比較表](../PARITY.md#current-scoped-feature-matrix)を参照してください。TypeScriptで公開済みの機能と、別途固定したPythonの比較基準を区別しています。
-
 [README に戻る](../README.ja.md)
 
 [English](guide.md) | [한국어](guide.ko.md) | [日本語](guide.ja.md) | [简体中文](guide.zh-CN.md)
 
-**文書・ソースのバージョン: 0.6.2。** インストール前に、選択したリリースとレジストリのメタデータを確認してください。日付付きの準備・検証記録は [VALIDATION.md](../VALIDATION.md)、リリース手順は [RELEASING.md](../RELEASING.md) にあります。SSH の両端には同じ TypeScript クライアントのバージョンが必要で、0.3.6 と 0.6.2 は互いの SSH 事前確認を拒否します。
+このガイドでは CLI のインストールと使い方を説明します。
 
-**0.4.0 handoff の範囲:** 任意の native 観測は macOS arm64 の厳密な Codex 0.160.1/0.162.1 に限定し、明示的な `operator_confirmed` 受領確認には対応する POSIX ledger を使います。Linux・Windows の native 観測と自動 ACK 収集は未対応です。 0.6.2 のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。
+**ドキュメントとソースのバージョン: 0.6.2。** SSH の両端で同じ TypeScript バージョンを使用してください。
 
-0.6.2 の詳細ガイドです（[0.3.1 の信頼性の修正](../PARITY.md#031-reliability-fixes)）。0.3.0 は複数ホスト SSH、送信者情報と返信経路、更新確認、任意の `sp` 短縮名を追加しました（[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)）。以前の公開記録は [0.3.1 公開リリースの証拠](../VALIDATION.md#public-031--2026-10-04-kst) にあります。以下の 0.1.0 の説明は旧版との比較です。
-
-<a id="移行時の境界-033-候補"></a>
-
-## 移行時の境界 (0.4.0)
-
-[0.3.2 の公開記録](../VALIDATION.md#public-032--2026-10-07-kst)はリリースのソースと成果物を固定しています。SSH の事前確認は TS のバージョン表示の完全一致を検査しますが、コミットハッシュは検査しません。ソースビルドのレビュー済みコミットは運用者が別途揃える必要があります。
-
-- Python の Claude JSON は `status`、`submitted`、`consumptionConfirmed` を省略する場合があります。TS は `validated`/`posted`、明示的な `submitted`、`consumptionConfirmed:false` を使います。欠けたフィールドは false や null ではありません。Claude の名前は null の場合があり、Codex の `queueId` は任意です。提出は ACK の証拠ではありません。
-- Claude のセッションディレクトリがない場合は空の一覧と `status:ok` を返します。任意の Codex ホームがない場合は `absent`、読める DB もエラーもない場合は全体が `not_installed` です。空の一覧や doctor の完了は送信許可ではありません。
-- `--host` を繰り返すと要求順の配列を返します。ホスト別の実行中の失敗は終了コード 1 に集約しますが、実行前のコマンド全体の拒否（重複ホストや空のメッセージなど）は配列出力でも終了コード 2 を維持します。公開 0.3.2 は SSH の終了 255 やタイムアウト後に完全な応答の証拠も失う場合があります。0.3.3 は要求に一致する完全な事実を保持し、ローカル終了コード 1 と `sshTransport` を返します。不完全・不正な証拠は unknown のままです。unknown の場合は自動再送しません。
-- 0.2.0 で導入した基本 doctor は Codex を実行せず inbox に提出しません。0.3.0 以降の明示的な `--check-return-route` は、利用できる非ローカル宛先に対してのみ、時間を制限した逆方向 SSH の無操作コマンドを実行します。自分自身への経路は SSH なしで `verified`、`transport:local`、`self_route_normalized` を返し、ホストがない場合は接続確認前に失敗します。`--check-reply-to` は未対応です。verified はローカル経路の正規化または 1 回の SSH 無操作コマンドの成功であり、ACK の認証や一般的な逆方向アクセスの保証ではありません。
-- 同じ端末の Reply-To をローカルに正規化するには、明示した OS ユーザーの一致、認識できる正確なローカル名、明示的な SSH オプションがないことが必要です。送信者の証拠が競合した場合は識別情報を省き、Claude の名前が使えない場合は PID を使います。
-- npm、Python、リモートホスト、スキルは別管理です。TS は自己更新やリモート更新を提供しません。通知は既定で無効で、無効化指定が優先します。明示的な `update --check` はレジストリを照会します。公開 TS 0.3.5 は公開スキル `0.2.1` と旧 `0.1.0`・`0.2.0` の厳密なプロファイルを受け入れます。公開 TS 0.3.2・0.3.3・0.3.4 は `0.2.1` を拒否します。導入の節には独立して公開されたスキルのソースを固定しています。
-- Windows の検証は公開 0.3.1、Windows 10 x64、管理者アカウント、PowerShell 5.1、Node 24.16.0 で行いました。オフライン導入、ラッパー・ネイティブロック、運用者の doctor・存在しない宛先の dry-run、ローカル fixture 31 件を検証しました。Node 22 はバージョン表示とネイティブロックの確認のみです。非管理者、他のアーキテクチャ、F6 のランタイム検査、以前の Linux 実験の最新規則は未検証です。0.3.2 の実機 ACK やデプロイ補助ツールの検証ではありません。
-
-[移行の詳細](../PARITY.md#ordinary-cli-migration-notes--117)と [Windows の検証記録](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)を参照してください。上の日付付き移行比較は当時の公開版を対象にしています。0.4.0 ソースの開発時の比較基準は Python 1.1.0 ですが、公開 npm 0.3.3 の従来の 1.0.2 表示は変わりません。Python 1.1.0 には実験的なローカル Claude の受領確認専用 ACK 経路があります。これは TS 実装の自動 ACK、元の送信者側の SSH 受領確認収集、Windows handoff 対応を意味しません。どちらの基準もエンドツーエンドの消費を保証せず、Side Session は実験段階です。Relay/MCP は比較対象外です。
-
-
-[0.4.0 handoff 設計と実装の範囲](../PARITY.md#handoff-v1-design-candidate--69)
+通常の Codex 送信には[ストレージの制約](api.md#codex-storage-configuration)が適用されます。Windows では Codex への送信と dry-run はキューに登録する前に停止します。
 
 ## 目次
 
@@ -42,6 +17,7 @@
 - [インストール](#インストール)
 - [使い方](#使い方)
 - [成功の意味と安全性](#成功の意味と安全性)
+- [移行時の境界](#移行時の境界-040)
 - [開発と検証](#開発と検証)
 - [npm リリース](#npm-リリース)
 - [関連プロジェクト](#関連プロジェクト)
@@ -50,14 +26,14 @@
 
 実行中の **Claude Code と Codex セッション**に、ローカルまたは SSH 経由でメッセージを送る TypeScript クライアントです。Node.js で動作し、Python は不要です。
 
-**0.6.2 の利用ガイドです。**パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
+**0.6.2 の利用ガイドです。** パッケージ名は `session-peer`、CLI コマンドは **`session-peer`**。Relay サーバーやホスティングサービスは提供しません。
 
 ## 機能と範囲
 
 - ローカル Claude/Codex セッションと既知の Codex home の検出（0.2.0 の機能、下記参照）。
-- `--dry-run` で宛先を確認し、ネイティブ inbox / queue にメッセージを一度だけ提出。Codex は一意かつ安定した live writer が必要です。
+- `--dry-run` で宛先を確認し、ネイティブの受信箱またはキューにメッセージを一度だけ登録します。Codex は一意かつ安定した live writer が必要です。
 - インストール済みの同じクライアントへの SSH 接続、構造化 Reply-To URI、JSON 出力。
-- 宛先や所有者が曖昧なら拒否。不確実な提出を自動再送しません。
+- 宛先や所有者が曖昧なら拒否。送信結果が不明でも自動で再送しません。
 
 Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
 
@@ -65,7 +41,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 ### 0.2.0 の統合一覧
 
-ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。0.2.0 でも明示的なコマンド形式を利用できます。
+ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。バージョンを明示してインストールする方法や、パラメーターを明示する `list`・`send` の形式は、0.1.0 でも使えます。
 
 対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（0.6.2）が必要です。
 
@@ -90,7 +66,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 ### 明示的なローカル受領確認
 
-receipt は通常の posted/queued という提出根拠とは別です。所有者が非公開状態を明示的に初期化し、フォアグラウンドの collector を手動で開始します。サービス登録や自動起動はしません。次の `serve` は所有者が停止するまで終了しません。
+受領確認は通常の送信結果である `posted`・`queued` とは別です。所有者が非公開の状態データを初期化し、ターミナルで収集プロセスを手動で起動します。サービス登録や自動起動はしません。次の `serve` は所有者が停止するまで終了しません。
 
 ```sh
 session-peer receipt init --state-dir "$HOME/.session-peer-receipts" --json
@@ -106,7 +82,7 @@ session-peer receipt respond --collector "$HOME/.session-peer-receipts/s" --rece
 
 `token_possession` は委任されたトークンの所持を示すだけで、モデルの身元、メッセージの消費、作業完了を証明しません。Claude は native 世代が不明な別の v2 delegated receipt context を使います。Codex は元の世代に結び付いた v1 を維持し、非公開 stdin を使う検証済み owned RPC 経路だけを許可します。トークンを native の `--message` 引数に入れる代替経路はありません。既存の手動 `operator_confirmed` 根拠とも異なります。
 
-collector は同じ端末の所有者専用経路です。保存容量の制限が重なり、小さい記録でも約 511 件で新しい受領確認要求を拒否する場合があります。自動削除や初期化で履歴を捨てることはありません。逆向き SSH collector と Windows managed storage は未対応です。明示的な各 wait は自分の期限を維持します。status/wait は非公開の状態分類を書き込む場合がありますが、native メッセージを再提出しません。不明な結果から自動再送は行いません。既存の native・プラットフォーム検証範囲は変わらず、fixture の成功は実エージェントの receipt 検証ではありません。
+collector は同じ端末の所有者専用経路です。保存容量の制限が重なり、小さい記録でも約 511 件で新しい受領確認要求を拒否する場合があります。自動削除や初期化で履歴を捨てることはありません。逆向き SSH collector と Windows managed storage は未対応です。明示的に開始した待機には、それぞれ独立した期限があります。status/wait は非公開の状態分類を書き込む場合がありますが、native メッセージを再提出しません。不明な結果から自動再送は行いません。既存の native・プラットフォーム検証範囲は変わらず、fixture の成功は実エージェントの receipt 検証ではありません。
 
 ## 必要条件
 
@@ -203,7 +179,7 @@ Python を使わずに宛先を準備する方法（バージョンごとの専�
 
 ### 返信
 
-`session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。peer 情報は権限ではなく、Reply-To URI をシェルとして実行しません。受け取った Reply-To は読み手のためのデータであり、返信を自動で観測・確認することはありません。
+`session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。相手から受け取ったメタデータを認可の根拠には使いません。Reply-To URI をシェルコマンドとして実行することもありません。受け取った Reply-To は読み手のためのデータであり、返信を自動で観測・確認することはありません。
 
 0.3.0 以降（0.2.1 以前にはありません）、送信者情報と自動の返信経路を追加します。
 
@@ -225,7 +201,34 @@ Python を使わずに宛先を準備する方法（バージョンごとの専�
 
 提出後に返信がない、または宛先が終了したという事実だけでは、消費や失敗を確定できません。自動再送しないでください。
 
-`consumptionConfirmed` は常に false。実際の ACK は宛先 TUI で別途確認し、queue や transcript polling から推定しません。終了コード 0/1/2 は成功/エラー/用法エラー。エラーは固定コードで、ネイティブ stderr や本文を返しません。Codex は実際の kernel flock、ファイル同一性、同一ユーザーの所有者開始時刻を複数回調べ、提出直前にも再検証します。lock の削除や所有エージェントへのシグナル送信はしません。一覧の名前・パス・ID は共有前に伏せてください。
+`consumptionConfirmed` は常に false。実際の ACK は宛先 TUI で別途確認し、queue や transcript polling から推定しません。終了コードは、成功時が 0、処理エラー時が 1、コマンドの指定に誤りがある場合が 2 です。エラーは固定コードで、ネイティブ stderr や本文を返しません。Codex は実際の kernel flock、ファイル同一性、同一ユーザーの所有者開始時刻を複数回調べ、提出直前にも再検証します。lock の削除や所有エージェントへのシグナル送信はしません。一覧の名前・パス・ID は共有前に伏せてください。
+
+<a id="移行時の境界-033-候補"></a>
+
+## 移行時の境界 (0.4.0)
+
+通常の Codex キュー提出も、`auth.json` があるログイン済み home など、クラウドポリシーの適用範囲を判定できない場合は `codex_cloud_storage_unverified` で拒否します。認証情報やキャッシュの内容は読まず、別途検証する owned app-server 経路では実際のストレージとの結び付きを確認する必要があります。
+
+このソースは Codex home、システム設定、macOS 管理設定、送信側と対象プロセスの実際の作業ディレクトリに適用されるプロジェクト設定を確認します。[ストレージ検証の範囲と拒否条件](api.md#codex-storage-configuration)を参照してください。Windows の Codex 送信・dry-run は、ローカルストレージ検査方式の検証が済むまでキュー提出前に拒否します。doctor と dry-run は Codex を実行せず、ローダーのバージョンは未確認のままです。
+
+現在の機能差と移植方針は[日付を明記した比較表](../PARITY.md#current-scoped-feature-matrix)を参照してください。TypeScriptで公開済みの機能と、別途固定したPythonの比較基準を区別しています。
+
+[0.3.0 の変更点](../PARITY.md#030-remote-usability-and-maintenance)、[0.3.1 の信頼性修正](../PARITY.md#031-reliability-fixes)、[0.3.1 の公開記録](../VALIDATION.md#public-031--2026-10-04-kst)を参照してください。0.1.0 の記述は旧バージョンについてです。
+
+[0.3.2 の公開記録](../VALIDATION.md#public-032--2026-10-07-kst)はリリースのソースと成果物を固定しています。SSH の事前確認は TS のバージョン表示の完全一致を検査しますが、コミットハッシュは検査しません。ソースビルドのレビュー済みコミットは運用者が別途揃える必要があります。
+
+- Python の Claude JSON は `status`、`submitted`、`consumptionConfirmed` を省略する場合があります。TS は `validated`/`posted`、明示的な `submitted`、`consumptionConfirmed:false` を使います。欠けたフィールドは false や null ではありません。Claude の名前は null の場合があり、Codex の `queueId` は任意です。提出は ACK の証拠ではありません。
+- Claude のセッションディレクトリがない場合は空の一覧と `status:ok` を返します。任意の Codex ホームがない場合は `absent`、読める DB もエラーもない場合は全体が `not_installed` です。空の一覧や doctor の完了は送信許可ではありません。
+- `--host` を繰り返すと要求順の配列を返します。ホスト別の実行中の失敗は終了コード 1 に集約しますが、実行前のコマンド全体の拒否（重複ホストや空のメッセージなど）は配列出力でも終了コード 2 を維持します。公開 0.3.2 は SSH の終了 255 やタイムアウト後に完全な応答の証拠も失う場合があります。0.3.3 は要求に一致する完全な事実を保持し、ローカル終了コード 1 と `sshTransport` を返します。不完全・不正な証拠は unknown のままです。unknown の場合は自動再送しません。
+- 0.2.0 で導入した基本 doctor は Codex を実行せず inbox に提出しません。0.3.0 以降の明示的な `--check-return-route` は、利用できる非ローカル宛先に対してのみ、時間を制限した逆方向 SSH の無操作コマンドを実行します。自分自身への経路は SSH なしで `verified`、`transport:local`、`self_route_normalized` を返し、ホストがない場合は接続確認前に失敗します。`--check-reply-to` は未対応です。verified はローカル経路の正規化または 1 回の SSH 無操作コマンドの成功であり、ACK の認証や一般的な逆方向アクセスの保証ではありません。
+- 同じ端末の Reply-To をローカルに正規化するには、明示した OS ユーザーの一致、認識できる正確なローカル名、明示的な SSH オプションがないことが必要です。送信者の証拠が競合した場合は識別情報を省き、Claude の名前が使えない場合は PID を使います。
+- npm、Python、リモートホスト、スキルは別管理です。TS は自己更新やリモート更新を提供しません。通知は既定で無効で、無効化指定が優先します。明示的な `update --check` はレジストリを照会します。公開 TS 0.3.5 は公開スキル `0.2.1` と旧 `0.1.0`・`0.2.0` の厳密なプロファイルを受け入れます。公開 TS 0.3.2・0.3.3・0.3.4 は `0.2.1` を拒否します。導入の節には独立して公開されたスキルのソースを固定しています。
+- Windows の検証は公開 0.3.1、Windows 10 x64、管理者アカウント、PowerShell 5.1、Node 24.16.0 で行いました。オフライン導入、ラッパー・ネイティブロック、運用者の doctor・存在しない宛先の dry-run、ローカル fixture 31 件を検証しました。Node 22 はバージョン表示とネイティブロックの確認のみです。非管理者、他のアーキテクチャ、F6 のランタイム検査、以前の Linux 実験の最新規則は未検証です。0.3.2 の実機 ACK やデプロイ補助ツールの検証ではありません。
+
+[移行の詳細](../PARITY.md#ordinary-cli-migration-notes--117)と [Windows の検証記録](../VALIDATION.md#windows-ssh-destination-f5--2026-10-07-kst)を参照してください。上の日付付き移行比較は当時の公開版を対象にしています。0.4.0 ソースの開発時の比較基準は Python 1.1.0 ですが、公開 npm 0.3.3 の従来の 1.0.2 表示は変わりません。Python 1.1.0 には実験的なローカル Claude の受領確認専用 ACK 経路があります。これは TS 実装の自動 ACK、元の送信者側の SSH 受領確認収集、Windows handoff 対応を意味しません。どちらの基準もエンドツーエンドの消費を保証せず、Side Session は実験段階です。Relay/MCP は比較対象外です。
+
+
+[0.4.0 handoff 設計と実装の範囲](../PARITY.md#handoff-v1-design-candidate--69)
 
 ## 開発と検証
 
@@ -278,6 +281,7 @@ pipe の広告を確認するだけで、pipe の存在や接続可能性は保�
 `capabilities` は wake/wait/ACK と消費確認を未対応と明示します。任意の TS スキル
 メタデータ検査もインストールを行いません。[診断の境界](../PARITY.md#source-read-only-doctor--18--020)
 を参照してください。SSH の両端には同じ TypeScript クライアントのバージョンが必要です。
+
 ### 更新確認と通知（0.3.0、#22）
 
 ```sh
@@ -314,9 +318,7 @@ TS スキルメタデータ（`skills`、`doctor` と同じ契約）と `skillsM
 より新しい npm の安定版を示す場合に、JSON 結果へ `clientUpdate` オブジェクトを追加し、
 テキスト出力では stderr に 1 行を出します。キャッシュがない・不正・期限切れの場合は
 切り離した更新プロセスを 1 つ起動し、コマンドの結果や終了コードを遅らせたり変えたり
-しません。更新に失敗した場合は 1 時間後まで再試行しません。キャッシュの書き込みは単一実行で、
-失敗時は閉じる側に倒れます。バックグラウンド更新でも明示的な確認でも、書き込みは
-`npm-update.lock` を保持している間だけ、より古い記録に対してだけ行います。自分が作成して
+しません。更新に失敗した場合は 1 時間後まで再試行しません。バックグラウンド更新でも明示的な確認でも、`npm-update.lock` を取得したプロセスだけが、既存の記録より新しい結果を書き込めます。自分が作成して
 いないロックを引き継いだり削除したりすることはありません。更新が異常終了したり、I/O エラーでロックを解放できなかったりしてロックが残った
 場合、バックグラウンド更新は止まり、`update --check` は `cache: "skipped_stale_lock"` を
 報告します。session-peer のプロセスが動いていないときに `npm-update.lock` を手動で削除して
@@ -378,13 +380,13 @@ npm `--ignore-scripts` は利用でき、postinstall は Skills CLI を呼び出
 
 ## 非公開 handoff と配送観測（0.4.0）
 
-0.4.0 には opt-in private POSIX handoff ledger が含まれます。必須の証拠が unsupported の場合は提出前に拒否し、best-effort の提出は ACK を証明しません。自動受領確認の接続設定、Windows ledger、元の送信者側の SSH 受領確認収集は未対応です。POSIX SSH opt-in は明示的に初期化した宛先 ledger で送信しない準備を行い、対象・home・generation を固定して一度だけ送信します。[宛先側 SSH の説明](api.md#unreleased-destination-side-ssh-handoff)を参照してください。模擬 SSH fixture と実ネットワーク検証は区別します。
+0.4.0 には opt-in private POSIX handoff ledger が含まれます。必須の証拠が `unsupported` の場合、キューや受信箱に書き込む前に拒否します。best-effort で証拠が未対応の場合も、ACK は確認できません。自動受領確認の接続設定、Windows ledger、元の送信者側の SSH 受領確認収集は未対応です。POSIX SSH opt-in は明示的に初期化した宛先 ledger で送信しない準備を行い、対象・home・generation を固定して一度だけ送信します。[宛先側 SSH の説明](api.md#unreleased-destination-side-ssh-handoff)を参照してください。模擬 SSH fixture と実ネットワーク検証は区別します。
 
-[CLI](api.md#unreleased-opt-in-handoff-cli--040-work)
+[CLI の仕様](api.md#unreleased-opt-in-handoff-cli--040-work)
 
 
 native 観測は、macOS arm64 の厳密な Codex 0.160.1/0.162.1 と既存のメタデータ保存先に限って配送を観測します。検証根拠が保存された提出は、別の `handoff wait` で native 状態を読み取り専用で観測できます。この操作は非公開 ledger に待機・終了記録を保存しますが、native 提出は繰り返しません。各待機は自分の期限だけで判定し、他の待機と過去の終了結果を保持します。専用の新規 Codex 0.162.1・Claude Code 2.1.296 セッションによる実機根拠と合成テストを区別します。queued/posted、注入、ターン終了、通常の返信は受領確認 ACK ではありません。自動 ACK と Windows handoff は未対応です。
 
-[Observation](api.md#unreleased-local-delivery-observation--72)
+[配信観測の仕様](api.md#unreleased-local-delivery-observation--72)
 
 Linux・Windows の native 注入観測は未対応です。 0.6.2 のソースは選択できない Linux arm64 の Codex 0.162.1 候補（固定された上流 `aarch64-unknown-linux-musl` 実行ファイル、スキーマ、注入テスト 1 回）を記録しますが、Linux 観測を有効化しません。Linux の native 観測は引き続き未対応です。対応する POSIX ledger では、運用者が明示的に確認した受領を `operator_confirmed` として記録できますが、自動 ACK 収集ではありません。0.4.0 の範囲は、検証済みの macOS 観測と明示的な運用者確認です。Linux・Windows 観測と receipt bootstrap は [#130](https://github.com/abruption/session-peer-ts/issues/130)、[#131](https://github.com/abruption/session-peer-ts/issues/131)、[#132](https://github.com/abruption/session-peer-ts/issues/132) の後続作業です。

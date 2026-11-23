@@ -23,9 +23,8 @@ co-installation is outside this feature's scope.
 
 ## Checking for the activation files
 
-An installation that reports 0.3.0 or later contains these files. `--version`
-alone is not conclusive for a source build, which reports its checkout's
-package version. Check for the files in the installed package directory:
+Published packages include the activation files starting with 0.3.0. For a
+source build, check the files directly in the installed package directory:
 
 ```sh
 # Global npm installation:
@@ -40,9 +39,8 @@ Test-Path (Join-Path (npm root --global) 'session-peer/shorthand/sp.ps1')
 Test-Path (Join-Path (npm root --prefix <prefix>) 'session-peer/shorthand/sp.ps1')
 ```
 
-A missing file means that installation predates the feature (for example the
-0.2.1 archive); its `session-peer` command still works, but `sp` cannot
-be activated from it.
+If the file is missing, check the selected package path and installation
+before activating `sp`. You can still use the `session-peer` command.
 
 ## Why activation is explicit
 
@@ -191,9 +189,10 @@ below the original, so this is a version replacement, not a registry upgrade),
 and checks that `sp --version` and `session-peer --version` both report the
 replacement. It then uninstalls the package and checks that both names fail as
 command not found (Bash/zsh exit 127, PowerShell `CommandNotFoundException`) and
-that deactivation removes `sp`. Installation and replacement use the same
-prefix, so moving the canonical command to another PATH location is not covered.
-It never installs globally or edits a profile.
+that deactivation removes `sp`.
+
+The fixture keeps both versions in the same prefix. It does not test moving the
+command elsewhere on PATH, install globally, or edit a shell profile.
 
 These are isolated fixtures, not live message or ACK evidence. Submission,
 ownership, permissions and no-retry-on-unknown contracts remain those of the

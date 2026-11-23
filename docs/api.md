@@ -34,8 +34,6 @@ not package subpath exports. Use the [CLI guide](guide.md#use) for sending and
 
 The ordinary SSH response correction is documented separately as the [0.3.3 ordinary SSH response correction](design/ordinary-ssh-responses.md); its internal parser is not a package-root export.
 
-<a id="unreleased-opt-in-handoff-cli--040-work"></a>
-
 <a id="codex-storage-configuration"></a>
 
 ## Codex storage configuration guards
@@ -158,6 +156,8 @@ The comparison also inspects Python
 [`f5e7c49554ff02771990a151e00b52f2abf3df0a`](https://github.com/abruption/session-peer/blob/f5e7c49554ff02771990a151e00b52f2abf3df0a/session_peer_core/codex.py).
 These are static source and isolated-fixture checks; no native Codex queue,
 user session, delivery/ACK or remote-host qualification was run for this change.
+
+<a id="unreleased-opt-in-handoff-cli--040-work"></a>
 
 ## Opt-in handoff CLI — 0.4.0
 
@@ -401,14 +401,17 @@ groundwork does not enable additional platform or ACK support.
 
 The 0.4.0 implementation includes the qualified macOS arm64 observer and explicit
 `operator_confirmed` receipts on supported POSIX ledgers. Other platforms do not
-inherit that qualification. Linux observation [#130](https://github.com/abruption/session-peer-ts/issues/130),
-Windows observation/private storage [#131](https://github.com/abruption/session-peer-ts/issues/131) and
-voluntary receipt producer/authenticated collector bootstrap [#132](https://github.com/abruption/session-peer-ts/issues/132)
-are future extensions. An automatic collector would still require an explicit
-receiver receipt; it must never infer ACK from messages or turn completion.
+inherit that qualification. Linux observation [#130](https://github.com/abruption/session-peer-ts/issues/130)
+and Windows observation/private storage [#131](https://github.com/abruption/session-peer-ts/issues/131)
+remain separate work. Version 0.6.0 added the explicit local receipt route below.
+The remaining work in [#132](https://github.com/abruption/session-peer-ts/issues/132)
+includes reverse-SSH collection. An authenticated receipt requires an explicit
+recipient response; messages and turn completion do not establish ACK.
 Unsupported required goals refuse before effect; no post-attempt fallback or resend.
 
-## Explicit local receipt bootstrap (source implementation)
+<a id="explicit-local-receipt-bootstrap-source-implementation"></a>
+
+## Explicit local receipt bootstrap (0.6.0+)
 
 The `receipt` owner commands and `send --receipt-collector SOCKET` select a local, manually operated receipt route. They do not start services, discover alternate collectors, wake a session, answer an approval or resend a native message. Read the [operator guide](guide.md#explicit-local-receipts) before supplying private receipt input.
 
