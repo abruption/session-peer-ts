@@ -45,7 +45,8 @@ test('a timeout reaps the child and a pipe-holding grandchild and returns prompt
 test('a signal to the CLI reaps the owned process group before it exits', posix, async t => {
   const f = fixture(t), runner = join(realpathSync(mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-runner-'))), 'runner.mjs');
   t.after(() => rmSync(join(runner, '..'), { recursive: true, force: true }));
-  writeFileSync(runner, `import { run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'dist/process.js')).href)};
+  writeFileSync(runner, `import { enableCliSignalForwarding, run } from ${JSON.stringify(pathToFileURL(join(process.cwd(), 'dist/process.js')).href)};
+enableCliSignalForwarding();
 await run(process.execPath, [${JSON.stringify(f.tree)}, 'stay'], { timeout: 60000 });`);
   const child = spawn(process.execPath, [runner], { stdio: 'ignore' });
   for (let i = 0; i < 250 && !existsSync(f.pids); i++) await timers.setTimeout(20);

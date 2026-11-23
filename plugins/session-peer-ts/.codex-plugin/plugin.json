@@ -1,0 +1,8 @@
+{
+  "name": "session-peer-ts",
+  "version": "0.7.0",
+  "description": "List and message sessions through the optional policy-restricted TypeScript MCP server.",
+  "mcpServers": "./.mcp.json",
+  "repository": "https://github.com/abruption/session-peer-ts",
+  "license": "MIT"
+}

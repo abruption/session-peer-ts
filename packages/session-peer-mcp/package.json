@@ -1,0 +1,13 @@
+{
+  "name": "session-peer-mcp",
+  "version": "0.7.0",
+  "description": "Optional policy-restricted stdio MCP server for session-peer",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": "^22.13.0 || ^24.0.0" },
+  "bin": { "session-peer-mcp": "./cli.mjs" },
+  "files": ["cli.mjs", "policy.mjs", "server.mjs", "worker.mjs", "README.md", "LICENSE"],
+  "peerDependencies": { "session-peer": "0.7.0" },
+  "dependencies": { "@modelcontextprotocol/sdk": "1.32.2" },
+  "repository": { "type": "git", "url": "git+https://github.com/abruption/session-peer-ts.git", "directory": "packages/session-peer-mcp" }
+}

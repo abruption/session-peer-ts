@@ -47,6 +47,9 @@ jobs:
         env:
           SESSION_PEER_PYTHON_ROOT: ${{ github.workspace }}/.reference-python
       - run: npm run test:package
+      - run: npm ci --prefix packages/session-peer-mcp --ignore-scripts --legacy-peer-deps
+      - run: npm run test:mcp
+      - run: npm audit --prefix packages/session-peer-mcp --omit=dev --legacy-peer-deps
       - name: Exercise release packaging without publishing or credentials
         run: node scripts/release.mjs pack && node scripts/release.mjs artifact
       - run: npm audit
@@ -66,6 +69,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:windows
       - run: npm run test:package
+      - run: npm ci --prefix packages/session-peer-mcp --ignore-scripts --legacy-peer-deps
+      - run: npm run test:mcp
+      - run: npm audit --prefix packages/session-peer-mcp --omit=dev --legacy-peer-deps
       - run: npm audit
   release-gate:
     name: release gate
