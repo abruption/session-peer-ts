@@ -31,7 +31,7 @@
 ## 功能与边界
 
 - 发现本机 Claude/Codex 会话与已知 Codex home（面向 0.2.0 的功能，见下文）。
-- 先用 `--dry-run` 验证目标，再向原生 inbox / queue 提交一次消息。Codex 要求唯一且稳定的活跃 writer。
+- 先用 `--dry-run` 验证目标，再向原生 inbox / queue 提交一次消息。Codex 通常要求唯一且稳定的活跃 writer。
 - 通过 SSH 调用远端已安装的同版本客户端，支持结构化 Reply-To URI 和 JSON 输出。
 - 目标或进程归属不明确时拒绝操作；不会自动重试结果不确定的提交。
 
@@ -43,7 +43,7 @@
 
 构建后，`node dist/cli.js list --json` 合并列出 Claude/Codex，`list --agent codex --json` 查找已知 home。公开 npm **0.1.0** 仍要求显式 agent，以及 Codex 列表所需的 home；安装命令和显式的 `list`、`send` 命令也适用于 0.1.0。
 
-范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。0.2.0的 Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（0.6.2）。
+范围仅限默认 `~/.codex`、`CODEX_HOME`、macOS Orca 下的直接账户 home，以及 JSON 数组 `SESSION_PEER_CODEX_HOMES`。`--codex-home` 固定 Codex 列表并绕过无关配置错误；`--agent claude` 完全跳过 Codex 探索。同一 home 的别名合并，不同 home 的相同 UUID 保留。发送时使用每行的 `codexHome`。可选 home 缺失不是错误；显式 home 缺失或无效会保留成功读取的行，并返回退出码 1。列表不会选择 writer 或提交消息。[列表契约](../PARITY.md#source-unified-listing-contract--16--020)说明排序、诊断、`--all` 和 SSH 行为。当前源码中，Codex 发送在省略 `--codex-home` 时选择唯一且稳定的 live writer；显式 home 仍会检查所有已知竞争 home。非活动队列提交需要已保存的线程、所有候选均确认非活动，以及 `--codex-home HOME --allow-inactive-codex-home`，不会执行 wake/resume。Dry-run 不提交。JSON 新增诊断 `codexHomeResolution`，且仅在原生输出提供时包含 `queueId`；两者均不代表消费确认。请参阅[选择契约](../PARITY.md#source-codex-home-selection--17--020)。公开 **0.1.0** 仍需要显式 live home，且没有非活动许可选项。SSH 两端需要相同的 TypeScript 客户端版本（0.6.2）。
 
 ### 0.2.0 CLI 易用性
 
@@ -61,7 +61,7 @@ Unicode 14.0.0 默认 full casefold 精确匹配，不进行规范化或模糊�
 
 如果 `CLAUDE_CONFIG_DIR` 和 `ANTHROPIC_CONFIG_DIR` 都没有非空值，Claude 探索除 `~/.claude/sessions` 外，还会检查 `~/Library/Application Support/orca/claude-profiles` 下各直接子档案的 `home/sessions`。显式设置环境变量时只使用指定的会话登记目录。Linux 和 Windows 不会扫描这一 macOS 路径。配置档案数和登记项数均有上限。自动发现的配置档案目录和登记文件必须归当前用户所有，且其他用户或用户组不可写入；不满足安全条件的来源会使探索被标记为不完整。对 macOS 自动探索来源的扩展 ACL（额外访问权限）一律保守拒绝，包括仅指定所有者的 ACL。检查使用受限的系统元数据工具，不执行代理。
 
-其他探索来源出错时，已读取的会话仍保留在列表中，同时返回探索不完整的诊断信息和失败退出码。发送和发件人识别要求信息完整且无冲突。指向同一实际登记目录的别名可以合并为一行；PID 或收件端点信息冲突时，不会按目录顺序或指定 PID 来决定目标。选择和 handoff 连续性检查保留原始登记信息的依据，并在提交前重新检查。列表和 dry-run 不连接收件端点。这些检查不证明 native 代次、消息消费或收讫确认 ACK。
+部分来源查询失败时，列表会保留已读取的会话，并返回非零退出码和诊断信息，说明结果不完整。发送和发件人识别要求信息完整且无冲突。指向同一实际登记目录的别名可以合并为一行；PID 或收件端点信息冲突时，不会按目录顺序或指定 PID 来决定目标。选择和 handoff 连续性检查保留原始登记信息的依据，并在提交前重新检查。列表和 dry-run 不连接收件端点。这些检查不证明 native 代次、消息消费或收讫确认 ACK。
 
 ### 显式本地收讫确认
 
@@ -194,11 +194,11 @@ session-peer list --host alpha --host user@[2001:db8::1] \
 | 结果 | 含义 |
 | --- | --- |
 | `validated`, `submitted:false` | dry-run 检查通过，尚未发送。 |
-| `posted` / `queued` | inbox 已写入 / queue 已接受，**不是消费确认或 ACK**。 |
+| `posted` / `queued` | inbox 已写入 / queue 已接受，**不能确认接收方已处理消息或发回 ACK**。 |
 | `refused`, `submitted:false` | 提交前被拒绝。 |
 | `unknown`, `submitted:null` | 可能已经提交，不要自动重发。 |
 
-提交后没有回复或目标退出，都不能单独证明消息已消费或失败。不要自动重发。
+消息提交后，没有回复或目标会话退出，都不足以判断接收方是否已处理消息，也不足以判断发送是否失败。不要自动重发。
 
 `consumptionConfirmed` 始终为 false。必须在目标 TUI 中另行确认实际 ACK，不可由排队或轮询 transcript 推断。退出码 0/1/2 分别表示成功/错误/用法错误。错误只返回固定代码，不返回原生 stderr 或消息内容。Codex 使用真实内核 flock、文件身份和同用户进程开始时间进行多次核验，排队前再次检查。不删除 lock，也不向拥有它的代理进程发送信号。发现结果仍包含本地名称、路径、ID，分享前请脱敏。
 
@@ -240,7 +240,7 @@ npm run test:package
 npm audit
 ```
 
-Python 只用作开发时的比较基准（v1.1.0，`8ca77cf31254c8287a2593fe484bb30a7dba2727`），不是运行时依赖。验证范围为普通列表和发现结果，不代表发送或 handoff 的完整互操作性。POSIX 契约测试还需要 C 编译器和 lsof。CI 在三种 OS 上使用 Node 22/24。macOS/Linux 对固定基准执行完整契约与包检查；Windows x64 执行构建、类型检查、原生 Claude inbox、持有/空闲锁、writer 归属与提交前竞争、CLI 队列结果、隔离模拟 SSH 目标的实际 PowerShell/.cmd 帧处理、包安装/原生加载/卸载及 audit。这些属于 fixture 检查；Windows 不运行 POSIX/Python 参考测试套件。Windows x64/Node 24 实机 ACK 是单独的一次性证据。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](../VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
+Python 只用作开发时的比较基准（v1.1.0，`8ca77cf31254c8287a2593fe484bb30a7dba2727`），不是运行时依赖。验证范围为普通列表和发现结果，不代表发送或 handoff 的完整互操作性。POSIX 契约测试还需要 C 编译器和 lsof。CI 在三种 OS 上使用 Node 22/24。macOS/Linux 对固定基准执行完整契约与包检查；Windows x64 执行构建、类型检查、原生 Claude inbox、持有锁和空闲锁的测试用例、writer 归属与提交前重新验证的竞态、CLI 队列结果，以及通过隔离的模拟 SSH 目标验证 PowerShell/.cmd 帧处理、包安装/原生加载/卸载及 audit。这些属于 fixture 检查；Windows 不运行 POSIX/Python 参考测试套件。Windows x64/Node 24 实机 ACK 是单独的一次性证据。临时 SQLite、Unix inbox、真实锁 fixture 与 [VALIDATION.md](../VALIDATION.md) 中专用真实 TUI 的证据分开记录；fixture 通过不是 ACK。包测试检查文件清单、重复打包哈希、全新安装与卸载。原生依赖通常有安装脚本，已验证的预编译路径使用 `--ignore-scripts`。SQLite 只读连接仍可能参与 WAL 共享内存管理，不能视为快照。
 
 参见 [CONTRIBUTING.md](../CONTRIBUTING.md)、[RELEASING.md](../RELEASING.md) 和 [SECURITY.md](../SECURITY.md)。后续版本的发布需单独批准，未启用自动 npm 发布。采用 [MIT](../LICENSE) 许可证。
 

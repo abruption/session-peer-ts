@@ -12,7 +12,7 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-**发现正在运行的 Claude Code 和 Codex 会话，并在本机或通过 SSH 发送消息。**
+**查找正在运行的 Claude Code 和 Codex 会话，在本机或通过 SSH 发送消息。**
 这是不需要 Python 的 Node.js 客户端。包名与命令名均为 `session-peer`。
 
 </div>
@@ -29,9 +29,9 @@ Windows 上的 Codex 发送和 dry-run 会在消息入队前停止。无法确�
 
 ![TypeScript session-peer 0.2.1 的实际 Codex 与 Claude Code 请求和回复](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
-使用 npm 0.2.1 确认了本地请求及明确的 `ACK DEMO-READY` 回复。CLI 与消息摘录经过重新渲染、标识信息匿名化及时间编辑，并非屏幕录像。仅提交不代表 ACK。
+演示使用 npm 0.2.1 在本机发送请求，并收到明确的 `ACK DEMO-READY` 回复。画面根据 CLI 输出和消息摘录重现，标识符已遮盖，显示时序经过调整。这不是屏幕录像。仅提交不代表 ACK。
 
-安装后列出会话，将 `CLAUDE_PID` 替换为选中的准确 PID：
+安装后列出会话，将 `CLAUDE_PID` 替换为目标会话的 PID：
 
 ```sh
 session-peer list --agent claude --json
@@ -39,7 +39,7 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 ```
 
 `--dry-run` 仅验证，不提交。实际发送时移除同一命令中的 `--dry-run`，执行一次。
-需要确认时，请明确要求回复。**`posted` / `queued` 仅表示提交，不代表消费或 ACK。**
+需要确认时，请明确要求回复。**`posted` / `queued` 表示消息已写入收件箱或进入队列。接收方是否处理消息或发回 ACK，需要另行确认。**
 遇到 `unknown` (`submitted:null`)、没有回复或目标退出时，不要自动重试。
 `consumptionConfirmed` 始终为 false，请在接收方 TUI 中确认实际回复。
 
@@ -50,7 +50,7 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 需要 macOS/Linux/Windows、**Node 22.x 中的 22.13 及以上或 24.x**，以及匹配的
 原生预编译依赖(x64/arm64)。Claude 需要运行中的 TUI inbox；Codex 需要 CLI 和
 可验证的 writer(macOS/Linux 还需要 `lsof`、`ps`)。SSH 需要已有密钥、主机信任
-以及两端**同版本的 TypeScript 客户端**。平台要求与显式非活动队列提交见详细指南。
+以及两端**同版本的 TypeScript 客户端**。各平台的要求，以及如何明确允许向非活动 Codex 会话的队列提交消息，见用户指南。
 
 <a id="install"></a>
 
@@ -88,7 +88,7 @@ npm install --global --ignore-scripts session-peer@0.6.2
 session-peer --version
 ```
 
-配套技能需单独安装和更新；npm 安装不会安装技能。请参阅指南中固定提交的技能安装步骤。
+配套技能需单独安装和更新。请按指南中的步骤使用指定的 Git 提交。
 
 <!-- Preserve links to the former detailed sections; their contents are in the guide. -->
 <a id="功能与边界"></a>
@@ -112,14 +112,14 @@ session-peer --version
 
 ## 文档
 
-- [用户指南](docs/guide.zh-CN.md) — CLI 选项、发现、Codex home、SSH、回复、安装方式和技能设置.
+- [用户指南](docs/guide.zh-CN.md) — CLI 选项、会话查找、Codex 主目录、SSH、回复、安装和技能设置。
 - [API 参考(英文)](docs/api.md).
 - [兼容性、迁移和功能计划](PARITY.md).
 - [发布证据与平台验证](VALIDATION.md).
 - [开发与贡献](CONTRIBUTING.md).
 - [发布流程](RELEASING.md).
 - [0.4.0 handoff 设计与实现范围](PARITY.md#handoff-v1-design-candidate--69).
-- [private handoff CLI 与限制](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
+- [私有 handoff 命令及限制](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
 
 <a id="license"></a>
 

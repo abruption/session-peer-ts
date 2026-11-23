@@ -29,9 +29,9 @@ Windows では Codex への送信と dry-run はキューに登録する前に�
 
 ![TypeScript session-peer 0.2.1 による実際の Codex・Claude Code 間の要求と返信](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
-npm 0.2.1 でローカルの要求と明示的な `ACK DEMO-READY` の返信を確認しました。CLI・メッセージの抜粋を識別情報の除去とタイミング編集後に再描画したもので、画面録画ではありません。提出だけでは ACK を意味しません。
+npm 0.2.1 でローカルの要求と明示的な `ACK DEMO-READY` の返信を確認しました。識別情報を隠し、表示タイミングを調整して、CLI の出力とメッセージの抜粋を再現したものです。画面録画ではありません。提出だけでは ACK を意味しません。
 
-インストール後、一覧から選んだ正確な PID に `CLAUDE_PID` を置き換えます:
+インストール後、一覧で送信先のセッションを選び、`CLAUDE_PID` をその PID に置き換えてください。
 
 ```sh
 session-peer list --agent claude --json
@@ -39,8 +39,8 @@ session-peer send --to CLAUDE_PID --message 'API の契約を確認して返信�
 ```
 
 `--dry-run` は送信せずに検証します。実際に送るときは同じコマンドから
-`--dry-run` を外して一度実行してください。確認が必要なら明示的に返信を求めます。
-**`posted` / `queued` は提出を示し、消費や ACK の確認ではありません。** `unknown`
+`--dry-run` を外して一度実行してください。受領確認が必要な場合は、メッセージで返信を依頼してください。
+**`posted` / `queued` は、受信箱への書き込みまたはキューへの登録を示します。受信側での処理や ACK は別途確認してください。** `unknown`
 (`submitted:null`)、返信がないこと、対象の終了を理由に自動再送しないでください。
 `consumptionConfirmed` は常に false です。返信は受信側 TUI で確認します。
 
@@ -48,11 +48,11 @@ session-peer send --to CLAUDE_PID --message 'API の契約を確認して返信�
 
 ## クイックスタート
 
-macOS/Linux/Windows、**Node 22.x の 22.13 以降または 24.x**、対応する
-ネイティブ事前ビルド依存関係(x64/arm64)が必要です。Claude は実行中 TUI の inbox、
+macOS/Linux/Windows、**Node 22.x の 22.13 以降または 24.x**、環境に合った
+ビルド済みのネイティブ依存パッケージ（x64/arm64）が必要です。Claude は実行中 TUI の inbox、
 Codex は CLI と検証可能な writer が必要です(macOS/Linux は `lsof`・`ps` も必要)。
 SSH は既存の鍵・ホスト信頼設定と両端の**同じバージョンの TypeScript クライアント**を
-必要とします。各 OS の条件と非アクティブなキューへの明示的提出はガイドを参照してください。
+必要とします。OS ごとの要件と、非アクティブな Codex セッションのキューに登録する条件はガイドを参照してください。
 
 <a id="install"></a>
 
@@ -82,7 +82,7 @@ Windows・削除の手順は以下の詳細ガイドを参照してください�
 ### 更新
 
 npm で導入したクライアントは npm で更新します。タグと対象バージョンを確認してから
-正確なバージョンを指定してください。以下は古い npm 版を選択した 0.6.2 に更新する例です。
+更新先のバージョンを指定してください。以下は、npm でインストールした旧版を 0.6.2 に更新する例です。
 CLI は更新をインストールせず、`session-peer update --check` は確認のみ行います。
 
 ```sh
@@ -91,8 +91,7 @@ npm install --global --ignore-scripts session-peer@0.6.2
 session-peer --version
 ```
 
-連携スキルの導入・更新は別に行います。npm インストールはスキルを導入しません。
-ガイドの固定コミットに基づくスキル導入手順を確認してください。
+連携スキルは、ガイドに記載されたコミットを使って別途インストール・更新してください。
 
 <!-- Preserve links to the former detailed sections; their contents are in the guide. -->
 <a id="機能と範囲"></a>
@@ -116,7 +115,7 @@ session-peer --version
 
 ## ドキュメント
 
-- [ユーザーガイド](docs/guide.ja.md) — CLI オプション、探索、Codex home、SSH、返信、導入方法とスキル設定.
+- [ユーザーガイド](docs/guide.ja.md) — CLI オプション、セッションの検索、Codex のホームディレクトリ、SSH、返信、インストール、スキル設定。
 - [API リファレンス(英語)](docs/api.md).
 - [互換性・移行・機能計画](PARITY.md).
 - [リリース証拠・プラットフォーム検証](VALIDATION.md).

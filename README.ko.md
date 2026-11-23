@@ -12,7 +12,7 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-**실행 중인 Claude Code와 Codex 세션을 찾아 로컬 또는 SSH(보안 원격 접속)로 메시지를 전달합니다.**
+**실행 중인 Claude Code와 Codex 세션을 찾아 메시지를 보냅니다. 로컬과 SSH를 지원합니다.**
 Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이언트입니다. 패키지명과 CLI 명령은 모두 `session-peer`입니다.
 
 </div>
@@ -28,9 +28,9 @@ Windows에서 Codex 전송과 dry-run은 큐에 넣기 전에 중단됩니다. �
 
 ![TypeScript session-peer 0.2.1로 Codex에서 Claude Code에 보낸 실제 요청과 회신](https://raw.githubusercontent.com/abruption/session-peer-ts/main/docs/assets/session-peer-ts-v0.2.1-roundtrip.gif)
 
-npm 0.2.1을 사용해 실제 로컬 요청을 보내고 명시적인 `ACK DEMO-READY` 회신을 받았습니다. 명령줄 도구(CLI)와 메시지 일부를 다시 구성했으며, 식별자는 가리고 시점 정보는 편집했습니다. 화면 녹화는 아닙니다. 메시지를 제출한 것만으로는 ACK(수신 확인 응답)가 아닙니다.
+npm 0.2.1을 사용해 실제 로컬 요청을 보내고 명시적인 `ACK DEMO-READY` 회신을 받았습니다. CLI 출력과 메시지 일부를 다시 구성했습니다. 식별 정보는 가리고 표시 시점은 조정했습니다. 화면 녹화는 아닙니다. 메시지를 제출한 것만으로는 ACK(수신 확인 응답)가 아닙니다.
 
-설치한 뒤 세션을 조회하고, `CLAUDE_PID`를 선택한 세션의 정확한 PID(프로세스 ID)로 바꾸세요.
+설치 후 세션 목록을 열고, `CLAUDE_PID`를 보낼 세션의 PID(프로세스 ID)로 바꾸세요.
 
 ```sh
 session-peer list --agent claude --json
@@ -40,7 +40,7 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract and 
 `--dry-run`은 메시지를 보내지 않고 요청만 검증합니다. 실제로 전달할 때는 같은
 명령에서 `--dry-run`을 빼고 한 번 실행하세요. 수신 확인이 필요하면 메시지에
 명시적인 회신을 요청하세요. **`posted` / `queued`는 제출 또는 큐 수락을 뜻할
-뿐, 수신 측의 소비(읽기·처리)나 ACK를 확인한 결과가 아닙니다.** `unknown`
+뿐, 수신 측이 메시지를 읽거나 처리했는지, ACK를 보냈는지는 알 수 없습니다.** `unknown`
 (`submitted:null`)은 제출 여부가 불확실하므로 자동 재시도하지 마세요. 회신이
 없거나 대상 세션이 종료된 경우에도 자동 재시도하지 마세요. `consumptionConfirmed`는
 항상 `false`이며, 실제 회신은 수신 측 TUI(터미널 사용자 인터페이스)에서 직접 확인하세요.
@@ -49,9 +49,9 @@ session-peer send --to CLAUDE_PID --message 'Please review the API contract and 
 ## 빠른 시작
 
 macOS, Linux, Windows와 **Node 22.x의 22.13 이상 또는 24.x**가 필요합니다.
-운영체제와 아키텍처(x64/arm64)에 맞는 네이티브 사전 빌드 의존성도 필요합니다.
-Claude Code에는 실행 중인 TUI의 받은 메시지함이, Codex에는 CLI와 메시지를 기록하는
-안정된 writer 프로세스가 필요합니다(macOS/Linux에서는 `lsof`와 `ps`도 필요합니다).
+운영체제와 아키텍처(x64/arm64)에 맞는 미리 빌드된 네이티브 모듈도 필요합니다.
+Claude Code에는 실행 중인 TUI의 받은 메시지함이, Codex에는 CLI가 필요하며, 메시지를 기록하는 writer 프로세스의 소유권을 확인할 수 있어야 합니다.
+macOS와 Linux에서는 `lsof`와 `ps`도 필요합니다.
 SSH를 사용하려면 기존 키와 호스트 신뢰 설정이 있어야 하며, 양쪽에서 **같은 버전의
 TypeScript 클라이언트**를 사용해야 합니다. 운영체제별 요구사항은
 [사용자 가이드](docs/guide.ko.md#요구사항)를, 비활성 Codex 세션에 메시지를 대기열로
@@ -64,7 +64,7 @@ TypeScript 클라이언트**를 사용해야 합니다. 운영체제별 요구�
 `session-peer`라는 같은 명령 이름을 사용합니다. 설치 전에 macOS/Linux에서는 `type -a session-peer`,
 PowerShell에서는 `Get-Command session-peer -All`로 PATH(명령 검색 경로)에서 어떤
 실행 파일을 찾는지 확인하세요. 사용할 구현을 선택하고 다른 패키지 관리자가 설치한
-파일을 `--force`로 덮어쓰지 마세요. 설치와 갱신은 사용자가 npm으로 직접 수행합니다.
+파일을 `--force`로 덮어쓰지 마세요. 설치와 업데이트는 npm에서 직접 실행하세요.
 
 **0.6.2 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](docs/guide.ko.md#소스에서-빌드)를 사용하세요.
 

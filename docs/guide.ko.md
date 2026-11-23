@@ -110,7 +110,7 @@ Claude 이름은 Unicode 14.0.0의 기본 완전 대소문자 접기(full casefo
 
 ### 명시적 로컬 수령 확인
 
-수령 확인 receipt는 일반 posted/queued 전송 근거와 별개입니다. 소유자가 비공개 상태를 직접 초기화하고, 터미널에서 실행 상태를 유지하는 수집기를 직접 시작합니다. 서비스 등록이나 자동 시작은 하지 않습니다. 다음 명령의 `serve`는 사용자가 중지할 때까지 종료되지 않습니다.
+수령 확인은 일반 전송의 `posted`·`queued` 결과와 별개입니다. 소유자가 비공개 상태를 초기화한 뒤 터미널에서 수집기를 실행합니다. 서비스 등록이나 자동 시작은 하지 않습니다. 다음 명령의 `serve`는 사용자가 중지할 때까지 종료되지 않습니다.
 
 ```sh
 session-peer receipt init --state-dir "$HOME/.session-peer-receipts" --json
@@ -126,7 +126,7 @@ session-peer receipt respond --collector "$HOME/.session-peer-receipts/s" --rece
 
 검증 결과의 `token_possession`은 위임받은 토큰의 소지만 증명하며, 모델 신원·메시지 소비·작업 완료를 증명하지 않습니다. Claude는 native 세대를 알 수 없는 별도의 v2 위임 receipt context를 사용합니다. Codex는 원래 세대에 결합한 v1을 유지하고, 비공개 stdin을 사용하는 검증된 owned RPC 경로만 허용합니다. 토큰을 native `--message` 인자로 넘기는 대체 경로는 없습니다. 기존 수동 `operator_confirmed` 근거와도 다릅니다.
 
-수집기는 같은 기기의 소유자 전용 경로만 사용합니다. 보존 용량 제한이 함께 적용되어 작은 기록 약 511개부터 새 수령 확인 요청이 거부될 수 있으며, 자동 정리·초기화로 이력을 버리지 않습니다. 역방향 SSH 수집기와 Windows managed 저장소는 미지원입니다. 각 명시적 대기는 자신의 마감 시각을 유지합니다. status/wait는 비공개 상태 분류를 기록할 수 있지만 native 메시지를 다시 제출하지 않습니다. 결과를 알 수 없다고 자동 재전송하지 않습니다. 기존 native·플랫폼 검증 범위는 그대로이며, fixture 성공이 실제 에이전트 receipt 검증을 뜻하지는 않습니다.
+수집기는 같은 기기의 소유자 전용 경로만 사용합니다. 보존 용량 제한이 함께 적용되어 작은 기록 약 511개부터 새 수령 확인 요청이 거부될 수 있으며, 자동 정리·초기화로 이력을 버리지 않습니다. 역방향 SSH 수집기와 Windows managed 저장소는 미지원입니다. 명시적으로 시작한 대기 작업마다 별도의 마감 시각을 정하며, 그 시각은 바뀌지 않습니다. status/wait는 비공개 상태 분류를 기록할 수 있지만 native 메시지를 다시 제출하지 않습니다. 결과를 알 수 없다고 자동 재전송하지 않습니다. 기존 native·플랫폼 검증 범위는 그대로이며, fixture 성공이 실제 에이전트 receipt 검증을 뜻하지는 않습니다.
 
 ## 요구사항
 
@@ -425,7 +425,7 @@ Codex는 커널의 flock, 파일 식별자, 같은 사용자가 소유한 프로
 
 일반 Codex 큐는 `auth.json`이 있는 로그인 home 등에서 클라우드 정책 적용 여부를 분류할 수 없으면 `codex_cloud_storage_unverified`로 거부합니다. 자격정보·캐시 내용은 읽지 않으며, 별도로 검증하는 owned app-server 경로에는 실제 저장소 바인딩 증거가 필요합니다.
 
-이 소스는 Codex home·시스템·macOS 관리 설정과 큐 실행 프로세스 및 대상 프로세스의 실제 작업 경로에 적용되는 프로젝트 설정을 검사합니다. [저장소 검증 범위와 거부 조건](api.md#codex-storage-configuration)을 확인하세요. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부합니다. doctor와 dry-run은 Codex를 실행하지 않으며 로더 버전은 미확인으로 남깁니다.
+이 소스는 Codex home·시스템·macOS 관리 설정과 큐 실행 프로세스 및 대상 프로세스의 실제 작업 경로에 적용되는 프로젝트 설정을 검사합니다. [저장소 검증 범위와 거부 조건](api.md#codex-storage-configuration)을 확인하세요. Windows Codex 전송과 dry-run은 로컬 저장소 검사 방식이 검증될 때까지 큐 제출 전에 거부합니다. doctor와 dry-run은 Codex를 실행하지 않으며 로더 버전을 검증하지 않습니다.
 
 현재 기능 차이와 포팅 결정은 [날짜가 명시된 비교표](../PARITY.md#current-scoped-feature-matrix)에서 확인하세요. TypeScript의 공개 기능과 별도로 고정한 Python 비교 기준을 구분합니다.
 
@@ -471,7 +471,7 @@ Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증
 구분합니다. fixture 통과는 ACK가 아닙니다. 패키지 내용·반복 빌드 해시·
 새 환경 설치·삭제도 검사합니다. 네이티브 의존성에는 설치 스크립트가 있지만 검증한 사전
 빌드 경로는 `--ignore-scripts`를 사용합니다. SQLite를 읽기 전용으로 열어도 WAL(미리 쓰기
-로그)의 공유 메모리 관리에 참여할 수 있으므로 스냅샷을 읽는 것은 아닙니다.
+로그)의 공유 메모리 관리에 참여할 수 있습니다. 별도 스냅샷에서 읽는 방식은 아닙니다.
 
 [CONTRIBUTING.md](../CONTRIBUTING.md), [RELEASING.md](../RELEASING.md),
 [SECURITY.md](../SECURITY.md)를 참고하세요. 이후 릴리스 발행도 수동으로 진행하며 별도
@@ -634,7 +634,7 @@ npm `--ignore-scripts`로 설치해도 되며, 설치 후 Skills CLI를 호출�
 
 ## 비공개 handoff와 전송 관측 (0.4.0)
 
-0.4.0에는 opt-in private POSIX handoff ledger가 포함됩니다. 필수 증거 채널이 unsupported이면 제출 전에 거절하며, best-effort 제출은 ACK를 증명하지 않습니다. 자동 수신 확인 연결 설정, Windows ledger 및 원래 발신자의 SSH 수신 확인 수집기는 미지원입니다. POSIX SSH opt-in은 명시적으로 초기화한 목적지 ledger에서 전송 없는 준비 단계로 대상·home·generation을 고정한 뒤 한 번만 전송합니다. [목적지 SSH 설명](api.md#unreleased-destination-side-ssh-handoff)을 참고하세요. 가짜 SSH fixture는 실제 네트워크 검증과 구분합니다.
+0.4.0에는 opt-in private POSIX handoff ledger가 포함됩니다. 필수 증거 채널이 `unsupported`이면 제출 전에 거부합니다. best-effort 전송에서도 지원되지 않는 증거로는 ACK를 확인할 수 없습니다. 자동 수신 확인 연결 설정, Windows ledger 및 원래 발신자의 SSH 수신 확인 수집기는 미지원입니다. POSIX SSH opt-in은 명시적으로 초기화한 목적지 ledger에서 전송 없는 준비 단계로 대상·home·generation을 고정한 뒤 한 번만 전송합니다. [목적지 SSH 설명](api.md#unreleased-destination-side-ssh-handoff)을 참고하세요. 가짜 SSH fixture는 실제 네트워크 검증과 구분합니다.
 
 [CLI 명세](api.md#unreleased-opt-in-handoff-cli--040-work)
 

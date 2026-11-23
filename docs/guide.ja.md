@@ -31,9 +31,9 @@
 ## 機能と範囲
 
 - ローカル Claude/Codex セッションと既知の Codex home の検出（0.2.0 の機能、下記参照）。
-- `--dry-run` で宛先を確認し、ネイティブ inbox / queue にメッセージを一度だけ提出。Codex は一意かつ安定した live writer が必要です。
+- `--dry-run` で宛先を確認し、ネイティブの受信箱またはキューにメッセージを一度だけ登録します。Codex は一意かつ安定した live writer が必要です。
 - インストール済みの同じクライアントへの SSH 接続、構造化 Reply-To URI、JSON 出力。
-- 宛先や所有者が曖昧なら拒否。不確実な提出を自動再送しません。
+- 宛先や所有者が曖昧なら拒否。送信結果が不明でも自動で再送しません。
 
 Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です。未対応コマンドは明示的に失敗します。汎用オーケストレーターではありません。
 
@@ -41,7 +41,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 ### 0.2.0 の統合一覧
 
-ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。0.2.0 でも明示的なコマンド形式を利用できます。
+ビルド後の `node dist/cli.js list --json` は Claude/Codex をまとめて表示し、`list --agent codex --json` は既知の home を検索します。公開 npm **0.1.0** では引き続き agent と Codex 一覧の home を明示します。バージョンを明示してインストールする方法や、パラメーターを明示する `list`・`send` の形式は、0.1.0 でも使えます。
 
 対象は既定の `~/.codex`、`CODEX_HOME`、macOS Orca 直下のアカウント home、JSON 配列 `SESSION_PEER_CODEX_HOMES` のみです。`--codex-home` は Codex 一覧を固定して無関係な設定エラーを回避し、`--agent claude` は Codex 探索を省略します。同じ home の別名は統合し、異なる home の同じ UUID は保持します。送信には各行の `codexHome` を使ってください。任意 home の不在はエラーではなく、明示した home の不在・不正は読み取れた行を保持して終了コード 1 を返します。一覧は writer を選択せず、メッセージを提出しません。[一覧契約](../PARITY.md#source-unified-listing-contract--16--020)に順序・診断・`--all`・SSH を記載しています。0.2.0の Codex 送信は `--codex-home` 省略時に一意で安定した live writer を選択します。明示 home でも既知の競合 home をすべて検査します。非アクティブなキュー送信には保存済みスレッド、全候補の非アクティブ検証、および `--codex-home HOME --allow-inactive-codex-home` が必要で、wake/resume は実行しません。Dry-run は提出しません。JSON に診断 `codexHomeResolution` と、ネイティブ出力にある場合のみ `queueId` を追加しますが、消費確認ではありません。[選択契約](../PARITY.md#source-codex-home-selection--17--020)を参照してください。公開 **0.1.0** には明示 live home が必要で、非アクティブ許可オプションはありません。SSH の両端には同じ TypeScript クライアントのバージョン（0.6.2）が必要です。
 
@@ -66,7 +66,7 @@ Relay 通信、MCP、wake/resume、Antigravity、自動更新は未実装です�
 
 ### 明示的なローカル受領確認
 
-receipt は通常の posted/queued という提出根拠とは別です。所有者が非公開状態を明示的に初期化し、フォアグラウンドの collector を手動で開始します。サービス登録や自動起動はしません。次の `serve` は所有者が停止するまで終了しません。
+受領確認は通常の送信結果である `posted`・`queued` とは別です。所有者が非公開の状態データを初期化し、ターミナルで収集プロセスを手動で起動します。サービス登録や自動起動はしません。次の `serve` は所有者が停止するまで終了しません。
 
 ```sh
 session-peer receipt init --state-dir "$HOME/.session-peer-receipts" --json
@@ -82,7 +82,7 @@ session-peer receipt respond --collector "$HOME/.session-peer-receipts/s" --rece
 
 `token_possession` は委任されたトークンの所持を示すだけで、モデルの身元、メッセージの消費、作業完了を証明しません。Claude は native 世代が不明な別の v2 delegated receipt context を使います。Codex は元の世代に結び付いた v1 を維持し、非公開 stdin を使う検証済み owned RPC 経路だけを許可します。トークンを native の `--message` 引数に入れる代替経路はありません。既存の手動 `operator_confirmed` 根拠とも異なります。
 
-collector は同じ端末の所有者専用経路です。保存容量の制限が重なり、小さい記録でも約 511 件で新しい受領確認要求を拒否する場合があります。自動削除や初期化で履歴を捨てることはありません。逆向き SSH collector と Windows managed storage は未対応です。明示的な各 wait は自分の期限を維持します。status/wait は非公開の状態分類を書き込む場合がありますが、native メッセージを再提出しません。不明な結果から自動再送は行いません。既存の native・プラットフォーム検証範囲は変わらず、fixture の成功は実エージェントの receipt 検証ではありません。
+collector は同じ端末の所有者専用経路です。保存容量の制限が重なり、小さい記録でも約 511 件で新しい受領確認要求を拒否する場合があります。自動削除や初期化で履歴を捨てることはありません。逆向き SSH collector と Windows managed storage は未対応です。明示的に開始した待機には、それぞれ独立した期限があります。status/wait は非公開の状態分類を書き込む場合がありますが、native メッセージを再提出しません。不明な結果から自動再送は行いません。既存の native・プラットフォーム検証範囲は変わらず、fixture の成功は実エージェントの receipt 検証ではありません。
 
 ## 必要条件
 
@@ -179,7 +179,7 @@ Python を使わずに宛先を準備する方法（バージョンごとの専�
 
 ### 返信
 
-`session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。peer 情報は権限ではなく、Reply-To URI をシェルとして実行しません。受け取った Reply-To は読み手のためのデータであり、返信を自動で観測・確認することはありません。
+`session-peer://v1/reply?...` URI を `--to` に指定できます。不明 / 重複フィールド、不正ホスト・エンコード、明示した経路との矛盾は拒否します。相手から受け取ったメタデータを認可の根拠には使いません。Reply-To URI をシェルコマンドとして実行することもありません。受け取った Reply-To は読み手のためのデータであり、返信を自動で観測・確認することはありません。
 
 0.3.0 以降（0.2.1 以前にはありません）、送信者情報と自動の返信経路を追加します。
 
@@ -201,7 +201,7 @@ Python を使わずに宛先を準備する方法（バージョンごとの専�
 
 提出後に返信がない、または宛先が終了したという事実だけでは、消費や失敗を確定できません。自動再送しないでください。
 
-`consumptionConfirmed` は常に false。実際の ACK は宛先 TUI で別途確認し、queue や transcript polling から推定しません。終了コード 0/1/2 は成功/エラー/用法エラー。エラーは固定コードで、ネイティブ stderr や本文を返しません。Codex は実際の kernel flock、ファイル同一性、同一ユーザーの所有者開始時刻を複数回調べ、提出直前にも再検証します。lock の削除や所有エージェントへのシグナル送信はしません。一覧の名前・パス・ID は共有前に伏せてください。
+`consumptionConfirmed` は常に false。実際の ACK は宛先 TUI で別途確認し、queue や transcript polling から推定しません。終了コードは、成功時が 0、処理エラー時が 1、コマンドの指定に誤りがある場合が 2 です。エラーは固定コードで、ネイティブ stderr や本文を返しません。Codex は実際の kernel flock、ファイル同一性、同一ユーザーの所有者開始時刻を複数回調べ、提出直前にも再検証します。lock の削除や所有エージェントへのシグナル送信はしません。一覧の名前・パス・ID は共有前に伏せてください。
 
 <a id="移行時の境界-033-候補"></a>
 
@@ -318,9 +318,7 @@ TS スキルメタデータ（`skills`、`doctor` と同じ契約）と `skillsM
 より新しい npm の安定版を示す場合に、JSON 結果へ `clientUpdate` オブジェクトを追加し、
 テキスト出力では stderr に 1 行を出します。キャッシュがない・不正・期限切れの場合は
 切り離した更新プロセスを 1 つ起動し、コマンドの結果や終了コードを遅らせたり変えたり
-しません。更新に失敗した場合は 1 時間後まで再試行しません。キャッシュの書き込みは単一実行で、
-失敗時は閉じる側に倒れます。バックグラウンド更新でも明示的な確認でも、書き込みは
-`npm-update.lock` を保持している間だけ、より古い記録に対してだけ行います。自分が作成して
+しません。更新に失敗した場合は 1 時間後まで再試行しません。バックグラウンド更新でも明示的な確認でも、`npm-update.lock` を取得したプロセスだけが、既存の記録より新しい結果を書き込めます。自分が作成して
 いないロックを引き継いだり削除したりすることはありません。更新が異常終了したり、I/O エラーでロックを解放できなかったりしてロックが残った
 場合、バックグラウンド更新は止まり、`update --check` は `cache: "skipped_stale_lock"` を
 報告します。session-peer のプロセスが動いていないときに `npm-update.lock` を手動で削除して
@@ -382,7 +380,7 @@ npm `--ignore-scripts` は利用でき、postinstall は Skills CLI を呼び出
 
 ## 非公開 handoff と配送観測（0.4.0）
 
-0.4.0 には opt-in private POSIX handoff ledger が含まれます。必須の証拠が unsupported の場合は提出前に拒否し、best-effort の提出は ACK を証明しません。自動受領確認の接続設定、Windows ledger、元の送信者側の SSH 受領確認収集は未対応です。POSIX SSH opt-in は明示的に初期化した宛先 ledger で送信しない準備を行い、対象・home・generation を固定して一度だけ送信します。[宛先側 SSH の説明](api.md#unreleased-destination-side-ssh-handoff)を参照してください。模擬 SSH fixture と実ネットワーク検証は区別します。
+0.4.0 には opt-in private POSIX handoff ledger が含まれます。必須の証拠が `unsupported` の場合、キューや受信箱に書き込む前に拒否します。best-effort で証拠が未対応の場合も、ACK は確認できません。自動受領確認の接続設定、Windows ledger、元の送信者側の SSH 受領確認収集は未対応です。POSIX SSH opt-in は明示的に初期化した宛先 ledger で送信しない準備を行い、対象・home・generation を固定して一度だけ送信します。[宛先側 SSH の説明](api.md#unreleased-destination-side-ssh-handoff)を参照してください。模擬 SSH fixture と実ネットワーク検証は区別します。
 
 [CLI の仕様](api.md#unreleased-opt-in-handoff-cli--040-work)
 
