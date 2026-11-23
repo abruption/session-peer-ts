@@ -1,9 +1,12 @@
 # Operator checklist for remote qualification
 
 Status: checklist and local static reporter merged in [#160](https://github.com/abruption/session-peer-ts/pull/160).
+The merge commit is [`1b9e762`](https://github.com/abruption/session-peer-ts/commit/1b9e762c154e1050b04f98d5c36cee0d332cf484).
 Issue [#158](https://github.com/abruption/session-peer-ts/issues/158) follows
 [#23](https://github.com/abruption/session-peer-ts/issues/23); both remain open.
 The 2026-10-21 design and its evidence limits remain applicable. Priority is P2.
+The v0.7.0 follow-up covers this operator guidance and its evidence inventory.
+Destination qualification and its acceptance criteria stay in #23.
 
 ## Purpose and boundary
 

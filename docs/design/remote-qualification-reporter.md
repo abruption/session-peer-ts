@@ -60,8 +60,9 @@ replacing paths and labels with the operator's explicit selections:
   labels are recorded as unverified operator attestation, not authenticated
   history or clock validation. The comparison proves no interval-wide preservation.
 - No baseline means the comparison is `not_checked`; malformed/incomplete
-  baseline evidence makes that comparison `unknown`. Unknown object keys are
-  input errors. Invalid evidence does not promote null hashes or old pass results.
+  baseline evidence makes that comparison `unknown` with
+  `baseline_evidence_incomplete`. Unknown object keys, including keys inside a
+  baseline object, reject the entire input with exit 2. Invalid evidence does not promote null hashes or old pass results.
 - JSON grammar is parsed by `JSON.parse`; duplicate decoded object keys,
   including escaped spellings, are rejected. Metadata with duplicate keys also
   yields unknown field observations, even when duplicates are in ignored fields.
