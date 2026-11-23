@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '../packages/session-peer-mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js';
@@ -55,6 +57,32 @@ try {
     const send = await client.callTool({ name: 'send_message', arguments: { target: 'claude:1', message: 'fixture' } });
     assert.equal(send.structuredContent.error, 'operation_not_allowed');
   } finally { await client.close(); }
+  const relay = createServer(socket => { socket.destroy(); });
+  let connections = 0;
+  relay.on('connection', () => { connections++; });
+  const inbox = process.platform === 'win32' ? '\\\\.\\pipe\\session-peer-mcp-fixture-' + process.pid : join(root, 's');
+  relay.listen(inbox);
+  await once(relay, 'listening');
+  try {
+    const sessions = join(home, '.claude/sessions');
+    mkdirSync(sessions, { recursive: true });
+    writeFileSync(join(sessions, process.pid + '.json'),
+      JSON.stringify({ pid: process.pid, name: 'fixture', messagingSocketPath: inbox }));
+    const policy = join(root, 'test-policy.json');
+    writeFileSync(policy, JSON.stringify({ schemaVersion: 1, destinations: [{
+      id: 'local', transport: 'local', agents: ['claude'], capabilities: ['send'],
+    }] }), { mode: 0o600 });
+    const fixture = new Client({ name: 'dry-run-fixture', version: '1.0.0' });
+    const channel = new StdioClientTransport({ command: process.execPath, args: [bin, '--policy', policy], env });
+    try {
+      await fixture.connect(channel);
+      const check = await fixture.callTool({ name: 'send_message',
+        arguments: { target: 'claude:' + process.pid, message: 'fixture', dryRun: true } });
+      assert.equal(check.structuredContent.status, 'validated', JSON.stringify(check.structuredContent));
+      assert.equal(check.structuredContent.submitted, false);
+      assert.equal(connections, 0);
+    } finally { await fixture.close(); }
+  } finally { await new Promise(resolve => relay.close(resolve)); }
   runNpm(['uninstall', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', 'session-peer-mcp', 'session-peer'], root);
-  console.log('Optional package smoke passed: isolated paired install, stdio list/refusal, uninstall.');
+  console.log('Optional package smoke passed: isolated paired install, stdio list/refusal/real dry-run, uninstall.');
 } finally { rmSync(root, { recursive: true, force: true }); }
