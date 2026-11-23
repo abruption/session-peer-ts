@@ -30,7 +30,7 @@ function parseOutcome(stdout, command, exitCode) {
   if (command === 'send' && (!['posted', 'queued', 'validated', 'refused', 'unknown'].includes(result.status) ||
       result.consumptionConfirmed !== false ||
       result.submitted !== ({ posted: true, queued: true, validated: false, refused: false, unknown: null })[result.status])) return undefined;
-  return { ...result, exitCode };
+  return result;
 }
 
 export async function runWorker({ cli, operation, signal, timeoutMs = DEFAULT_TIMEOUT_MS }) {
@@ -71,6 +71,7 @@ export async function runWorker({ cli, operation, signal, timeoutMs = DEFAULT_TI
       stopReason = reason;
       child.stdin.destroy();
       if (child.connected) child.send('session-peer:cancel', () => {});
+      else if (process.platform !== 'win32' && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
       forceTimer = setTimeout(() => {
         if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
         child.stdout.destroy(); child.stderr.destroy();

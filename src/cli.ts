@@ -410,6 +410,7 @@ try {
 } finally {
   if (wireWatchdog) clearTimeout(wireWatchdog);
   if (process.send && process.env.SESSION_PEER_MCP_WORKER === '1') {
+    stopCliChildren();
     process.removeListener('disconnect', stopMcpWorker);
     process.disconnect?.();
   }

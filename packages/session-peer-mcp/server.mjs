@@ -63,15 +63,22 @@ async function executeList(cli, decision, all, signal, run) {
   // Each agent has its own eligibility and Codex home. Keep a healthy agent's
   // results if the other lookup fails or cancellation stops remaining work.
   const outcome = { schemaVersion: 1, command: 'list', ok: true, sessions: [], discovery: {} };
+  let completed = false;
   for (const agent of agents) {
+    if (signal.aborted) {
+      outcome.discovery[agent] = { status: 'error', error: 'cancelled' };
+      outcome.ok = false;
+      continue;
+    }
     const item = await run({ cli, signal, operation: { route, agent, command: 'list', all } });
     if (Array.isArray(item.sessions)) outcome.sessions.push(...item.sessions);
     outcome.discovery[agent] = item.discovery?.[agent] ?? {
       status: 'error', error: item.error ?? 'discovery_failed',
     };
-    if (!item.ok) outcome.ok = false;
+    if (item.ok) completed = true;
+    else outcome.ok = false;
   }
-  if (!outcome.ok) outcome.error = 'partial_discovery';
+  if (!outcome.ok) outcome.error = signal.aborted && !completed && outcome.sessions.length === 0 ? 'cancelled' : 'partial_discovery';
   // Bound the combined result without replacing successful agent rows on an
   // ordinary partial failure. Each worker already has its own output cap.
   if (Buffer.byteLength(JSON.stringify(outcome), 'utf8') > MAX_RESULT)

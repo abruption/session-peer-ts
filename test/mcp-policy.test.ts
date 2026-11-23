@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { reply } from '../dist/index.js';
 // Optional package policy is plain Node ESM and carries no SDK dependency.
@@ -10,12 +13,15 @@ function uri(agent: string, session: string, options: Record<string, string> = {
   return 'session-peer://v1/reply?' + new URLSearchParams({ agent, session, transport: 'ssh', ...options });
 }
 
-test('default policy only lists local Claude and a selected missing policy fails closed', () => {
+test('default policy only lists local Claude and a selected missing policy fails closed', t => {
   const policy = readPolicy(undefined, reply);
   assert.deepEqual(authorizeList(policy).agents, ['claude']);
   assert.throws(() => authorizeList(policy, { agent: 'codex' }), /operation_not_allowed/);
   assert.throws(() => authorizeSend(policy, { target: 'claude:1' }, reply), /operation_not_allowed/);
   assert.throws(() => readPolicy('non-absolute-missing-policy.json', reply), /invalid_policy/);
+  const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-mcp-policy-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.throws(() => readPolicy(join(root, 'selected-missing.json'), reply), /invalid_policy/);
 });
 
 test('policy requires an exact explicit Codex home and rejects duplicate JSON grants', () => {
@@ -30,6 +36,7 @@ test('policy requires an exact explicit Codex home and rejects duplicate JSON gr
     uri('codex', codexId, { host: base.host, codexHome: base.codexHome + '/' }),
     uri('codex', codexId, { transport: 'local', codexHome: base.codexHome }),
     'claude:1',
+    'codex:not-a-uuid',
   ]) assert.throws(() => authorizeSend(policy, { destination: 'worker', target }, reply), /operation_not_allowed/);
   assert.throws(() => authorizeList(policy, { destination: 'worker' }), /operation_not_allowed/);
   assert.throws(() => parsePolicy(JSON.stringify({ schemaVersion: 1, destinations: [{ ...base, codexHome: 'relative' }] }), reply), /invalid_policy/);

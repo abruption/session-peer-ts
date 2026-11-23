@@ -96,8 +96,7 @@ function same(a, b) {
 
 export function readPolicy(file, reply) {
   if (file === undefined) return parsePolicy('{"schemaVersion":1,"destinations":[{"id":"local","transport":"local","agents":["claude"],"capabilities":["list"]}]}', reply);
-  const pathRules = process.platform === 'win32' ? win32 : posix;
-  requirePolicy(typeof file === 'string' && pathRules.isAbsolute(file) && !control.test(file));
+  requirePolicy(absoluteHome(file, process.platform === 'win32'));
   let fd;
   try {
     const before = lstatSync(file, { bigint: true });
@@ -141,6 +140,8 @@ export function authorizeSend(policy, { destination = 'local', target }, reply) 
   }
   const agent = to.startsWith('codex:') ? 'codex' : 'claude';
   requireAllowed(route.agents.includes(agent));
+  if (agent === 'codex') requireAllowed(/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(to.slice(6)));
+  else requireAllowed(!!(to.startsWith('claude:') ? to.slice(7) : to).trim());
   if (uri) requireAllowed(uri.home === (agent === 'codex' ? route.codexHome : undefined));
   return { route, to, agent };
 }
