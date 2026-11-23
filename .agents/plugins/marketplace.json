@@ -1,0 +1,10 @@
+{
+  "name": "session-peer-ts",
+  "interface": { "displayName": "Session Peer TypeScript" },
+  "plugins": [{
+    "name": "session-peer-ts",
+    "source": { "source": "local", "path": "./plugins/session-peer-ts" },
+    "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+    "category": "Productivity"
+  }]
+}

@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "session-peer-ts": { "command": "session-peer-mcp", "args": [] }
+  }
+}

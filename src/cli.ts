@@ -11,7 +11,7 @@ import { lstatSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { Refusal } from './discovery.js';
 import { checkMessage } from './send.js';
-import { enableCliSignalForwarding } from './process.js';
+import { enableCliSignalForwarding, stopCliChildren } from './process.js';
 import { envelope, host, reply, VERSION, VERSION_LINE } from './protocol.js';
 import { CHANNELS, checkUpdate, noticeText, refreshCache, refuseSelfUpdate, REFRESH_ARG, updateNotice } from './updates.js';
 import { sshJump, sshOptions, type SshJump } from './ssh.js';
@@ -197,6 +197,11 @@ async function input(limit = 4_100_000, preserveBOM = false, timeoutMs?: number)
 }
 
 enableCliSignalForwarding();
+const stopMcpWorker = () => { stopCliChildren(); process.exit(130); };
+if (process.send && process.env.SESSION_PEER_MCP_WORKER === '1') {
+  process.on('message', message => { if (message === 'session-peer:cancel') stopMcpWorker(); });
+  process.once('disconnect', stopMcpWorker);
+}
 let command = 'unknown';
 let requested: string[] = [];
 let format: OutputFormat = 'json';
@@ -402,4 +407,10 @@ try {
   console.log(renderOutput(!wire && requested.length > 1 ? requested.map(item => ({ ...value, host: item })) : value, format));
   process.exitCode = exitCode;
   }
-} finally { if (wireWatchdog) clearTimeout(wireWatchdog); }
+} finally {
+  if (wireWatchdog) clearTimeout(wireWatchdog);
+  if (process.send && process.env.SESSION_PEER_MCP_WORKER === '1') {
+    process.removeListener('disconnect', stopMcpWorker);
+    process.disconnect?.();
+  }
+}
