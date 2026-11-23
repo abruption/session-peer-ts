@@ -1,8 +1,9 @@
-# Proposal: operator checklist for remote qualification
+# Operator checklist for remote qualification
 
-Status: **Implementation proposal; human PR review required.** Issue [#158](https://github.com/abruption/session-peer-ts/issues/158),
-following [#23](https://github.com/abruption/session-peer-ts/issues/23).
-Draft date: 2026-10-21. No release version is assigned; priority is P2.
+Status: checklist and local static reporter merged in [#160](https://github.com/abruption/session-peer-ts/pull/160).
+Issue [#158](https://github.com/abruption/session-peer-ts/issues/158) follows
+[#23](https://github.com/abruption/session-peer-ts/issues/23); both remain open.
+The 2026-10-21 design and its evidence limits remain applicable. Priority is P2.
 
 ## Purpose and boundary
 
@@ -159,6 +160,26 @@ means separately scoped native destination execution; none was run for this desi
 | Windows destination matrix and other account/architecture/runtime/concurrency cells | Separate live experiment proposals per cell | Bounded historical evidence only; other cells remain unrun. |
 | F2–F6 capability/error/identity/provisioning follow-ups | Separate design/implementation review and validation | Proposals, not commands delivered here. No Windows-client jump qualification. |
 
+The following inventory makes the open cells concrete. It does not prescribe a
+new recovery engine or approve experiments; the human decision above determines
+whether each historical recovery criterion is retained, rescoped or retired.
+
+| Cell or historical criterion | Existing evidence and remaining work |
+| --- | --- |
+| Linux x86_64, current receipt/recovery rules | The dated Debian run used earlier rules. Unreceipted target recovery under a fresh lock, corrupt/mismatched/orphan receipts, `.receipts` trust, unverifiable-owner override, journal-confirmed rollback and operator-check → receipt → unlock ordering need a decision and, if retained, separately scoped requalification. |
+| Other POSIX destinations and root trust, rename and libc checks | Only the dated Debian x86_64/glibc destination is described in the ADR; other environments need separate evidence. The POSIX empty-directory race remains unguaranteed and unexercised. |
+| Windows x64 non-admin and other account/runtime combinations | The dated full workflow used an administrator account and Node 24.16.0. Node 22.23.3 has direct banner/native-lock smoke only; neither covers a full non-admin or Node 22 workflow. |
+| Linux arm64, Windows arm64, macOS x64 native loads; Windows arm64/macOS Node 22 workflow | Native loads and the full installation/recovery cells remain unvalidated. glibc below 2.28 and musl are expected to fail, not qualified. |
+| Concurrency, adversarial races and identity launcher | General race qualification remains open; the launcher was logically compared on Linux and prototyped on macOS, not generally qualified. |
+| Windows-client jump | Windows destination evidence does not qualify the separate client jump path ([#20](https://github.com/abruption/session-peer-ts/issues/20)). |
+
+Static reporter output belongs to **static metadata** or **operator attestation**
+only; its `not_checked` entries are reminders, not native results. Synthetic or
+CI fixtures show behavior under their stated setup. An operator-recorded command
+result applies to that invocation, and actual native destination evidence applies
+only to its recorded cell and scope. None fills an unexecuted current check or
+automatically resolves the historical criteria above.
+
 Historical anchors remain dated: the 2026-10-02 Debian 13 x86_64/glibc 2.41
 run used published TS 0.2.1 and Node 24.21.0/22.23.3 under then-current ADR rules, with incomplete
 operator ordering and later recovery rules unvalidated. The 2026-10-07 Windows
@@ -200,7 +221,6 @@ local file observations. Diagnostics, remote access, runtime/native execution,
 ownership, caller use and remediation remain outside the program. There is no
 new journal, receipt, lock, recovery engine or production CLI command.
 
-This authorizes the requested isolated implementation and review, not a merge,
-release, live experiment or closure of #23. Human PR review must still assess
-the implementation and remaining design choices. Additional functionality
-needs its own explicit scope; #155 remains deferred.
+The requested implementation was merged in #160. That merge did not complete
+the destination work or close #23. Additional functionality and live experiments
+need their own explicit scope; #155 remains deferred.

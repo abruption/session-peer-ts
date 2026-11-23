@@ -1,6 +1,7 @@
 # Repository-only static qualification reporter
 
-Status: implementation proposal for [#158](https://github.com/abruption/session-peer-ts/issues/158).
+Status: repository-only implementation merged in [#160](https://github.com/abruption/session-peer-ts/pull/160),
+for [#158](https://github.com/abruption/session-peer-ts/issues/158).
 The owner requested this limited code extension on 2026-10-21 after reviewing
 [the checklist](remote-qualification-checklist.md). It supersedes only the
 checklist-only deferral of a reporter; it does not revive #155 or adopt F1–F6.
@@ -141,6 +142,6 @@ Native special-file/race evidence and Windows stdin/CLI behavior have not been
 qualified; deterministic mocks do not replace those checks. There are no live-host
 or agent tests in this implementation request.
 
-The expanded contract and implementation undergo fresh noninteractive Opus 5.5
-review before PR handoff. Human merge review is required; no release, publication,
-installation-manager change or closure of the original #23 criteria is implied.
+The review and exact validation checkpoints are recorded in #160. Its merge does
+not establish native destination qualification, installation-manager authority,
+or closure of the original #23 criteria.
