@@ -11,9 +11,9 @@ and permits deployments from `main` only.
 
 ## 0.7.0 release preparation
 
-The core release includes the execution layer, the optional policy-scoped MCP
-integration, the aligned README and guide entry pages, and remote qualification
-guidance from #193, #194 and #195. Native agent integrations and remaining
+The 0.7.0 changes cover the execution layer, the aligned README and guide entry
+pages, remote qualification guidance, and the separately packaged policy-scoped
+MCP integration from #193, #194 and #195. Native agent integrations and remaining
 platform and remote qualification are tracked separately.
 
 Build the core with the exact-main procedure below. The stable dispatch uses

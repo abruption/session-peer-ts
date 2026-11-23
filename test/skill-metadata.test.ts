@@ -411,7 +411,7 @@ test('0.5.2 finite row preserves the four exact 0.4.0, 0.5.0 and 0.5.1 profiles'
     assert.deepEqual(validateSkillMetadata(text,'0.6.0'),compatible);
     assert.deepEqual(validateSkillMetadata(text,'0.6.1'),compatible);
     assert.deepEqual(validateSkillMetadata(text,'0.6.2'),compatible);
-  assert.deepEqual(validateSkillMetadata(text,'0.7.0'),compatible);
+    assert.deepEqual(validateSkillMetadata(text,'0.7.0'),compatible);
     assert.deepEqual(validateSkillMetadata(text),compatible);
     assert.deepEqual(validateSkillMetadata(text,undefined),compatible);
     writeFileSync(file,text);assert.deepEqual(inspectSkill(file),{path:file,...compatible});
@@ -455,7 +455,7 @@ test('complete 0.3.0 companion candidate bytes match exact review and the 0.4.0,
   assert.deepEqual(validateSkillMetadata(text,'0.6.2'),compatible);
   assert.deepEqual(validateSkillMetadata(text,'0.7.0'),compatible);
   const {file}=fixture(t);writeFileSync(file,bytes);assert.deepEqual(inspectSkill(file),{path:file,...compatible});
-  for(const runtime of ['0.3.2','0.3.3','0.3.4','0.3.5','0.3.6','0.3.7','0.4.1','0.5.3','0.6.3'])assert.deepEqual(validateSkillMetadata(text,runtime),incompatible);
+  for(const runtime of ['0.3.2','0.3.3','0.3.4','0.3.5','0.3.6','0.3.7','0.4.1','0.5.3','0.6.3','0.7.1'])assert.deepEqual(validateSkillMetadata(text,runtime),incompatible);
   for(const runtime of [null,{},0,'','0.4.0-preview.1','00.4.0','0.5.0-preview.1','00.5.0','0.5.1-preview.1','00.5.1','0.5.2-preview.1','00.5.2','0.6.0-preview.1','00.6.0','0.6.1-preview.1','00.6.1','0.6.2-preview.1','00.6.2','0.7.0-preview.1','00.7.0'])assert.deepEqual(validateSkillMetadata(text,runtime),missing);
   // Only bounded metadata is interpreted; candidate body instructions stay inert.
 });

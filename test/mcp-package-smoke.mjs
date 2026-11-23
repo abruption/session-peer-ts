@@ -19,7 +19,8 @@ const runNpm = (args, cwd) => execFileSync(process.execPath, [npm, ...args], {
 });
 const pack = (cwd, destination) => {
   const [metadata] = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', destination], cwd));
-  return { archive: join(destination, metadata.filename), files: metadata.files.map(({ path }) => path).sort() };
+  return { archive: join(destination, metadata.filename), version: metadata.version,
+    files: metadata.files.map(({ path }) => path).sort() };
 };
 try {
   const core = pack(process.cwd(), root);
@@ -31,7 +32,8 @@ try {
   const prefix = join(root, 'install');
   const home = join(root, 'home');
   for (const dir of [prefix, home]) mkdirSync(dir);
-  assert.equal(JSON.parse(readFileSync('package.json', 'utf8')).version, peer);
+  assert.equal(core.version, peer);
+  assert.equal(mcp.version, peer);
   runNpm(['install', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund',
     '--registry', 'https://registry.npmjs.org/', core.archive, mcp.archive], root);
   const bin = join(prefix, 'node_modules/session-peer-mcp/cli.mjs');

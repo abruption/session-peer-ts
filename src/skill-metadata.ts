@@ -11,7 +11,8 @@ const verdict = (compatible: boolean): SkillCheck => ({ status: compatible ? 'co
   code: compatible ? 'skill_contract_compatible' : 'skill_contract_mismatch', verification: 'metadata_only' });
 export const SKILL_METADATA_LIMIT = 65536;
 const keys = ['version', 'runtime-implementation', 'runtime-min-version', 'runtime-full-version', 'runtime-capability-policy'] as const;
-// The 0.7.0 row carries forward the four exact profiles accepted by public 0.6.2.
+// Preserve each published runtime/profile result. The 0.7.0 row carries
+// forward the four exact profiles accepted by public 0.6.2.
 // Metadata compatibility does not authenticate content or publish/install a skill.
 // Every later runtime/profile requires separate review; no version ranges.
 const matrix: Record<string, readonly string[]> = {
