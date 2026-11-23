@@ -24,7 +24,7 @@ test('release dispatch binds stable and preview modes to exact versions, tags an
     { RELEASE_ARCHIVE_SHA256: 'c'.repeat(64) + '\n' }, { RELEASE_CONFIRMATION: '' }, { GITHUB_SHA: 'main; echo unsafe' }]) {
     assert.throws(() => validateDispatch(pkg, { ...env, ...patch }));
   }
-  for (const patch of [{ private: true }, { version: '1.0.0' }, { version: '0.5.2' }, { version: '0.6.1' }, { publishConfig: { ...pkg.publishConfig, tag: 'preview' } },
+  for (const patch of [{ private: true }, { version: '1.0.0' }, { version: '0.5.2' }, { version: '0.6.2' }, { publishConfig: { ...pkg.publishConfig, tag: 'preview' } },
     { repository: { url: 'https://example.com' } }, { scripts: { ...pkg.scripts, prepublishOnly: 'echo unsafe' } }]) {
     assert.throws(() => validatePackage({ ...pkg, ...patch }));
   }
@@ -50,13 +50,13 @@ test('release gate rejects moved main, absent/failed/pending CI and missing envi
   assert.throws(() => validateGitHubGate(sha, main, runs, { name: 'npm', protection_rules: [{ type: 'required_reviewers', reviewers: [] }] }));
 });
 
-test('0.6.2 stable staging requires verified 0.6.1 and unchanged preview/tag baselines', () => {
+test('0.7.0 stable staging requires verified 0.6.2 and unchanged preview/tag baselines', () => {
   const previewDist = { integrity: 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==',
     attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.1.0-preview.1' } };
-  const stableDist = { integrity: 'sha512-N7ZFgG1YUOvDosCAm+aOprOTLHPSeFWvb43dP1DJV3YYNyg2cf1YlTSQ1EGb63GKK1Lak/y2gXXv8hn2CSDp1Q==',
-    attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.6.1' } };
-  const current = { name: pkg.name, versions: { '0.6.1': { dist: stableDist }, '0.1.0-preview.1': { dist: previewDist } },
-    'dist-tags': { latest: '0.6.1', preview: '0.1.0-preview.1' } };
+  const stableDist = { integrity: 'sha512-gYBJQz/YcS7Dw6DRCZDHhWf8nzays9I+YLGz/f2clUlSmCWFnE/7s0f4uRFi+o27a2l4l2pLPawhd/bof9nefg==',
+    attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/session-peer@0.6.2' } };
+  const current = { name: pkg.name, versions: { '0.6.2': { dist: stableDist }, '0.1.0-preview.1': { dist: previewDist } },
+    'dist-tags': { latest: '0.6.2', preview: '0.1.0-preview.1' } };
   validateRegistryState(pkg, 'stable-stage', current);
   assert.throws(() => validateRegistryState(pkg, 'stable-stage', null));
   assert.throws(() => validateRegistryState(pkg, 'trusted-stage', current));
@@ -72,10 +72,10 @@ test('0.6.2 stable staging requires verified 0.6.1 and unchanged preview/tag bas
     versions: { ...current.versions, '0.1.0-preview.1': { dist: { ...previewDist, attestations: undefined } } } }));
   const preview = { ...pkg, version: '0.1.0-preview.2', publishConfig: { ...pkg.publishConfig, tag: 'preview' } };
   assert.throws(() => validateRegistryState(preview, 'trusted-stage', { ...current, 'dist-tags': { latest: '0.1.0-preview.0' } }), /latest_points_to_prerelease/);
-  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.1': { dist: { ...stableDist, integrity: 'tampered' } } } }), /verified_stable_changed/);
-  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.1': { dist: { ...stableDist, attestations: undefined } } } }));
+  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.2': { dist: { ...stableDist, integrity: 'tampered' } } } }), /verified_stable_changed/);
+  assert.throws(() => validateRegistryState(pkg, 'stable-stage', { ...current, versions: { ...current.versions, '0.6.2': { dist: { ...stableDist, attestations: undefined } } } }));
   validateRegistryState(preview, 'trusted-stage', { ...current,
-    'dist-tags': { latest: '0.6.1', preview: '0.1.0-preview.1' } });
+    'dist-tags': { latest: '0.6.2', preview: '0.1.0-preview.1' } });
 });
 
 test('release artifact binds version, allowlist, commit, SHA-256 and registry integrity', () => {
@@ -89,7 +89,7 @@ test('release artifact binds version, allowlist, commit, SHA-256 and registry in
     /approved_archive_sha256_changed/);
   assert.throws(() => validateArtifact(pkg, manifest, bytes, sha, ''),
     /approved_archive_sha256_invalid/);
-  for (const patch of [{ filename: '../escape.tgz' }, { version: '1.0.0' }, { version: '0.6.1' }, { commit: 'b'.repeat(40) },
+  for (const patch of [{ filename: '../escape.tgz' }, { version: '1.0.0' }, { version: '0.6.2' }, { commit: 'b'.repeat(40) },
     { files: [...packageFiles, '.npmrc'] }, { sha256: '0'.repeat(64) }, { integrity: 'sha512-invalid' }]) {
     assert.throws(() => validateArtifact(pkg, { ...manifest, ...patch }, bytes, sha));
   }

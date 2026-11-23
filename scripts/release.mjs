@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 export const repository = 'abruption/session-peer-ts';
 export const registry = 'https://registry.npmjs.org';
-const stableVersion = '0.6.2';
-const previousStable = '0.6.1';
-const previousStableIntegrity = 'sha512-N7ZFgG1YUOvDosCAm+aOprOTLHPSeFWvb43dP1DJV3YYNyg2cf1YlTSQ1EGb63GKK1Lak/y2gXXv8hn2CSDp1Q==';
+const stableVersion = '0.7.0';
+const previousStable = '0.6.2';
+const previousStableIntegrity = 'sha512-gYBJQz/YcS7Dw6DRCZDHhWf8nzays9I+YLGz/f2clUlSmCWFnE/7s0f4uRFi+o27a2l4l2pLPawhd/bof9nefg==';
 const verifiedPreview = '0.1.0-preview.1';
 const verifiedPreviewIntegrity = 'sha512-h4SMvrQ/LWA9osd4EHIs9rSTqv1u+S3MXQAmn+yG/gZ9+7NwYMutq+Oa5K/0ggIq61Wfwdh11Cv+5YdEffiNMA==';
 export const packageFiles = ['UNICODE-LICENSE.txt', 'dist/casefold.js', 'dist/casefold.d.ts', 'dist/help.js', 'dist/help.d.ts', 'dist/output.js', 'dist/output.d.ts', 'CONTRIBUTING.md', 'LICENSE', 'PARITY.md', 'README.ja.md', 'README.ko.md',
@@ -30,7 +30,7 @@ export function validatePackage(pkg) {
   assert.deepEqual(pkg.exports, { '.': { types: './dist/index.d.ts', import: './dist/index.js' } });
   assert.equal(pkg.private, false);
   assert.ok(pkg.version === stableVersion || /^\d+\.\d+\.\d+-preview\.\d+$/.test(pkg.version),
-    'only reviewed preview versions and 0.6.2 stable are supported');
+    `only reviewed preview versions and ${stableVersion} stable are supported`);
   assert.deepEqual(pkg.bin, { 'session-peer': 'dist/cli.js' });
   assert.equal(pkg.repository.url, `git+https://github.com/${repository}.git`);
   assert.deepEqual(pkg.publishConfig, { registry: `${registry}/`, access: 'public',

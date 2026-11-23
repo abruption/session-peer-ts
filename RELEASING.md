@@ -9,6 +9,26 @@ the historical 0.3.2 settings-read exception is recorded below. The workflow
 uses OIDC and no npm token. The protected GitHub environment requires a reviewer
 and permits deployments from `main` only.
 
+## 0.7.0 release preparation
+
+The core release includes the execution layer, the optional policy-scoped MCP
+integration, the aligned README and guide entry pages, and remote qualification
+guidance from #193, #194 and #195. Native agent integrations and remaining
+platform and remote qualification are tracked separately.
+
+Build the core with the exact-main procedure below. The stable dispatch uses
+`version=0.7.0`, `mode=stable-stage` and
+`confirmation=session-peer@0.7.0 stable-stage`, with the approved main SHA and
+archive SHA-256. The expected registry baselines are `latest=0.6.2` and
+`preview=0.1.0-preview.1`. Fresh registry, approval and provenance gates apply.
+
+The separate `session-peer-mcp@0.7.0` archive declares an exact peer dependency
+on `session-peer@0.7.0`. Use `npm run test:mcp` after installing both sets of
+locked dependencies to verify both unmodified archives together in an
+isolated prefix. The core publication workflow handles only `session-peer`.
+Any public availability of the optional package requires its own reviewed
+publication procedure, after the matching core is public.
+
 ## 0.6.2 release supply-chain hardening
 
 [#190](https://github.com/abruption/session-peer-ts/issues/190) adds verification

@@ -28,23 +28,12 @@ try {
   assert.deepEqual(mcp.files, ['LICENSE', 'README.md', 'cli.mjs', 'package.json', 'policy.mjs', 'server.mjs', 'worker.mjs']);
   const mcpMeta = JSON.parse(readFileSync(join(optional, 'package.json'), 'utf8'));
   const peer = mcpMeta.peerDependencies['session-peer'];
-  const unpack = join(root, 'unpack'), rewritten = join(root, 'fixture'), prefix = join(root, 'install');
+  const prefix = join(root, 'install');
   const home = join(root, 'home');
-  for (const dir of [unpack, rewritten, prefix, home]) mkdirSync(dir);
-  // The matching core peer may not yet exist in the registry. Patch only a
-  // throwaway core copy's version metadata to exercise the paired install.
-  execFileSync('tar', ['-xzf', core.archive, '-C', unpack], { timeout: 10000 });
-  const pkg = join(unpack, 'package'), metaFile = join(pkg, 'package.json');
-  const meta = JSON.parse(readFileSync(metaFile, 'utf8'));
-  const protocol = join(pkg, 'dist/protocol.js');
-  const old = readFileSync(protocol, 'utf8');
-  const versionLine = `export const VERSION = '${meta.version}';`;
-  assert.ok(old.includes(versionLine));
-  writeFileSync(protocol, old.replace(versionLine, `export const VERSION = '${peer}';`));
-  writeFileSync(metaFile, JSON.stringify({ ...meta, version: peer }));
-  const fixtureCore = pack(pkg, rewritten);
+  for (const dir of [prefix, home]) mkdirSync(dir);
+  assert.equal(JSON.parse(readFileSync('package.json', 'utf8')).version, peer);
   runNpm(['install', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund',
-    '--registry', 'https://registry.npmjs.org/', fixtureCore.archive, mcp.archive], root);
+    '--registry', 'https://registry.npmjs.org/', core.archive, mcp.archive], root);
   const bin = join(prefix, 'node_modules/session-peer-mcp/cli.mjs');
   const client = new Client({ name: 'package-fixture', version: '1.0.0' });
   const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: join(home, '.claude'),

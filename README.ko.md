@@ -19,7 +19,7 @@ Python을 설치하지 않아도 Node.js에서 실행되는 TypeScript 클라이
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**문서와 소스의 기준은 0.6.2 버전입니다.**
+**문서와 소스의 기준은 0.7.0 버전입니다.**
 
 Windows에서 Codex 전송과 dry-run은 큐에 넣기 전에 중단됩니다. 클라우드 저장 정책을 확인할 수 없는 환경에서도 일반 Codex 전송이 중단됩니다. [Codex 저장소 검사 규칙](docs/api.md#codex-storage-configuration)과 [전달 관측 범위](docs/api.md#local-delivery-observation--72)를 참고하세요.
 
@@ -66,15 +66,15 @@ PowerShell에서는 `Get-Command session-peer -All`로 PATH(명령 검색 경로
 실행 파일을 찾는지 확인하세요. 사용할 구현을 선택하고 다른 패키지 관리자가 설치한
 파일을 `--force`로 덮어쓰지 마세요. 설치와 업데이트는 npm에서 직접 실행하세요.
 
-**0.6.2 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](docs/guide.ko.md#소스에서-빌드)를 사용하세요.
+**0.7.0 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](docs/guide.ko.md#소스에서-빌드)를 사용하세요.
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.6.2
+npm view session-peer@0.7.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 
-예상 결과는 `session-peer 0.6.2 (typescript)`입니다. 별도 경로에 설치하거나,
+예상 결과는 `session-peer 0.7.0 (typescript)`입니다. 별도 경로에 설치하거나,
 소스에서 빌드하거나, Windows에서 설치·제거하는 방법은 [사용자 가이드](docs/guide.ko.md#설치)를 참고하세요.
 
 선택 사항인 `sp` 단축 명령은 0.3.0 이상에 포함되며(0.2.1 이하에는 없음) 자동으로
@@ -85,13 +85,13 @@ session-peer --version
 ### 업데이트
 
 npm으로 설치한 클라이언트는 사용자가 직접 npm으로 업데이트합니다. 사용 가능한 배포 태그
-(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 선택한 0.6.2 버전으로
+(dist-tag)와 대상 버전을 확인한 뒤 해당 버전을 지정해 설치하세요. 아래 예시는 이전 npm 설치본을 선택한 0.7.0 버전으로
 업데이트합니다. `session-peer` CLI는 업데이트를 설치하지 않습니다. `session-peer
 update --check`는 새 버전이 있는지 확인할 뿐입니다.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.6.2
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 

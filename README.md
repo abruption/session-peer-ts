@@ -19,7 +19,7 @@ A Node.js client that runs without Python. Package and command: `session-peer`.
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**Documentation and source version: 0.6.2.**
+**Documentation and source version: 0.7.0.**
 
 Windows Codex send and dry-run stop before queueing. Ordinary Codex sends also stop when cloud storage policy cannot be verified. See the [Codex storage rules](docs/api.md#codex-storage-configuration) and [delivery observation limits](docs/api.md#local-delivery-observation--72).
 
@@ -57,15 +57,15 @@ Check `type -a session-peer` on macOS/Linux or `Get-Command session-peer -All`
 in PowerShell before installing. Choose the intended PATH entry; do not use
 `--force` to overwrite another manager’s files.
 
-**Version 0.6.2 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).
+**Version 0.7.0 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](docs/guide.md#build-from-source).
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.6.2
+npm view session-peer@0.7.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 
-Expected: `session-peer 0.6.2 (typescript)`. For isolated installation, source
+Expected: `session-peer 0.7.0 (typescript)`. For isolated installation, source
 builds, Windows and removal, see the detailed guide below.
 
 Optional `sp` shorthand ships with 0.3.0 and later (not 0.2.1 or earlier) and is
@@ -75,12 +75,12 @@ never enabled automatically. See [explicit activation and collisions](docs/short
 
 Use npm for an npm-managed installation. Check the available tags and review
 the target version, then install that exact version; this example updates an
-older npm installation to the selected 0.6.2 release. The CLI does not install updates;
+older npm installation to the selected 0.7.0 release. The CLI does not install updates;
 `session-peer update --check` only reports them.
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.6.2
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 
