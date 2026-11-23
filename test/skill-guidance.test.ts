@@ -46,6 +46,7 @@ test('published skill 0.2.1 complete bytes match the recorded release and finite
   assert.deepEqual(validateSkillMetadata(text, '0.6.0'), expected);
   assert.deepEqual(validateSkillMetadata(text, '0.6.1'), expected);
   assert.deepEqual(validateSkillMetadata(text, '0.6.2'), expected);
+  assert.deepEqual(validateSkillMetadata(text, '0.7.0'), expected);
   const path = fileURLToPath(url);
   assert.deepEqual(inspectSkill(path), { ...expected, path });
   for (const runtime of ['0.3.2', '0.3.3', '0.3.4', '0.3.7', '0.4.1', '0.5.3', '0.6.3']) {

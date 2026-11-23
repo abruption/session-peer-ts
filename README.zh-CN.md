@@ -19,7 +19,7 @@
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**文档和源码版本：0.6.2。**
+**文档和源码版本：0.7.0。**
 
 Windows 上的 Codex 发送和 dry-run 会在消息入队前停止。无法确认云端存储策略时，普通 Codex 发送也会停止。请参阅 [Codex 存储检查规则](docs/api.md#codex-storage-configuration)和[投递观测范围](docs/api.md#local-delivery-observation--72)。
 
@@ -61,15 +61,15 @@ session-peer send --to CLAUDE_PID --message '请检查 API 契约并回复。' -
 `Get-Command session-peer -All` 检查 PATH。选择所需实现，不要用 `--force`
 覆盖其他安装管理器的文件。
 
-**安装 0.6.2：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](docs/guide.zh-CN.md#从源码构建)。
+**安装 0.7.0：** 运行 npm 安装或更新示例前，请确认注册表可用性并审核所选发布版本。如该版本不可用，请使用[已审核的源码构建](docs/guide.zh-CN.md#从源码构建)。
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.6.2
+npm view session-peer@0.7.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 
-预期输出：`session-peer 0.6.2 (typescript)`。隔离安装、源码构建、Windows 和
+预期输出：`session-peer 0.7.0 (typescript)`。隔离安装、源码构建、Windows 和
 卸载步骤见下方详细指南。
 
 可选的 `sp` 简写包含在 0.3.0 及更高版本中（0.2.1 及更早版本没有），不会自动启用。
@@ -80,11 +80,11 @@ session-peer --version
 ### 更新
 
 使用 npm 更新由 npm 管理的安装。先检查标签并审阅目标版本，再安装指定版本。
-下面示例将旧 npm 安装更新至所选的 0.6.2。CLI 不会安装更新，`session-peer update --check` 只做检查。
+下面示例将旧 npm 安装更新至所选的 0.7.0。CLI 不会安装更新，`session-peer update --check` 只做检查。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.6.2
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 

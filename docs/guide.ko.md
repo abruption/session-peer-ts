@@ -6,7 +6,7 @@
 
 이 가이드에서는 CLI 설치와 사용 방법을 설명합니다.
 
-**문서와 소스의 기준은 0.6.2 버전입니다.** SSH 양쪽에서 같은 TypeScript 버전을 사용해야 합니다.
+**문서와 소스의 기준은 0.7.0 버전입니다.** SSH 양쪽에서 같은 TypeScript 버전을 사용해야 합니다.
 
 일반 Codex 전송에는 [저장소 검사 규칙](api.md#codex-storage-configuration)이 적용됩니다. Windows에서 Codex 전송과 dry-run은 큐에 넣기 전에 중단됩니다.
 
@@ -78,7 +78,7 @@ JSON에는 정제된 `codexHomeResolution`이 포함되며, 네이티브 응답�
 `queueId`도 포함됩니다. 둘 다 메시지를 읽거나 처리했음을 확인하지 않습니다.
 [홈 선택 계약](../PARITY.md#source-codex-home-selection--17--020)을 참고하세요.
 공개 **0.1.0**은 여전히 실행 중인 홈을 명시해야 하며 비활성 세션 허용 옵션이 없습니다.
-SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.6.2)을 설치해야
+SSH를 사용할 때는 발신·수신 양쪽에 같은 TypeScript 클라이언트 버전(0.7.0)을 설치해야
 합니다.
 
 <a id="020-cli-사용성"></a>
@@ -144,20 +144,20 @@ Claude Code에는 받은 메시지함에 접근할 수 있는 실행 중 TUI(터
 
 Node 22.x의 22.13 이상 또는 24.x를 사용하세요. Python CLI도 같은 `session-peer`
 명령 이름을 쓰므로, 설치 전에 PATH(명령 검색 경로)에서 어떤 실행 파일을 찾는지
-확인하세요. 아래 명령은 선택한 0.6.2 버전을 npm으로 설치하는 예입니다.
+확인하세요. 아래 명령은 선택한 0.7.0 버전을 npm으로 설치하는 예입니다.
 CLI 자체는 패키지를 설치하거나 업데이트하지 않습니다.
 
-**0.6.2 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.
+**0.7.0 설치:** npm 설치·업데이트 예시를 실행하기 전에 레지스트리 제공 여부와 선택한 릴리스를 확인하세요. 해당 버전이 제공되지 않으면 [검토한 소스 빌드](#소스에서-빌드)를 사용하세요.
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.6.2
-session-peer --version  # session-peer 0.6.2 (typescript)
+npm view session-peer@0.7.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.7.0
+session-peer --version  # session-peer 0.7.0 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
 
-예상 결과는 `session-peer 0.6.2 (typescript)`입니다.
+예상 결과는 `session-peer 0.7.0 (typescript)`입니다.
 
 1. 세션을 조회하고 `CLAUDE_PID`를 대상으로 선택한 정확한 PID로 바꾸세요.
 2. `--dry-run`으로 검증합니다. 이 단계에서는 메시지를 제출하지 않습니다.
@@ -185,11 +185,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.6.2.tgz
+npm install --global --ignore-scripts ./session-peer-0.7.0.tgz
 session-peer --version
 ```
 
-0.6.2에서 예상되는 결과는 `session-peer 0.6.2 (typescript)`입니다. 로컬 빌드
+0.7.0에서 예상되는 결과는 `session-peer 0.7.0 (typescript)`입니다. 로컬 빌드
 산출물을 선택하려면 `./...tgz` 경로를 그대로 두세요. 이후 버전에 이 명령을 사용할
 때는 먼저 체크아웃한 소스의 버전을 확인하세요.
 
@@ -210,7 +210,7 @@ Python CLI를 덮어쓰지 않으려면 격리 prefix에 설치·제거할 수 �
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.6.2.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.7.0.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -480,7 +480,7 @@ Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증
 <a id="package-release"></a>
 ## npm 릴리스
 
-아래 레지스트리 조회로 0.6.2의 현재 제공 여부와 npm 태그를 확인하세요. 날짜가 기록된 준비 근거는 이후 발행 결과를 입증하지 않습니다.
+아래 레지스트리 조회로 0.7.0의 현재 제공 여부와 npm 태그를 확인하세요. 날짜가 기록된 준비 근거는 이후 발행 결과를 입증하지 않습니다.
 
 0.3.2는 2026-10-07 KST에, 0.3.1은 2026-10-04 KST에 공개·검증했습니다.
 [0.3.2 공개 기록](../VALIDATION.md#public-032--2026-10-07-kst)과
@@ -491,7 +491,7 @@ Windows x64/Node 24에서 실제 TUI로 확인한 ACK는 별도의 일회성 증
 설치 전에는 정확한 버전과 현재 npm 태그를 확인하세요.
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
+npm view session-peer@0.7.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -547,7 +547,7 @@ session-peer update --check --channel preview --output-format text
 `updateCommand`는 실행 중인 CLI 경로로 설치 주체를 확인할 수 있을 때 사용자에게 안내합니다.
 해당하는 경우는
 자체 `session-peer` 실행기가 이 패키지를 가리키는 npm 전역 prefix(기본, Homebrew, nvm,
-nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.6.2`),
+nvm-windows, fnm. 예: `npm install --global --ignore-scripts session-peer@0.7.0`),
 매니페스트에 `session-peer`가 선언된 pnpm·Yarn·Bun 전역 저장소, Volta, npx 캐시입니다.
 프로젝트 설치(`npm_project`, `pnpm_project`), 소스 체크아웃(`source`), 그 밖의
 경우(`unknown`)에는 `updateCommand: null`과 `guidance` 문장만 돌려주므로, 관련 없는 현재
@@ -643,4 +643,4 @@ native 전송 관찰은 macOS arm64의 정확한 Codex 0.160.1/0.162.1과 이미
 
 [전달 관측 명세](api.md#unreleased-local-delivery-observation--72)
 
-Linux·Windows의 native 주입 관측은 미지원입니다. 0.6.2 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.
+Linux·Windows의 native 주입 관측은 미지원입니다. 0.7.0 소스는 선택할 수 없는 Linux arm64 Codex 0.162.1 후보(고정된 업스트림 `aarch64-unknown-linux-musl` 실행 파일, 스키마, 주입 테스트 1회)를 기록하며 Linux 관측을 활성화하지 않습니다. Linux native 관측은 계속 미지원입니다. 지원되는 POSIX ledger에서는 운영자가 명시적으로 확인한 수령 사실을 `operator_confirmed`로 기록할 수 있지만, 자동 ACK 수집은 아닙니다. 0.4.0 범위는 검증된 macOS 관측과 명시적 운영자 확인입니다. Linux·Windows 관측과 receipt bootstrap은 각각 [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131), [#132](https://github.com/abruption/session-peer-ts/issues/132)에서 후속 작업으로 관리합니다.

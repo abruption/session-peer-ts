@@ -6,7 +6,7 @@
 
 Use this guide to install and run the CLI.
 
-**Documentation and source version: 0.6.2.** Both SSH endpoints must use the same TypeScript version.
+**Documentation and source version: 0.7.0.** Both SSH endpoints must use the same TypeScript version.
 
 [Codex storage restrictions](api.md#codex-storage-configuration) apply to ordinary sends. Windows Codex send and dry-run stop before queueing.
 
@@ -29,7 +29,7 @@ Use this guide to install and run the CLI.
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 This TypeScript client runs on Node.js without Python.
 
-This guide describes **version 0.6.2**. The npm package and CLI command are both **`session-peer`**. This
+This guide describes **version 0.7.0**. The npm package and CLI command are both **`session-peer`**. This
 project does not provide a Relay server or hosted service.
 
 ## Quick start
@@ -37,12 +37,12 @@ project does not provide a Relay server or hosted service.
 Use Node **22.13+ within 22.x or 24.x**. Check which `session-peer` your PATH
 selects if the Python CLI is already installed; both packages use that command.
 
-**Version 0.6.2 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).
+**Version 0.7.0 installation:** check registry availability and review the chosen release before running the npm install/update examples. If that version is unavailable, use the [reviewed source build](#build-from-source).
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.6.2
-session-peer --version  # session-peer 0.6.2 (typescript)
+npm view session-peer@0.7.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.7.0
+session-peer --version  # session-peer 0.7.0 (typescript)
 session-peer list --agent claude --json
 session-peer send --to CLAUDE_PID --message 'Please review the API contract.' --dry-run --json
 ```
@@ -109,7 +109,7 @@ submits nothing. JSON adds sanitized `codexHomeResolution` and, when supplied by
 native queue output, `queueId`; neither confirms consumption. See the
 [selection contract](../PARITY.md#source-codex-home-selection--17--020).
 Published **0.1.0** still requires an explicit live home and has no inactive opt-in.
-On SSH, both ends need the same TypeScript client version (0.6.2).
+On SSH, both ends need the same TypeScript client version (0.7.0).
 
 ### Claude profiles on macOS
 
@@ -159,11 +159,11 @@ npm run build
 node dist/cli.js --version
 npm pack --ignore-scripts
 # Optional global install: first check which session-peer your PATH selects.
-npm install --global --ignore-scripts ./session-peer-0.6.2.tgz
+npm install --global --ignore-scripts ./session-peer-0.7.0.tgz
 session-peer --version
 ```
 
-Expected for version 0.6.2: `session-peer 0.6.2 (typescript)`. Keep the `./...tgz` path to
+Expected for version 0.7.0: `session-peer 0.7.0 (typescript)`. Keep the `./...tgz` path to
 select the locally built artifact. Check the checkout version before using
 these commands for a later release.
 
@@ -183,7 +183,7 @@ On Windows PowerShell, inspect competing commands with
 npm ci --ignore-scripts
 npm run build
 npm pack --ignore-scripts
-npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.6.2.tgz
+npm install --prefix "$env:TEMP\session-peer-ts-source" --ignore-scripts .\session-peer-0.7.0.tgz
 & "$env:TEMP\session-peer-ts-source\node_modules\.bin\session-peer.cmd" --version
 # Later: npm uninstall --prefix "$env:TEMP\session-peer-ts-source" session-peer
 ```
@@ -509,7 +509,7 @@ separate approval. Licensed under [MIT](../LICENSE).
 
 ## Package release
 
-Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current 0.6.2 availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.
+Public **0.3.2** was verified on 2026-10-07 KST ([immutable checkpoint](../VALIDATION.md#public-032--2026-10-07-kst)). Check current 0.7.0 availability and npm tags with the registry queries below; dated preparation evidence does not establish a later publication outcome.
 
 Version 0.2.1 was published and verified on 2026-09-29 KST and 0.2.0 on
 2026-09-28 KST; see the [0.2.1 public release record](../VALIDATION.md#public-021--2026-09-29-kst).
@@ -517,7 +517,7 @@ Later releases add their own dated records. Check the exact version and current
 tags before installing:
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
+npm view session-peer@0.7.0 version dist.integrity
 npm view session-peer dist-tags
 ```
 
@@ -570,7 +570,7 @@ and reports `current`, `latest`, `channel` (`latest` by default, or `preview`),
 installation's owner is positively identified from the running CLI's path:
 an npm global prefix whose own `session-peer` launcher points at this package
 (default, Homebrew, nvm, nvm-windows and fnm prefixes), for example
-`npm install --global --ignore-scripts session-peer@0.6.2`; a pnpm, Yarn or Bun
+`npm install --global --ignore-scripts session-peer@0.7.0`; a pnpm, Yarn or Bun
 global store whose manifest declares `session-peer`; Volta; or the npx cache.
 Project installs (`npm_project`, `pnpm_project`), source checkouts (`source`)
 and anything else (`unknown`) get `updateCommand: null` and a `guidance`
@@ -671,4 +671,4 @@ Native observation supports exact Codex 0.160.1/0.162.1 on macOS arm64 with an a
 
 [Observation reference](api.md#unreleased-local-delivery-observation--72)
 
-Native delivery observation is unsupported on Linux and Windows. The 0.6.2 source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).
+Native delivery observation is unsupported on Linux and Windows. The 0.7.0 source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported. The supported POSIX ledger can record an explicitly verified receipt as `operator_confirmed`; this is not automatic ACK collection. The 0.4.0 scope is qualified macOS observation and explicit operator confirmation. Linux, Windows and receipt-bootstrap extensions are tracked separately in [#130](https://github.com/abruption/session-peer-ts/issues/130), [#131](https://github.com/abruption/session-peer-ts/issues/131) and [#132](https://github.com/abruption/session-peer-ts/issues/132).

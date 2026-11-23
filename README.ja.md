@@ -19,7 +19,7 @@ Python 不要の Node.js クライアントです。パッケージ名とコマ�
 
 <!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-**ドキュメントとソースのバージョン: 0.6.2。**
+**ドキュメントとソースのバージョン: 0.7.0。**
 
 Windows では Codex への送信と dry-run はキューに登録する前に停止します。クラウドのストレージポリシーを確認できない環境でも、通常の Codex 送信は停止します。[Codex のストレージ検証規則](docs/api.md#codex-storage-configuration)と[配信観測の範囲](docs/api.md#local-delivery-observation--72)を参照してください。
 
@@ -63,15 +63,15 @@ SSH は既存の鍵・ホスト信頼設定と両端の**同じバージョン�
 `Get-Command session-peer -All` で PATH を確認してください。利用する実装を選び、
 別の管理ツールのファイルを `--force` で上書きしないでください。
 
-**0.6.2 のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](docs/guide.ja.md#ソースからビルド)を使います。
+**0.7.0 のインストール:** npm の導入・更新例を実行する前に、レジストリで公開状況と選択したリリースを確認してください。利用できない場合は[レビュー済みソースビルド](docs/guide.ja.md#ソースからビルド)を使います。
 
 ```sh
-npm view session-peer@0.6.2 version dist.integrity
-npm install --global --ignore-scripts session-peer@0.6.2
+npm view session-peer@0.7.0 version dist.integrity
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 
-期待する出力: `session-peer 0.6.2 (typescript)`。分離インストール・ソースビルド・
+期待する出力: `session-peer 0.7.0 (typescript)`。分離インストール・ソースビルド・
 Windows・削除の手順は以下の詳細ガイドを参照してください。
 
 任意の `sp` 短縮名は 0.3.0 以降に含まれ（0.2.1 以前にはありません）、自動では有効になりません。
@@ -82,12 +82,12 @@ Windows・削除の手順は以下の詳細ガイドを参照してください�
 ### 更新
 
 npm で導入したクライアントは npm で更新します。タグと対象バージョンを確認してから
-更新先のバージョンを指定してください。以下は、npm でインストールした旧版を 0.6.2 に更新する例です。
+更新先のバージョンを指定してください。以下は、npm でインストールした旧版を 0.7.0 に更新する例です。
 CLI は更新をインストールせず、`session-peer update --check` は確認のみ行います。
 
 ```sh
 npm view session-peer dist-tags
-npm install --global --ignore-scripts session-peer@0.6.2
+npm install --global --ignore-scripts session-peer@0.7.0
 session-peer --version
 ```
 

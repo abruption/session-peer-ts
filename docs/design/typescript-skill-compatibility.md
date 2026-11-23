@@ -2,6 +2,13 @@
 
 This document retains the original TS source proposal and dated design review for [#118](https://github.com/abruption/session-peer-ts/issues/118), based on the companion [Draft #20 at `963c3d7`](https://github.com/abruption/session-peer-skill/blob/963c3d748a11b1164013ee26c9c0ef285c52b285/docs/typescript-compatibility.md). Companion [design acceptance at `699a325`](https://github.com/abruption/session-peer-skill/blob/699a3251830c30c62d0f812363faf4d0eb0c8e0c/docs/typescript-compatibility.md) records the full static review of the exact candidates below on 2026-10-09. This design-only acceptance does not authorize runtime merge/release, successor skill metadata/publication, installation or pin changes, content authenticity, or live delivery support.
 
+## 0.7.0 finite row
+
+The 0.7.0 release candidate accepts the four exact profiles accepted by 0.6.2.
+Compiled default and explicit 0.7.0 checks use this finite row. The existing
+companion skill release, source pin, and published capability evidence apply
+at their recorded versions.
+
 ## 0.6.2 finite row
 
 The 0.6.2 release candidate carries the four exact 0.6.1 skill profiles
