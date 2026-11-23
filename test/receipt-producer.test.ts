@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 // Explicit, bounded files: never recursively copy dist or a dependency tree.
-const bundle = ['app-server','casefold','cli','codex-storage','diagnostics','discovery','handoff',
+const bundle = ['app-server','casefold','cli','codex-storage','diagnostics','discovery','execution','handoff',
   'handoff-ledger','handoff-observer-probe','handoff-operations','handoff-writer-probe','help','index',
   'linux-native-probe','linux-proc','macos-acl','metadata-observation','native-profiles','output','process',
   'protocol','receipt-collector','receipt-command','receipt-producer','receipt-protocol','receipt-send',
