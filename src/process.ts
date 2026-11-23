@@ -35,6 +35,10 @@ export type Done = { code: number | null; stdout: string; stderr: string; spawne
 // equivalent here: only the child is killed and descendants may linger; the
 // tree backend below is a candidate that is deliberately not used (#131).
 const groups = new Set<number>();
+let forwardCliSignals = false;
+// The executable explicitly owns process exit. In-process callers retain
+// their own signal handlers and still get per-child timeout cleanup.
+export function enableCliSignalForwarding(): void { forwardCliSignals = true; }
 const posix = process.platform !== 'win32';
 const reap = (pid: number | undefined) => { if (pid) try { process.kill(-pid, 'SIGKILL'); } catch { /* Already gone (ESRCH). */ } };
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
@@ -78,7 +82,7 @@ export function run(binary: string, args: string[], options: {
     const timer = setTimeout(() => stop('timeout'), options.timeout ?? 3000);
     const register = () => {
       if (finished || stopped || !posix || child.pid === undefined || groups.has(child.pid)) return;
-      if (!groups.size) for (const name of signals) process.on(name, forward);
+      if (forwardCliSignals && !groups.size) for (const name of signals) process.on(name, forward);
       groups.add(child.pid);
     };
     // Register as soon as the PID exists, so a signal arriving before the
