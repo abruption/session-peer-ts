@@ -67,7 +67,7 @@ try {
     const sessions = join(home, '.claude/sessions');
     mkdirSync(sessions, { recursive: true });
     writeFileSync(join(sessions, process.pid + '.json'),
-      JSON.stringify({ pid: process.pid, name: 'fixture', messagingSocketPath: inbox }));
+      JSON.stringify({ pid: process.pid, startedAt: Date.now(), name: 'fixture', messagingSocketPath: inbox }));
     const policy = join(root, 'test-policy.json');
     writeFileSync(policy, JSON.stringify({ schemaVersion: 1, destinations: [{
       id: 'local', transport: 'local', agents: ['claude'], capabilities: ['send'],
