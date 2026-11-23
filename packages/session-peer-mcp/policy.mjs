@@ -105,6 +105,8 @@ export function readPolicy(file, reply) {
     fd = openSync(file, flags);
     const opened = fstatSync(fd, { bigint: true });
     requirePolicy(opened.isFile() && same(before, opened));
+    if (process.platform !== 'win32')
+      requirePolicy(opened.uid === BigInt(process.getuid()) && (opened.mode & 0o022n) === 0n);
     const bytes = Buffer.alloc(POLICY_LIMIT + 1);
     let bytesRead = 0;
     for (; bytesRead < bytes.length;) {

@@ -4,12 +4,13 @@ export const WORKER_LIMIT = 512 * 1024;
 export const DEFAULT_TIMEOUT_MS = 110_000;
 const cancelGraceMs = 750;
 
-function workerEnvironment() {
+function workerEnvironment(message) {
   const env = { ...process.env };
   const omitted = new Set(['CLAUDE_CODE_MESSAGING_SOCKET', 'CODEX_THREAD_ID', 'CODEX_SESSION_ID',
     'NODE_OPTIONS', 'NODE_PATH', 'SESSION_PEER_UPDATE_NOTICE', 'SESSION_PEER_REPLY_HOST', 'CC_PEER_REPLY_HOST']);
   for (const key of Object.keys(env)) if (omitted.has(key.toUpperCase())) delete env[key];
   env.SESSION_PEER_MCP_WORKER = '1';
+  if (message !== undefined) env.SESSION_PEER_MCP_BODY_BYTES = String(Buffer.byteLength(message, 'utf8'));
   return env;
 }
 
@@ -50,7 +51,7 @@ export async function runWorker({ cli, operation, signal, timeoutMs = DEFAULT_TI
   return new Promise(resolve => {
     let child;
     try {
-      child = spawn(process.execPath, args, { env: workerEnvironment(), shell: false,
+      child = spawn(process.execPath, args, { env: workerEnvironment(command === 'send' ? operation.message : undefined), shell: false,
         windowsHide: true, stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
     } catch { resolve(unknown(command, 'worker_unavailable', false, effectful)); return; }
     // A returned PID is enough to make a send conservative from this point.
@@ -69,12 +70,12 @@ export async function runWorker({ cli, operation, signal, timeoutMs = DEFAULT_TI
     const stop = reason => {
       if (finished || stopReason) return;
       stopReason = reason;
-      child.stdin.destroy();
+      // Do not turn a partial pipe write into EOF while the worker can run.
       if (child.connected) child.send('session-peer:cancel', () => {});
       else if (process.platform !== 'win32' && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
       forceTimer = setTimeout(() => {
         if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-        child.stdout.destroy(); child.stderr.destroy();
+        child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
         completionTimer = setTimeout(() => finish(null), 100);
       }, cancelGraceMs);
     };

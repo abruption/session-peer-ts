@@ -197,8 +197,9 @@ async function input(limit = 4_100_000, preserveBOM = false, timeoutMs?: number)
 }
 
 enableCliSignalForwarding();
+const mcpWorker = Boolean(process.send) && process.env.SESSION_PEER_MCP_WORKER === '1';
 const stopMcpWorker = () => { stopCliChildren(); process.exit(130); };
-if (process.send && process.env.SESSION_PEER_MCP_WORKER === '1') {
+if (mcpWorker) {
   process.on('message', message => { if (message === 'session-peer:cancel') stopMcpWorker(); });
   process.once('disconnect', stopMcpWorker);
 }
@@ -314,9 +315,11 @@ try {
         message = options.values.get('--message');
         if (message === undefined || (!wire && message === '-')) {
           if (wire) throw new Refusal('remote_message_required');
-          message = await input(4_100_000, false, handoffBudget?.observationRemainingMs());
+          message = await input(4_100_000, mcpWorker, handoffBudget?.observationRemainingMs());
         }
       }
+      if (mcpWorker && process.env.SESSION_PEER_MCP_BODY_BYTES !== String(Buffer.byteLength(message, 'utf8')))
+        throw new Refusal('worker_input_incomplete');
       checkMessage(message); rawMessage = message;
       const noFrom = options.flags.has('--no-from'), noReply = options.flags.has('--no-reply-to');
       if (options.address) {
@@ -409,7 +412,7 @@ try {
   }
 } finally {
   if (wireWatchdog) clearTimeout(wireWatchdog);
-  if (process.send && process.env.SESSION_PEER_MCP_WORKER === '1') {
+  if (mcpWorker) {
     stopCliChildren();
     process.removeListener('disconnect', stopMcpWorker);
     process.disconnect?.();

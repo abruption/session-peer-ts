@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -22,6 +22,14 @@ test('default policy only lists local Claude and a selected missing policy fails
   const root = mkdtempSync(join(process.env.TASK_TEMP ?? tmpdir(), 'codex-mcp-policy-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   assert.throws(() => readPolicy(join(root, 'selected-missing.json'), reply), /invalid_policy/);
+  if (process.platform !== 'win32') {
+    const file = join(root, 'writable-policy.json');
+    writeFileSync(file, '{"schemaVersion":1,"destinations":[{"id":"local","transport":"local","agents":["claude"],"capabilities":["send"]}]}');
+    chmodSync(file, 0o622);
+    assert.throws(() => readPolicy(file, reply), /invalid_policy/);
+    chmodSync(file, 0o600);
+    assert.equal(authorizeSend(readPolicy(file, reply), { target: 'claude:fixture' }, reply).agent, 'claude');
+  }
 });
 
 test('policy requires an exact explicit Codex home and rejects duplicate JSON grants', () => {

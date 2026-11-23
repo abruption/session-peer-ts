@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { fileURLToPath } from 'node:url';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -93,4 +96,24 @@ test('a launched effectful worker times out as unknown and receives cooperative 
   const lines = readFileSync(f.effects, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(lines[0].command, 'send');
   assert.deepEqual(lines.slice(1), [{ cancelled: true }]);
+});
+
+test('the real core worker refuses a truncated stdin body before selecting a target', async t => {
+  const f = fixture(t);
+  const cli = fileURLToPath(new URL('../../../dist/cli.js', import.meta.url));
+  const child = spawn(process.execPath, [cli, 'send', '--json', '--no-from',
+    '--no-reply-to', '--no-update-notice', '--to=claude:fixture'],
+  { stdio: ['pipe', 'pipe', 'pipe', 'ipc'], env: { ...process.env,
+    CLAUDE_CONFIG_DIR: join(f.dir, 'claude'), SESSION_PEER_MCP_WORKER: '1',
+    SESSION_PEER_MCP_BODY_BYTES: '32' } });
+  const output = [];
+  child.stdout.on('data', bytes => output.push(bytes));
+  child.stderr.resume();
+  const closed = once(child, 'close');
+  child.stdin.end('partial');
+  const [code] = await closed;
+  const outcome = JSON.parse(Buffer.concat(output).toString('utf8'));
+  assert.equal(code, 2);
+  assert.equal(outcome.error, 'worker_input_incomplete');
+  assert.equal(outcome.submitted, false);
 });

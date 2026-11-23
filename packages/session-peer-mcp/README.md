@@ -7,7 +7,9 @@ prefix. Installing the ordinary core alone does not load the MCP SDK.
 
 Run `session-peer-mcp` to allow local Claude listing. Start it with
 `--policy /absolute/path/policy.json` to select an explicit operator policy.
-A missing or invalid selected file prevents startup. The repository's
+A missing or invalid selected file prevents startup. On POSIX the file must
+be owned by the current user and cannot be writable by the group or others.
+Keep it under directories you trust. On Windows protect the file with ACLs. The repository's
 `session-peer-ts` plugin starts with the same local-list-only default.
 A send-capable host configuration must explicitly supply the policy path.
 Host permission prompts and SSH host trust still apply.
@@ -35,9 +37,10 @@ return route.
 The server runs at most two concurrent operations, limits stdin frames to
 128 KiB, limits each worker result to 512 KiB and uses a 110-second operation
 deadline. The caller receives structured JSON and its text equivalent.
-A partial list can preserve healthy rows. On interruption after a possible
+A partial list preserves healthy rows within the result limit. On interruption after a possible
 send, reconcile the unknown outcome without automatically resending.
 Message text travels through the private worker stdin pipe. The core's
 existing native adapters still apply, including the Codex queue argument.
-On Windows cleanup covers known direct child handles. Closing a local SSH
+Forced worker exit can leave cleanup unconfirmed. On Windows cooperative
+cleanup covers known direct child handles. Closing a local SSH
 connection does not establish that a remote process stopped.

@@ -41,7 +41,7 @@ function validate(name, input) {
     (input.all === undefined || typeof input.all === 'boolean');
   if (name === 'send_message') return keys.every(key => ['destination', 'target', 'message', 'dryRun'].includes(key)) &&
     typeof input.target === 'string' && input.target.length > 0 && input.target.length <= 4096 &&
-    typeof input.message === 'string' && !!input.message.trim() && !input.message.includes('\0') &&
+    typeof input.message === 'string' && !!input.message.trim() && input.message.isWellFormed() && !input.message.includes('\0') &&
     Buffer.byteLength(input.message, 'utf8') <= MAX_TEXT &&
     (input.dryRun === undefined || typeof input.dryRun === 'boolean');
   return false;
@@ -92,7 +92,9 @@ export async function startServer({ cli, policy, reply, version, stdin = process
   const transport = new StdioServerTransport(stdin, stdout, { maxBufferSize: MAX_FRAME });
   const stop = () => { for (const controller of active) controller.abort(); };
   server.onclose = stop;
-  server.onerror = () => { stop(); void server.close().catch(() => {}); };
+  // Recoverable protocol errors cannot cancel unrelated in-flight calls.
+  // The pinned transport enforces maxBufferSize independently.
+  server.onerror = () => {};
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
   server.setRequestHandler(CallToolRequestSchema, async ({ params }, extra) => {
     const input = params.arguments ?? {};
