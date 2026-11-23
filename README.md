@@ -12,20 +12,16 @@
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
-<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
-
-**Documentation and source version: 0.6.2.** Review the selected release and registry metadata before installation. Dated preparation and validation records are in [VALIDATION.md](VALIDATION.md); release procedures are in [RELEASING.md](RELEASING.md). SSH endpoints require the same TypeScript client version; 0.3.6 and 0.6.2 refuse each other’s SSH preflight.
-
-**0.4.0 handoff scope:** opt-in native observation is limited to exact Codex 0.160.1/0.162.1 on macOS arm64; explicit `operator_confirmed` receipts use supported POSIX ledgers. Linux/Windows native observation and automatic ACK collection remain unsupported. The 0.6.2 source records a non-selectable Linux arm64 Codex 0.162.1 candidate (pinned upstream `aarch64-unknown-linux-musl` executable, schema and one injection test); it does not enable Linux observation. Linux native observation remains unsupported.
-
 **Find and message running Claude Code and Codex sessions, locally or over SSH.**
 A Node.js client that runs without Python. Package and command: `session-peer`.
 
 </div>
 
-Ordinary Codex sends also refuse signed-in or other cloud-unclassifiable homes; see the [storage scope](docs/api.md#codex-storage-configuration) before choosing a route.
+<!-- docs-contract: stable-release-source; package=session-peer; bin=session-peer; node=22.13+/24; python-reference=1.1.0 -->
 
-Source storage guards now inspect additional Codex configuration layers. Windows Codex send/dry-run refuse before queue submission while local storage classification is unqualified; ordinary Claude behavior is separate. Review the [guard scope](docs/api.md#codex-storage-configuration) and selected release before installation.
+**Documentation and source version: 0.6.2.**
+
+Windows Codex send and dry-run stop before queueing. Ordinary Codex sends also stop when cloud storage policy cannot be verified. See the [Codex storage rules](docs/api.md#codex-storage-configuration) and [delivery observation limits](docs/api.md#local-delivery-observation--72).
 
 ## Demo
 
@@ -116,9 +112,7 @@ does not install a skill. Review its pinned-source instructions in the guide.
 - [Release evidence and platform validation](VALIDATION.md).
 - [Development and contributions](CONTRIBUTING.md).
 - [Release process](RELEASING.md).
-
 - [0.4.0 handoff design and implementation scope](PARITY.md#handoff-v1-design-candidate--69).
-
 - [Private handoff CLI and limitations](docs/api.md#unreleased-opt-in-handoff-cli--040-work).
 
 ## License
