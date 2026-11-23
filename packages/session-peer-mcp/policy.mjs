@@ -32,16 +32,19 @@ function oneOf(values, permit) {
 // parsed policy can grant access; escaped key spellings compare as text.
 function uniqueKeys(text) {
   const stack = [];
-  for (const [token] of text.matchAll(/"(?:[^"\\]|\\[\s\S])*"|[{}\[\],:]/g)) {
+  for (let index = 0; index < text.length; index++) {
+    const token = text[index];
     if (token === '{') stack.push({ keys: new Set(), key: true });
     else if (token === '[') stack.push(null);
     else if (token === '}' || token === ']') stack.pop();
-    else {
+    else if (token === ',' && stack.at(-1)) stack.at(-1).key = true;
+    else if (token === '"') {
+      const start = index++;
+      // The preceding JSON.parse guarantees a closing quote and valid escapes.
+      while (text[index] !== '"') index += text[index] === '\\' ? 2 : 1;
       const object = stack.at(-1);
-      if (!object) continue;
-      if (token === ',') object.key = true;
-      else if (token.startsWith('"') && object.key) {
-        const key = JSON.parse(token);
+      if (object?.key) {
+        const key = JSON.parse(text.slice(start, index + 1));
         requirePolicy(!object.keys.has(key));
         object.keys.add(key);
         object.key = false;

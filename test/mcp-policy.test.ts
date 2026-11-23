@@ -32,6 +32,17 @@ test('default policy only lists local Claude and a selected missing policy fails
   }
 });
 
+test('policy scans escaped strings and rejects equivalent keys in nested grants', () => {
+  const home = '/fixture/{inbox},["quoted"]\\path';
+  const valid = JSON.stringify({ schemaVersion: 1, destinations: [
+    { id: 'local', transport: 'local', agents: ['codex'], capabilities: ['list'], codexHome: home },
+    { id: 'other', transport: 'local', agents: ['claude'], capabilities: ['list'] },
+  ] });
+  assert.equal(parsePolicy(valid, reply, 'linux').get('local')?.codexHome, home);
+  const duplicate = valid.replace('"capabilities":', '"capabilit\\u0069es":["send"],"capabilities":');
+  assert.throws(() => parsePolicy(duplicate, reply, 'linux'), /invalid_policy/);
+});
+
 test('policy requires an exact explicit Codex home and rejects duplicate JSON grants', () => {
   const base = { id: 'worker', transport: 'ssh', host: 'user@worker', remotePlatform: 'posix',
     agents: ['codex'], capabilities: ['send'], codexHome: '/fixture/.codex' };
